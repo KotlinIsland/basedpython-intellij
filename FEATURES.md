@@ -112,7 +112,7 @@ Status key: `[x]` done · `[~]` partial · `[ ]` todo
 ## 11. Refactoring
 - [x] Rename (LSP rename — Shift+F6, enabled on `by`)
 - [~] Safe delete — delegated to the `by` LSP at runtime: rename/find-references/go-to-definition are LSP-backed (§142 toggles), so deleting a symbol after an LSP reference check is available. A native IDE SafeDelete dialog (usage preview + conflict detection) needs a local cross-file symbol resolver the plugin intentionally does NOT duplicate (the LSP is the source of truth); building one would re-implement a Python resolver
-- [~] Extract variable / method / constant — Extract Variable + Introduce Constant done (selection-driven, refactoring.ExtractVariableAction/IntroduceConstantAction); Extract Method pending
+- [x] Extract variable / method / constant — all three done (selection-driven): refactoring.ExtractVariableAction, IntroduceConstantAction, ExtractMethodAction (pure ExtractMethodLogic: nearest-enclosing-def insertion, body re-indentation, optional trailing-return heuristic)
 - [x] Inline variable — refactoring.InlineVariableAction (text-heuristic; bails on multiple/blank/multi-line assignments)
 - [~] Change signature — requires whole-program symbol resolution to rewrite every call site; delegated to the `by` LSP (rename + references are enabled). A native Change Signature dialog needs a local resolver the plugin intentionally defers to the LSP rather than duplicating
 - [~] Move file/symbol + update imports — moving a file is supported by the platform; auto-rewriting import statements across the project needs cross-file symbol resolution, delegated to the `by` LSP (which updates references on rename). Native move-with-import-update needs a local resolver the plugin defers to the LSP
