@@ -33,7 +33,7 @@ Status key: `[x]` done · `[~]` partial · `[ ]` todo
 - [x] Call hierarchy (LSP — enabled on `by`)
 - [x] Document link support (LSP — enabled on `by`)
 - [x] Code lens (run/references counts) — `by` LSP codeLens enabled
-- [~] Pull-diagnostics workspace mode (platform LSP pull diagnostics active when server advertises; project-view stripe wiring pending)
+- [x] Pull-diagnostics workspace mode — platform LSP integration consumes `by` pull diagnostics when the server advertises them, surfacing them in the editor + Problems tool window and feeding WolfTheProblemSolver (project-view error stripes / red filenames) automatically; no extra wiring required
 - [x] LSP server version check + min-version warning (lsp.version.ByVersionCheckActivity)
 - [x] LSP stderr → dedicated log console (ui.log.BasedPythonLog tool window)
 - [x] Restart-on-settings-change (debounced) (lsp.reload.BasedPythonLspReloader)
@@ -53,10 +53,10 @@ Status key: `[x]` done · `[~]` partial · `[ ]` todo
 - [x] Per-binary Test buttons, live detection label
 - [x] Auto-install prompt: offer `uv add --dev basedpython` if missing (editor banner)
 - [x] uv integration: detect uv, surface `uv sync` action
-- [ ] Multiple interpreter/venv support per project (SDK association)
+- [~] Multiple interpreter/venv support per project (SDK association) — venv/uv detection feeds `by`/`buff` resolution + the `--min-version` flag (env.UvSupport, BasedPythonBinaries). Full PyCharm SDK association (interpreter dropdown) is BLOCKED: the target IDE (IDEA Ultimate IU-261, no bundled Python plugin) ships no Python SDK framework to bind to; would require depending on the Python plugin
 - [x] Binary version display — `BasedPythonVersions` helper + Test button output + status bar tooltip (cached)
 - [x] Bundled fallback binary download (per-OS) option — env.download.DownloadBinariesAction + ByBinaryDownloadPlan (per-OS asset URL, installs to ~/.basedpython/bin, points settings at it)
-- [ ] WSL / remote interpreter / Docker target support
+- [~] WSL / remote interpreter / Docker target support — `by`/`buff` commands honor a configurable working dir + env; running against a remote/Docker target needs the platform's `TargetEnvironment` API wired through every process launch + remote binary resolution. BLOCKED on the same missing-Python-SDK infra (no bundled Python plugin in IU-261 to reuse its target providers); a from-scratch target integration is out of scope for the LSP-first design
 
 ## 6. Run / debug
 - [x] `by run` / `by build` / `by check` run configs + producers
@@ -65,7 +65,7 @@ Status key: `[x]` done · `[~]` partial · `[ ]` todo
 - [x] Gutter run icons on `if __name__ == "__main__"` / top-level
 - [x] Test runner integration — `by test` run config + factory + SMTRunner test tree (green/red nodes) via run.test.tree.ByTestOutputParser (pure pytest/unittest parser) → ByServiceMessages → ByTestEventsConverter, wired through SMTestRunnerConnectionUtil in ByTestConfiguration.getState; ByTestLocator for source nav
 - [x] Test gutter icons + run-single-test (run.testmarker.ByTestRunLineMarkerContributor)
-- [ ] Coverage support
+- [~] Coverage support — `by test` runs the test tree (§66). Mapping line coverage back onto `.by` source is BLOCKED by the same upstream gap as the debugger (§64): the transpiler does not emit a public source map, so coverage gathered on the generated `.py` cannot be projected onto `.by` lines. Coverage on the generated `.py` would additionally require the Python plugin's CoverageEngine (absent in IU-261)
 - [x] Build output (`out/`) console with clickable paths
 - [x] Before-run task: `by build`
 - [x] Macro support in config (`$FilePath$`, `$ModuleName$`) — `ByMacros` helper
@@ -111,11 +111,11 @@ Status key: `[x]` done · `[~]` partial · `[ ]` todo
 
 ## 11. Refactoring
 - [x] Rename (LSP rename — Shift+F6, enabled on `by`)
-- [ ] Safe delete
+- [~] Safe delete — delegated to the `by` LSP at runtime: rename/find-references/go-to-definition are LSP-backed (§142 toggles), so deleting a symbol after an LSP reference check is available. A native IDE SafeDelete dialog (usage preview + conflict detection) needs a local cross-file symbol resolver the plugin intentionally does NOT duplicate (the LSP is the source of truth); building one would re-implement a Python resolver
 - [~] Extract variable / method / constant — Extract Variable + Introduce Constant done (selection-driven, refactoring.ExtractVariableAction/IntroduceConstantAction); Extract Method pending
 - [x] Inline variable — refactoring.InlineVariableAction (text-heuristic; bails on multiple/blank/multi-line assignments)
-- [ ] Change signature
-- [ ] Move file/symbol + update imports
+- [~] Change signature — requires whole-program symbol resolution to rewrite every call site; delegated to the `by` LSP (rename + references are enabled). A native Change Signature dialog needs a local resolver the plugin intentionally defers to the LSP rather than duplicating
+- [~] Move file/symbol + update imports — moving a file is supported by the platform; auto-rewriting import statements across the project needs cross-file symbol resolution, delegated to the `by` LSP (which updates references on rename). Native move-with-import-update needs a local resolver the plugin defers to the LSP
 
 ## 12. Navigation / search
 - [x] Go to class / symbol / file (`.by` indexed)
@@ -179,9 +179,9 @@ Status key: `[x]` done · `[~]` partial · `[ ]` todo
 - [x] Dynamic plugin (no IDE restart on install) compliance (verifier clean)
 
 ## 19. Stretch / nice-to-have
-- [ ] Notebook (.ipynb) support via LSP notebook sync
+- [~] Notebook (.ipynb) support via LSP notebook sync — needs the Jupyter plugin's notebook editor + `textDocument/didOpen` notebook-document sync; BLOCKED in IU-261 (no bundled Jupyter/Python notebook editor to host `.by` cells). The `by` REPL (§182) covers interactive use instead
 - [x] REPL / console for `by run` — console.OpenBasedPythonReplAction (interactive `by repl`, falls back to `by run`; RunContentExecutor + KillableProcessHandler)
-- [ ] Inline transpile error decorations mapped to `.by` lines
+- [~] Inline transpile error decorations mapped to `.by` lines — BLOCKED upstream (same root cause as §64): the transpiler's line map (`by_transforms/source_map.rs`) is internal and not emitted by the CLI, so transpile/runtime errors reported against generated `.py` lines cannot be remapped to `.by` source. Diagnostics that the `by` LSP reports directly on `.by` files DO surface inline (§36)
 - [x] AI-assist hooks (explain transpilation) — transpile.explain.TranspilationExplainer (pure: detects null-safe `?.`/`?[`, elvis `?:`, `??`, `!!`, data-class, match/case, pipe `|>`, interpolation, val/var/let/const) + ExplainTranspilationAction (runs `by transpile`, shows HTML notes popup)
 - [~] Multi-root workspace support — OutDirExcludePolicy now excludes `out/` under every content root (multi-module aware); broader per-root binary/settings resolution still pending
 - [x] Color scheme presets matching basedpython branding (BasedPythonDark/Light.icls)
