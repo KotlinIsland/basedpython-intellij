@@ -8,10 +8,14 @@ import com.intellij.platform.lsp.api.LspServerSupportProvider
 import com.intellij.platform.lsp.api.LspServerSupportProvider.LspServerStarter
 import com.intellij.platform.lsp.api.ProjectWideLspServerDescriptor
 import com.intellij.platform.lsp.api.customization.LspCallHierarchyDisabled
+import com.intellij.platform.lsp.api.customization.LspCodeActionsDisabled
 import com.intellij.platform.lsp.api.customization.LspCodeLensDisabled
 import com.intellij.platform.lsp.api.customization.LspCompletionDisabled
 import com.intellij.platform.lsp.api.customization.LspCustomization
 import com.intellij.platform.lsp.api.customization.LspDocumentColorDisabled
+import com.intellij.platform.lsp.api.customization.LspFormattingDisabled
+import com.intellij.platform.lsp.api.customization.LspHoverDisabled
+import com.intellij.platform.lsp.api.customization.LspOptimizeImportsDisabled
 import com.intellij.platform.lsp.api.customization.LspDocumentHighlightsDisabled
 import com.intellij.platform.lsp.api.customization.LspDocumentLinkDisabled
 import com.intellij.platform.lsp.api.customization.LspDocumentSymbolDisabled
@@ -72,16 +76,37 @@ internal class ByLspServerDescriptor(
   // `by` advertises: completion, hover, goto-def/decl/type-def, references, rename,
   // doc highlight, signature help, diagnostics, inlay hints, semantic tokens,
   // code actions, doc/workspace symbols, selection/folding range, type hierarchy.
-  // Only inlay hints are user-gated: turning off all three inlay toggles in
-  // settings disables LSP inlay hints entirely.
-  override val lspCustomization: LspCustomization = run {
-    val s = BasedPythonSettings.getInstance(project)
-    val anyInlay = s.inlayParameterHints || s.inlayTypeHints || s.inlayReturnHints
-    if (anyInlay) object : LspCustomization() {} else InlayHintsOffCustomization
-  }
+  // Per-capability toggles (§142) let the user disable individual features;
+  // inlay hints are disabled when all three inlay toggles are off.
+  override val lspCustomization: LspCustomization =
+    ByCapabilityCustomization(BasedPythonSettings.getInstance(project))
 
-  private object InlayHintsOffCustomization : LspCustomization() {
-    override val inlayHintCustomizer = LspInlayHintDisabled
+  /** Disables only the `by` capabilities the user turned off in settings. */
+  private class ByCapabilityCustomization(private val s: BasedPythonSettings) : LspCustomization() {
+    override val completionCustomizer
+      get() = if (s.byCompletion) super.completionCustomizer else LspCompletionDisabled
+    override val goToDefinitionCustomizer
+      get() = if (s.byGoToDefinition) super.goToDefinitionCustomizer else LspGoToDefinitionDisabled
+    override val goToTypeDefinitionCustomizer
+      get() = if (s.byGoToDefinition) super.goToTypeDefinitionCustomizer else LspGoToTypeDefinitionDisabled
+    override val findReferencesCustomizer
+      get() = if (s.byFindReferences) super.findReferencesCustomizer else LspFindReferencesDisabled
+    override val renameCustomizer
+      get() = if (s.byRename) super.renameCustomizer else LspRenameDisabled
+    override val semanticTokensCustomizer
+      get() = if (s.bySemanticTokens) super.semanticTokensCustomizer else LspSemanticTokensDisabled
+    override val codeLensCustomizer
+      get() = if (s.byCodeLens) super.codeLensCustomizer else LspCodeLensDisabled
+    override val documentHighlightsCustomizer
+      get() = if (s.byDocumentHighlight) super.documentHighlightsCustomizer else LspDocumentHighlightsDisabled
+    override val signatureHelpCustomizer
+      get() = if (s.bySignatureHelp) super.signatureHelpCustomizer else LspSignatureHelpDisabled
+    override val inlayHintCustomizer
+      get() = if (s.inlayParameterHints || s.inlayTypeHints || s.inlayReturnHints) {
+        super.inlayHintCustomizer
+      } else {
+        LspInlayHintDisabled
+      }
   }
 }
 
@@ -120,11 +145,13 @@ internal class BuffLspServerDescriptor(
     })
 
   // `buff` advertises only formatting + code actions + hover + diagnostics.
-  // Disable everything else so the two servers don't collide on capabilities
-  // the type-checker (`by`) handles better.
-  override val lspCustomization: LspCustomization = BuffOnlyFmtAndLintCustomization
+  // Everything the type-checker (`by`) handles better stays disabled; the three
+  // buff capabilities are individually user-gated (§142).
+  override val lspCustomization: LspCustomization =
+    BuffCapabilityCustomization(BasedPythonSettings.getInstance(project))
 
-  private object BuffOnlyFmtAndLintCustomization : LspCustomization() {
+  private class BuffCapabilityCustomization(private val s: BasedPythonSettings) : LspCustomization() {
+    // Always-off (handled by `by`):
     override val goToDefinitionCustomizer = LspGoToDefinitionDisabled
     override val goToTypeDefinitionCustomizer = LspGoToTypeDefinitionDisabled
     override val completionCustomizer = LspCompletionDisabled
@@ -142,6 +169,16 @@ internal class BuffLspServerDescriptor(
     override val codeLensCustomizer = LspCodeLensDisabled
     override val documentColorCustomizer = LspDocumentColorDisabled
     override val documentLinkCustomizer = LspDocumentLinkDisabled
+
+    // User-gated buff capabilities:
+    override val formattingCustomizer
+      get() = if (s.buffFormatting) super.formattingCustomizer else LspFormattingDisabled
+    override val optimizeImportsCustomizer
+      get() = if (s.buffFormatting) super.optimizeImportsCustomizer else LspOptimizeImportsDisabled
+    override val codeActionsCustomizer
+      get() = if (s.buffCodeActions) super.codeActionsCustomizer else LspCodeActionsDisabled
+    override val hoverCustomizer
+      get() = if (s.buffHover) super.hoverCustomizer else LspHoverDisabled
   }
 }
 

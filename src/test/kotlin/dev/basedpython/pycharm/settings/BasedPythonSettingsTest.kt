@@ -65,6 +65,59 @@ class BasedPythonSettingsTest : BasePlatformTestCase() {
         assertTrue(settings.indexGeneratedPython)
     }
 
+    // ---- §142 per-server capability toggles ----
+
+    fun `test capability toggles default to true`() {
+        val d = BasedPythonSettings.State()
+        assertTrue(d.byCompletion)
+        assertTrue(d.byGoToDefinition)
+        assertTrue(d.byFindReferences)
+        assertTrue(d.byRename)
+        assertTrue(d.bySemanticTokens)
+        assertTrue(d.byCodeLens)
+        assertTrue(d.byDocumentHighlight)
+        assertTrue(d.bySignatureHelp)
+        assertTrue(d.buffFormatting)
+        assertTrue(d.buffCodeActions)
+        assertTrue(d.buffHover)
+    }
+
+    fun `test capability toggles are mutable`() {
+        settings.byCompletion = false
+        settings.buffFormatting = false
+        assertFalse(settings.byCompletion)
+        assertFalse(settings.buffFormatting)
+        assertTrue(settings.byRename)
+    }
+
+    fun `test loadState round-trips capability toggles`() {
+        val incoming = BasedPythonSettings.State(
+            byCompletion = false,
+            byGoToDefinition = false,
+            byFindReferences = false,
+            byRename = false,
+            bySemanticTokens = false,
+            byCodeLens = false,
+            byDocumentHighlight = false,
+            bySignatureHelp = false,
+            buffFormatting = false,
+            buffCodeActions = false,
+            buffHover = false,
+        )
+        settings.loadState(incoming)
+        assertFalse(settings.byCompletion)
+        assertFalse(settings.byGoToDefinition)
+        assertFalse(settings.byFindReferences)
+        assertFalse(settings.byRename)
+        assertFalse(settings.bySemanticTokens)
+        assertFalse(settings.byCodeLens)
+        assertFalse(settings.byDocumentHighlight)
+        assertFalse(settings.bySignatureHelp)
+        assertFalse(settings.buffFormatting)
+        assertFalse(settings.buffCodeActions)
+        assertFalse(settings.buffHover)
+    }
+
     override fun tearDown() {
         try {
             // Reset to defaults so we don't leak state between fixtures.

@@ -72,6 +72,19 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
         "Index generated .py in out/ (enables native Python support — requires a Python plugin)",
     )
 
+    // Per-server capability toggles (§142)
+    private val byCompletion = JCheckBox("Completion")
+    private val byGoToDefinition = JCheckBox("Go to definition / type definition")
+    private val byFindReferences = JCheckBox("Find references")
+    private val byRename = JCheckBox("Rename")
+    private val bySemanticTokens = JCheckBox("Semantic tokens (coloring)")
+    private val byCodeLens = JCheckBox("Code lens")
+    private val byDocumentHighlight = JCheckBox("Highlight usages")
+    private val bySignatureHelp = JCheckBox("Signature help")
+    private val buffFormatting = JCheckBox("Formatting")
+    private val buffCodeActions = JCheckBox("Code actions (lint fixes)")
+    private val buffHover = JCheckBox("Hover")
+
     private val detectedVenvLabel = JBLabel("Detected venv binary: …")
 
     private var rootPanel: JComponent? = null
@@ -115,6 +128,21 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
             }
             group("Python interop") {
                 row { cell(indexGeneratedPython) }
+            }
+            group("`by` server capabilities") {
+                row { cell(byCompletion) }
+                row { cell(byGoToDefinition) }
+                row { cell(byFindReferences) }
+                row { cell(byRename) }
+                row { cell(bySemanticTokens) }
+                row { cell(byCodeLens) }
+                row { cell(byDocumentHighlight) }
+                row { cell(bySignatureHelp) }
+            }
+            group("`buff` server capabilities") {
+                row { cell(buffFormatting) }
+                row { cell(buffCodeActions) }
+                row { cell(buffHover) }
             }
         }
 
@@ -179,7 +207,18 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
             inlayTypeHints.isSelected != s.inlayTypeHints ||
             inlayReturnHints.isSelected != s.inlayReturnHints ||
             (lspTraceCombo.selectedItem as? String ?: "off") != s.lspTraceLevel ||
-            indexGeneratedPython.isSelected != s.indexGeneratedPython
+            indexGeneratedPython.isSelected != s.indexGeneratedPython ||
+            byCompletion.isSelected != s.byCompletion ||
+            byGoToDefinition.isSelected != s.byGoToDefinition ||
+            byFindReferences.isSelected != s.byFindReferences ||
+            byRename.isSelected != s.byRename ||
+            bySemanticTokens.isSelected != s.bySemanticTokens ||
+            byCodeLens.isSelected != s.byCodeLens ||
+            byDocumentHighlight.isSelected != s.byDocumentHighlight ||
+            bySignatureHelp.isSelected != s.bySignatureHelp ||
+            buffFormatting.isSelected != s.buffFormatting ||
+            buffCodeActions.isSelected != s.buffCodeActions ||
+            buffHover.isSelected != s.buffHover
     }
 
     override fun apply() {
@@ -200,6 +239,18 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
         val indexChanged = indexGeneratedPython.isSelected != s.indexGeneratedPython
         s.indexGeneratedPython = indexGeneratedPython.isSelected
         if (indexChanged) fireRootsRescan()
+
+        s.byCompletion = byCompletion.isSelected
+        s.byGoToDefinition = byGoToDefinition.isSelected
+        s.byFindReferences = byFindReferences.isSelected
+        s.byRename = byRename.isSelected
+        s.bySemanticTokens = bySemanticTokens.isSelected
+        s.byCodeLens = byCodeLens.isSelected
+        s.byDocumentHighlight = byDocumentHighlight.isSelected
+        s.bySignatureHelp = bySignatureHelp.isSelected
+        s.buffFormatting = buffFormatting.isSelected
+        s.buffCodeActions = buffCodeActions.isSelected
+        s.buffHover = buffHover.isSelected
 
         BasedPythonLspReloader.getInstance(project).onSettingsChanged()
         updateDetectedLabel()
@@ -237,6 +288,17 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
         inlayReturnHints.isSelected = s.inlayReturnHints
         lspTraceCombo.selectedItem = s.lspTraceLevel
         indexGeneratedPython.isSelected = s.indexGeneratedPython
+        byCompletion.isSelected = s.byCompletion
+        byGoToDefinition.isSelected = s.byGoToDefinition
+        byFindReferences.isSelected = s.byFindReferences
+        byRename.isSelected = s.byRename
+        bySemanticTokens.isSelected = s.bySemanticTokens
+        byCodeLens.isSelected = s.byCodeLens
+        byDocumentHighlight.isSelected = s.byDocumentHighlight
+        bySignatureHelp.isSelected = s.bySignatureHelp
+        buffFormatting.isSelected = s.buffFormatting
+        buffCodeActions.isSelected = s.buffCodeActions
+        buffHover.isSelected = s.buffHover
         updateDetectedLabel()
     }
 

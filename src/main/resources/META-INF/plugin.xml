@@ -224,6 +224,9 @@
         <annotator
             language="BasedPython"
             implementationClass="dev.basedpython.pycharm.editor.highlight.BasedPythonNumericLiteralAnnotator"/>
+        <annotator
+            language="BasedPython"
+            implementationClass="dev.basedpython.pycharm.highlight.fstring.FStringInterpolationAnnotator"/>
         <postStartupActivity
             implementation="dev.basedpython.pycharm.onboarding.BasedPythonWelcomeActivity"/>
         <liveTemplateMacro implementation="dev.basedpython.pycharm.editor.templates.macro.ByModuleNameMacro"/>
