@@ -38,6 +38,20 @@ class BasedPythonSettings : PersistentStateComponent<BasedPythonSettings.State> 
      * keep `.by` files as the single source of truth and avoid duplicate symbols.
      */
     var indexGeneratedPython: Boolean = false,
+    // ---- Per-server capability toggles (§142). All default-on. ----
+    // `by` server capabilities:
+    var byCompletion: Boolean = true,
+    var byGoToDefinition: Boolean = true,
+    var byFindReferences: Boolean = true,
+    var byRename: Boolean = true,
+    var bySemanticTokens: Boolean = true,
+    var byCodeLens: Boolean = true,
+    var byDocumentHighlight: Boolean = true,
+    var bySignatureHelp: Boolean = true,
+    // `buff` server capabilities:
+    var buffFormatting: Boolean = true,
+    var buffCodeActions: Boolean = true,
+    var buffHover: Boolean = true,
   )
 
   private var state = State()
@@ -98,6 +112,42 @@ class BasedPythonSettings : PersistentStateComponent<BasedPythonSettings.State> 
   var indexGeneratedPython: Boolean
     get() = state.indexGeneratedPython
     set(value) { state.indexGeneratedPython = value }
+
+  // ---- Per-server capability toggles (§142) ----
+
+  var byCompletion: Boolean
+    get() = state.byCompletion
+    set(value) { state.byCompletion = value }
+  var byGoToDefinition: Boolean
+    get() = state.byGoToDefinition
+    set(value) { state.byGoToDefinition = value }
+  var byFindReferences: Boolean
+    get() = state.byFindReferences
+    set(value) { state.byFindReferences = value }
+  var byRename: Boolean
+    get() = state.byRename
+    set(value) { state.byRename = value }
+  var bySemanticTokens: Boolean
+    get() = state.bySemanticTokens
+    set(value) { state.bySemanticTokens = value }
+  var byCodeLens: Boolean
+    get() = state.byCodeLens
+    set(value) { state.byCodeLens = value }
+  var byDocumentHighlight: Boolean
+    get() = state.byDocumentHighlight
+    set(value) { state.byDocumentHighlight = value }
+  var bySignatureHelp: Boolean
+    get() = state.bySignatureHelp
+    set(value) { state.bySignatureHelp = value }
+  var buffFormatting: Boolean
+    get() = state.buffFormatting
+    set(value) { state.buffFormatting = value }
+  var buffCodeActions: Boolean
+    get() = state.buffCodeActions
+    set(value) { state.buffCodeActions = value }
+  var buffHover: Boolean
+    get() = state.buffHover
+    set(value) { state.buffHover = value }
 
   // ---- Effective values: project value, else IDE-wide default (see settings.app) ----
 

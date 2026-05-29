@@ -11,7 +11,7 @@ Status key: `[x]` done · `[~]` partial · `[ ]` todo
 - [x] Language singleton, parser definition (flat)
 - [x] Real PSI tree (composite nodes: defs, classes, imports, params, blocks, decorators) — lang.psi.BasedPythonPsiElements + lang.parser.BasedPythonParser
 - [x] Indentation-aware lexer (INDENT/DEDENT/STATEMENT_BREAK tokens) — lang.parser.BasedPythonIndentingLexer
-- [ ] f-string interpolation sub-lexing (highlight `{expr}` inside strings)
+- [x] f-string interpolation sub-lexing (highlight `{expr}` inside strings) — highlight.fstring.FStringInterpolation (pure helper) + FStringInterpolationAnnotator; reuses FSTRING_INTERP color key
 - [x] Associate `.pyi` stubs + `.by` variants (no separate `.by` stub variant exists; `.pyi` handled by Python support — N/A)
 - [ ] Dialect detection: treat `.py` in basedpython project as basedpython-aware
 - [x] File-type icon + marketplace logo (pluginIcon.svg light/dark)
@@ -63,7 +63,7 @@ Status key: `[x]` done · `[~]` partial · `[ ]` todo
 - [x] Working dir, env vars, extra args, `--min-version`
 - [~] **Debugger** — "Debug .by (pdb)" builds then runs generated `.py` under `python -m pdb` in an interactive console; pdb frames clickable. Full source-mapped IDE debug blocked upstream: the transpiler's line map (`by_transforms/source_map.rs`) is internal and not emitted by the CLI as a sidecar.
 - [x] Gutter run icons on `if __name__ == "__main__"` / top-level
-- [~] Test runner integration — `by test` run config + factory (test-tree parsing pending)
+- [x] Test runner integration — `by test` run config + factory + SMTRunner test tree (green/red nodes) via run.test.tree.ByTestOutputParser (pure pytest/unittest parser) → ByServiceMessages → ByTestEventsConverter, wired through SMTestRunnerConnectionUtil in ByTestConfiguration.getState; ByTestLocator for source nav
 - [x] Test gutter icons + run-single-test (run.testmarker.ByTestRunLineMarkerContributor)
 - [ ] Coverage support
 - [x] Build output (`out/`) console with clickable paths
@@ -139,7 +139,7 @@ Status key: `[x]` done · `[~]` partial · `[ ]` todo
 - [x] Format-on-save toggle
 - [x] Inspection severity config (IDE-automatic per LocalInspectionTool)
 - [x] LSP trace level (off/messages/verbose)
-- [~] Per-server enable + capability toggles (byEnabled/buffEnabled present; capability toggles pending)
+- [x] Per-server enable + capability toggles — byEnabled/buffEnabled plus per-capability switches (by: completion, goto-def, references, rename, semantic tokens, code lens, highlight usages, signature help; buff: formatting, code actions, hover) wired into LspServers descriptors + Configurable; restart-on-change
 - [x] Import/export settings (actions.settings.Export/ImportSettingsAction)
 - [x] Application-level defaults vs project override — settings.app.BasedPythonAppSettings (APP service) + BasedPythonDefaults resolver; BasedPythonSettings.effective* getters fall back to IDE-wide defaults; BasedPythonAppConfigurable UI ("BasedPython Defaults")
 
