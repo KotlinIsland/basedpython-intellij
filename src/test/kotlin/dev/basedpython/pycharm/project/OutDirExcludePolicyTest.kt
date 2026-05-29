@@ -23,14 +23,24 @@ class OutDirExcludePolicyTest : BasePlatformTestCase() {
 
     fun `test out dir excluded by default`() {
         val urls = policy.excludeUrlsForProject
-        assertEquals("exactly one excluded url expected", 1, urls.size)
-        val expected = VfsUtilCore.pathToUrl("${project.basePath}/out")
-        assertEquals(expected, urls[0])
+        assertTrue("at least one excluded url expected", urls.isNotEmpty())
     }
 
-    fun `test excluded url points at out directory`() {
-        val url = policy.excludeUrlsForProject.single()
-        assertTrue("url should end with /out, was: $url", url.endsWith("/out"))
+    fun `test base path out is among excluded urls`() {
+        val expected = VfsUtilCore.pathToUrl("${project.basePath}/out")
+        assertTrue("base out url should be present: $expected in ${policy.excludeUrlsForProject.toList()}",
+            policy.excludeUrlsForProject.contains(expected))
+    }
+
+    fun `test every excluded url points at an out directory`() {
+        val urls = policy.excludeUrlsForProject
+        assertTrue(urls.isNotEmpty())
+        urls.forEach { assertTrue("url should end with /out, was: $it", it.endsWith("/out")) }
+    }
+
+    fun `test excluded urls are deduplicated`() {
+        val urls = policy.excludeUrlsForProject.toList()
+        assertEquals("urls should be unique", urls.size, urls.toSet().size)
     }
 
     fun `test no exclusion when index generated python enabled`() {
@@ -42,18 +52,27 @@ class OutDirExcludePolicyTest : BasePlatformTestCase() {
         val settings = BasedPythonSettings.getInstance(project)
 
         settings.indexGeneratedPython = false
-        assertEquals(1, policy.excludeUrlsForProject.size)
+        assertTrue(policy.excludeUrlsForProject.isNotEmpty())
 
         settings.indexGeneratedPython = true
         assertEquals(0, policy.excludeUrlsForProject.size)
 
         settings.indexGeneratedPython = false
-        assertEquals(1, policy.excludeUrlsForProject.size)
+        assertTrue(policy.excludeUrlsForProject.isNotEmpty())
     }
 
     fun `test repeated calls are stable`() {
         val first = policy.excludeUrlsForProject.toList()
         val second = policy.excludeUrlsForProject.toList()
         assertEquals(first, second)
+    }
+
+    fun `test outUrls helper includes content roots`() {
+        // Helper used directly so multi-root logic is unit-covered even with a
+        // single-root fixture.
+        val urls = OutDirExcludePolicy.outUrls(project).toList()
+        assertTrue(urls.isNotEmpty())
+        urls.forEach { assertTrue(it.endsWith("/out")) }
+        assertEquals(urls.size, urls.toSet().size)
     }
 }

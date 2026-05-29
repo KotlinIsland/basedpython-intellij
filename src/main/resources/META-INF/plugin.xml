@@ -454,5 +454,22 @@
             <add-to-group group-id="BasedPython.ActionGroup" anchor="last"/>
             <add-to-group group-id="EditorPopupMenu" anchor="last"/>
         </action>
+
+        <!-- ===== Wave 12: inline variable (§117) ===== -->
+        <action id="dev.basedpython.pycharm.refactoring.InlineVariable"
+                class="dev.basedpython.pycharm.refactoring.InlineVariableAction"
+                text="Inline Variable"
+                description="Inline a local variable: replace its usages with its value and delete the assignment.">
+            <add-to-group group-id="BasedPython.ActionGroup" anchor="last"/>
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+        </action>
+
+        <!-- ===== Wave 12: download prebuilt binaries (§58) ===== -->
+        <action id="dev.basedpython.pycharm.env.download.DownloadBinaries"
+                class="dev.basedpython.pycharm.env.download.DownloadBinariesAction"
+                text="Download Prebuilt by/buff Binaries"
+                description="Download per-OS prebuilt by/buff binaries into ~/.basedpython/bin and point settings at them.">
+            <add-to-group group-id="BasedPython.ActionGroup" anchor="last"/>
+        </action>
     </actions>
 </idea-plugin>
