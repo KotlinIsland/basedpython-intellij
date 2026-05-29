@@ -55,7 +55,7 @@ Status key: `[x]` done · `[~]` partial · `[ ]` todo
 - [x] uv integration: detect uv, surface `uv sync` action
 - [ ] Multiple interpreter/venv support per project (SDK association)
 - [x] Binary version display — `BasedPythonVersions` helper + Test button output + status bar tooltip (cached)
-- [ ] Bundled fallback binary download (per-OS) option
+- [x] Bundled fallback binary download (per-OS) option — env.download.DownloadBinariesAction + ByBinaryDownloadPlan (per-OS asset URL, installs to ~/.basedpython/bin, points settings at it)
 - [ ] WSL / remote interpreter / Docker target support
 
 ## 6. Run / debug
@@ -113,7 +113,7 @@ Status key: `[x]` done · `[~]` partial · `[ ]` todo
 - [x] Rename (LSP rename — Shift+F6, enabled on `by`)
 - [ ] Safe delete
 - [~] Extract variable / method / constant — Extract Variable + Introduce Constant done (selection-driven, refactoring.ExtractVariableAction/IntroduceConstantAction); Extract Method pending
-- [ ] Inline variable
+- [x] Inline variable — refactoring.InlineVariableAction (text-heuristic; bails on multiple/blank/multi-line assignments)
 - [ ] Change signature
 - [ ] Move file/symbol + update imports
 
@@ -183,5 +183,5 @@ Status key: `[x]` done · `[~]` partial · `[ ]` todo
 - [x] REPL / console for `by run` — console.OpenBasedPythonReplAction (interactive `by repl`, falls back to `by run`; RunContentExecutor + KillableProcessHandler)
 - [ ] Inline transpile error decorations mapped to `.by` lines
 - [ ] AI-assist hooks (explain transpilation)
-- [ ] Multi-root workspace support
+- [~] Multi-root workspace support — OutDirExcludePolicy now excludes `out/` under every content root (multi-module aware); broader per-root binary/settings resolution still pending
 - [x] Color scheme presets matching basedpython branding (BasedPythonDark/Light.icls)
