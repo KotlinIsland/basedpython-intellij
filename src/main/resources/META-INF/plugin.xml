@@ -33,6 +33,9 @@
         <lang.quoteHandler
             language="BasedPython"
             implementationClass="dev.basedpython.pycharm.lang.BasedPythonQuoteHandler"/>
+        <!-- §16 dialect detection: treat .py in a basedpython project as BasedPython source -->
+        <fileTypeOverrider
+            implementation="dev.basedpython.pycharm.lang.dialect.BasedPythonFileTypeOverrider"/>
 
         <!-- ===== Stream B: LSP servers + settings + notifications ===== -->
         <projectService serviceImplementation="dev.basedpython.pycharm.settings.BasedPythonSettings"/>
@@ -473,6 +476,15 @@
                 text="Download Prebuilt by/buff Binaries"
                 description="Download per-OS prebuilt by/buff binaries into ~/.basedpython/bin and point settings at them.">
             <add-to-group group-id="BasedPython.ActionGroup" anchor="last"/>
+        </action>
+
+        <!-- ===== Wave 14: explain transpilation (§185) ===== -->
+        <action id="dev.basedpython.pycharm.transpile.explain.ExplainTranspilation"
+                class="dev.basedpython.pycharm.transpile.explain.ExplainTranspilationAction"
+                text="Explain Transpilation"
+                description="Run `by transpile` on the current .by file and show a structured explanation of the basedpython-specific constructs that were transformed (null-safe access, elvis, data classes, pattern matching, etc.).">
+            <add-to-group group-id="BasedPython.ActionGroup" anchor="last"/>
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
         </action>
     </actions>
 </idea-plugin>

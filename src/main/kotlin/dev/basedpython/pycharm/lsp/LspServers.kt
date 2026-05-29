@@ -94,7 +94,11 @@ internal class ByLspServerDescriptor(
     override val renameCustomizer
       get() = if (s.byRename) super.renameCustomizer else LspRenameDisabled
     override val semanticTokensCustomizer
-      get() = if (s.bySemanticTokens) super.semanticTokensCustomizer else LspSemanticTokensDisabled
+      get() = if (s.bySemanticTokens) {
+        dev.basedpython.pycharm.lsp.semantic.BasedPythonLspSemanticTokensSupport()
+      } else {
+        LspSemanticTokensDisabled
+      }
     override val codeLensCustomizer
       get() = if (s.byCodeLens) super.codeLensCustomizer else LspCodeLensDisabled
     override val documentHighlightsCustomizer
