@@ -1,0 +1,425 @@
+<!-- Plugin Configuration File. Read more: https://plugins.jetbrains.com/docs/intellij/plugin-configuration-file.html -->
+<idea-plugin>
+    <id>basedpython-pycharm</id>
+    <name>basedpython</name>
+    <vendor url="https://basedpython.dev">basedpython</vendor>
+
+    <depends>com.intellij.modules.platform</depends>
+    <depends>com.intellij.modules.lsp</depends>
+    <depends>org.toml.lang</depends>
+
+    <resource-bundle>messages.BasedPythonBundle</resource-bundle>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <!-- ===== Stream A: language / file type / highlighting ===== -->
+        <fileType
+            name="BasedPython"
+            implementationClass="dev.basedpython.pycharm.lang.BasedPythonFileType"
+            fieldName="INSTANCE"
+            language="BasedPython"
+            extensions="by"/>
+        <lang.parserDefinition
+            language="BasedPython"
+            implementationClass="dev.basedpython.pycharm.lang.BasedPythonParserDefinition"/>
+        <lang.syntaxHighlighterFactory
+            language="BasedPython"
+            implementationClass="dev.basedpython.pycharm.lang.BasedPythonSyntaxHighlighterFactory"/>
+        <lang.commenter
+            language="BasedPython"
+            implementationClass="dev.basedpython.pycharm.lang.BasedPythonCommenter"/>
+        <lang.braceMatcher
+            language="BasedPython"
+            implementationClass="dev.basedpython.pycharm.lang.BasedPythonBraceMatcher"/>
+        <lang.quoteHandler
+            language="BasedPython"
+            implementationClass="dev.basedpython.pycharm.lang.BasedPythonQuoteHandler"/>
+
+        <!-- ===== Stream B: LSP servers + settings + notifications ===== -->
+        <projectService serviceImplementation="dev.basedpython.pycharm.settings.BasedPythonSettings"/>
+        <notificationGroup id="BasedPython" displayType="BALLOON"/>
+        <platform.lsp.serverSupportProvider
+            implementation="dev.basedpython.pycharm.lsp.ByLspServerSupportProvider"/>
+        <platform.lsp.serverSupportProvider
+            implementation="dev.basedpython.pycharm.lsp.BuffLspServerSupportProvider"/>
+
+        <!-- ===== Stream C: run configurations ===== -->
+        <configurationType implementation="dev.basedpython.pycharm.run.BasedPythonRunConfigurationType"/>
+        <runConfigurationProducer implementation="dev.basedpython.pycharm.run.ByRunFromFileProducer"/>
+        <runConfigurationProducer implementation="dev.basedpython.pycharm.run.ByCheckFromFileProducer"/>
+
+        <!-- ===== Stream D: action notification group ===== -->
+        <notificationGroup id="BasedPython.Actions" displayType="BALLOON"/>
+
+        <!-- ===== Stream E: settings UI + status bar ===== -->
+        <projectConfigurable
+            groupId="language"
+            id="dev.basedpython.pycharm.settings"
+            displayName="BasedPython"
+            provider="dev.basedpython.pycharm.settings.ui.BasedPythonConfigurableProvider"/>
+        <statusBarWidgetFactory
+            id="dev.basedpython.pycharm.statusbar"
+            implementation="dev.basedpython.pycharm.statusbar.BasedPythonStatusBarWidgetFactory"/>
+
+        <!-- ===== Stream F: colors + templates ===== -->
+        <colorSettingsPage implementation="dev.basedpython.pycharm.editor.colors.BasedPythonColorSettingsPage"/>
+        <defaultLiveTemplates file="liveTemplates/BasedPython"/>
+        <liveTemplateContext
+            contextId="BASED_PYTHON"
+            implementation="dev.basedpython.pycharm.editor.BasedPythonTemplateContextType"/>
+        <internalFileTemplate name="BasedPython File"/>
+        <internalFileTemplate name="BasedPython Class"/>
+        <internalFileTemplate name="BasedPython Data Class"/>
+        <internalFileTemplate name="BasedPython Protocol"/>
+
+        <!-- ===== Stream G: structure view, folding, breadcrumbs ===== -->
+        <lang.psiStructureViewFactory
+            language="BasedPython"
+            implementationClass="dev.basedpython.pycharm.structure.BasedPythonStructureViewFactory"/>
+        <lang.foldingBuilder
+            language="BasedPython"
+            implementationClass="dev.basedpython.pycharm.structure.BasedPythonFoldingBuilder"/>
+        <breadcrumbsInfoProvider
+            implementation="dev.basedpython.pycharm.structure.BasedPythonBreadcrumbsProvider"/>
+
+        <!-- ===== Stream H: semantic annotator ===== -->
+        <annotator
+            language="BasedPython"
+            implementationClass="dev.basedpython.pycharm.highlight.BasedPythonAnnotator"/>
+
+        <!-- ===== Stream I: formatting ===== -->
+        <actionOnSaveInfoProvider
+            implementation="dev.basedpython.pycharm.format.BuffFormatOnSaveInfoProvider"/>
+        <actionOnSave
+            implementation="dev.basedpython.pycharm.format.BuffFormatOnSaveAction"/>
+        <lang.importOptimizer
+            language="BasedPython"
+            implementationClass="dev.basedpython.pycharm.format.BuffImportOptimizer"/>
+        <codeStyleSettingsProvider
+            implementation="dev.basedpython.pycharm.format.BuffCodeStyleSettingsProvider"/>
+        <langCodeStyleSettingsProvider
+            implementation="dev.basedpython.pycharm.format.BuffLanguageCodeStyleSettingsProvider"/>
+
+        <!-- ===== Stream K: TODO index, inspections, intentions ===== -->
+        <indexPatternBuilder
+            implementation="dev.basedpython.pycharm.inspections.BasedPythonIndexPatternBuilder"/>
+        <spellchecker.support
+            language="BasedPython"
+            implementationClass="dev.basedpython.pycharm.inspections.spellcheck.BasedPythonSpellcheckingStrategy"/>
+        <localInspection
+            language="BasedPython"
+            groupName="BasedPython"
+            displayName="Mutable default argument"
+            shortName="BasedPythonMutableDefaultArg"
+            enabledByDefault="true"
+            level="WEAK WARNING"
+            implementationClass="dev.basedpython.pycharm.inspections.MutableDefaultArgInspection"/>
+        <localInspection
+            language="BasedPython"
+            groupName="BasedPython"
+            displayName="by binary not configured"
+            shortName="BasedPythonBinaryNotConfigured"
+            enabledByDefault="true"
+            level="WEAK WARNING"
+            implementationClass="dev.basedpython.pycharm.inspections.BinaryNotConfiguredInspection"/>
+        <intentionAction>
+            <language>BasedPython</language>
+            <className>dev.basedpython.pycharm.inspections.intentions.AddReturnTypeIntention</className>
+            <category>BasedPython</category>
+        </intentionAction>
+        <intentionAction>
+            <language>BasedPython</language>
+            <className>dev.basedpython.pycharm.inspections.intentions.ConvertToDataClassIntention</className>
+            <category>BasedPython</category>
+        </intentionAction>
+        <intentionAction>
+            <language>BasedPython</language>
+            <className>dev.basedpython.pycharm.inspections.intentions.ConvertFromDataClassIntention</className>
+            <category>BasedPython</category>
+        </intentionAction>
+        <intentionAction>
+            <language>BasedPython</language>
+            <className>dev.basedpython.pycharm.inspections.intentions.WrapNullSafeIntention</className>
+            <category>BasedPython</category>
+        </intentionAction>
+        <intentionAction>
+            <language>BasedPython</language>
+            <className>dev.basedpython.pycharm.inspections.intentions.ExplainNamedTupleIntention</className>
+            <category>BasedPython</category>
+        </intentionAction>
+
+        <!-- ===== Stream L: extra templates ===== -->
+        <defaultLiveTemplates file="liveTemplates/BasedPythonExtra"/>
+        <codeInsight.template.postfixTemplateProvider
+            language="BasedPython"
+            implementationClass="dev.basedpython.pycharm.editor.templates.BasedPythonPostfixTemplateProvider"/>
+        <lang.surroundDescriptor
+            language="BasedPython"
+            implementationClass="dev.basedpython.pycharm.editor.templates.BasedPythonSurroundDescriptor"/>
+
+        <!-- ===== Stream O: project scaffolding + config awareness ===== -->
+        <generatorNewProjectWizard
+            implementation="dev.basedpython.pycharm.project.BasedPythonProjectGenerator"/>
+        <completion.contributor
+            language="TEXT"
+            implementationClass="dev.basedpython.pycharm.project.PyprojectCompletionContributor"/>
+        <completion.contributor
+            language="TOML"
+            implementationClass="dev.basedpython.pycharm.project.PyprojectCompletionContributor"/>
+        <directoryIndexExcludePolicy
+            implementation="dev.basedpython.pycharm.project.OutDirExcludePolicy"/>
+
+        <!-- ===== Stream R: navigation & search ===== -->
+        <gotoSymbolContributor
+            implementation="dev.basedpython.pycharm.navigation.BasedPythonSymbolContributor"/>
+        <gotoClassContributor
+            implementation="dev.basedpython.pycharm.navigation.BasedPythonClassContributor"/>
+        <gotoRelatedProvider
+            implementation="dev.basedpython.pycharm.navigation.BasedPythonRelatedProvider"/>
+
+        <!-- ===== Stream S: run line markers + test config ===== -->
+        <runLineMarkerContributor
+            language="BasedPython"
+            implementationClass="dev.basedpython.pycharm.run.marker.ByRunLineMarkerContributor"/>
+        <configurationType
+            implementation="dev.basedpython.pycharm.run.test.ByTestConfigurationType"/>
+
+        <!-- ===== Stream U: docs & help ===== -->
+        <lang.documentationProvider
+            language="BasedPython"
+            implementationClass="dev.basedpython.pycharm.docs.BasedPythonDocumentationProvider"/>
+
+        <!-- ===== Stream V: smart editing ===== -->
+        <enterHandlerDelegate
+            implementation="dev.basedpython.pycharm.editor.smart.BasedPythonEnterHandler"/>
+        <backspaceHandlerDelegate
+            implementation="dev.basedpython.pycharm.editor.smart.BasedPythonBackspaceHandler"/>
+
+        <!-- ===== Stream W: environment UX ===== -->
+        <editorNotificationProvider
+            implementation="dev.basedpython.pycharm.env.ByMissingBannerProvider"/>
+
+        <!-- ===== Stream Y: run ergonomics ===== -->
+        <consoleFilterProvider
+            implementation="dev.basedpython.pycharm.run.ergonomics.ByConsoleFilterProvider"/>
+        <stepsBeforeRunProvider
+            implementation="dev.basedpython.pycharm.run.ergonomics.BuildBeforeRunTaskProvider"/>
+
+        <!-- ===== Stream Z: move statement ===== -->
+        <statementUpDownMover
+            implementation="dev.basedpython.pycharm.editor.mover.BasedPythonStatementMover"
+            order="before line"/>
+
+        <!-- ===== Wave 6: cheap platform wins ===== -->
+        <postStartupActivity
+            implementation="dev.basedpython.pycharm.lsp.version.ByVersionCheckActivity"/>
+        <runLineMarkerContributor
+            language="BasedPython"
+            implementationClass="dev.basedpython.pycharm.run.testmarker.ByTestRunLineMarkerContributor"/>
+        <fileIndentOptionsProvider
+            implementation="dev.basedpython.pycharm.editor.indent.BasedPythonFileIndentOptionsProvider"/>
+
+        <!-- ===== Wave 7: highlight, watch, onboarding, template macros ===== -->
+        <highlightUsagesHandlerFactory
+            implementation="dev.basedpython.pycharm.editor.highlight.BasedPythonKeywordHighlightUsagesHandlerFactory"/>
+        <annotator
+            language="BasedPython"
+            implementationClass="dev.basedpython.pycharm.editor.highlight.BasedPythonNumericLiteralAnnotator"/>
+        <postStartupActivity
+            implementation="dev.basedpython.pycharm.onboarding.BasedPythonWelcomeActivity"/>
+        <liveTemplateMacro implementation="dev.basedpython.pycharm.editor.templates.macro.ByModuleNameMacro"/>
+        <liveTemplateMacro implementation="dev.basedpython.pycharm.editor.templates.macro.ByHeaderMacro"/>
+        <liveTemplateMacro implementation="dev.basedpython.pycharm.editor.templates.macro.ByOutPathMacro"/>
+
+        <!-- ===== Wave 8: buff format service, color presets, LSP lifecycle ===== -->
+        <formattingService
+            implementation="dev.basedpython.pycharm.editor.format.BuffFormattingService"/>
+        <bundledColorScheme path="/colorSchemes/BasedPythonDark"/>
+        <bundledColorScheme path="/colorSchemes/BasedPythonLight"/>
+        <postStartupActivity
+            implementation="dev.basedpython.pycharm.lsp.reload.BasedPythonLspReloadActivity"/>
+
+        <!-- ===== Wave 9: log tool window, module facet, explain intention ===== -->
+        <toolWindow id="basedpython"
+                    anchor="bottom"
+                    canCloseContents="false"
+                    factoryClass="dev.basedpython.pycharm.ui.log.BasedPythonLogToolWindowFactory"/>
+        <facetType implementation="dev.basedpython.pycharm.facet.BasedPythonFacetType"/>
+        <intentionAction>
+            <language>BasedPython</language>
+            <className>dev.basedpython.pycharm.inspections.explain.ExplainRuleIntention</className>
+            <category>BasedPython</category>
+        </intentionAction>
+
+        <!-- ===== Wave 10: settings web help ===== -->
+        <webHelpProvider id="dev.basedpython.pycharm"
+                         implementation="dev.basedpython.pycharm.docs.help.BasedPythonWebHelpProvider"/>
+    </extensions>
+
+    <applicationListeners>
+        <listener class="dev.basedpython.pycharm.run.watch.WatchModeSaveListener"
+                  topic="com.intellij.openapi.fileEditor.FileDocumentManagerListener"/>
+    </applicationListeners>
+
+    <actions>
+        <!-- ===== Stream B ===== -->
+        <action id="BasedPython.RestartLsp"
+                class="dev.basedpython.pycharm.lsp.RestartLspAction"
+                text="Restart BasedPython LSP Servers"
+                description="Stops and restarts the by and buff language servers for this project."/>
+
+        <!-- ===== Stream D: Tools menu group + popup entries ===== -->
+        <group id="BasedPython.ActionGroup"
+               class="dev.basedpython.pycharm.actions.BasedPythonActionGroup"
+               text="BasedPython"
+               icon="AllIcons.Nodes.Plugin"
+               popup="true">
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+
+            <action id="BasedPython.TranspileFile"
+                    class="dev.basedpython.pycharm.actions.TranspileFileAction"
+                    text="Transpile .by to .py"
+                    description="Run `by transpile` on the current file and open the Python output in a scratch tab."/>
+            <action id="BasedPython.ReverseTranspile"
+                    class="dev.basedpython.pycharm.actions.ReverseTranspileAction"
+                    text="Reverse Transpile .py to .by"
+                    description="Run `by transpile --reverse` on the current file and open the BasedPython output in a scratch tab."/>
+            <action id="BasedPython.GenerateApiFile"
+                    class="dev.basedpython.pycharm.actions.GenerateApiFileAction"
+                    text="Generate api.lock"
+                    description="Run `by generate-api-file` at the project root."/>
+            <action id="BasedPython.FormatWithBuff"
+                    class="dev.basedpython.pycharm.actions.FormatWithBuffAction"
+                    text="Format with buff"
+                    description="Run `buff format` on the current file.">
+                <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt shift L"/>
+            </action>
+            <action id="BasedPython.CheckProject"
+                    class="dev.basedpython.pycharm.actions.CheckProjectAction"
+                    text="Check Project"
+                    description="Run `by check` and stream output to a Run console."/>
+            <action id="BasedPython.CleanCaches"
+                    class="dev.basedpython.pycharm.actions.CleanCachesAction"
+                    text="Clean buff Caches"
+                    description="Run `buff clean` at the project root."/>
+            <action id="BasedPython.ExplainRule"
+                    class="dev.basedpython.pycharm.actions.ExplainRuleAction"
+                    text="Explain Rule..."
+                    description="Look up the rule code under the caret (or prompt for one) via `buff rule` / `by explain`."/>
+
+            <separator/>
+            <reference ref="BasedPython.RestartLsp"/>
+        </group>
+
+        <!-- Editor + Project View popups expose transpile actions directly. -->
+        <action id="BasedPython.TranspileFile.Popup"
+                class="dev.basedpython.pycharm.actions.TranspileFileAction"
+                text="Transpile to .py"
+                icon="AllIcons.Nodes.Plugin">
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+            <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
+        </action>
+        <action id="BasedPython.ReverseTranspile.Popup"
+                class="dev.basedpython.pycharm.actions.ReverseTranspileAction"
+                text="Reverse Transpile to .by"
+                icon="AllIcons.Nodes.Plugin">
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+            <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
+        </action>
+
+        <!-- ===== Stream F: New-file action ===== -->
+        <action id="BasedPython.NewFile"
+                class="dev.basedpython.pycharm.editor.CreateBasedPythonFileAction"
+                text="BasedPython File"
+                description="Create new BasedPython file">
+            <add-to-group group-id="NewGroup" anchor="before" relative-to-action="NewFile"/>
+        </action>
+
+        <!-- ===== Stream P: transpilation views ===== -->
+        <action id="dev.basedpython.pycharm.transpile.ShowTranspiledDiff"
+                class="dev.basedpython.pycharm.transpile.ShowTranspiledDiffAction"
+                text="Show Transpiled Python"
+                description="Open a side-by-side diff of the current .by file and its generated Python (live-refresh on edit).">
+            <add-to-group group-id="BasedPython.ActionGroup" anchor="after" relative-to-action="BasedPython.TranspileFile"/>
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+            <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
+        </action>
+        <action id="dev.basedpython.pycharm.transpile.GoToGeneratedPy"
+                class="dev.basedpython.pycharm.transpile.GoToGeneratedPyAction"
+                text="Go to Generated .py"
+                description="Open the out/ counterpart of the current .by file; offers to run `by build` if missing.">
+            <add-to-group group-id="BasedPython.ActionGroup" anchor="after" relative-to-action="dev.basedpython.pycharm.transpile.ShowTranspiledDiff"/>
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+            <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
+        </action>
+        <action id="dev.basedpython.pycharm.transpile.DiffApiLock"
+                class="dev.basedpython.pycharm.transpile.DiffApiLockAction"
+                text="Diff api.lock"
+                description="Compare the current api.lock against a freshly regenerated one to see public-API changes.">
+            <add-to-group group-id="BasedPython.ActionGroup" anchor="after" relative-to-action="BasedPython.GenerateApiFile"/>
+        </action>
+        <action id="dev.basedpython.pycharm.transpile.ConvertByToPy"
+                class="dev.basedpython.pycharm.transpile.ConvertByToPyAction"
+                text="Convert .by to .py (in place)"
+                description="Run `by transpile` and write result to out/&lt;relPath&gt;.py, creating the file if needed.">
+            <add-to-group group-id="BasedPython.ActionGroup" anchor="last"/>
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+            <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
+        </action>
+        <action id="dev.basedpython.pycharm.transpile.DebugWithPdb"
+                class="dev.basedpython.pycharm.transpile.DebugWithPdbAction"
+                text="Debug .by (pdb)"
+                description="Run `by build` then launch the generated .py under python -m pdb in an interactive console.">
+            <add-to-group group-id="BasedPython.ActionGroup" anchor="after" relative-to-action="dev.basedpython.pycharm.transpile.GoToGeneratedPy"/>
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+        </action>
+        <action id="dev.basedpython.pycharm.transpile.TranspileSelection"
+                class="dev.basedpython.pycharm.transpile.selection.TranspileSelectionAction"
+                text="Transpile Selection"
+                description="Transpile the selected basedpython snippet to Python and show it in a popup.">
+            <add-to-group group-id="BasedPython.ActionGroup" anchor="after" relative-to-action="dev.basedpython.pycharm.transpile.DebugWithPdb"/>
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+        </action>
+        <action id="BasedPython.ExportSettings"
+                class="dev.basedpython.pycharm.actions.settings.ExportSettingsAction"
+                text="Export basedpython Settings..."
+                description="Serialize the project's basedpython settings to a file.">
+            <add-to-group group-id="BasedPython.ActionGroup" anchor="last"/>
+        </action>
+        <action id="BasedPython.ImportSettings"
+                class="dev.basedpython.pycharm.actions.settings.ImportSettingsAction"
+                text="Import basedpython Settings..."
+                description="Load basedpython settings from a previously exported file.">
+            <add-to-group group-id="BasedPython.ActionGroup" anchor="last"/>
+        </action>
+        <action id="dev.basedpython.pycharm.run.watch.ToggleWatchMode"
+                class="dev.basedpython.pycharm.run.watch.ToggleWatchModeAction"
+                text="Toggle basedpython Watch Mode"
+                description="Toggle auto `by build` on save for .by files (per project, off by default).">
+            <add-to-group group-id="BasedPython.ActionGroup" anchor="last"/>
+        </action>
+        <action id="dev.basedpython.pycharm.transpile.ConvertPyToBy"
+                class="dev.basedpython.pycharm.transpile.ConvertPyToByAction"
+                text="Convert .py to .by (in place)"
+                description="Run `by transpile --reverse` and write result to a .by sibling next to the source .py.">
+            <add-to-group group-id="BasedPython.ActionGroup" anchor="last"/>
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+            <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
+        </action>
+
+        <!-- ===== Stream U: docs & help ===== -->
+        <action id="BasedPython.QuickReference"
+                class="dev.basedpython.pycharm.docs.BasedPythonQuickReferenceAction"
+                text="BasedPython Syntax Quick Reference"
+                description="Show a quick reference of basedpython syntax and modifiers.">
+            <add-to-group group-id="BasedPython.ActionGroup" anchor="last"/>
+        </action>
+
+        <!-- ===== Stream W: environment UX ===== -->
+        <action id="BasedPython.UvSync"
+                class="dev.basedpython.pycharm.env.UvSyncAction"
+                text="uv sync"
+                description="Run `uv sync` at the project base.">
+            <add-to-group group-id="BasedPython.ActionGroup" anchor="last"/>
+        </action>
+    </actions>
+</idea-plugin>

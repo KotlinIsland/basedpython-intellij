@@ -1,0 +1,95 @@
+<templateSet group="BasedPython">
+    <template name="cdef"
+              value="class def $NAME$:&#10;    $END$"
+              description="BasedPython class def"
+              toReformat="false"
+              toShortenFQNames="true">
+        <variable name="NAME" expression="" defaultValue="&quot;MyClass&quot;" alwaysStopAt="true"/>
+        <context>
+            <option name="OTHER" value="false"/>
+            <option name="BasedPython" value="true"/>
+        </context>
+    </template>
+    <template name="dcl"
+              value="data class $NAME$:&#10;    $END$"
+              description="BasedPython data class"
+              toReformat="false"
+              toShortenFQNames="true">
+        <variable name="NAME" expression="" defaultValue="&quot;MyData&quot;" alwaysStopAt="true"/>
+        <context>
+            <option name="OTHER" value="false"/>
+            <option name="BasedPython" value="true"/>
+        </context>
+    </template>
+    <template name="fdcl"
+              value="frozen data class $NAME$:&#10;    $END$"
+              description="BasedPython frozen data class"
+              toReformat="false"
+              toShortenFQNames="true">
+        <variable name="NAME" expression="" defaultValue="&quot;MyFrozen&quot;" alwaysStopAt="true"/>
+        <context>
+            <option name="OTHER" value="false"/>
+            <option name="BasedPython" value="true"/>
+        </context>
+    </template>
+    <template name="ecl"
+              value="enum class $NAME$:&#10;    $END$"
+              description="BasedPython enum class"
+              toReformat="false"
+              toShortenFQNames="true">
+        <variable name="NAME" expression="" defaultValue="&quot;MyEnum&quot;" alwaysStopAt="true"/>
+        <context>
+            <option name="OTHER" value="false"/>
+            <option name="BasedPython" value="true"/>
+        </context>
+    </template>
+    <template name="proto"
+              value="protocol $NAME$:&#10;    $END$"
+              description="BasedPython protocol"
+              toReformat="false"
+              toShortenFQNames="true">
+        <variable name="NAME" expression="" defaultValue="&quot;MyProtocol&quot;" alwaysStopAt="true"/>
+        <context>
+            <option name="OTHER" value="false"/>
+            <option name="BasedPython" value="true"/>
+        </context>
+    </template>
+    <template name="ovr"
+              value="override&#10;def $NAME$($SELF$) -> $TYPE$:&#10;    $END$"
+              description="BasedPython override method"
+              toReformat="false"
+              toShortenFQNames="true">
+        <variable name="NAME" expression="" defaultValue="&quot;method&quot;" alwaysStopAt="true"/>
+        <variable name="SELF" expression="" defaultValue="&quot;self&quot;" alwaysStopAt="true"/>
+        <variable name="TYPE" expression="" defaultValue="&quot;None&quot;" alwaysStopAt="true"/>
+        <context>
+            <option name="OTHER" value="false"/>
+            <option name="BasedPython" value="true"/>
+        </context>
+    </template>
+    <template name="nt"
+              value="newtype $NAME$ = $TYPE$$END$"
+              description="BasedPython newtype"
+              toReformat="false"
+              toShortenFQNames="true">
+        <variable name="NAME" expression="" defaultValue="&quot;MyType&quot;" alwaysStopAt="true"/>
+        <variable name="TYPE" expression="" defaultValue="&quot;int&quot;" alwaysStopAt="true"/>
+        <context>
+            <option name="OTHER" value="false"/>
+            <option name="BasedPython" value="true"/>
+        </context>
+    </template>
+    <template name="let"
+              value="let $NAME$: $TYPE$ = $VALUE$$END$"
+              description="BasedPython let binding"
+              toReformat="false"
+              toShortenFQNames="true">
+        <variable name="NAME" expression="" defaultValue="&quot;x&quot;" alwaysStopAt="true"/>
+        <variable name="TYPE" expression="" defaultValue="&quot;int&quot;" alwaysStopAt="true"/>
+        <variable name="VALUE" expression="" defaultValue="&quot;0&quot;" alwaysStopAt="true"/>
+        <context>
+            <option name="OTHER" value="false"/>
+            <option name="BasedPython" value="true"/>
+        </context>
+    </template>
+</templateSet>

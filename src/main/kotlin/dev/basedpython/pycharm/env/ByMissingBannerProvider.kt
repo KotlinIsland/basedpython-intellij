@@ -1,0 +1,111 @@
+package dev.basedpython.pycharm.env
+
+import com.intellij.execution.configurations.GeneralCommandLine
+import com.intellij.execution.process.OSProcessHandler
+import com.intellij.execution.process.ProcessAdapter
+import com.intellij.execution.process.ProcessEvent
+import com.intellij.execution.process.ProcessTerminatedListener
+import com.intellij.notification.NotificationType
+import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.fileEditor.FileEditor
+import com.intellij.openapi.options.ShowSettingsUtil
+import com.intellij.openapi.project.Project
+import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.ui.EditorNotificationPanel
+import com.intellij.ui.EditorNotificationProvider
+import com.intellij.ui.EditorNotifications
+import dev.basedpython.pycharm.lang.BasedPythonFileType
+import dev.basedpython.pycharm.lsp.BasedPythonBinaries
+import java.nio.file.Path
+import java.util.function.Function
+import javax.swing.JComponent
+
+/**
+ * Shows a banner above open `.by` files when the `by` binary cannot be resolved.
+ *
+ * Detection delegates to [BasedPythonBinaries.resolveBy]; a `null` result means "missing"
+ * and the banner is shown. Actions: install via `uv add --dev basedpython`, open the
+ * BasedPython settings page, or dismiss for the current editor session.
+ */
+class ByMissingBannerProvider : EditorNotificationProvider {
+
+    override fun collectNotificationData(
+        project: Project,
+        file: VirtualFile,
+    ): Function<in FileEditor, out JComponent?>? {
+        if (file.fileType !is BasedPythonFileType) return null
+        if (dismissed.contains(file)) return null
+        // Show only when `by` is unresolved.
+        if (BasedPythonBinaries.resolveBy(project) != null) return null
+
+        return Function { _ -> buildPanel(project, file) }
+    }
+
+    private fun buildPanel(project: Project, file: VirtualFile): EditorNotificationPanel {
+        val panel = EditorNotificationPanel(EditorNotificationPanel.Status.Warning)
+        panel.text = "basedpython `by` not found."
+
+        panel.createActionLabel("Install with uv") {
+            installWithUv(project)
+        }
+        panel.createActionLabel("Configure…") {
+            ShowSettingsUtil.getInstance().showSettingsDialog(project, "BasedPython")
+        }
+        panel.createActionLabel("Dismiss") {
+            dismissed.add(file)
+            EditorNotifications.getInstance(project).updateNotifications(file)
+        }
+        return panel
+    }
+
+    private fun installWithUv(project: Project) {
+        val base: Path = UvSupport.basePath(project) ?: run {
+            UvSupport.notify(project, "Install basedpython", "No project base path.", NotificationType.WARNING)
+            return
+        }
+        val uv = UvSupport.findUv()
+        val cmd = GeneralCommandLine()
+            .withExePath(uv?.toString() ?: "uv")
+            .withParameters("add", "--dev", "basedpython")
+            .withWorkDirectory(base.toFile())
+            .withCharset(Charsets.UTF_8)
+
+        ApplicationManager.getApplication().executeOnPooledThread {
+            try {
+                val handler = OSProcessHandler(cmd)
+                ProcessTerminatedListener.attach(handler)
+                handler.addProcessListener(object : ProcessAdapter() {
+                    override fun processTerminated(event: ProcessEvent) {
+                        if (event.exitCode == 0) {
+                            UvSupport.notify(
+                                project, "Install basedpython",
+                                "`uv add --dev basedpython` completed.", NotificationType.INFORMATION,
+                            )
+                            ApplicationManager.getApplication().invokeLater {
+                                EditorNotifications.getInstance(project).updateAllNotifications()
+                            }
+                        } else {
+                            UvSupport.notify(
+                                project, "Install basedpython",
+                                "`uv add --dev basedpython` exited with code ${event.exitCode}.",
+                                NotificationType.ERROR,
+                            )
+                        }
+                    }
+                })
+                handler.startNotify()
+            } catch (ex: Exception) {
+                UvSupport.notify(
+                    project, "Install basedpython",
+                    "Failed to start `uv`: ${ex.message}", NotificationType.ERROR,
+                )
+            }
+        }
+    }
+
+    private companion object {
+        /** Files the user dismissed the banner for, for this IDE session. */
+        private val dismissed: MutableSet<VirtualFile> =
+            java.util.Collections.synchronizedSet(java.util.HashSet())
+    }
+}
