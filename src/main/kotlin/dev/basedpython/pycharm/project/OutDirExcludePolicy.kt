@@ -3,6 +3,7 @@ package dev.basedpython.pycharm.project
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.roots.impl.DirectoryIndexExcludePolicy
 import com.intellij.openapi.vfs.VfsUtilCore
+import dev.basedpython.pycharm.settings.BasedPythonSettings
 
 /**
  * Excludes `out/` directories at content-root level from IDE indexing.
@@ -29,6 +30,12 @@ class OutDirExcludePolicy(private val project: Project) : DirectoryIndexExcludeP
      * method returning an empty array; we override it to add the `out/` dir.
      */
     override fun getExcludeUrlsForProject(): Array<String> {
+        // Opt-in reuse of Python tooling: when the user wants native Python code
+        // intelligence on the generated `.py` files (requires a Python plugin),
+        // stop excluding `out/` so the Python plugin indexes it.
+        if (BasedPythonSettings.getInstance(project).indexGeneratedPython) {
+            return emptyArray()
+        }
         val basePath = project.basePath ?: return emptyArray()
         val outUrl = VfsUtilCore.pathToUrl("$basePath/out")
         return arrayOf(outUrl)

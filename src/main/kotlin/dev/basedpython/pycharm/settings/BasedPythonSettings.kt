@@ -31,6 +31,13 @@ class BasedPythonSettings : PersistentStateComponent<BasedPythonSettings.State> 
     var inlayTypeHints: Boolean = true,
     var inlayReturnHints: Boolean = true,
     var lspTraceLevel: String = "off",
+    /**
+     * When true, the generated `out/` directory is NOT excluded from indexing,
+     * so a Python plugin (PyCharm, or IDEA with the Python plugin) provides full
+     * native code intelligence on the transpiled `.py` files. Off by default to
+     * keep `.by` files as the single source of truth and avoid duplicate symbols.
+     */
+    var indexGeneratedPython: Boolean = false,
   )
 
   private var state = State()
@@ -87,6 +94,10 @@ class BasedPythonSettings : PersistentStateComponent<BasedPythonSettings.State> 
   var lspTraceLevel: String
     get() = state.lspTraceLevel
     set(value) { state.lspTraceLevel = value }
+
+  var indexGeneratedPython: Boolean
+    get() = state.indexGeneratedPython
+    set(value) { state.indexGeneratedPython = value }
 
   companion object {
     @JvmStatic
