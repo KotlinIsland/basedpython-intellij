@@ -9,8 +9,8 @@ Status key: `[x]` done · `[~]` partial · `[ ]` todo
 ## 1. Language registration & file type
 - [x] `.by` file type + icon
 - [x] Language singleton, parser definition (flat)
-- [ ] Real PSI tree (composite nodes: defs, classes, imports, params) — enables structure view, folding, find-usages without LSP
-- [ ] Indentation-aware lexer (INDENT/DEDENT tokens)
+- [x] Real PSI tree (composite nodes: defs, classes, imports, params, blocks, decorators) — lang.psi.BasedPythonPsiElements + lang.parser.BasedPythonParser
+- [x] Indentation-aware lexer (INDENT/DEDENT/STATEMENT_BREAK tokens) — lang.parser.BasedPythonIndentingLexer
 - [ ] f-string interpolation sub-lexing (highlight `{expr}` inside strings)
 - [x] Associate `.pyi` stubs + `.by` variants (no separate `.by` stub variant exists; `.pyi` handled by Python support — N/A)
 - [ ] Dialect detection: treat `.py` in basedpython project as basedpython-aware
@@ -154,7 +154,8 @@ Status key: `[x]` done · `[~]` partial · `[ ]` todo
 ## 16. Project / build system
 - [x] Project wizard / new-project template (basedpython project scaffold)
 - [x] pyproject.toml `[tool.ruff]` / basedpython config awareness + completion
-- [x] Mark `out/` as generated/excluded
+- [x] Mark `out/` as generated/excluded (project.OutDirExcludePolicy)
+- [x] Python interop: opt-in setting to index generated `.py` in `out/` so an installed Python plugin (PyCharm / IDEA+Python) gives native code intelligence on the transpiled output — `BasedPythonSettings.indexGeneratedPython` gates OutDirExcludePolicy; toggle fires roots rescan (IDEA Ultimate does NOT bundle Python, so reuse is opt-in when a Python plugin is present)
 - [x] Watch mode: auto `by build` on save (opt-in) (run.watch.WatchModeSaveListener + ToggleWatchModeAction)
 - [x] Module facet for basedpython (facet.BasedPythonFacetType)
 

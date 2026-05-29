@@ -68,6 +68,10 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
     private val inlayReturnHints = JCheckBox("Return type hints")
     private val lspTraceCombo = ComboBox(arrayOf("off", "messages", "verbose"))
 
+    private val indexGeneratedPython = JCheckBox(
+        "Index generated .py in out/ (enables native Python support — requires a Python plugin)",
+    )
+
     private val detectedVenvLabel = JBLabel("Detected venv binary: …")
 
     private var rootPanel: JComponent? = null
@@ -108,6 +112,9 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
             }
             group("Diagnostics") {
                 row("LSP trace level:") { cell(lspTraceCombo) }
+            }
+            group("Python interop") {
+                row { cell(indexGeneratedPython) }
             }
         }
 
@@ -171,7 +178,8 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
             inlayParameterHints.isSelected != s.inlayParameterHints ||
             inlayTypeHints.isSelected != s.inlayTypeHints ||
             inlayReturnHints.isSelected != s.inlayReturnHints ||
-            (lspTraceCombo.selectedItem as? String ?: "off") != s.lspTraceLevel
+            (lspTraceCombo.selectedItem as? String ?: "off") != s.lspTraceLevel ||
+            indexGeneratedPython.isSelected != s.indexGeneratedPython
     }
 
     override fun apply() {
@@ -188,8 +196,30 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
         s.inlayTypeHints = inlayTypeHints.isSelected
         s.inlayReturnHints = inlayReturnHints.isSelected
         s.lspTraceLevel = lspTraceCombo.selectedItem as? String ?: "off"
+
+        val indexChanged = indexGeneratedPython.isSelected != s.indexGeneratedPython
+        s.indexGeneratedPython = indexGeneratedPython.isSelected
+        if (indexChanged) fireRootsRescan()
+
         BasedPythonLspReloader.getInstance(project).onSettingsChanged()
         updateDetectedLabel()
+    }
+
+    /**
+     * Re-evaluate directory-index exclusions so toggling [indexGeneratedPython]
+     * immediately includes/excludes the generated `out/` directory.
+     */
+    private fun fireRootsRescan() {
+        com.intellij.openapi.application.ApplicationManager.getApplication().invokeLater {
+            com.intellij.openapi.application.WriteAction.run<RuntimeException> {
+                com.intellij.openapi.roots.ex.ProjectRootManagerEx
+                    .getInstanceEx(project)
+                    .makeRootsChange(
+                        com.intellij.openapi.util.EmptyRunnable.getInstance(),
+                        com.intellij.openapi.project.RootsChangeRescanningInfo.TOTAL_RESCAN,
+                    )
+            }
+        }
     }
 
     override fun reset() {
@@ -206,6 +236,7 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
         inlayTypeHints.isSelected = s.inlayTypeHints
         inlayReturnHints.isSelected = s.inlayReturnHints
         lspTraceCombo.selectedItem = s.lspTraceLevel
+        indexGeneratedPython.isSelected = s.indexGeneratedPython
         updateDetectedLabel()
     }
 
