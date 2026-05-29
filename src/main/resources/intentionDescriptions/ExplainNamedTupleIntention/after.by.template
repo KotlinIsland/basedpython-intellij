@@ -1,0 +1,2 @@
+def get_point() -> (x: float, y: float):
+    return (x=1.0, y=2.0)

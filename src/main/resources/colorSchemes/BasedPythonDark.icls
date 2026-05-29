@@ -1,0 +1,145 @@
+<scheme name="BasedPython Dark" version="142" parent_scheme="Darcula">
+  <metaInfo>
+    <property name="created">2026-05-29</property>
+    <property name="ide">PyCharm</property>
+    <property name="originalScheme">BasedPython Dark</property>
+  </metaInfo>
+  <colors>
+    <option name="CARET_COLOR" value="ffd43b" />
+  </colors>
+  <attributes>
+    <!-- Lexer-based keys (dev.basedpython.pycharm.lang.BasedPythonColors) -->
+    <option name="BASEDPYTHON_KEYWORD">
+      <value>
+        <option name="FOREGROUND" value="ffd43b" />
+        <option name="FONT_TYPE" value="1" />
+      </value>
+    </option>
+    <option name="BASEDPYTHON_STRING">
+      <value>
+        <option name="FOREGROUND" value="6a8759" />
+      </value>
+    </option>
+    <option name="BASEDPYTHON_NUMBER">
+      <value>
+        <option name="FOREGROUND" value="56b6c2" />
+      </value>
+    </option>
+    <option name="BASEDPYTHON_COMMENT">
+      <value>
+        <option name="FOREGROUND" value="7f848e" />
+        <option name="FONT_TYPE" value="2" />
+      </value>
+    </option>
+    <option name="BASEDPYTHON_OPERATOR">
+      <value>
+        <option name="FOREGROUND" value="ffd43b" />
+      </value>
+    </option>
+    <option name="BASEDPYTHON_IDENTIFIER">
+      <value>
+        <option name="FOREGROUND" value="bbbbbb" />
+      </value>
+    </option>
+    <option name="BASEDPYTHON_PARENTHESES">
+      <value>
+        <option name="FOREGROUND" value="cccccc" />
+      </value>
+    </option>
+    <option name="BASEDPYTHON_BRACKETS">
+      <value>
+        <option name="FOREGROUND" value="cccccc" />
+      </value>
+    </option>
+    <option name="BASEDPYTHON_BRACES">
+      <value>
+        <option name="FOREGROUND" value="cccccc" />
+      </value>
+    </option>
+    <option name="BASEDPYTHON_COMMA">
+      <value>
+        <option name="FOREGROUND" value="cccccc" />
+      </value>
+    </option>
+    <option name="BASEDPYTHON_SEMICOLON">
+      <value>
+        <option name="FOREGROUND" value="cccccc" />
+      </value>
+    </option>
+    <option name="BASEDPYTHON_DOT">
+      <value>
+        <option name="FOREGROUND" value="cccccc" />
+      </value>
+    </option>
+    <option name="BASEDPYTHON_BAD_CHARACTER">
+      <value>
+        <option name="FOREGROUND" value="ff5370" />
+        <option name="EFFECT_COLOR" value="ff5370" />
+        <option name="EFFECT_TYPE" value="2" />
+      </value>
+    </option>
+    <!-- Semantic (annotator-driven) keys (dev.basedpython.pycharm.highlight.BasedPythonHighlightKeys) -->
+    <option name="BASEDPYTHON_BUILTIN_NAME">
+      <value>
+        <option name="FOREGROUND" value="4b8bbe" />
+        <option name="FONT_TYPE" value="1" />
+      </value>
+    </option>
+    <option name="BASEDPYTHON_SELF_PARAMETER">
+      <value>
+        <option name="FOREGROUND" value="ffd43b" />
+        <option name="FONT_TYPE" value="2" />
+      </value>
+    </option>
+    <option name="BASEDPYTHON_DECORATOR">
+      <value>
+        <option name="FOREGROUND" value="ffd43b" />
+      </value>
+    </option>
+    <option name="BASEDPYTHON_FUNCTION_DECLARATION">
+      <value>
+        <option name="FOREGROUND" value="6ab0de" />
+        <option name="FONT_TYPE" value="1" />
+      </value>
+    </option>
+    <option name="BASEDPYTHON_CLASS_DECLARATION">
+      <value>
+        <option name="FOREGROUND" value="4b8bbe" />
+        <option name="FONT_TYPE" value="1" />
+      </value>
+    </option>
+    <option name="BASEDPYTHON_PARAMETER">
+      <value>
+        <option name="FOREGROUND" value="bbbbbb" />
+      </value>
+    </option>
+    <option name="BASEDPYTHON_TYPE_NAME">
+      <value>
+        <option name="FOREGROUND" value="6ab0de" />
+      </value>
+    </option>
+    <option name="BASEDPYTHON_KEYWORD_ARGUMENT">
+      <value>
+        <option name="FOREGROUND" value="d4a96a" />
+      </value>
+    </option>
+    <option name="BASEDPYTHON_STRING_ESCAPE">
+      <value>
+        <option name="FOREGROUND" value="56b6c2" />
+        <option name="FONT_TYPE" value="1" />
+      </value>
+    </option>
+    <option name="BASEDPYTHON_FSTRING_INTERP">
+      <value>
+        <option name="FOREGROUND" value="ffd43b" />
+      </value>
+    </option>
+    <!-- Numeric literal special key (BasedPythonNumericLiteralAnnotator) -->
+    <option name="BASEDPYTHON_NUMERIC_LITERAL_SPECIAL">
+      <value>
+        <option name="FOREGROUND" value="2bbac5" />
+        <option name="FONT_TYPE" value="1" />
+      </value>
+    </option>
+  </attributes>
+</scheme>

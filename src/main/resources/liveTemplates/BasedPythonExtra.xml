@@ -1,0 +1,136 @@
+<templateSet group="BasedPythonExtra">
+    <template name="main"
+              value="if __name__ == &quot;__main__&quot;:&#10;    $END$"
+              description="main guard"
+              toReformat="false"
+              toShortenFQNames="true">
+        <context>
+            <option name="OTHER" value="false"/>
+            <option name="BasedPython" value="true"/>
+        </context>
+    </template>
+    <template name="adef"
+              value="async def $NAME$($PARAMS$) -> $RETURN$:&#10;    $END$"
+              description="async def"
+              toReformat="false"
+              toShortenFQNames="true">
+        <variable name="NAME" expression="" defaultValue="&quot;my_func&quot;" alwaysStopAt="true"/>
+        <variable name="PARAMS" expression="" defaultValue="&quot;&quot;" alwaysStopAt="true"/>
+        <variable name="RETURN" expression="" defaultValue="&quot;None&quot;" alwaysStopAt="true"/>
+        <context>
+            <option name="OTHER" value="false"/>
+            <option name="BasedPython" value="true"/>
+        </context>
+    </template>
+    <template name="match"
+              value="match $EXPR$:&#10;    case $PATTERN$:&#10;        $END$"
+              description="match/case statement"
+              toReformat="false"
+              toShortenFQNames="true">
+        <variable name="EXPR" expression="" defaultValue="&quot;value&quot;" alwaysStopAt="true"/>
+        <variable name="PATTERN" expression="" defaultValue="&quot;_&quot;" alwaysStopAt="true"/>
+        <context>
+            <option name="OTHER" value="false"/>
+            <option name="BasedPython" value="true"/>
+        </context>
+    </template>
+    <template name="enum"
+              value="enum class $NAME$:&#10;    $MEMBER$ = $VALUE$$END$"
+              description="enum class"
+              toReformat="false"
+              toShortenFQNames="true">
+        <variable name="NAME" expression="" defaultValue="&quot;MyEnum&quot;" alwaysStopAt="true"/>
+        <variable name="MEMBER" expression="" defaultValue="&quot;VALUE&quot;" alwaysStopAt="true"/>
+        <variable name="VALUE" expression="" defaultValue="&quot;1&quot;" alwaysStopAt="true"/>
+        <context>
+            <option name="OTHER" value="false"/>
+            <option name="BasedPython" value="true"/>
+        </context>
+    </template>
+    <template name="test"
+              value="def test_$NAME$() -> None:&#10;    $END$"
+              description="pytest test function"
+              toReformat="false"
+              toShortenFQNames="true">
+        <variable name="NAME" expression="" defaultValue="&quot;something&quot;" alwaysStopAt="true"/>
+        <context>
+            <option name="OTHER" value="false"/>
+            <option name="BasedPython" value="true"/>
+        </context>
+    </template>
+    <template name="fix"
+              value="@pytest.fixture&#10;def $NAME$($PARAMS$):&#10;    $END$"
+              description="pytest fixture"
+              toReformat="false"
+              toShortenFQNames="true">
+        <variable name="NAME" expression="" defaultValue="&quot;my_fixture&quot;" alwaysStopAt="true"/>
+        <variable name="PARAMS" expression="" defaultValue="&quot;&quot;" alwaysStopAt="true"/>
+        <context>
+            <option name="OTHER" value="false"/>
+            <option name="BasedPython" value="true"/>
+        </context>
+    </template>
+    <template name="prop"
+              value="@property&#10;def $NAME$(self) -> $TYPE$:&#10;    $END$"
+              description="property"
+              toReformat="false"
+              toShortenFQNames="true">
+        <variable name="NAME" expression="" defaultValue="&quot;value&quot;" alwaysStopAt="true"/>
+        <variable name="TYPE" expression="" defaultValue="&quot;int&quot;" alwaysStopAt="true"/>
+        <context>
+            <option name="OTHER" value="false"/>
+            <option name="BasedPython" value="true"/>
+        </context>
+    </template>
+    <template name="field"
+              value="$NAME$: $TYPE$ = $DEFAULT$$END$"
+              description="dataclass field"
+              toReformat="false"
+              toShortenFQNames="true">
+        <variable name="NAME" expression="" defaultValue="&quot;field_name&quot;" alwaysStopAt="true"/>
+        <variable name="TYPE" expression="" defaultValue="&quot;int&quot;" alwaysStopAt="true"/>
+        <variable name="DEFAULT" expression="" defaultValue="&quot;0&quot;" alwaysStopAt="true"/>
+        <context>
+            <option name="OTHER" value="false"/>
+            <option name="BasedPython" value="true"/>
+        </context>
+    </template>
+    <template name="try"
+              value="try:&#10;    $TRY$&#10;except $EXC$ as $VAR$:&#10;    $END$"
+              description="try/except"
+              toReformat="false"
+              toShortenFQNames="true">
+        <variable name="TRY" expression="" defaultValue="&quot;pass&quot;" alwaysStopAt="true"/>
+        <variable name="EXC" expression="" defaultValue="&quot;Exception&quot;" alwaysStopAt="true"/>
+        <variable name="VAR" expression="" defaultValue="&quot;e&quot;" alwaysStopAt="true"/>
+        <context>
+            <option name="OTHER" value="false"/>
+            <option name="BasedPython" value="true"/>
+        </context>
+    </template>
+    <template name="with"
+              value="with $EXPR$ as $VAR$:&#10;    $END$"
+              description="with statement"
+              toReformat="false"
+              toShortenFQNames="true">
+        <variable name="EXPR" expression="" defaultValue="&quot;context_manager&quot;" alwaysStopAt="true"/>
+        <variable name="VAR" expression="" defaultValue="&quot;ctx&quot;" alwaysStopAt="true"/>
+        <context>
+            <option name="OTHER" value="false"/>
+            <option name="BasedPython" value="true"/>
+        </context>
+    </template>
+    <template name="compr"
+              value="[$EXPR$ for $VAR$ in $ITER$]$END$"
+              description="list comprehension"
+              toReformat="false"
+              toShortenFQNames="true">
+        <variable name="EXPR" expression="" defaultValue="&quot;x&quot;" alwaysStopAt="true"/>
+        <variable name="VAR" expression="" defaultValue="&quot;x&quot;" alwaysStopAt="true"/>
+        <variable name="ITER" expression="" defaultValue="&quot;items&quot;" alwaysStopAt="true"/>
+        <context>
+            <option name="OTHER" value="false"/>
+            <option name="BasedPython" value="true"/>
+        </context>
+    </template>
+</templateSet>
