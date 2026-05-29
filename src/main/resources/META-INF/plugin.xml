@@ -253,6 +253,15 @@
         <!-- ===== Wave 10: settings web help ===== -->
         <webHelpProvider id="dev.basedpython.pycharm"
                          implementation="dev.basedpython.pycharm.docs.help.BasedPythonWebHelpProvider"/>
+
+        <!-- ===== Wave 11: application-level defaults (§144) ===== -->
+        <applicationService
+            serviceImplementation="dev.basedpython.pycharm.settings.app.BasedPythonAppSettings"/>
+        <applicationConfigurable
+            groupId="language"
+            id="dev.basedpython.pycharm.settings.app"
+            displayName="BasedPython Defaults"
+            instance="dev.basedpython.pycharm.settings.app.BasedPythonAppConfigurable"/>
     </extensions>
 
     <applicationListeners>
@@ -420,6 +429,30 @@
                 text="uv sync"
                 description="Run `uv sync` at the project base.">
             <add-to-group group-id="BasedPython.ActionGroup" anchor="last"/>
+        </action>
+
+        <!-- ===== Wave 11: REPL console (§182) ===== -->
+        <action id="BasedPython.OpenRepl"
+                class="dev.basedpython.pycharm.console.OpenBasedPythonReplAction"
+                text="Open basedpython REPL"
+                description="Start an interactive `by repl` (falls back to `by run`) console.">
+            <add-to-group group-id="BasedPython.ActionGroup" anchor="last"/>
+        </action>
+
+        <!-- ===== Wave 11: local refactorings (§115) ===== -->
+        <action id="dev.basedpython.pycharm.refactoring.ExtractVariable"
+                class="dev.basedpython.pycharm.refactoring.ExtractVariableAction"
+                text="Extract Variable (BasedPython)"
+                description="Extract the selected expression into a new local variable">
+            <add-to-group group-id="BasedPython.ActionGroup" anchor="last"/>
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+        </action>
+        <action id="dev.basedpython.pycharm.refactoring.IntroduceConstant"
+                class="dev.basedpython.pycharm.refactoring.IntroduceConstantAction"
+                text="Introduce Constant (BasedPython)"
+                description="Extract the selected expression into a module-level UPPER_CASE constant">
+            <add-to-group group-id="BasedPython.ActionGroup" anchor="last"/>
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
         </action>
     </actions>
 </idea-plugin>

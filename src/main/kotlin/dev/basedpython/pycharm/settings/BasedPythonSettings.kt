@@ -99,6 +99,28 @@ class BasedPythonSettings : PersistentStateComponent<BasedPythonSettings.State> 
     get() = state.indexGeneratedPython
     set(value) { state.indexGeneratedPython = value }
 
+  // ---- Effective values: project value, else IDE-wide default (see settings.app) ----
+
+  /** `by` path: project value, or the application-level default, or null (autodetect). */
+  val effectiveByPath: String?
+    get() = dev.basedpython.pycharm.settings.app.BasedPythonDefaults.effectiveByPath(state.byPath)
+
+  /** `buff` path: project value, or the application-level default, or null (autodetect). */
+  val effectiveBuffPath: String?
+    get() = dev.basedpython.pycharm.settings.app.BasedPythonDefaults.effectiveBuffPath(state.buffPath)
+
+  val effectiveByExtraArgs: String
+    get() = dev.basedpython.pycharm.settings.app.BasedPythonDefaults.effectiveByExtraArgs(state.byExtraArgs)
+
+  val effectiveBuffExtraArgs: String
+    get() = dev.basedpython.pycharm.settings.app.BasedPythonDefaults.effectiveBuffExtraArgs(state.buffExtraArgs)
+
+  val effectivePythonVersion: String
+    get() = dev.basedpython.pycharm.settings.app.BasedPythonDefaults.effectivePythonVersion(state.pythonVersion)
+
+  val effectiveLspTraceLevel: String
+    get() = dev.basedpython.pycharm.settings.app.BasedPythonDefaults.effectiveLspTraceLevel(state.lspTraceLevel)
+
   companion object {
     @JvmStatic
     fun getInstance(project: Project): BasedPythonSettings = project.service()
