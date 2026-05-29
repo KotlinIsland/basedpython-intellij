@@ -13,14 +13,14 @@ Status key: `[x]` done · `[~]` partial · `[ ]` todo
 - [x] Indentation-aware lexer (INDENT/DEDENT/STATEMENT_BREAK tokens) — lang.parser.BasedPythonIndentingLexer
 - [x] f-string interpolation sub-lexing (highlight `{expr}` inside strings) — highlight.fstring.FStringInterpolation (pure helper) + FStringInterpolationAnnotator; reuses FSTRING_INTERP color key
 - [x] Associate `.pyi` stubs + `.by` variants (no separate `.by` stub variant exists; `.pyi` handled by Python support — N/A)
-- [ ] Dialect detection: treat `.py` in basedpython project as basedpython-aware
+- [x] Dialect detection: treat `.py` in basedpython project as basedpython-aware — lang.dialect.BasedPythonFileTypeOverrider + BasedPythonProjectDetector (byEnabled + marker file: pyproject.toml/api.lock/top-level .by); only overrides .py in basedpython projects
 - [x] File-type icon + marketplace logo (pluginIcon.svg light/dark)
 
 ## 2. Syntax highlighting
 - [x] Lexer-driven keyword/string/number/comment/operator highlighting
 - [x] basedpython extras (`?.`, `??`, `final`, `override`, `protocol`, `let`, `newtype`, `data class`, etc.)
 - [x] Annotator-level semantic coloring fallback when LSP off (builtins, self/cls, decorators, type names)
-- [~] LSP semantic tokens → color scheme keys (platform default mapping active; custom basedpython-key mapping pending)
+- [x] LSP semantic tokens → color scheme keys — lsp.semantic.BasedPythonSemanticTokensMapping (pure) + BasedPythonLspSemanticTokensSupport, wired into ByLspServerDescriptor.semanticTokensCustomizer; maps LSP token types/modifiers to basedpython TextAttributesKeys (themeable)
 - [x] String escape sequence highlighting
 - [x] f-string interpolation highlighting
 - [x] Highlight numeric separators, complex literals distinctly (editor.highlight.BasedPythonNumericLiteralAnnotator)
@@ -169,7 +169,7 @@ Status key: `[x]` done · `[~]` partial · `[ ]` todo
 ## 18. Quality / infra
 - [x] Unit tests (lexer, file type, binary resolution)
 - [x] LSP integration tests (lsp/*Test — 22 binary-free tests)
-- [~] Plugin verifier (pluginVerifier task) passes for target IDEs
+- [x] Plugin verifier (pluginVerifier task) passes for target IDEs — Compatible against IU-261.25134.12 (only informational deprecated/experimental/internal-API usages)
 - [x] CI build + verify
 - [x] Compatibility range (sinceBuild/untilBuild) set
 - [x] Plugin logo/marketplace assets (pluginIcon.svg light/dark)
@@ -182,6 +182,6 @@ Status key: `[x]` done · `[~]` partial · `[ ]` todo
 - [ ] Notebook (.ipynb) support via LSP notebook sync
 - [x] REPL / console for `by run` — console.OpenBasedPythonReplAction (interactive `by repl`, falls back to `by run`; RunContentExecutor + KillableProcessHandler)
 - [ ] Inline transpile error decorations mapped to `.by` lines
-- [ ] AI-assist hooks (explain transpilation)
+- [x] AI-assist hooks (explain transpilation) — transpile.explain.TranspilationExplainer (pure: detects null-safe `?.`/`?[`, elvis `?:`, `??`, `!!`, data-class, match/case, pipe `|>`, interpolation, val/var/let/const) + ExplainTranspilationAction (runs `by transpile`, shows HTML notes popup)
 - [~] Multi-root workspace support — OutDirExcludePolicy now excludes `out/` under every content root (multi-module aware); broader per-root binary/settings resolution still pending
 - [x] Color scheme presets matching basedpython branding (BasedPythonDark/Light.icls)
