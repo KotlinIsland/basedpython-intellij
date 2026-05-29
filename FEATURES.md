@@ -112,7 +112,7 @@ Status key: `[x]` done · `[~]` partial · `[ ]` todo
 ## 11. Refactoring
 - [x] Rename (LSP rename — Shift+F6, enabled on `by`)
 - [ ] Safe delete
-- [ ] Extract variable / method / constant
+- [~] Extract variable / method / constant — Extract Variable + Introduce Constant done (selection-driven, refactoring.ExtractVariableAction/IntroduceConstantAction); Extract Method pending
 - [ ] Inline variable
 - [ ] Change signature
 - [ ] Move file/symbol + update imports
@@ -141,7 +141,7 @@ Status key: `[x]` done · `[~]` partial · `[ ]` todo
 - [x] LSP trace level (off/messages/verbose)
 - [~] Per-server enable + capability toggles (byEnabled/buffEnabled present; capability toggles pending)
 - [x] Import/export settings (actions.settings.Export/ImportSettingsAction)
-- [ ] Application-level defaults vs project override
+- [x] Application-level defaults vs project override — settings.app.BasedPythonAppSettings (APP service) + BasedPythonDefaults resolver; BasedPythonSettings.effective* getters fall back to IDE-wide defaults; BasedPythonAppConfigurable UI ("BasedPython Defaults")
 
 ## 15. Status / UX
 - [x] Status bar widget (LSP health)
@@ -180,7 +180,7 @@ Status key: `[x]` done · `[~]` partial · `[ ]` todo
 
 ## 19. Stretch / nice-to-have
 - [ ] Notebook (.ipynb) support via LSP notebook sync
-- [ ] REPL / console for `by run`
+- [x] REPL / console for `by run` — console.OpenBasedPythonReplAction (interactive `by repl`, falls back to `by run`; RunContentExecutor + KillableProcessHandler)
 - [ ] Inline transpile error decorations mapped to `.by` lines
 - [ ] AI-assist hooks (explain transpilation)
 - [ ] Multi-root workspace support
