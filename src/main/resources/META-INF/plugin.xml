@@ -470,6 +470,15 @@
             <add-to-group group-id="EditorPopupMenu" anchor="last"/>
         </action>
 
+        <!-- ===== Wave 15: extract method (§115) ===== -->
+        <action id="dev.basedpython.pycharm.refactoring.ExtractMethod"
+                class="dev.basedpython.pycharm.refactoring.ExtractMethodAction"
+                text="Extract Method (BasedPython)"
+                description="Extract the selected statements into a new function and replace them with a call">
+            <add-to-group group-id="BasedPython.ActionGroup" anchor="last"/>
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+        </action>
+
         <!-- ===== Wave 12: download prebuilt binaries (§58) ===== -->
         <action id="dev.basedpython.pycharm.env.download.DownloadBinaries"
                 class="dev.basedpython.pycharm.env.download.DownloadBinariesAction"
