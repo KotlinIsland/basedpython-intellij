@@ -2,7 +2,6 @@ package dev.basedpython.pycharm.lang
 
 import com.intellij.lang.ASTNode
 import com.intellij.lang.ParserDefinition
-import com.intellij.lang.PsiBuilder
 import com.intellij.lang.PsiParser
 import com.intellij.lexer.Lexer
 import com.intellij.openapi.project.Project
@@ -12,13 +11,20 @@ import com.intellij.psi.PsiFile
 import com.intellij.psi.TokenType
 import com.intellij.psi.tree.IFileElementType
 import com.intellij.psi.tree.TokenSet
+import dev.basedpython.pycharm.lang.parser.BasedPythonIndentingLexer
+import dev.basedpython.pycharm.lang.parser.BasedPythonParser
+import dev.basedpython.pycharm.lang.psi.BasedPythonPsiFactory
 
 /**
- * Minimal parser definition. We intentionally produce a flat tree: the lexer streams tokens,
- * the parser wraps them in the file element. Real semantic analysis is delegated to the LSP.
+ * Parser definition for `.by`. Parsing uses the indent-aware [BasedPythonIndentingLexer] and
+ * the tolerant [BasedPythonParser] to build a real composite PSI tree.
  *
- * `createElement` should never be called for non-file nodes because we never produce composite
- * nodes — but the platform requires the method, so we return a safe placeholder.
+ * NOTE: this lexer is for PARSING ONLY. Syntax highlighting keeps its own plain
+ * [BasedPythonLexer] (see [BasedPythonSyntaxHighlighter]), so the synthetic INDENT/DEDENT/
+ * STATEMENT_BREAK tokens never reach the highlighter.
+ *
+ * INDENT/DEDENT/STATEMENT_BREAK are deliberately NOT in the whitespace/comment sets so the
+ * parser can consume them as structural tokens.
  */
 class BasedPythonParserDefinition : ParserDefinition {
 
@@ -30,7 +36,7 @@ class BasedPythonParserDefinition : ParserDefinition {
         val WHITESPACE: TokenSet = TokenSet.create(TokenType.WHITE_SPACE)
     }
 
-    override fun createLexer(project: Project?): Lexer = BasedPythonLexer()
+    override fun createLexer(project: Project?): Lexer = BasedPythonIndentingLexer()
 
     override fun getCommentTokens(): TokenSet = COMMENTS
     override fun getStringLiteralElements(): TokenSet = STRINGS
@@ -38,19 +44,9 @@ class BasedPythonParserDefinition : ParserDefinition {
 
     override fun getFileNodeType(): IFileElementType = FILE
 
-    override fun createParser(project: Project?): PsiParser = PsiParser { root, builder ->
-        parseFlat(root, builder)
-    }
-
-    private fun parseFlat(root: com.intellij.psi.tree.IElementType, builder: PsiBuilder): ASTNode {
-        val marker = builder.mark()
-        while (!builder.eof()) builder.advanceLexer()
-        marker.done(root)
-        return builder.treeBuilt
-    }
+    override fun createParser(project: Project?): PsiParser = BasedPythonParser()
 
     override fun createFile(viewProvider: FileViewProvider): PsiFile = BasedPythonFile(viewProvider)
 
-    override fun createElement(node: ASTNode): PsiElement =
-        throw UnsupportedOperationException("BasedPython parser produces no composite nodes; node=$node")
+    override fun createElement(node: ASTNode): PsiElement = BasedPythonPsiFactory.createElement(node)
 }
