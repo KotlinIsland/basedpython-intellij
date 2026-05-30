@@ -48,12 +48,29 @@ class LexerTest {
 
     @Test
     fun `basedpython extra keywords are KEYWORD tokens`() {
-        val extras = listOf("final", "override", "abstract", "static", "protocol",
-            "let", "newtype", "public", "private", "data", "frozen", "enum")
+        val extras = listOf("final", "override", "abstract", "static", "protocol", "open", "export",
+            "let", "newtype", "public", "private", "data", "frozen", "enum", "out")
         val src = extras.joinToString(" ")
         val types = tokenTypes(src)
         assertEquals(extras.size, types.size)
         types.forEach { assertEquals("token should be KEYWORD", BasedPythonTokenTypes.KEYWORD, it) }
+    }
+
+    @Test
+    fun `variance markers out and in are keywords in a type-parameter bracket`() {
+        // abstract class A[out T]: ...  — the reported case where `out` was not coloured.
+        val tokens = tokenize("class A[out T]:")
+        val outTok = tokens.first { it.second == "out" }
+        assertEquals(BasedPythonTokenTypes.KEYWORD, outTok.first)
+        // `in out T` — both variance markers colour as keywords.
+        tokenize("class B[in out T]:").filter { it.second == "in" || it.second == "out" }
+            .forEach { assertEquals(BasedPythonTokenTypes.KEYWORD, it.first) }
+    }
+
+    @Test
+    fun `open and export modifiers are keywords`() {
+        val types = tokenTypes("open class export def")
+        types.forEach { assertEquals(BasedPythonTokenTypes.KEYWORD, it) }
     }
 
     @Test

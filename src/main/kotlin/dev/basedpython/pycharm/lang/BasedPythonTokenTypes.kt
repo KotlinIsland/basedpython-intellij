@@ -44,9 +44,16 @@ object BasedPythonTokenTypes {
     )
 
     // BasedPython extras
+    // Modifier keywords (may precede def/class/let/assignment, in any order) plus the
+    // class-kind / binding introducers. Matches the parser's `is_modifier_kw` list, with
+    // `protocol`/`let`/`newtype` (introducers) added.
+    // `out`/`in` are use-site variance markers in type brackets (`[out T]`, `[in T]`,
+    // `[in out T]`); `in` is already a Python keyword, so only `out` is added here.
+    // These are soft keywords (also valid identifiers); the highlighter colors them
+    // unconditionally, consistent with how `match`/`case`/`type`/`data` are treated.
     val BASEDPYTHON_KEYWORDS: Set<String> = setOf(
-        "final", "override", "abstract", "static", "protocol",
-        "let", "newtype", "public", "private", "data", "frozen", "enum",
+        "final", "override", "abstract", "static", "protocol", "open", "export",
+        "let", "newtype", "public", "private", "data", "frozen", "enum", "out",
     )
 
     val ALL_KEYWORDS: Set<String> = PYTHON_KEYWORDS + BASEDPYTHON_KEYWORDS
