@@ -6,8 +6,8 @@ import javax.swing.Icon
 
 class BasedPythonFileType private constructor() : LanguageFileType(BasedPythonLanguage) {
 
-    override fun getName(): String = "BasedPython"
-    override fun getDescription(): String = "BasedPython source file"
+    override fun getName(): String = "basedpython"
+    override fun getDescription(): String = "basedpython source file"
     override fun getDefaultExtension(): String = "by"
     override fun getIcon(): Icon = ICON
 

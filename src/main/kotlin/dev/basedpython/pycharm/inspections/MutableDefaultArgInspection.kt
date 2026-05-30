@@ -20,7 +20,7 @@ import dev.basedpython.pycharm.lang.BasedPythonTokenTypes
  */
 class MutableDefaultArgInspection : LocalInspectionTool() {
 
-    override fun getGroupDisplayName(): String = "BasedPython"
+    override fun getGroupDisplayName(): String = "basedpython"
     override fun getDisplayName(): String = "Mutable default argument"
     override fun getShortName(): String = "BasedPythonMutableDefaultArg"
 

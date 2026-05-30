@@ -65,7 +65,7 @@ internal class ByVersionCheckActivity : ProjectActivity {
                 NotificationType.WARNING,
             )
             .addAction(NotificationAction.createSimple(BasedPythonBundle.message("notification.action.openSettings")) {
-                ShowSettingsUtil.getInstance().showSettingsDialog(project, "BasedPython")
+                ShowSettingsUtil.getInstance().showSettingsDialog(project, "basedpython")
             })
             .notify(project)
     }

@@ -167,7 +167,7 @@ class BasedPythonBundleTest {
 
     @Test
     fun `plain values match expected text`() {
-        assertEquals("BasedPython", value("notification.basedPython.title"))
+        assertEquals("basedpython", value("notification.basedPython.title"))
         assertEquals("buff caches cleaned", value("notification.cleanCachesSuccess"))
         assertEquals("no explanation available", value("explainRule.noExplanation"))
         assertEquals("Restart", value("notification.action.restart"))

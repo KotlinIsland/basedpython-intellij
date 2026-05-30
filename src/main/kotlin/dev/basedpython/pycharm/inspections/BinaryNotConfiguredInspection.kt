@@ -17,7 +17,7 @@ import dev.basedpython.pycharm.lsp.BasedPythonBinaries
  */
 class BinaryNotConfiguredInspection : LocalInspectionTool() {
 
-    override fun getGroupDisplayName(): String = "BasedPython"
+    override fun getGroupDisplayName(): String = "basedpython"
     override fun getDisplayName(): String = "by binary not configured"
     override fun getShortName(): String = "BasedPythonBinaryNotConfigured"
 
@@ -42,10 +42,10 @@ class BinaryNotConfiguredInspection : LocalInspectionTool() {
     }
 
     private class OpenBasedPythonSettingsFix : LocalQuickFix {
-        override fun getFamilyName(): String = "Open BasedPython settings"
+        override fun getFamilyName(): String = "Open basedpython settings"
 
         override fun applyFix(project: Project, descriptor: ProblemDescriptor) {
-            ShowSettingsUtil.getInstance().showSettingsDialog(project, "BasedPython")
+            ShowSettingsUtil.getInstance().showSettingsDialog(project, "basedpython")
         }
     }
 }

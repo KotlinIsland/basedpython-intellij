@@ -29,7 +29,7 @@ class BasedPythonProjectGenerator : GeneratorNewProjectWizard {
 
     override val id: String = "BasedPython"
 
-    override val name: String = "BasedPython"
+    override val name: String = "basedpython"
 
     override val icon: Icon =
         IconLoader.getIcon("/icons/basedpython.svg", BasedPythonProjectGenerator::class.java)
@@ -108,8 +108,8 @@ indent-style = "space"
 """.trimIndent()
 
     private fun mainByContent(): String = """
-# BasedPython hello-world
-# Demonstrates data class syntax (a BasedPython extension over Python)
+# basedpython hello-world
+# Demonstrates data class syntax (a basedpython extension over Python)
 
 data class Point:
     x: float
@@ -142,7 +142,7 @@ __pycache__/
 venv/
 env/
 
-# BasedPython build output
+# basedpython build output
 out/
 
 # Distribution / packaging
@@ -161,7 +161,7 @@ build/
     private fun readmeContent(projectName: String): String = """
 # $projectName
 
-A [BasedPython](https://github.com/KotlinIsland/basedpython) project.
+A [basedpython](https://github.com/KotlinIsland/basedpython) project.
 
 ## Getting started
 
@@ -184,7 +184,7 @@ buff format .
 ```
 $projectName/
 ├── src/
-│   └── main.by        # BasedPython source files
+│   └── main.by        # basedpython source files
 ├── out/               # Transpiled Python (generated, excluded from indexing)
 ├── pyproject.toml     # Project config + [tool.ruff] config
 └── .gitignore

@@ -20,8 +20,8 @@ class FileTypeTest {
     }
 
     @Test
-    fun `name is BasedPython`() {
-        assertEquals("BasedPython", BasedPythonFileType.INSTANCE.name)
+    fun `name is basedpython`() {
+        assertEquals("basedpython", BasedPythonFileType.INSTANCE.name)
     }
 
     @Test

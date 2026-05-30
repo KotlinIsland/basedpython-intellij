@@ -89,7 +89,7 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
 
     private var rootPanel: JComponent? = null
 
-    override fun getDisplayName(): String = "BasedPython"
+    override fun getDisplayName(): String = "basedpython"
 
     override fun createComponent(): JComponent {
         val testByBtn = JButton("Test").apply { addActionListener { runVersionCheck(byPathField.text, "by") } }

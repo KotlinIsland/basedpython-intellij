@@ -56,7 +56,7 @@ class BasedPythonQuickReferenceAction : AnAction() {
     private companion object {
         val CHEAT_SHEET: String = buildString {
             append("<html><body style='font-family:sans-serif;'>")
-            append("<h3 style='margin:0 0 4px 0;'>BasedPython Syntax Quick Reference</h3>")
+            append("<h3 style='margin:0 0 4px 0;'>basedpython Syntax Quick Reference</h3>")
             append("<table cellpadding='2' style='font-size:small;'>")
 
             row("let x = 42", "Immutable binding")
