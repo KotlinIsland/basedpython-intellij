@@ -11,6 +11,7 @@ import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.vfs.VirtualFile
 import dev.basedpython.pycharm.lang.BasedPythonFileType
 import dev.basedpython.pycharm.refactoring.ExtractionLogic.ExtractionPlan
+import dev.basedpython.pycharm.util.BasedPythonBundle
 
 /**
  * Shared scaffolding for the selection-driven refactorings. Subclasses supply a display title,
@@ -61,7 +62,7 @@ abstract class AbstractExtractionAction : AnAction() {
         val suggested = suggestName(selectedText.trim())
         val name = promptForName(project, suggested) ?: return
         if (!ExtractionLogic.isValidIdentifier(name)) {
-            Messages.showErrorDialog(project, "'$name' is not a valid identifier.", commandTitle)
+            Messages.showErrorDialog(project, BasedPythonBundle.message("refactoring.invalidIdentifier", name), commandTitle)
             return
         }
 

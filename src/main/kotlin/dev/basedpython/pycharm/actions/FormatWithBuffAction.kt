@@ -10,6 +10,7 @@ import com.intellij.openapi.progress.Task
 import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.openapi.vfs.VirtualFile
 import dev.basedpython.pycharm.lang.BasedPythonFileType
+import dev.basedpython.pycharm.util.BasedPythonBundle
 
 /** `buff format <file>` for `.by`/`.py` files. Bound to Ctrl+Alt+Shift+L. */
 class FormatWithBuffAction : AnAction() {
@@ -26,16 +27,16 @@ class FormatWithBuffAction : AnAction() {
         val file = e.getData(CommonDataKeys.VIRTUAL_FILE) ?: return
         val path = file.toNioPath()
 
-        ProgressManager.getInstance().run(object : Task.Backgroundable(project, "Formatting ${file.name} with buff", true) {
+        ProgressManager.getInstance().run(object : Task.Backgroundable(project, BasedPythonBundle.message("progress.formattingWithBuff", file.name), true) {
             override fun run(indicator: ProgressIndicator) {
                 indicator.isIndeterminate = true
                 val out = ByCli.runBuff(project, "format", path.toString(), cwd = path.parent) ?: return
                 if (out.exitCode != 0) {
-                    ByCli.notifyError(project, "buff format failed", out.stderr.ifBlank { "exit ${out.exitCode}" })
+                    ByCli.notifyError(project, BasedPythonBundle.message("notification.formatFailed.title"), out.stderr.ifBlank { BasedPythonBundle.message("notification.exitCode", out.exitCode) })
                     return
                 }
                 VfsUtil.markDirtyAndRefresh(true, false, false, file)
-                ByCli.notifyInfo(project, "BasedPython", "Formatted ${file.name}")
+                ByCli.notifyInfo(project, BasedPythonBundle.message("notification.basedPython.title"), BasedPythonBundle.message("notification.formatted", file.name))
             }
         })
     }

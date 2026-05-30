@@ -15,6 +15,7 @@ import com.intellij.psi.search.GlobalSearchScope
 import dev.basedpython.pycharm.docs.BasedPythonDocEntries
 import dev.basedpython.pycharm.lang.BasedPythonFileType
 import dev.basedpython.pycharm.lsp.BasedPythonBinaries
+import dev.basedpython.pycharm.util.BasedPythonBundle
 
 /**
  * First-run welcome notification.
@@ -60,26 +61,25 @@ internal class BasedPythonWelcomeActivity : ProjectActivity {
         val notification = NotificationGroupManager.getInstance()
             .getNotificationGroup(NOTIFICATION_GROUP_ID)
             .createNotification(
-                "Welcome to basedpython",
-                "BasedPython support is active for this project. " +
-                    "Configure binaries and behavior in Settings, or read the docs to get started.",
+                BasedPythonBundle.message("notification.welcome.title"),
+                BasedPythonBundle.message("notification.welcome.content"),
                 NotificationType.INFORMATION,
             )
             .setImportant(true)
 
         notification
             .addAction(
-                NotificationAction.createSimple({ "Open Settings" }) {
+                NotificationAction.createSimple({ BasedPythonBundle.message("notification.action.openSettings") }) {
                     ShowSettingsUtil.getInstance().showSettingsDialog(project, SETTINGS_ID)
                 },
             )
             .addAction(
-                NotificationAction.createSimple({ "Documentation" }) {
+                NotificationAction.createSimple({ BasedPythonBundle.message("notification.action.documentation") }) {
                     BrowserUtil.browse(BasedPythonDocEntries.DOCS_BASE)
                 },
             )
             .addAction(
-                NotificationAction.createSimple({ "Don't show again" }) {
+                NotificationAction.createSimple({ BasedPythonBundle.message("notification.action.dontShowAgain") }) {
                     PropertiesComponent.getInstance().setValue(WELCOME_SHOWN_KEY, true)
                     notification.expire()
                 },

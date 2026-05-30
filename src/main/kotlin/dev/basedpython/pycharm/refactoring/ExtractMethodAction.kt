@@ -1,6 +1,7 @@
 package dev.basedpython.pycharm.refactoring
 
 import dev.basedpython.pycharm.refactoring.ExtractionLogic.ExtractionPlan
+import dev.basedpython.pycharm.util.BasedPythonBundle
 
 /**
  * "Extract Method" for `.by` files.
@@ -17,8 +18,8 @@ import dev.basedpython.pycharm.refactoring.ExtractionLogic.ExtractionPlan
  */
 class ExtractMethodAction : AbstractExtractionAction() {
 
-    override val commandTitle: String = "Extract Method"
-    override val namePrompt: String = "Method name:"
+    override val commandTitle: String get() = BasedPythonBundle.message("refactoring.extractMethod.title")
+    override val namePrompt: String get() = BasedPythonBundle.message("refactoring.extractMethod.prompt")
 
     override fun suggestName(expression: String): String = ExtractMethodLogic.defaultMethodName()
 

@@ -10,6 +10,7 @@ import com.intellij.openapi.options.ShowSettingsUtil
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.startup.ProjectActivity
 import dev.basedpython.pycharm.actions.ByCli
+import dev.basedpython.pycharm.util.BasedPythonBundle
 
 /**
  * On project open, runs `by --version` in the background. If the resolved `by`
@@ -59,12 +60,11 @@ internal class ByVersionCheckActivity : ProjectActivity {
         NotificationGroupManager.getInstance()
             .getNotificationGroup(ByCli.NOTIFICATION_GROUP_ID)
             .createNotification(
-                "BasedPython: `by` is out of date",
-                "Detected `by` version $detected, but $MIN_BY_VERSION or newer is recommended. " +
-                    "Some language features may not work correctly.",
+                BasedPythonBundle.message("notification.byOutdated.title"),
+                BasedPythonBundle.message("notification.byOutdated.content", detected, MIN_BY_VERSION),
                 NotificationType.WARNING,
             )
-            .addAction(NotificationAction.createSimple("Open settings") {
+            .addAction(NotificationAction.createSimple(BasedPythonBundle.message("notification.action.openSettings")) {
                 ShowSettingsUtil.getInstance().showSettingsDialog(project, "BasedPython")
             })
             .notify(project)

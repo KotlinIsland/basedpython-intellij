@@ -9,6 +9,7 @@ import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.vfs.VirtualFile
 import dev.basedpython.pycharm.lang.BasedPythonFileType
+import dev.basedpython.pycharm.util.BasedPythonBundle
 
 /**
  * Inline Variable refactoring for `.by` files (FEATURES.md §117).
@@ -23,7 +24,7 @@ import dev.basedpython.pycharm.lang.BasedPythonFileType
  */
 class InlineVariableAction : AnAction() {
 
-    private val commandTitle = "Inline Variable"
+    private val commandTitle get() = BasedPythonBundle.message("refactoring.inlineVariable.title")
 
     override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
 
@@ -47,7 +48,7 @@ class InlineVariableAction : AnAction() {
         if (name == null) {
             Messages.showInfoMessage(
                 project,
-                "Place the caret on a local variable to inline it.",
+                BasedPythonBundle.message("refactoring.inlineVariable.placeCaret"),
                 commandTitle,
             )
             return
@@ -57,8 +58,7 @@ class InlineVariableAction : AnAction() {
         if (plan == null) {
             Messages.showInfoMessage(
                 project,
-                "Cannot inline '$name': it must have exactly one single-line assignment " +
-                    "and at least one other usage.",
+                BasedPythonBundle.message("refactoring.inlineVariable.cannotInline", name),
                 commandTitle,
             )
             return

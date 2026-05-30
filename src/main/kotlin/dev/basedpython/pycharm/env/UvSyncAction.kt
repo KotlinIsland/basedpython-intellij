@@ -11,6 +11,7 @@ import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.project.Project
+import dev.basedpython.pycharm.util.BasedPythonBundle
 import java.nio.file.Path
 
 /**
@@ -32,7 +33,7 @@ class UvSyncAction : AnAction() {
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
         val base: Path = UvSupport.basePath(project) ?: run {
-            UvSupport.notify(project, "uv sync", "No project base path.", NotificationType.WARNING)
+            UvSupport.notify(project, BasedPythonBundle.message("uv.sync.title"), BasedPythonBundle.message("uv.noBasePath"), NotificationType.WARNING)
             return
         }
         val uv = UvSupport.findUv()
@@ -51,15 +52,15 @@ class UvSyncAction : AnAction() {
                     override fun processTerminated(event: ProcessEvent) {
                         val code = event.exitCode
                         if (code == 0) {
-                            UvSupport.notify(project, "uv sync", "Completed successfully.", NotificationType.INFORMATION)
+                            UvSupport.notify(project, BasedPythonBundle.message("uv.sync.title"), BasedPythonBundle.message("uv.sync.success"), NotificationType.INFORMATION)
                         } else {
-                            UvSupport.notify(project, "uv sync", "Exited with code $code.", NotificationType.ERROR)
+                            UvSupport.notify(project, BasedPythonBundle.message("uv.sync.title"), BasedPythonBundle.message("uv.sync.exitCode", code), NotificationType.ERROR)
                         }
                     }
                 })
                 handler.startNotify()
             } catch (ex: Exception) {
-                UvSupport.notify(project, "uv sync", "Failed to start: ${ex.message}", NotificationType.ERROR)
+                UvSupport.notify(project, BasedPythonBundle.message("uv.sync.title"), BasedPythonBundle.message("uv.sync.startFailed", ex.message ?: ""), NotificationType.ERROR)
             }
         }
     }

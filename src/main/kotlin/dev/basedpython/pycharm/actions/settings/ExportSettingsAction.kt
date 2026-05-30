@@ -12,6 +12,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.JDOMUtil
 import com.intellij.util.xmlb.XmlSerializer
 import dev.basedpython.pycharm.settings.BasedPythonSettings
+import dev.basedpython.pycharm.util.BasedPythonBundle
 
 /**
  * Serializes the current project's [BasedPythonSettings] state to a user-chosen `.xml`
@@ -30,8 +31,8 @@ class ExportSettingsAction : AnAction(), DumbAware {
         val project = e.project ?: return
 
         val descriptor = FileSaverDescriptor(
-            "Export basedpython Settings",
-            "Choose where to write the basedpython settings file.",
+            BasedPythonBundle.message("settings.export.dialog.title"),
+            BasedPythonBundle.message("settings.export.dialog.description"),
             "xml",
         )
         val dialog = FileChooserFactory.getInstance().createSaveFileDialog(descriptor, project)
@@ -44,14 +45,14 @@ class ExportSettingsAction : AnAction(), DumbAware {
             JDOMUtil.write(element, path)
             notify(
                 project,
-                "basedpython settings exported",
-                "Settings written to ${path.fileName}.",
+                BasedPythonBundle.message("settings.export.success.title"),
+                BasedPythonBundle.message("settings.export.success.content", path.fileName),
                 NotificationType.INFORMATION,
             )
         } catch (ex: Exception) {
             notify(
                 project,
-                "basedpython settings export failed",
+                BasedPythonBundle.message("settings.export.failed.title"),
                 ex.message ?: ex.javaClass.simpleName,
                 NotificationType.ERROR,
             )

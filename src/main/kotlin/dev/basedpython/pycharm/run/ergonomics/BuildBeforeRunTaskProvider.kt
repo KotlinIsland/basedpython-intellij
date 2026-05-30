@@ -17,6 +17,7 @@ import dev.basedpython.pycharm.lsp.BasedPythonBinaries
 import dev.basedpython.pycharm.run.ByBuildConfiguration
 import dev.basedpython.pycharm.run.ByCheckConfiguration
 import dev.basedpython.pycharm.run.ByRunConfiguration
+import dev.basedpython.pycharm.util.BasedPythonBundle
 import javax.swing.Icon
 
 /**
@@ -33,7 +34,7 @@ class BuildBeforeRunTaskProvider : BeforeRunTaskProvider<BuildBeforeRunTask>() {
 
     override fun getId(): Key<BuildBeforeRunTask> = BuildBeforeRunTask.PROVIDER_ID
 
-    override fun getName(): String = "Run `by build` first"
+    override fun getName(): String = BasedPythonBundle.message("runConfig.buildBeforeRun.name")
 
     override fun getIcon(): Icon = AllIcons.Actions.Compile
 
@@ -59,7 +60,7 @@ class BuildBeforeRunTaskProvider : BeforeRunTaskProvider<BuildBeforeRunTask>() {
         val project = configuration.project
         val by = BasedPythonBinaries.resolveBy(project)
         if (by == null) {
-            reportFailure(project, "`by` binary not found — set path in Settings | BasedPython")
+            reportFailure(project, BasedPythonBundle.message("runConfig.buildBeforeRun.binaryMissing"))
             return false
         }
 
@@ -77,7 +78,7 @@ class BuildBeforeRunTaskProvider : BeforeRunTaskProvider<BuildBeforeRunTask>() {
                 LOG.warn("`by build` failed (exit ${output.exitCode}): ${output.stderr}")
                 reportFailure(
                     project,
-                    "`by build` failed (exit code ${output.exitCode}).\n${output.stderr.trim().ifEmpty { output.stdout.trim() }}",
+                    BasedPythonBundle.message("runConfig.buildBeforeRun.failed", output.exitCode, output.stderr.trim().ifEmpty { output.stdout.trim() }),
                 )
                 false
             } else {
@@ -85,7 +86,7 @@ class BuildBeforeRunTaskProvider : BeforeRunTaskProvider<BuildBeforeRunTask>() {
             }
         } catch (e: Exception) {
             LOG.warn("Failed to launch `by build`", e)
-            reportFailure(project, "Could not launch `by build`: ${e.message}")
+            reportFailure(project, BasedPythonBundle.message("runConfig.buildBeforeRun.launchFailed", e.message ?: ""))
             false
         }
     }
@@ -104,7 +105,7 @@ class BuildBeforeRunTaskProvider : BeforeRunTaskProvider<BuildBeforeRunTask>() {
 
     private fun reportFailure(project: Project, message: String) {
         ApplicationManager.getApplication().invokeLater {
-            Messages.showErrorDialog(project, message, "by build Failed")
+            Messages.showErrorDialog(project, message, BasedPythonBundle.message("runConfig.buildBeforeRun.failed.title"))
         }
     }
 

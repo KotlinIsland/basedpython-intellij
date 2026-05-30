@@ -1,6 +1,7 @@
 package dev.basedpython.pycharm.refactoring
 
 import dev.basedpython.pycharm.refactoring.ExtractionLogic.ExtractionPlan
+import dev.basedpython.pycharm.util.BasedPythonBundle
 
 /**
  * "Extract Variable" for `.by` files.
@@ -11,8 +12,8 @@ import dev.basedpython.pycharm.refactoring.ExtractionLogic.ExtractionPlan
  */
 class ExtractVariableAction : AbstractExtractionAction() {
 
-    override val commandTitle: String = "Extract Variable"
-    override val namePrompt: String = "Variable name:"
+    override val commandTitle: String get() = BasedPythonBundle.message("refactoring.extractVariable.title")
+    override val namePrompt: String get() = BasedPythonBundle.message("refactoring.extractVariable.prompt")
 
     override fun suggestName(expression: String): String = ExtractionLogic.defaultVariableName()
 

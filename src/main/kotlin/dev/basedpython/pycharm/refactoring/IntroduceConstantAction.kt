@@ -1,6 +1,7 @@
 package dev.basedpython.pycharm.refactoring
 
 import dev.basedpython.pycharm.refactoring.ExtractionLogic.ExtractionPlan
+import dev.basedpython.pycharm.util.BasedPythonBundle
 
 /**
  * "Introduce Constant" for `.by` files.
@@ -10,8 +11,8 @@ import dev.basedpython.pycharm.refactoring.ExtractionLogic.ExtractionPlan
  */
 class IntroduceConstantAction : AbstractExtractionAction() {
 
-    override val commandTitle: String = "Introduce Constant"
-    override val namePrompt: String = "Constant name:"
+    override val commandTitle: String get() = BasedPythonBundle.message("refactoring.introduceConstant.title")
+    override val namePrompt: String get() = BasedPythonBundle.message("refactoring.introduceConstant.prompt")
 
     override fun suggestName(expression: String): String = ExtractionLogic.defaultConstantName(expression)
 

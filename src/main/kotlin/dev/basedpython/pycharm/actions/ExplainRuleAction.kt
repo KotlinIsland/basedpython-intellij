@@ -18,6 +18,7 @@ import com.intellij.openapi.ui.popup.JBPopupFactory
 import com.intellij.openapi.wm.WindowManager
 import com.intellij.ui.JBColor
 import com.intellij.ui.awt.RelativePoint
+import dev.basedpython.pycharm.util.BasedPythonBundle
 
 /** Show a balloon explaining the rule code under the caret (or prompt for one). */
 class ExplainRuleAction : AnAction() {
@@ -35,7 +36,7 @@ class ExplainRuleAction : AnAction() {
         val editor = e.getData(CommonDataKeys.EDITOR)
         val code = detectRuleAtCaret(project, editor) ?: promptForCode(project) ?: return
 
-        ProgressManager.getInstance().run(object : Task.Backgroundable(project, "Explaining rule $code", true) {
+        ProgressManager.getInstance().run(object : Task.Backgroundable(project, BasedPythonBundle.message("progress.explainingRule", code), true) {
             override fun run(indicator: ProgressIndicator) {
                 indicator.isIndeterminate = true
                 val buff = ByCli.runBuff(project, "rule", code)
@@ -48,8 +49,8 @@ class ExplainRuleAction : AnAction() {
                     showBalloon(project, editor, code, by.stdout)
                     return
                 }
-                val msg = (buff?.stderr ?: by?.stderr ?: "no explanation available").ifBlank { "no explanation available" }
-                ByCli.notifyError(project, "No explanation for $code", msg)
+                val msg = (buff?.stderr ?: by?.stderr ?: BasedPythonBundle.message("explainRule.noExplanation")).ifBlank { BasedPythonBundle.message("explainRule.noExplanation") }
+                ByCli.notifyError(project, BasedPythonBundle.message("explainRule.noExplanationFor.title", code), msg)
             }
         })
     }
@@ -91,8 +92,8 @@ class ExplainRuleAction : AnAction() {
         ApplicationManager.getApplication().invokeAndWait {
             result = Messages.showInputDialog(
                 project,
-                "Rule code (e.g. F401):",
-                "Explain BasedPython Rule",
+                BasedPythonBundle.message("explainRule.prompt.message"),
+                BasedPythonBundle.message("explainRule.prompt.title"),
                 Messages.getQuestionIcon(),
             )
         }

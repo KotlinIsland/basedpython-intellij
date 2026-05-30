@@ -8,6 +8,7 @@ import com.intellij.psi.PsiFile
 import dev.basedpython.pycharm.lang.BasedPythonFile
 import dev.basedpython.pycharm.lang.BasedPythonLexer
 import dev.basedpython.pycharm.lang.BasedPythonTokenTypes
+import dev.basedpython.pycharm.util.BasedPythonBundle
 
 /**
  * Informational intention that recognises an anonymous named-tuple literal of the form
@@ -18,8 +19,8 @@ import dev.basedpython.pycharm.lang.BasedPythonTokenTypes
  */
 class ExplainNamedTupleIntention : IntentionAction {
 
-    override fun getText(): String = "Explain anonymous named-tuple syntax"
-    override fun getFamilyName(): String = "Explain anonymous named-tuple"
+    override fun getText(): String = BasedPythonBundle.message("intention.explainNamedTuple.text")
+    override fun getFamilyName(): String = BasedPythonBundle.message("intention.explainNamedTuple.familyName")
     override fun startInWriteAction(): Boolean = false
 
     override fun isAvailable(project: Project, editor: Editor, file: PsiFile): Boolean {
@@ -30,21 +31,8 @@ class ExplainNamedTupleIntention : IntentionAction {
     override fun invoke(project: Project, editor: Editor, file: PsiFile) {
         Messages.showInfoMessage(
             project,
-            """
-            BasedPython anonymous named-tuple syntax:
-
-              (name: str, age: int)
-
-            This creates an anonymous NamedTuple type inline, equivalent to:
-
-              class _T(NamedTuple):
-                  name: str
-                  age: int
-
-            and can be used as a return type, variable annotation, or in collections.
-            The type is structural — compatible with any NamedTuple with matching fields.
-            """.trimIndent(),
-            "BasedPython: Anonymous Named-Tuple"
+            BasedPythonBundle.message("intention.explainNamedTuple.message"),
+            BasedPythonBundle.message("intention.explainNamedTuple.dialogTitle"),
         )
     }
 

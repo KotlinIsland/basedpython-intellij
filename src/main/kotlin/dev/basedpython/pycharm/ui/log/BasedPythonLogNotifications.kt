@@ -11,6 +11,7 @@ import com.intellij.openapi.actionSystem.impl.SimpleDataContext
 import com.intellij.openapi.options.ShowSettingsUtil
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.wm.ToolWindowManager
+import dev.basedpython.pycharm.util.BasedPythonBundle
 
 /**
  * Builds `BasedPython.Actions` notifications carrying the common plugin actions:
@@ -49,12 +50,12 @@ internal object BasedPythonLogNotifications {
     }
 
     fun openSettings(project: Project): NotificationAction =
-        NotificationAction.createSimple("Open Settings") {
+        NotificationAction.createSimple(BasedPythonBundle.message("notification.action.openSettings")) {
             ShowSettingsUtil.getInstance().showSettingsDialog(project, SETTINGS_ID)
         }
 
     fun restartLsp(project: Project): NotificationAction =
-        NotificationAction.createSimple("Restart LSP") {
+        NotificationAction.createSimple(BasedPythonBundle.message("notification.action.restartLsp")) {
             val action = ActionManager.getInstance().getAction(RESTART_LSP_ACTION_ID)
                 ?: return@createSimple
             ActionUtil.invokeAction(
@@ -67,7 +68,7 @@ internal object BasedPythonLogNotifications {
         }
 
     fun viewLog(project: Project): NotificationAction =
-        NotificationAction.createSimple("View Log") {
+        NotificationAction.createSimple(BasedPythonBundle.message("notification.action.viewLog")) {
             ToolWindowManager.getInstance(project)
                 .getToolWindow(TOOL_WINDOW_ID)
                 ?.activate(null)
