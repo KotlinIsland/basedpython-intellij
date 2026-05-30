@@ -59,3 +59,8 @@
 - Move Statement Up/Down (Ctrl+Shift+Up/Down) that respects indentation blocks.
 - **Debug .by (pdb)** action: builds, then runs the generated `.py` under `python -m pdb`
   in an interactive console (frames are clickable).
+
+### Changed
+
+- Extended IDE compatibility range to `262.*` (sinceBuild `261`). Verified Compatible
+  against both IU-261.25134.67 and IU-262.6653.22.

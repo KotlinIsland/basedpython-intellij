@@ -34,7 +34,7 @@ intellijPlatform {
   pluginConfiguration {
     ideaVersion {
       sinceBuild = "261"
-      untilBuild = "261.*"
+      untilBuild = "262.*"
     }
 
     // Extract the <!-- Plugin description --> section from README.md and provide for the plugin's manifest
