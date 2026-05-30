@@ -105,7 +105,15 @@ class BasedPythonAnnotator : Annotator {
                     if (BasedPythonSoftKeywords.isSoft(tokText) &&
                         !BasedPythonSoftKeywords.isKeyword(tokViews, i)
                     ) {
-                        demoteKeyword(holder, baseOffset, tok.start, tok.end, tokText)
+                        // Exception: a soft keyword used as a decorator name (`@final`) is owned by
+                        // the decorator second-pass; don't stamp identifier attributes over it.
+                        val prev = prevNonWs(tokens, i - 1)
+                        val isDecoratorName = prev != null &&
+                            prev.type == BasedPythonTokenTypes.OPERATOR &&
+                            text.substring(prev.start, prev.end) == "@"
+                        if (!isDecoratorName) {
+                            demoteKeyword(holder, baseOffset, tok.start, tok.end, tokText)
+                        }
                         prevKeyword = ""
                         afterColon = false
                         afterArrow = false
