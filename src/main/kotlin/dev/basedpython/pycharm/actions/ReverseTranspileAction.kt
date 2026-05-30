@@ -32,7 +32,7 @@ class ReverseTranspileAction : AnAction() {
         ProgressManager.getInstance().run(object : Task.Backgroundable(project, BasedPythonBundle.message("progress.reverseTranspiling", file.name), true) {
             override fun run(indicator: ProgressIndicator) {
                 indicator.isIndeterminate = true
-                val out = ByCli.run(project, "transpile", "--reverse", path.toString(), cwd = path.parent) ?: return
+                val out = ByCli.run(project, "transpile", "--reverse", path.toString(), cwd = path.parent, contextFile = file) ?: return
                 if (out.exitCode != 0) {
                     ByCli.notifyError(project, BasedPythonBundle.message("notification.reverseTranspileFailed.title"), out.stderr.ifBlank { BasedPythonBundle.message("notification.exitCode", out.exitCode) })
                     return

@@ -49,6 +49,7 @@ class BuffImportOptimizer : ImportOptimizer {
                             project,
                             "check", "--fix", "--select", "I", path.toString(),
                             cwd = path.parent,
+                            contextFile = vf,
                             title = "buff organize-imports",
                         ) ?: return
 

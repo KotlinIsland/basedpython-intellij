@@ -40,14 +40,15 @@ class BuffFormattingService : AsyncDocumentFormattingService() {
     override fun createFormattingTask(request: AsyncFormattingRequest): FormattingTask? {
         val context = request.context
         val project = context.project
-        val ioFile = context.virtualFile?.toNioPath()
-        return BuffFormattingTask(project, request, ioFile)
+        val vf = context.virtualFile
+        return BuffFormattingTask(project, request, vf?.toNioPath(), vf)
     }
 
     private class BuffFormattingTask(
         private val project: Project,
         private val request: AsyncFormattingRequest,
         private val sourcePath: Path?,
+        private val sourceFile: com.intellij.openapi.vfs.VirtualFile?,
     ) : FormattingTask {
 
         @Volatile
@@ -78,6 +79,7 @@ class BuffFormattingService : AsyncDocumentFormattingService() {
                     project,
                     "format", tempFile.toString(),
                     cwd = workDir ?: tempFile.parent,
+                    contextFile = sourceFile,
                     title = "buff format",
                 )
                 if (out == null) {

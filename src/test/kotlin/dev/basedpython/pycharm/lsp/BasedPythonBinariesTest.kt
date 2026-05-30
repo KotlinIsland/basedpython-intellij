@@ -117,4 +117,39 @@ class BasedPythonBinariesTest : BasePlatformTestCase() {
     if (by != null) assertTrue("resolved `by` must be executable", Files.isExecutable(by))
     if (buff != null) assertTrue("resolved `buff` must be executable", Files.isExecutable(buff))
   }
+
+  // --- searchStartDirs ordering (pure logic; multi-root §186) ---
+
+  fun `test searchStartDirs prefers content root over project base`() {
+    val root = Path.of("/work/moduleA")
+    val base = Path.of("/work")
+    assertEquals(listOf(root, base), BasedPythonBinaries.searchStartDirs(root, base))
+  }
+
+  fun `test searchStartDirs dedupes when content root equals project base`() {
+    val base = Path.of("/work")
+    assertEquals(listOf(base), BasedPythonBinaries.searchStartDirs(base, base))
+  }
+
+  fun `test searchStartDirs with only a content root`() {
+    val root = Path.of("/work/moduleA")
+    assertEquals(listOf(root), BasedPythonBinaries.searchStartDirs(root, null))
+  }
+
+  fun `test searchStartDirs with only a project base`() {
+    val base = Path.of("/work")
+    assertEquals(listOf(base), BasedPythonBinaries.searchStartDirs(null, base))
+  }
+
+  fun `test searchStartDirs is empty when nothing is known`() {
+    assertTrue(BasedPythonBinaries.searchStartDirs(null, null).isEmpty())
+  }
+
+  fun `test resolveBy with a content file still honors override`() {
+    // contextFile param must not break the override short-circuit.
+    val exe = makeExecutable("by-fake2")
+    BasedPythonSettings.getInstance(project).byPath = exe.toString()
+    val vf = myFixture.configureByText("ctx.by", "x = 1").virtualFile
+    assertEquals(exe, BasedPythonBinaries.resolveBy(project, vf))
+  }
 }

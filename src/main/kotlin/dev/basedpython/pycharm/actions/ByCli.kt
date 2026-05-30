@@ -7,6 +7,7 @@ import com.intellij.execution.util.ExecUtil
 import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.vfs.VirtualFile
 import dev.basedpython.pycharm.util.BasedPythonBundle
 import java.nio.file.Path
 
@@ -19,14 +20,20 @@ internal object ByCli {
 
     const val NOTIFICATION_GROUP_ID: String = "BasedPython.Actions"
 
-    /** Run `by` with [args]. Returns `null` if the binary cannot be located. */
+    /**
+     * Run `by` with [args]. Returns `null` if the binary cannot be located.
+     *
+     * [contextFile] (when known) makes binary resolution content-root-aware so a per-module
+     * `.venv` is preferred over the workspace-level one in a multi-root project.
+     */
     fun run(
         project: Project,
         vararg args: String,
         cwd: Path? = null,
+        contextFile: VirtualFile? = null,
         @Suppress("UNUSED_PARAMETER") title: String = "by",
     ): ProcessOutput? {
-        val bin = BasedPythonBinaries.resolveBy(project)
+        val bin = BasedPythonBinaries.resolveBy(project, contextFile)
         if (bin == null) {
             notifyBinaryMissing(project, "by")
             return null
@@ -39,9 +46,10 @@ internal object ByCli {
         project: Project,
         vararg args: String,
         cwd: Path? = null,
+        contextFile: VirtualFile? = null,
         @Suppress("UNUSED_PARAMETER") title: String = "buff",
     ): ProcessOutput? {
-        val bin = BasedPythonBinaries.resolveBuff(project)
+        val bin = BasedPythonBinaries.resolveBuff(project, contextFile)
         if (bin == null) {
             notifyBinaryMissing(project, "buff")
             return null
