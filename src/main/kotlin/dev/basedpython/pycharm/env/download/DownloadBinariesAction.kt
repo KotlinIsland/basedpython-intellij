@@ -14,6 +14,7 @@ import com.intellij.util.io.HttpRequests
 import dev.basedpython.pycharm.lsp.BasedPythonBinaries
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import dev.basedpython.pycharm.ui.log.BasedPythonLogNotifications
+import dev.basedpython.pycharm.util.BasedPythonBundle
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.attribute.PosixFilePermission
@@ -54,7 +55,7 @@ class DownloadBinariesAction : AnAction() {
             BasedPythonLogNotifications.create(
                 project,
                 TITLE,
-                "Could not determine a supported OS/architecture for a prebuilt download.",
+                BasedPythonBundle.message("download.unsupportedPlatform"),
                 NotificationType.WARNING,
             ).notify(project)
             return
@@ -66,21 +67,25 @@ class DownloadBinariesAction : AnAction() {
 
         val choice = Messages.showYesNoDialog(
             project,
-            "Download prebuilt ${missing.joinToString(" and ")} for ${platform.slug} into\n" +
-                "${ByBinaryDownloadPlan.installDir(home)}?",
+            BasedPythonBundle.message(
+                "download.confirm.message",
+                missing.joinToString(" and "),
+                platform.slug,
+                ByBinaryDownloadPlan.installDir(home),
+            ),
             TITLE,
             Messages.getQuestionIcon(),
         )
         if (choice != Messages.YES) return
 
-        ProgressManager.getInstance().run(object : Task.Backgroundable(project, "Downloading BasedPython binaries", true) {
+        ProgressManager.getInstance().run(object : Task.Backgroundable(project, BasedPythonBundle.message("download.progress.title"), true) {
             override fun run(indicator: ProgressIndicator) {
                 val installed = mutableListOf<String>()
                 val failures = mutableListOf<String>()
                 for ((idx, name) in missing.withIndex()) {
                     indicator.checkCanceled()
                     indicator.fraction = idx.toDouble() / missing.size
-                    indicator.text = "Downloading $name…"
+                    indicator.text = BasedPythonBundle.message("download.progress.item", name)
                     try {
                         val url = ByBinaryDownloadPlan.downloadUrl(name, version, platform)
                         val target = ByBinaryDownloadPlan.installPath(home, name, platform)
@@ -135,15 +140,15 @@ class DownloadBinariesAction : AnAction() {
             BasedPythonLogNotifications.create(
                 project,
                 TITLE,
-                "Installed ${installed.joinToString(" and ")} and updated settings.",
+                BasedPythonBundle.message("download.result.success", installed.joinToString(" and ")),
                 NotificationType.INFORMATION,
             ).notify(project)
         } else {
-            val ok = if (installed.isEmpty()) "" else "Installed ${installed.joinToString(", ")}. "
+            val ok = if (installed.isEmpty()) "" else BasedPythonBundle.message("download.result.partialPrefix", installed.joinToString(", "))
             BasedPythonLogNotifications.create(
                 project,
                 TITLE,
-                "${ok}Failed: ${failures.joinToString("; ")}",
+                BasedPythonBundle.message("download.result.failed", ok, failures.joinToString("; ")),
                 NotificationType.ERROR,
             ).notify(project)
         }
@@ -151,6 +156,6 @@ class DownloadBinariesAction : AnAction() {
 
     companion object {
         private val LOG = Logger.getInstance(DownloadBinariesAction::class.java)
-        private const val TITLE = "Download BasedPython binaries"
+        private val TITLE get() = BasedPythonBundle.message("download.title")
     }
 }

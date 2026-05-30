@@ -173,7 +173,7 @@ Status key: `[x]` done · `[~]` partial · `[ ]` todo
 - [x] CI build + verify
 - [x] Compatibility range (sinceBuild/untilBuild) set
 - [x] Plugin logo/marketplace assets (pluginIcon.svg light/dark)
-- [~] i18n message bundles (no hardcoded strings)
+- [x] i18n message bundles (no hardcoded strings) — all user-visible action text/descriptions in plugin.xml via resource-bundle convention; all Kotlin notifications/dialogs/progress/UI strings via BasedPythonBundle.message(...); 109 keys, MessageFormat-escaped; BasedPythonBundleTest validates coverage + format round-trip
 - [x] Proper plugin description/vendor/changelog metadata (README desc + CHANGELOG changeNotes + vendor)
 - [x] Performance: lexer benchmarks on large files (LexerPerformanceTest)
 - [x] Dynamic plugin (no IDE restart on install) compliance (verifier clean)

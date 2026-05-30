@@ -14,6 +14,7 @@ import com.intellij.util.xmlb.XmlSerializer
 import com.intellij.util.xmlb.XmlSerializerUtil
 import dev.basedpython.pycharm.lsp.reload.BasedPythonLspReloader
 import dev.basedpython.pycharm.settings.BasedPythonSettings
+import dev.basedpython.pycharm.util.BasedPythonBundle
 
 /**
  * Reads a basedpython settings file previously written by [ExportSettingsAction] and applies
@@ -32,8 +33,8 @@ class ImportSettingsAction : AnAction(), DumbAware {
         val project = e.project ?: return
 
         val descriptor = FileChooserDescriptorFactory.createSingleFileDescriptor()
-            .withTitle("Import basedpython Settings")
-            .withDescription("Choose a basedpython settings file (.xml) to import.")
+            .withTitle(BasedPythonBundle.message("settings.import.dialog.title"))
+            .withDescription(BasedPythonBundle.message("settings.import.dialog.description"))
             .withFileFilter { it.extension.equals("xml", ignoreCase = true) }
         val chosen = FileChooser.chooseFile(descriptor, project, null) ?: return
         val path = chosen.toNioPath()
@@ -49,14 +50,14 @@ class ImportSettingsAction : AnAction(), DumbAware {
 
             notify(
                 project,
-                "basedpython settings imported",
-                "Settings applied from ${path.fileName}. Language servers will restart.",
+                BasedPythonBundle.message("settings.import.success.title"),
+                BasedPythonBundle.message("settings.import.success.content", path.fileName),
                 NotificationType.INFORMATION,
             )
         } catch (ex: Exception) {
             notify(
                 project,
-                "basedpython settings import failed",
+                BasedPythonBundle.message("settings.import.failed.title"),
                 ex.message ?: ex.javaClass.simpleName,
                 NotificationType.ERROR,
             )

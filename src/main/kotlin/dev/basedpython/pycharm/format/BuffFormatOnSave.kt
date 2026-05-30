@@ -14,6 +14,7 @@ import com.intellij.openapi.vfs.VfsUtil
 import dev.basedpython.pycharm.actions.ByCli
 import dev.basedpython.pycharm.lang.BasedPythonFileType
 import dev.basedpython.pycharm.settings.BasedPythonSettings
+import dev.basedpython.pycharm.util.BasedPythonBundle
 
 // ---------------------------------------------------------------------------
 // ActionOnSave — executes buff format when documents are saved
@@ -44,7 +45,7 @@ class BuffFormatOnSaveAction : ActionOnSave() {
         if (toFormat.isEmpty()) return
 
         ProgressManager.getInstance().run(
-            object : Task.Backgroundable(project, "Formatting .by files with buff", false) {
+            object : Task.Backgroundable(project, BasedPythonBundle.message("progress.formatOnSave"), false) {
                 override fun run(indicator: ProgressIndicator) {
                     indicator.isIndeterminate = true
                     for (vf in toFormat) {
@@ -59,8 +60,8 @@ class BuffFormatOnSaveAction : ActionOnSave() {
                         if (out.exitCode != 0) {
                             ByCli.notifyError(
                                 project,
-                                "buff format failed",
-                                out.stderr.ifBlank { "exit ${out.exitCode}" },
+                                BasedPythonBundle.message("notification.formatFailed.title"),
+                                out.stderr.ifBlank { BasedPythonBundle.message("notification.exitCode", out.exitCode) },
                             )
                         } else {
                             VfsUtil.markDirtyAndRefresh(true, false, false, vf)
@@ -94,7 +95,7 @@ class BuffFormatOnSaveInfo(context: ActionOnSaveContext) : ActionOnSaveInfo(cont
     // Shadow of the persisted value, tracks UI state until Apply is clicked.
     private var uiEnabled: Boolean = FormatOnSaveUtil.isEnabled(project)
 
-    override fun getActionOnSaveName(): String = "Format .by files with buff"
+    override fun getActionOnSaveName(): String = BasedPythonBundle.message("actionOnSave.formatName")
 
     override fun isActionOnSaveEnabled(): Boolean = uiEnabled
 

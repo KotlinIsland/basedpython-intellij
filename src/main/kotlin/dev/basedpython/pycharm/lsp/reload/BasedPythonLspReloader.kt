@@ -17,6 +17,7 @@ import com.intellij.platform.lsp.api.LspServerSupportProvider
 import com.intellij.util.Alarm
 import dev.basedpython.pycharm.lsp.BuffLspServerSupportProvider
 import dev.basedpython.pycharm.lsp.ByLspServerSupportProvider
+import dev.basedpython.pycharm.util.BasedPythonBundle
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -109,12 +110,12 @@ internal class BasedPythonLspReloader(private val project: Project) : Disposable
         val notification = NotificationGroupManager.getInstance()
           .getNotificationGroup(GROUP_ID)
           .createNotification(
-            "basedpython: '$name' language server stopped",
-            "The server exited unexpectedly. basedpython features for .by files are unavailable until it restarts.",
+            BasedPythonBundle.message("notification.lspCrashed.title", name),
+            BasedPythonBundle.message("notification.lspCrashed.content"),
             NotificationType.ERROR,
           )
         notification.addAction(
-          com.intellij.notification.NotificationAction.createSimple("Restart") {
+          com.intellij.notification.NotificationAction.createSimple(BasedPythonBundle.message("notification.action.restart")) {
             notification.expire()
             restartNow()
           },

@@ -278,48 +278,31 @@
     <actions>
         <!-- ===== Stream B ===== -->
         <action id="BasedPython.RestartLsp"
-                class="dev.basedpython.pycharm.lsp.RestartLspAction"
-                text="Restart BasedPython LSP Servers"
-                description="Stops and restarts the by and buff language servers for this project."/>
+                class="dev.basedpython.pycharm.lsp.RestartLspAction"/>
 
         <!-- ===== Stream D: Tools menu group + popup entries ===== -->
         <group id="BasedPython.ActionGroup"
                class="dev.basedpython.pycharm.actions.BasedPythonActionGroup"
-               text="BasedPython"
                icon="AllIcons.Nodes.Plugin"
                popup="true">
             <add-to-group group-id="ToolsMenu" anchor="last"/>
 
             <action id="BasedPython.TranspileFile"
-                    class="dev.basedpython.pycharm.actions.TranspileFileAction"
-                    text="Transpile .by to .py"
-                    description="Run `by transpile` on the current file and open the Python output in a scratch tab."/>
+                    class="dev.basedpython.pycharm.actions.TranspileFileAction"/>
             <action id="BasedPython.ReverseTranspile"
-                    class="dev.basedpython.pycharm.actions.ReverseTranspileAction"
-                    text="Reverse Transpile .py to .by"
-                    description="Run `by transpile --reverse` on the current file and open the BasedPython output in a scratch tab."/>
+                    class="dev.basedpython.pycharm.actions.ReverseTranspileAction"/>
             <action id="BasedPython.GenerateApiFile"
-                    class="dev.basedpython.pycharm.actions.GenerateApiFileAction"
-                    text="Generate api.lock"
-                    description="Run `by generate-api-file` at the project root."/>
+                    class="dev.basedpython.pycharm.actions.GenerateApiFileAction"/>
             <action id="BasedPython.FormatWithBuff"
-                    class="dev.basedpython.pycharm.actions.FormatWithBuffAction"
-                    text="Format with buff"
-                    description="Run `buff format` on the current file.">
+                    class="dev.basedpython.pycharm.actions.FormatWithBuffAction">
                 <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt shift L"/>
             </action>
             <action id="BasedPython.CheckProject"
-                    class="dev.basedpython.pycharm.actions.CheckProjectAction"
-                    text="Check Project"
-                    description="Run `by check` and stream output to a Run console."/>
+                    class="dev.basedpython.pycharm.actions.CheckProjectAction"/>
             <action id="BasedPython.CleanCaches"
-                    class="dev.basedpython.pycharm.actions.CleanCachesAction"
-                    text="Clean buff Caches"
-                    description="Run `buff clean` at the project root."/>
+                    class="dev.basedpython.pycharm.actions.CleanCachesAction"/>
             <action id="BasedPython.ExplainRule"
-                    class="dev.basedpython.pycharm.actions.ExplainRuleAction"
-                    text="Explain Rule..."
-                    description="Look up the rule code under the caret (or prompt for one) via `buff rule` / `by explain`."/>
+                    class="dev.basedpython.pycharm.actions.ExplainRuleAction"/>
 
             <separator/>
             <reference ref="BasedPython.RestartLsp"/>
@@ -328,14 +311,12 @@
         <!-- Editor + Project View popups expose transpile actions directly. -->
         <action id="BasedPython.TranspileFile.Popup"
                 class="dev.basedpython.pycharm.actions.TranspileFileAction"
-                text="Transpile to .py"
                 icon="AllIcons.Nodes.Plugin">
             <add-to-group group-id="EditorPopupMenu" anchor="last"/>
             <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
         </action>
         <action id="BasedPython.ReverseTranspile.Popup"
                 class="dev.basedpython.pycharm.actions.ReverseTranspileAction"
-                text="Reverse Transpile to .by"
                 icon="AllIcons.Nodes.Plugin">
             <add-to-group group-id="EditorPopupMenu" anchor="last"/>
             <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
@@ -343,79 +324,57 @@
 
         <!-- ===== Stream F: New-file action ===== -->
         <action id="BasedPython.NewFile"
-                class="dev.basedpython.pycharm.editor.CreateBasedPythonFileAction"
-                text="BasedPython File"
-                description="Create new BasedPython file">
+                class="dev.basedpython.pycharm.editor.CreateBasedPythonFileAction">
             <add-to-group group-id="NewGroup" anchor="before" relative-to-action="NewFile"/>
         </action>
 
         <!-- ===== Stream P: transpilation views ===== -->
         <action id="dev.basedpython.pycharm.transpile.ShowTranspiledDiff"
-                class="dev.basedpython.pycharm.transpile.ShowTranspiledDiffAction"
-                text="Show Transpiled Python"
-                description="Open a side-by-side diff of the current .by file and its generated Python (live-refresh on edit).">
+                class="dev.basedpython.pycharm.transpile.ShowTranspiledDiffAction">
             <add-to-group group-id="BasedPython.ActionGroup" anchor="after" relative-to-action="BasedPython.TranspileFile"/>
             <add-to-group group-id="EditorPopupMenu" anchor="last"/>
             <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
         </action>
         <action id="dev.basedpython.pycharm.transpile.GoToGeneratedPy"
-                class="dev.basedpython.pycharm.transpile.GoToGeneratedPyAction"
-                text="Go to Generated .py"
-                description="Open the out/ counterpart of the current .by file; offers to run `by build` if missing.">
+                class="dev.basedpython.pycharm.transpile.GoToGeneratedPyAction">
             <add-to-group group-id="BasedPython.ActionGroup" anchor="after" relative-to-action="dev.basedpython.pycharm.transpile.ShowTranspiledDiff"/>
             <add-to-group group-id="EditorPopupMenu" anchor="last"/>
             <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
         </action>
         <action id="dev.basedpython.pycharm.transpile.DiffApiLock"
-                class="dev.basedpython.pycharm.transpile.DiffApiLockAction"
-                text="Diff api.lock"
-                description="Compare the current api.lock against a freshly regenerated one to see public-API changes.">
+                class="dev.basedpython.pycharm.transpile.DiffApiLockAction">
             <add-to-group group-id="BasedPython.ActionGroup" anchor="after" relative-to-action="BasedPython.GenerateApiFile"/>
         </action>
         <action id="dev.basedpython.pycharm.transpile.ConvertByToPy"
-                class="dev.basedpython.pycharm.transpile.ConvertByToPyAction"
-                text="Convert .by to .py (in place)"
-                description="Run `by transpile` and write result to out/&lt;relPath&gt;.py, creating the file if needed.">
+                class="dev.basedpython.pycharm.transpile.ConvertByToPyAction">
             <add-to-group group-id="BasedPython.ActionGroup" anchor="last"/>
             <add-to-group group-id="EditorPopupMenu" anchor="last"/>
             <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
         </action>
         <action id="dev.basedpython.pycharm.transpile.DebugWithPdb"
-                class="dev.basedpython.pycharm.transpile.DebugWithPdbAction"
-                text="Debug .by (pdb)"
-                description="Run `by build` then launch the generated .py under python -m pdb in an interactive console.">
+                class="dev.basedpython.pycharm.transpile.DebugWithPdbAction">
             <add-to-group group-id="BasedPython.ActionGroup" anchor="after" relative-to-action="dev.basedpython.pycharm.transpile.GoToGeneratedPy"/>
             <add-to-group group-id="EditorPopupMenu" anchor="last"/>
         </action>
         <action id="dev.basedpython.pycharm.transpile.TranspileSelection"
-                class="dev.basedpython.pycharm.transpile.selection.TranspileSelectionAction"
-                text="Transpile Selection"
-                description="Transpile the selected basedpython snippet to Python and show it in a popup.">
+                class="dev.basedpython.pycharm.transpile.selection.TranspileSelectionAction">
             <add-to-group group-id="BasedPython.ActionGroup" anchor="after" relative-to-action="dev.basedpython.pycharm.transpile.DebugWithPdb"/>
             <add-to-group group-id="EditorPopupMenu" anchor="last"/>
         </action>
         <action id="BasedPython.ExportSettings"
-                class="dev.basedpython.pycharm.actions.settings.ExportSettingsAction"
-                text="Export basedpython Settings..."
-                description="Serialize the project's basedpython settings to a file.">
+                class="dev.basedpython.pycharm.actions.settings.ExportSettingsAction">
             <add-to-group group-id="BasedPython.ActionGroup" anchor="last"/>
         </action>
         <action id="BasedPython.ImportSettings"
-                class="dev.basedpython.pycharm.actions.settings.ImportSettingsAction"
-                text="Import basedpython Settings..."
-                description="Load basedpython settings from a previously exported file.">
+                class="dev.basedpython.pycharm.actions.settings.ImportSettingsAction">
             <add-to-group group-id="BasedPython.ActionGroup" anchor="last"/>
         </action>
         <action id="dev.basedpython.pycharm.run.watch.ToggleWatchMode"
-                class="dev.basedpython.pycharm.run.watch.ToggleWatchModeAction"
-                text="Toggle basedpython Watch Mode"
-                description="Toggle auto `by build` on save for .by files (per project, off by default).">
+                class="dev.basedpython.pycharm.run.watch.ToggleWatchModeAction">
             <add-to-group group-id="BasedPython.ActionGroup" anchor="last"/>
         </action>
         <action id="dev.basedpython.pycharm.transpile.ConvertPyToBy"
-                class="dev.basedpython.pycharm.transpile.ConvertPyToByAction"
-                text="Convert .py to .by (in place)"
-                description="Run `by transpile --reverse` and write result to a .by sibling next to the source .py.">
+                class="dev.basedpython.pycharm.transpile.ConvertPyToByAction">
             <add-to-group group-id="BasedPython.ActionGroup" anchor="last"/>
             <add-to-group group-id="EditorPopupMenu" anchor="last"/>
             <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
@@ -423,75 +382,57 @@
 
         <!-- ===== Stream U: docs & help ===== -->
         <action id="BasedPython.QuickReference"
-                class="dev.basedpython.pycharm.docs.BasedPythonQuickReferenceAction"
-                text="BasedPython Syntax Quick Reference"
-                description="Show a quick reference of basedpython syntax and modifiers.">
+                class="dev.basedpython.pycharm.docs.BasedPythonQuickReferenceAction">
             <add-to-group group-id="BasedPython.ActionGroup" anchor="last"/>
         </action>
 
         <!-- ===== Stream W: environment UX ===== -->
         <action id="BasedPython.UvSync"
-                class="dev.basedpython.pycharm.env.UvSyncAction"
-                text="uv sync"
-                description="Run `uv sync` at the project base.">
+                class="dev.basedpython.pycharm.env.UvSyncAction">
             <add-to-group group-id="BasedPython.ActionGroup" anchor="last"/>
         </action>
 
         <!-- ===== Wave 11: REPL console (§182) ===== -->
         <action id="BasedPython.OpenRepl"
-                class="dev.basedpython.pycharm.console.OpenBasedPythonReplAction"
-                text="Open basedpython REPL"
-                description="Start an interactive `by repl` (falls back to `by run`) console.">
+                class="dev.basedpython.pycharm.console.OpenBasedPythonReplAction">
             <add-to-group group-id="BasedPython.ActionGroup" anchor="last"/>
         </action>
 
         <!-- ===== Wave 11: local refactorings (§115) ===== -->
         <action id="dev.basedpython.pycharm.refactoring.ExtractVariable"
-                class="dev.basedpython.pycharm.refactoring.ExtractVariableAction"
-                text="Extract Variable (BasedPython)"
-                description="Extract the selected expression into a new local variable">
+                class="dev.basedpython.pycharm.refactoring.ExtractVariableAction">
             <add-to-group group-id="BasedPython.ActionGroup" anchor="last"/>
             <add-to-group group-id="EditorPopupMenu" anchor="last"/>
         </action>
         <action id="dev.basedpython.pycharm.refactoring.IntroduceConstant"
-                class="dev.basedpython.pycharm.refactoring.IntroduceConstantAction"
-                text="Introduce Constant (BasedPython)"
-                description="Extract the selected expression into a module-level UPPER_CASE constant">
+                class="dev.basedpython.pycharm.refactoring.IntroduceConstantAction">
             <add-to-group group-id="BasedPython.ActionGroup" anchor="last"/>
             <add-to-group group-id="EditorPopupMenu" anchor="last"/>
         </action>
 
         <!-- ===== Wave 12: inline variable (§117) ===== -->
         <action id="dev.basedpython.pycharm.refactoring.InlineVariable"
-                class="dev.basedpython.pycharm.refactoring.InlineVariableAction"
-                text="Inline Variable"
-                description="Inline a local variable: replace its usages with its value and delete the assignment.">
+                class="dev.basedpython.pycharm.refactoring.InlineVariableAction">
             <add-to-group group-id="BasedPython.ActionGroup" anchor="last"/>
             <add-to-group group-id="EditorPopupMenu" anchor="last"/>
         </action>
 
         <!-- ===== Wave 15: extract method (§115) ===== -->
         <action id="dev.basedpython.pycharm.refactoring.ExtractMethod"
-                class="dev.basedpython.pycharm.refactoring.ExtractMethodAction"
-                text="Extract Method (BasedPython)"
-                description="Extract the selected statements into a new function and replace them with a call">
+                class="dev.basedpython.pycharm.refactoring.ExtractMethodAction">
             <add-to-group group-id="BasedPython.ActionGroup" anchor="last"/>
             <add-to-group group-id="EditorPopupMenu" anchor="last"/>
         </action>
 
         <!-- ===== Wave 12: download prebuilt binaries (§58) ===== -->
         <action id="dev.basedpython.pycharm.env.download.DownloadBinaries"
-                class="dev.basedpython.pycharm.env.download.DownloadBinariesAction"
-                text="Download Prebuilt by/buff Binaries"
-                description="Download per-OS prebuilt by/buff binaries into ~/.basedpython/bin and point settings at them.">
+                class="dev.basedpython.pycharm.env.download.DownloadBinariesAction">
             <add-to-group group-id="BasedPython.ActionGroup" anchor="last"/>
         </action>
 
         <!-- ===== Wave 14: explain transpilation (§185) ===== -->
         <action id="dev.basedpython.pycharm.transpile.explain.ExplainTranspilation"
-                class="dev.basedpython.pycharm.transpile.explain.ExplainTranspilationAction"
-                text="Explain Transpilation"
-                description="Run `by transpile` on the current .by file and show a structured explanation of the basedpython-specific constructs that were transformed (null-safe access, elvis, data classes, pattern matching, etc.).">
+                class="dev.basedpython.pycharm.transpile.explain.ExplainTranspilationAction">
             <add-to-group group-id="BasedPython.ActionGroup" anchor="last"/>
             <add-to-group group-id="EditorPopupMenu" anchor="last"/>
         </action>

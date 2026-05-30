@@ -7,6 +7,7 @@ import com.intellij.execution.util.ExecUtil
 import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
 import com.intellij.openapi.project.Project
+import dev.basedpython.pycharm.util.BasedPythonBundle
 import java.nio.file.Path
 
 /**
@@ -61,8 +62,8 @@ internal object ByCli {
         NotificationGroupManager.getInstance()
             .getNotificationGroup(NOTIFICATION_GROUP_ID)
             .createNotification(
-                "BasedPython: $name binary not found",
-                "Configure the path to $name in Settings | Tools | BasedPython.",
+                BasedPythonBundle.message("notification.binaryMissing.title", name),
+                BasedPythonBundle.message("notification.binaryMissing.content", name),
                 NotificationType.WARNING,
             )
             .notify(project)

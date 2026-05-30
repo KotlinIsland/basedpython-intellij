@@ -12,6 +12,7 @@ import com.intellij.openapi.progress.Task
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.testFramework.LightVirtualFile
 import dev.basedpython.pycharm.lang.BasedPythonFileType
+import dev.basedpython.pycharm.util.BasedPythonBundle
 
 /** Right-click a `.py` file → `by transpile --reverse <file>` → open as scratch `.by`. */
 class ReverseTranspileAction : AnAction() {
@@ -28,12 +29,12 @@ class ReverseTranspileAction : AnAction() {
         val file = e.getData(CommonDataKeys.VIRTUAL_FILE) ?: return
         val path = file.toNioPath()
 
-        ProgressManager.getInstance().run(object : Task.Backgroundable(project, "Reverse-transpiling ${file.name}", true) {
+        ProgressManager.getInstance().run(object : Task.Backgroundable(project, BasedPythonBundle.message("progress.reverseTranspiling", file.name), true) {
             override fun run(indicator: ProgressIndicator) {
                 indicator.isIndeterminate = true
                 val out = ByCli.run(project, "transpile", "--reverse", path.toString(), cwd = path.parent) ?: return
                 if (out.exitCode != 0) {
-                    ByCli.notifyError(project, "by transpile --reverse failed", out.stderr.ifBlank { "exit ${out.exitCode}" })
+                    ByCli.notifyError(project, BasedPythonBundle.message("notification.reverseTranspileFailed.title"), out.stderr.ifBlank { BasedPythonBundle.message("notification.exitCode", out.exitCode) })
                     return
                 }
                 val byName = file.nameWithoutExtension + ".by"

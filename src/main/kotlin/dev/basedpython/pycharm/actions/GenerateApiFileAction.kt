@@ -10,6 +10,7 @@ import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.Task
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VfsUtil
+import dev.basedpython.pycharm.util.BasedPythonBundle
 import java.nio.file.Paths
 
 /** `by generate-api-file` at project root → refresh VFS → open api.lock if present. */
@@ -26,12 +27,12 @@ class GenerateApiFileAction : AnAction() {
         val basePath = project.basePath ?: return
         val cwd = Paths.get(basePath)
 
-        ProgressManager.getInstance().run(object : Task.Backgroundable(project, "Generating api.lock", true) {
+        ProgressManager.getInstance().run(object : Task.Backgroundable(project, BasedPythonBundle.message("progress.generatingApiLock"), true) {
             override fun run(indicator: ProgressIndicator) {
                 indicator.isIndeterminate = true
                 val out = ByCli.run(project, "generate-api-file", cwd = cwd) ?: return
                 if (out.exitCode != 0) {
-                    ByCli.notifyError(project, "by generate-api-file failed", out.stderr.ifBlank { "exit ${out.exitCode}" })
+                    ByCli.notifyError(project, BasedPythonBundle.message("notification.generateApiFailed.title"), out.stderr.ifBlank { BasedPythonBundle.message("notification.exitCode", out.exitCode) })
                     return
                 }
 
@@ -40,11 +41,12 @@ class GenerateApiFileAction : AnAction() {
                 if (refreshed != null) VfsUtil.markDirtyAndRefresh(false, false, false, refreshed)
 
                 val ruleCount = parseRuleCount(out.stdout)
-                val summary = buildString {
-                    append("api.lock generated")
-                    if (ruleCount != null) append(" — $ruleCount rule${if (ruleCount == 1) "" else "s"}")
+                val summary = if (ruleCount != null) {
+                    BasedPythonBundle.message("notification.apiLockGenerated.withRules", ruleCount)
+                } else {
+                    BasedPythonBundle.message("notification.apiLockGenerated")
                 }
-                ByCli.notifyInfo(project, "BasedPython", summary)
+                ByCli.notifyInfo(project, BasedPythonBundle.message("notification.basedPython.title"), summary)
 
                 if (refreshed != null) {
                     ApplicationManager.getApplication().invokeLater {

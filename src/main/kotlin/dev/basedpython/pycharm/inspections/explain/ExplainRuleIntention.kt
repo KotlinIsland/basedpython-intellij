@@ -17,6 +17,7 @@ import com.intellij.ui.JBColor
 import com.intellij.ui.awt.RelativePoint
 import dev.basedpython.pycharm.actions.ByCli
 import dev.basedpython.pycharm.lang.BasedPythonFileType
+import dev.basedpython.pycharm.util.BasedPythonBundle
 
 /**
  * Alt+Enter intention that explains the lint rule code under the caret in a `.by` file.
@@ -28,11 +29,11 @@ class ExplainRuleIntention : IntentionAction {
 
     private val ruleRegex = Regex("""\b([A-Z]{1,4}\d{2,4})\b""")
 
-    override fun getFamilyName(): String = "Explain BasedPython rule"
+    override fun getFamilyName(): String = BasedPythonBundle.message("intention.explainRule.familyName")
 
     override fun getText(): String {
         val code = lastDetectedCode
-        return if (code != null) "Explain rule $code" else "Explain BasedPython rule"
+        return if (code != null) BasedPythonBundle.message("intention.explainRule.textWithCode", code) else BasedPythonBundle.message("intention.explainRule.familyName")
     }
 
     // Cached so getText() can show the concrete code resolved during isAvailable().
@@ -52,7 +53,7 @@ class ExplainRuleIntention : IntentionAction {
     override fun invoke(project: Project, editor: Editor?, file: PsiFile?) {
         val code = detectRuleAtCaret(project, editor) ?: lastDetectedCode ?: return
 
-        ProgressManager.getInstance().run(object : Task.Backgroundable(project, "Explaining rule $code", true) {
+        ProgressManager.getInstance().run(object : Task.Backgroundable(project, BasedPythonBundle.message("progress.explainingRule", code), true) {
             override fun run(indicator: ProgressIndicator) {
                 indicator.isIndeterminate = true
                 val buff = ByCli.runBuff(project, "rule", code)
@@ -65,8 +66,8 @@ class ExplainRuleIntention : IntentionAction {
                     showBalloon(project, editor, code, by.stdout)
                     return
                 }
-                val msg = (buff?.stderr ?: by?.stderr ?: "no explanation available").ifBlank { "no explanation available" }
-                ByCli.notifyError(project, "No explanation for $code", msg)
+                val msg = (buff?.stderr ?: by?.stderr ?: BasedPythonBundle.message("explainRule.noExplanation")).ifBlank { BasedPythonBundle.message("explainRule.noExplanation") }
+                ByCli.notifyError(project, BasedPythonBundle.message("explainRule.noExplanationFor.title", code), msg)
             }
         })
     }

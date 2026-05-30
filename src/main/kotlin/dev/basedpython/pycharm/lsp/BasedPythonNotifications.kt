@@ -3,6 +3,7 @@ package dev.basedpython.pycharm.lsp
 import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
 import com.intellij.openapi.project.Project
+import dev.basedpython.pycharm.util.BasedPythonBundle
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -22,9 +23,8 @@ internal object BasedPythonNotifications {
     NotificationGroupManager.getInstance()
       .getNotificationGroup(GROUP_ID)
       .createNotification(
-        "basedpython: '$binary' not found",
-        "Set the path in Settings → Languages & Frameworks → BasedPython, " +
-          "or install it into the project's .venv.",
+        BasedPythonBundle.message("notification.lspBinaryMissing.title", binary),
+        BasedPythonBundle.message("notification.lspBinaryMissing.content"),
         NotificationType.WARNING,
       )
       .notify(project)

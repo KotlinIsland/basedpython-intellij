@@ -15,6 +15,7 @@ import com.intellij.openapi.project.Project
 import dev.basedpython.pycharm.lsp.BasedPythonBinaries
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import dev.basedpython.pycharm.ui.log.BasedPythonLogNotifications
+import dev.basedpython.pycharm.util.BasedPythonBundle
 import java.nio.file.Path
 import java.nio.file.Paths
 
@@ -48,7 +49,7 @@ class OpenBasedPythonReplAction : AnAction() {
      */
     fun openRepl(project: Project) {
         ProgressManager.getInstance().run(
-            object : Task.Backgroundable(project, "Starting basedpython REPL…", true) {
+            object : Task.Backgroundable(project, BasedPythonBundle.message("repl.starting"), true) {
                 override fun run(indicator: ProgressIndicator) {
                     indicator.isIndeterminate = true
                     val bin = BasedPythonBinaries.resolveBy(project)
@@ -79,7 +80,7 @@ class OpenBasedPythonReplAction : AnAction() {
         }
         ProcessTerminatedListener.attach(handler)
 
-        val title = "basedpython REPL"
+        val title = BasedPythonBundle.message("repl.consoleTitle")
         RunContentExecutor(project, handler)
             .withTitle(title)
             .withActivateToolWindow(true)
@@ -93,8 +94,8 @@ class OpenBasedPythonReplAction : AnAction() {
     private fun notifyMissing(project: Project) {
         BasedPythonLogNotifications.create(
             project,
-            "basedpython REPL",
-            "The `by` binary could not be found. Configure its path in Settings | Tools | BasedPython.",
+            BasedPythonBundle.message("repl.consoleTitle"),
+            BasedPythonBundle.message("repl.binaryMissing"),
             NotificationType.WARNING,
         ).addAction(BasedPythonLogNotifications.openSettings(project))
             .notify(project)
@@ -103,7 +104,7 @@ class OpenBasedPythonReplAction : AnAction() {
     private fun notifyStartFailed(project: Project, t: Throwable) {
         BasedPythonLogNotifications.create(
             project,
-            "basedpython REPL failed to start",
+            BasedPythonBundle.message("repl.startFailed.title"),
             t.message ?: t.javaClass.simpleName,
             NotificationType.ERROR,
         ).notify(project)

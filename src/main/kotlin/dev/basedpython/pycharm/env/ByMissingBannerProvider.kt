@@ -16,6 +16,7 @@ import com.intellij.ui.EditorNotificationProvider
 import com.intellij.ui.EditorNotifications
 import dev.basedpython.pycharm.lang.BasedPythonFileType
 import dev.basedpython.pycharm.lsp.BasedPythonBinaries
+import dev.basedpython.pycharm.util.BasedPythonBundle
 import java.nio.file.Path
 import java.util.function.Function
 import javax.swing.JComponent
@@ -43,15 +44,15 @@ class ByMissingBannerProvider : EditorNotificationProvider {
 
     private fun buildPanel(project: Project, file: VirtualFile): EditorNotificationPanel {
         val panel = EditorNotificationPanel(EditorNotificationPanel.Status.Warning)
-        panel.text = "basedpython `by` not found."
+        panel.text = BasedPythonBundle.message("banner.byMissing.text")
 
-        panel.createActionLabel("Install with uv") {
+        panel.createActionLabel(BasedPythonBundle.message("banner.byMissing.installWithUv")) {
             installWithUv(project)
         }
-        panel.createActionLabel("Configure…") {
+        panel.createActionLabel(BasedPythonBundle.message("banner.byMissing.configure")) {
             ShowSettingsUtil.getInstance().showSettingsDialog(project, "BasedPython")
         }
-        panel.createActionLabel("Dismiss") {
+        panel.createActionLabel(BasedPythonBundle.message("banner.byMissing.dismiss")) {
             dismissed.add(file)
             EditorNotifications.getInstance(project).updateNotifications(file)
         }
@@ -60,7 +61,7 @@ class ByMissingBannerProvider : EditorNotificationProvider {
 
     private fun installWithUv(project: Project) {
         val base: Path = UvSupport.basePath(project) ?: run {
-            UvSupport.notify(project, "Install basedpython", "No project base path.", NotificationType.WARNING)
+            UvSupport.notify(project, BasedPythonBundle.message("install.basedpython.title"), BasedPythonBundle.message("uv.noBasePath"), NotificationType.WARNING)
             return
         }
         val uv = UvSupport.findUv()
@@ -78,16 +79,16 @@ class ByMissingBannerProvider : EditorNotificationProvider {
                     override fun processTerminated(event: ProcessEvent) {
                         if (event.exitCode == 0) {
                             UvSupport.notify(
-                                project, "Install basedpython",
-                                "`uv add --dev basedpython` completed.", NotificationType.INFORMATION,
+                                project, BasedPythonBundle.message("install.basedpython.title"),
+                                BasedPythonBundle.message("install.basedpython.success"), NotificationType.INFORMATION,
                             )
                             ApplicationManager.getApplication().invokeLater {
                                 EditorNotifications.getInstance(project).updateAllNotifications()
                             }
                         } else {
                             UvSupport.notify(
-                                project, "Install basedpython",
-                                "`uv add --dev basedpython` exited with code ${event.exitCode}.",
+                                project, BasedPythonBundle.message("install.basedpython.title"),
+                                BasedPythonBundle.message("install.basedpython.exitCode", event.exitCode),
                                 NotificationType.ERROR,
                             )
                         }
@@ -96,8 +97,8 @@ class ByMissingBannerProvider : EditorNotificationProvider {
                 handler.startNotify()
             } catch (ex: Exception) {
                 UvSupport.notify(
-                    project, "Install basedpython",
-                    "Failed to start `uv`: ${ex.message}", NotificationType.ERROR,
+                    project, BasedPythonBundle.message("install.basedpython.title"),
+                    BasedPythonBundle.message("install.basedpython.startFailed", ex.message ?: ""), NotificationType.ERROR,
                 )
             }
         }

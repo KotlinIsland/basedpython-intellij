@@ -8,6 +8,7 @@ import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.psi.PsiFile
 import dev.basedpython.pycharm.actions.ByCli
 import dev.basedpython.pycharm.lang.BasedPythonFileType
+import dev.basedpython.pycharm.util.BasedPythonBundle
 
 /**
  * Optimize Imports (Ctrl+Alt+O) for `.by` files.
@@ -39,7 +40,7 @@ class BuffImportOptimizer : ImportOptimizer {
             // processFile's Runnable is expected to run on a background thread;
             // wrap in a Task so there is visible progress feedback.
             ProgressManager.getInstance().run(
-                object : Task.Backgroundable(project, "Optimizing imports with buff", false) {
+                object : Task.Backgroundable(project, BasedPythonBundle.message("progress.optimizeImports"), false) {
                     override fun run(indicator: ProgressIndicator) {
                         indicator.isIndeterminate = true
                         indicator.text2 = vf.name
@@ -54,8 +55,8 @@ class BuffImportOptimizer : ImportOptimizer {
                         if (out.exitCode != 0) {
                             ByCli.notifyError(
                                 project,
-                                "buff organize-imports failed",
-                                out.stderr.ifBlank { "exit ${out.exitCode}" },
+                                BasedPythonBundle.message("notification.organizeImportsFailed.title"),
+                                out.stderr.ifBlank { BasedPythonBundle.message("notification.exitCode", out.exitCode) },
                             )
                         } else {
                             VfsUtil.markDirtyAndRefresh(true, false, false, vf)

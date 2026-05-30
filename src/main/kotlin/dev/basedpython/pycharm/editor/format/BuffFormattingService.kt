@@ -7,6 +7,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiFile
 import dev.basedpython.pycharm.actions.ByCli
 import dev.basedpython.pycharm.lang.BasedPythonFileType
+import dev.basedpython.pycharm.util.BasedPythonBundle
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
@@ -65,7 +66,7 @@ class BuffFormattingService : AsyncDocumentFormattingService() {
                     Files.createTempFile("buff-format-", ".by")
                 }
             } catch (e: Exception) {
-                request.onError("buff format failed", e.message ?: "Could not create temporary file")
+                request.onError(BasedPythonBundle.message("notification.formatFailed.title"), e.message ?: BasedPythonBundle.message("format.tempFileFailed"))
                 return
             }
 
@@ -80,19 +81,19 @@ class BuffFormattingService : AsyncDocumentFormattingService() {
                     title = "buff format",
                 )
                 if (out == null) {
-                    request.onError("buff format failed", "buff binary not found")
+                    request.onError(BasedPythonBundle.message("notification.formatFailed.title"), BasedPythonBundle.message("format.buffBinaryNotFound"))
                     return
                 }
                 if (cancelled) return
                 if (out.exitCode != 0) {
-                    request.onError("buff format failed", out.stderr.ifBlank { "exit ${out.exitCode}" })
+                    request.onError(BasedPythonBundle.message("notification.formatFailed.title"), out.stderr.ifBlank { BasedPythonBundle.message("notification.exitCode", out.exitCode) })
                     return
                 }
 
                 val formatted = String(Files.readAllBytes(tempFile), StandardCharsets.UTF_8)
                 request.onTextReady(formatted)
             } catch (e: Exception) {
-                request.onError("buff format failed", e.message ?: e.javaClass.simpleName)
+                request.onError(BasedPythonBundle.message("notification.formatFailed.title"), e.message ?: e.javaClass.simpleName)
             } finally {
                 runCatching { Files.deleteIfExists(tempFile) }
             }
