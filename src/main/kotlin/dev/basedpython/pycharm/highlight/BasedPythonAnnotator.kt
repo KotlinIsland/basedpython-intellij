@@ -3,7 +3,10 @@ package dev.basedpython.pycharm.highlight
 import com.intellij.lang.annotation.AnnotationHolder
 import com.intellij.lang.annotation.Annotator
 import com.intellij.lang.annotation.HighlightSeverity
+import com.intellij.openapi.editor.HighlighterColors
+import com.intellij.openapi.editor.colors.EditorColorsManager
 import com.intellij.openapi.editor.colors.TextAttributesKey
+import com.intellij.openapi.editor.markup.TextAttributes
 import com.intellij.openapi.util.TextRange
 import com.intellij.psi.PsiElement
 import dev.basedpython.pycharm.lang.BasedPythonLexer
@@ -68,6 +71,9 @@ class BasedPythonAnnotator : Annotator {
     ) {
         val n = tokens.size
 
+        // Token views (type + text) for the context-free soft-keyword classifier.
+        val tokViews = tokens.map { BasedPythonSoftKeywords.Tok(it.type, text.substring(it.start, it.end)) }
+
         // Small state machine tracking whether we are:
         //   - inside a def-parameter list (to highlight PARAMETER)
         //   - expecting a function/class name after def/class keyword
@@ -94,6 +100,17 @@ class BasedPythonAnnotator : Annotator {
 
                 // ── KEYWORD tokens ──────────────────────────────────────────
                 BasedPythonTokenTypes.KEYWORD -> {
+                    // Soft keywords used outside a keyword position (e.g. `x = out`, `type(x)`,
+                    // `obj.match`) are demoted to identifier colour, like a parser would.
+                    if (BasedPythonSoftKeywords.isSoft(tokText) &&
+                        !BasedPythonSoftKeywords.isKeyword(tokViews, i)
+                    ) {
+                        demoteKeyword(holder, baseOffset, tok.start, tok.end, tokText)
+                        prevKeyword = ""
+                        afterColon = false
+                        afterArrow = false
+                        i++; continue
+                    }
                     when (tokText) {
                         "def" -> {
                             expectDefName = true
@@ -448,6 +465,28 @@ class BasedPythonAnnotator : Annotator {
             .textAttributes(key)
             .create()
     }
+
+    /**
+     * Render a soft keyword that is being used as a plain identifier. We must *override* the
+     * lexer's keyword colour, so for the plain case we enforce the editor's default text
+     * attributes (a bare IDENTIFIER key could merge and leave the keyword colour showing).
+     * When the word is also a builtin (`open`, `type`), colour it as a builtin instead.
+     */
+    private fun demoteKeyword(holder: AnnotationHolder, baseOffset: Int, start: Int, end: Int, tokText: String) {
+        if (end <= start) return
+        if (isBuiltin(tokText)) {
+            highlight(holder, baseOffset, start, end, BasedPythonHighlightKeys.BUILTIN_NAME)
+            return
+        }
+        val range = TextRange(baseOffset + start, baseOffset + end)
+        holder.newSilentAnnotation(HighlightSeverity.INFORMATION)
+            .range(range)
+            .enforcedTextAttributes(defaultTextAttributes())
+            .create()
+    }
+
+    private fun defaultTextAttributes(): TextAttributes =
+        EditorColorsManager.getInstance().globalScheme.getAttributes(HighlighterColors.TEXT) ?: TextAttributes()
 
     private fun nextNonWs(tokens: List<TokEntry>, from: Int): TokEntry? {
         var k = from
