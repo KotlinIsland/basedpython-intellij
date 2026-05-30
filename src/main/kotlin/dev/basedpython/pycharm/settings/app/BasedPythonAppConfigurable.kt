@@ -51,7 +51,7 @@ internal class BasedPythonAppConfigurable : Configurable {
 
     private var rootPanel: JComponent? = null
 
-    override fun getDisplayName(): String = "BasedPython Defaults"
+    override fun getDisplayName(): String = "basedpython Defaults"
 
     override fun getHelpTopic(): String = "dev.basedpython.pycharm.settings.app"
 

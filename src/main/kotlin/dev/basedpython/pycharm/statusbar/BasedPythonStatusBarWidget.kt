@@ -62,7 +62,7 @@ internal class BasedPythonStatusBarWidget(private val project: Project) :
     override fun getTooltipText(): String {
         val snap = LspServerStateService.getInstance(project).snapshot()
         return buildString {
-            append("BasedPython LSP\n")
+            append("basedpython LSP\n")
             append("  by:   ").append(stateWord(snap.byLight))
             byVersion?.let { append("  v").append(it) }
             append("  (").append(snap.byPath ?: "not found").append(")\n")
@@ -95,7 +95,7 @@ internal class BasedPythonStatusBarWidget(private val project: Project) :
             })
         }
         return JBPopupFactory.getInstance().createActionGroupPopup(
-            "BasedPython",
+            "basedpython",
             group,
             com.intellij.openapi.actionSystem.impl.SimpleDataContext.getProjectContext(project),
             JBPopupFactory.ActionSelectionAid.SPEEDSEARCH,

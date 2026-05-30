@@ -36,7 +36,7 @@ class BasedPythonRelatedProvider : GotoRelatedProvider() {
 
         val target = counterpart?.takeIf { it.isValid && it.exists() } ?: return emptyList()
         val psiTarget = PsiManager.getInstance(project).findFile(target) ?: return emptyList()
-        val groupName = if (isByFile(file)) "Generated Python" else "BasedPython Source"
+        val groupName = if (isByFile(file)) "Generated Python" else "basedpython Source"
         return listOf(GotoRelatedItem(psiTarget, groupName))
     }
 

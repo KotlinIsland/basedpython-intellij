@@ -13,7 +13,7 @@
     <extensions defaultExtensionNs="com.intellij">
         <!-- ===== Stream A: language / file type / highlighting ===== -->
         <fileType
-            name="BasedPython"
+            name="basedpython"
             implementationClass="dev.basedpython.pycharm.lang.BasedPythonFileType"
             fieldName="INSTANCE"
             language="BasedPython"
@@ -57,7 +57,7 @@
         <projectConfigurable
             groupId="language"
             id="dev.basedpython.pycharm.settings"
-            displayName="BasedPython"
+            displayName="basedpython"
             provider="dev.basedpython.pycharm.settings.ui.BasedPythonConfigurableProvider"/>
         <statusBarWidgetFactory
             id="dev.basedpython.pycharm.statusbar"
@@ -110,7 +110,7 @@
             implementationClass="dev.basedpython.pycharm.inspections.spellcheck.BasedPythonSpellcheckingStrategy"/>
         <localInspection
             language="BasedPython"
-            groupName="BasedPython"
+            groupName="basedpython"
             displayName="Mutable default argument"
             shortName="BasedPythonMutableDefaultArg"
             enabledByDefault="true"
@@ -118,7 +118,7 @@
             implementationClass="dev.basedpython.pycharm.inspections.MutableDefaultArgInspection"/>
         <localInspection
             language="BasedPython"
-            groupName="BasedPython"
+            groupName="basedpython"
             displayName="by binary not configured"
             shortName="BasedPythonBinaryNotConfigured"
             enabledByDefault="true"
@@ -266,7 +266,7 @@
         <applicationConfigurable
             groupId="language"
             id="dev.basedpython.pycharm.settings.app"
-            displayName="BasedPython Defaults"
+            displayName="basedpython Defaults"
             instance="dev.basedpython.pycharm.settings.app.BasedPythonAppConfigurable"/>
     </extensions>
 

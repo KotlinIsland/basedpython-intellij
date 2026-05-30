@@ -105,7 +105,7 @@ internal object BasedPythonDocEntries {
         put(
             "class", DocEntry(
                 "class def",
-                "Declares a <b>class</b>. In BasedPython, member modifiers such as " +
+                "Declares a <b>class</b>. In basedpython, member modifiers such as " +
                     "<code>public</code>, <code>private</code>, <code>final</code>, " +
                     "<code>abstract</code>, <code>static</code> and <code>override</code> are " +
                     "supported.<br/><pre>class def Widget:\n    public name: str</pre>",
@@ -115,7 +115,7 @@ internal object BasedPythonDocEntries {
         put(
             "class def", DocEntry(
                 "class def",
-                "Declares a <b>class</b>. In BasedPython, member modifiers such as " +
+                "Declares a <b>class</b>. In basedpython, member modifiers such as " +
                     "<code>public</code>, <code>private</code>, <code>final</code>, " +
                     "<code>abstract</code>, <code>static</code> and <code>override</code> are " +
                     "supported.<br/><pre>class def Widget:\n    public name: str</pre>",

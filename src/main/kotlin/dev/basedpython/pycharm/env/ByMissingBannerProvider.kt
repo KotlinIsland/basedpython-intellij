@@ -50,7 +50,7 @@ class ByMissingBannerProvider : EditorNotificationProvider {
             installWithUv(project)
         }
         panel.createActionLabel(BasedPythonBundle.message("banner.byMissing.configure")) {
-            ShowSettingsUtil.getInstance().showSettingsDialog(project, "BasedPython")
+            ShowSettingsUtil.getInstance().showSettingsDialog(project, "basedpython")
         }
         panel.createActionLabel(BasedPythonBundle.message("banner.byMissing.dismiss")) {
             dismissed.add(file)
