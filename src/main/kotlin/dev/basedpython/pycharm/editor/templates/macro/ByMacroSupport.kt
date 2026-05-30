@@ -59,13 +59,18 @@ internal object ByMacroSupport {
     }
 
     /**
-     * The `out/<rel>.py` path [file] transpiles to, relative to the project base path, using `/`
-     * separators (e.g. `out/pkg/sub/foo.py`). Empty when unavailable.
+     * The `out/<rel>.py` path [file] transpiles to, relative to the file's own content root
+     * (multi-root aware), using `/` separators (e.g. `out/pkg/sub/foo.py`). Falls back to the
+     * project base path when the file is not under a registered content root. Empty when
+     * unavailable.
      */
     fun outPath(project: Project?, file: VirtualFile?): String {
         if (project == null || file == null) return ""
-        val basePath = project.basePath ?: return ""
-        val base = LocalFileSystem.getInstance().findFileByPath(basePath) ?: return ""
+        val index = ProjectFileIndex.getInstance(project)
+        val base = index.getContentRootForFile(file)
+            ?: index.getSourceRootForFile(file)
+            ?: project.basePath?.let { LocalFileSystem.getInstance().findFileByPath(it) }
+            ?: return ""
         val rel = VfsUtilCore.getRelativePath(file, base, '/') ?: return ""
         val withPyExt = rel.replaceFirst(Regex("\\.by$", RegexOption.IGNORE_CASE), ".py")
         return "out/$withPyExt"

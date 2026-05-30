@@ -30,7 +30,7 @@ class FormatWithBuffAction : AnAction() {
         ProgressManager.getInstance().run(object : Task.Backgroundable(project, BasedPythonBundle.message("progress.formattingWithBuff", file.name), true) {
             override fun run(indicator: ProgressIndicator) {
                 indicator.isIndeterminate = true
-                val out = ByCli.runBuff(project, "format", path.toString(), cwd = path.parent) ?: return
+                val out = ByCli.runBuff(project, "format", path.toString(), cwd = path.parent, contextFile = file) ?: return
                 if (out.exitCode != 0) {
                     ByCli.notifyError(project, BasedPythonBundle.message("notification.formatFailed.title"), out.stderr.ifBlank { BasedPythonBundle.message("notification.exitCode", out.exitCode) })
                     return

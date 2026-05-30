@@ -55,6 +55,7 @@ class BuffFormatOnSaveAction : ActionOnSave() {
                             project,
                             "format", path.toString(),
                             cwd = path.parent,
+                            contextFile = vf,
                             title = "buff format",
                         ) ?: continue
                         if (out.exitCode != 0) {
