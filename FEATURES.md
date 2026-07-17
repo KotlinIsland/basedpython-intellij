@@ -17,9 +17,18 @@ Status key: `[x]` done · `[~]` partial · `[ ]` todo
 - [x] File-type icon + marketplace logo (pluginIcon.svg light/dark)
 
 ## 2. Syntax highlighting
-- [x] Lexer-driven keyword/string/number/comment/operator highlighting
-- [x] basedpython extras (`?.`, `??`, `final`, `override`, `protocol`, `let`, `newtype`, `data class`, etc.)
-- [x] Annotator-level semantic coloring fallback when LSP off (builtins, self/cls, decorators, type names)
+
+**Policy: the `by` LSP is the source of truth for semantic colour and is always preferred when
+available.** It knows the types and symbols the annotator can only guess at, and it tracks the
+language on its own — new syntax colours with no plugin change. The lexer stays regardless (the
+platform requires a lexer to register the language, and semantic tokens never cover strings,
+comments, numbers, operators or brackets). Everything marked *no-LSP fallback* below is **very low
+priority**: basedpython is unusable without `by`, so don't invest in fallback fidelity, and never
+let it override a semantic token.
+
+- [x] Lexer-driven keyword/string/number/comment/operator highlighting (needed in all modes)
+- [x] basedpython extras (`?.`, `??`, `final`, `override`, `protocol`, `let`, `newtype`, `data class`, etc.) — keyword set is a *no-LSP fallback*; a stale list is tolerable since the server reports keywords itself
+- [x] Annotator-level semantic coloring (builtins, self/cls, decorators, type names) — *no-LSP fallback, very low priority*; approximate by design, superseded by semantic tokens
 - [x] LSP semantic tokens → color scheme keys — lsp.semantic.BasedPythonSemanticTokensMapping (pure) + BasedPythonLspSemanticTokensSupport, wired into ByLspServerDescriptor.semanticTokensCustomizer; maps LSP token types/modifiers to basedpython TextAttributesKeys (themeable)
 - [x] String escape sequence highlighting
 - [x] f-string interpolation highlighting

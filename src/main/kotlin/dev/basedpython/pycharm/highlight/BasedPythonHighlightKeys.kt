@@ -6,8 +6,17 @@ import com.intellij.openapi.editor.colors.TextAttributesKey
 /**
  * Additional TextAttributesKeys for semantic (annotator-driven) highlighting.
  * These are layered on top of the lexer-based [dev.basedpython.pycharm.lang.BasedPythonColors].
- * When the LSP server is running its semantic tokens take priority; these keys serve as
- * lexer-driven fallbacks for the no-LSP (e.g. free-IDE) case.
+ *
+ * **The `by` LSP is the source of truth for semantic colour and is always preferred when
+ * available.** Its semantic tokens know the types and symbols the annotator can only guess at, and
+ * they track the language on their own: a new keyword or construct in `by` colours correctly with
+ * no change here.
+ *
+ * The annotator behind these keys is a best-effort fallback for the no-LSP case, and that case is
+ * **very low priority** — basedpython is not usable without `by`, so an editor without it is
+ * already degraded. Don't spend effort raising the fallback's fidelity, and never let it override
+ * the LSP: prefer `.textAttributes(key)`, which yields to semantic tokens, over
+ * `.enforcedTextAttributes(...)`, which does not.
  */
 object BasedPythonHighlightKeys {
 
