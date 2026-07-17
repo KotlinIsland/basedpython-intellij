@@ -1,8 +1,8 @@
-<scheme name="BasedPython Light" version="142" parent_scheme="Default">
+<scheme name="basedpython Light" version="142" parent_scheme="Default">
   <metaInfo>
     <property name="created">2026-05-29</property>
     <property name="ide">PyCharm</property>
-    <property name="originalScheme">BasedPython Light</property>
+    <property name="originalScheme">basedpython Light</property>
   </metaInfo>
   <colors>
     <option name="CARET_COLOR" value="3776ab" />

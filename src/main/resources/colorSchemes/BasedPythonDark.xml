@@ -1,8 +1,8 @@
-<scheme name="BasedPython Dark" version="142" parent_scheme="Darcula">
+<scheme name="basedpython dark islands" version="142" parent_scheme="Islands Dark">
   <metaInfo>
     <property name="created">2026-05-29</property>
     <property name="ide">PyCharm</property>
-    <property name="originalScheme">BasedPython Dark</property>
+    <property name="originalScheme">basedpython dark</property>
   </metaInfo>
   <colors>
     <option name="CARET_COLOR" value="ffd43b" />
