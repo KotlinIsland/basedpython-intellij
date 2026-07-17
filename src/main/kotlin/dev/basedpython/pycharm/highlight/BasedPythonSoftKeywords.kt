@@ -4,7 +4,14 @@ import com.intellij.psi.tree.IElementType
 import dev.basedpython.pycharm.lang.BasedPythonTokenTypes
 
 /**
- * Contextual classification of basedpython *soft* keywords.
+ * Contextual classification of basedpython *soft* keywords, for the no-LSP case only.
+ *
+ * **Prefer the LSP.** `by` already resolves every one of these correctly: its parser decides
+ * whether an occurrence is a keyword or a name and reports the verdict as a semantic token, so when
+ * the server is running these heuristics are redundant and should not be consulted. They exist only
+ * so a `.by` file isn't mis-coloured without a server — a **very low priority** scenario, since
+ * basedpython isn't usable without `by`. The rules below approximate a real parser and will be
+ * wrong at the edges; that's accepted, not a bug to chase.
  *
  * The lexer is context-free: it emits [BasedPythonTokenTypes.KEYWORD] for every word in the
  * keyword set, including soft keywords that are also valid identifiers (`match`, `case`, `type`,

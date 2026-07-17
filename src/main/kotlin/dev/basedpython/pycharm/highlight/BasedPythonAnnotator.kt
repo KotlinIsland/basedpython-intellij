@@ -13,13 +13,24 @@ import dev.basedpython.pycharm.lang.BasedPythonLexer
 import dev.basedpython.pycharm.lang.BasedPythonTokenTypes
 
 /**
- * Semantic annotator for basedpython (.by) files.
+ * Best-effort semantic colour for basedpython (.by) files when the `by` LSP is unavailable.
+ *
+ * **Prefer the LSP whenever it is running.** Everything below is guessed from the token stream —
+ * "is this identifier a builtin, a type, a parameter?" is a question only type resolution answers,
+ * and `by`'s semantic tokens answer it correctly, for constructs this file has never heard of. This
+ * annotator exists purely so a `.by` file isn't monochrome without a server, and that scenario is
+ * **very low priority**: basedpython isn't usable without `by` in the first place. Treat gaps and
+ * wrong guesses here as expected, not as bugs worth chasing; fix the LSP path instead.
+ *
+ * Consequently this must never win against a semantic token. Use `.textAttributes(key)`, which
+ * yields to the LSP's higher-priority layer. `.enforcedTextAttributes(...)` overrides it and is
+ * reserved for [demoteKeyword], which has to beat the *lexer's* keyword colour, not the LSP's.
  *
  * Because the PSI tree is flat (all content is token leaves under the file root) we run
  * the annotator only on the top-level PsiFile element, walking the entire token stream once
  * per file pass. This avoids re-entering per child-leaf and keeps allocations low.
  *
- * Highlights applied (lexer-driven fallbacks — LSP semantic tokens take priority when server runs):
+ * Highlights applied (all superseded by LSP semantic tokens when the server is running):
  *   - Python / basedpython builtins → BUILTIN_NAME
  *   - `self` / `cls` (first-param or general reference) → SELF_PARAMETER
  *   - `@decorator` spans → DECORATOR

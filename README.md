@@ -14,7 +14,8 @@ support, run configurations, CLI actions, and editor tooling.
 - Lexer-driven syntax highlighting for Python and basedpython keywords (`final`,
   `override`, `abstract`, `static`, `protocol`, `let`, `newtype`, `public`, `private`,
   `data class`, `frozen data class`, `enum class`), strings, numbers, comments, and
-  operators (including `?.` and `??`) — works even when the LSP is offline.
+  operators (including `?.` and `??`). Strings, comments, numbers and operators are colored
+  here in every mode — LSP semantic tokens classify identifiers, not punctuation.
 - Line commenting (`#`), brace matching for `()` / `[]` / `{}`, quote auto-pairing.
 - Configurable color scheme under *Settings → Editor → Color Scheme → basedpython*.
 
@@ -48,10 +49,15 @@ support, run configurations, CLI actions, and editor tooling.
 - Optional status bar widget showing live `by` / `buff` LSP health (green = running,
   gray = stopped, red = binary missing).
 
-### Semantic highlighting (no LSP required)
-- Annotator-level coloring for built-in names, `self`/`cls`, decorators, type names,
-  function/class declarations, parameters, and keyword arguments.
+### Semantic highlighting
+- Driven by the `by` LSP, which is always preferred when available: it knows the types and
+  symbols behind each name, and it tracks the language on its own — new basedpython syntax
+  colors correctly with no plugin update.
 - String escape-sequence and f-string interpolation (`{expr}`) highlighting.
+- With no server running, an annotator guesses at built-in names, `self`/`cls`, decorators,
+  type names, function/class declarations, parameters, and keyword arguments from the token
+  stream alone. It exists so a file isn't monochrome without `by`, which is a very low
+  priority case — basedpython isn't usable without `by` — so it is approximate by design.
 
 ### Code intelligence
 - Structure view, breadcrumbs, and code folding (imports, functions, classes, multiline
