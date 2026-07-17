@@ -1,8 +1,13 @@
 package dev.basedpython.pycharm.lsp
 
 import com.intellij.execution.configurations.GeneralCommandLine
+import com.intellij.execution.process.OSProcessHandler
+import com.intellij.execution.process.ProcessEvent
+import com.intellij.execution.process.ProcessListener
+import com.intellij.execution.process.ProcessOutputTypes
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.util.Key
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.platform.lsp.api.LspServerSupportProvider
 import com.intellij.platform.lsp.api.LspServerSupportProvider.LspServerStarter
@@ -30,9 +35,37 @@ import com.intellij.platform.lsp.api.customization.LspSemanticTokensDisabled
 import com.intellij.platform.lsp.api.customization.LspSignatureHelpDisabled
 import com.intellij.platform.lsp.api.customization.LspTypeHierarchyDisabled
 import dev.basedpython.pycharm.settings.BasedPythonSettings
+import dev.basedpython.pycharm.ui.log.BasedPythonLog
 import java.nio.file.Path
 
 private val LOG = Logger.getInstance("dev.basedpython.pycharm.lsp")
+
+/**
+ * Mirrors a language server's stderr into the "basedpython" tool window.
+ *
+ * The servers log to stderr (stdout carries the LSP protocol itself, so it must not be touched).
+ * The platform already forwards that to idea.log, but the tool window has its own console, and
+ * nothing was writing to it — which is why "Show Logs" opened an empty window.
+ *
+ * Attaching a listener is additive and does not consume the stream, so the platform's own reader is
+ * unaffected.
+ */
+private fun OSProcessHandler.mirrorStderrTo(project: Project, serverName: String): OSProcessHandler {
+    val log = BasedPythonLog.getInstance(project)
+    addProcessListener(object : ProcessListener {
+        override fun onTextAvailable(event: ProcessEvent, outputType: Key<*>) {
+            if (outputType != ProcessOutputTypes.STDERR) return
+            val text = event.text.trimEnd('\n', '\r')
+            if (text.isBlank()) return
+            log.serverOutput(serverName, text, isError = isServerError(text))
+        }
+    })
+    return this
+}
+
+/** The servers prefix their own level; a panic has no level but is the thing most worth seeing. */
+private fun isServerError(text: String): Boolean =
+    text.contains(" ERROR ") || text.contains("panicked")
 
 private val SUPPORTED_EXTENSIONS = setOf("by", "byi", "py", "pyi")
 
@@ -72,6 +105,9 @@ internal class ByLspServerDescriptor(
       add("server")
       addAll(extraArgs)
     })
+
+  override fun startServerProcess(): OSProcessHandler =
+    super.startServerProcess().mirrorStderrTo(project, "by")
 
   // `by` advertises: completion, hover, goto-def/decl/type-def, references, rename,
   // doc highlight, signature help, diagnostics, inlay hints, semantic tokens,
@@ -147,6 +183,9 @@ internal class BuffLspServerDescriptor(
       add("server")
       addAll(extraArgs)
     })
+
+  override fun startServerProcess(): OSProcessHandler =
+    super.startServerProcess().mirrorStderrTo(project, "buff")
 
   // `buff` advertises only formatting + code actions + hover + diagnostics.
   // Everything the type-checker (`by`) handles better stays disabled; the three

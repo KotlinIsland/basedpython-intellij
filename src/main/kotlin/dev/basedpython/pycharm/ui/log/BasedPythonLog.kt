@@ -46,6 +46,25 @@ internal class BasedPythonLog(private val project: Project) {
         append(format("ERROR", msg), ConsoleViewContentType.ERROR_OUTPUT)
     }
 
+    /**
+     * Append a line a language server wrote to its own stderr.
+     *
+     * Deliberately not routed through [error]: that calls [Logger.error], which raises an IDE
+     * fatal-error report. A server complaining about the user's code — or even panicking — is not
+     * an IDE error, and reporting each one as such would bury the user in dialogs. It is still
+     * coloured as error output so it stands out in the console, and mirrored to idea.log at info
+     * level.
+     *
+     * [text] already carries the server's own timestamp and level, so it is passed through
+     * verbatim rather than re-formatted.
+     */
+    fun serverOutput(serverName: String, text: String, isError: Boolean) {
+        log.info("[$serverName] $text")
+        val type =
+            if (isError) ConsoleViewContentType.ERROR_OUTPUT else ConsoleViewContentType.NORMAL_OUTPUT
+        append("[$serverName] $text\n", type)
+    }
+
     /** Lazily build (or reuse) the console backing the tool window. */
     fun getOrCreateConsole(): ConsoleView {
         synchronized(lock) {
