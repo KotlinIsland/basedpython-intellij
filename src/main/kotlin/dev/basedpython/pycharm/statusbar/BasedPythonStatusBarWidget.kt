@@ -11,7 +11,9 @@ import com.intellij.openapi.ui.popup.JBPopupFactory
 import com.intellij.openapi.wm.StatusBar
 import com.intellij.openapi.wm.StatusBarWidget
 import com.intellij.openapi.wm.StatusBarWidget.WidgetPresentation
+import com.intellij.platform.lsp.api.LspServer
 import com.intellij.platform.lsp.api.LspServerManager
+import com.intellij.platform.lsp.api.LspServerManagerListener
 import com.intellij.util.Consumer
 import dev.basedpython.pycharm.lsp.BuffLspServerSupportProvider
 import dev.basedpython.pycharm.lsp.ByLspServerSupportProvider
@@ -54,31 +56,37 @@ internal class BasedPythonStatusBarWidget(private val project: Project) :
 
     override fun getSelectedValue(): String {
         val snap = LspServerStateService.getInstance(project).snapshot()
-        val dot = when (snap.byLight) {
-            ServerLight.GREEN -> "●"
-            ServerLight.GRAY -> "○"
-            ServerLight.RED -> "✕"
-        }
-        return "by: $dot"
+        return "by: ${glyph(snap.byLight)}"
+    }
+
+    /** A healthy server is quiet; only [ServerLight.PROBLEM] is meant to catch the eye. */
+    private fun glyph(l: ServerLight) = when (l) {
+        ServerLight.RUNNING -> "○"
+        ServerLight.STOPPED -> "◌"
+        ServerLight.PROBLEM -> "✕"
     }
 
     override fun getTooltipText(): String {
         val snap = LspServerStateService.getInstance(project).snapshot()
         return buildString {
             append("basedpython LSP\n")
-            append("  by:   ").append(stateWord(snap.byLight))
+            append("  by:   ").append(stateWord(snap.byLight, snap.byPath))
             byVersion?.let { append("  v").append(it) }
             append("  (").append(snap.byPath ?: "not found").append(")\n")
-            append("  buff: ").append(stateWord(snap.buffLight))
+            append("  buff: ").append(stateWord(snap.buffLight, snap.buffPath))
             buffVersion?.let { append("  v").append(it) }
             append("  (").append(snap.buffPath ?: "not found").append(")")
         }
     }
 
-    private fun stateWord(l: ServerLight) = when (l) {
-        ServerLight.GREEN -> "running"
-        ServerLight.GRAY -> "stopped"
-        ServerLight.RED -> "binary missing"
+    /**
+     * [ServerLight.PROBLEM] covers both "no binary to run" and "the binary ran and then died",
+     * which want different fixes — tell them apart by whether a binary was resolved at all.
+     */
+    private fun stateWord(l: ServerLight, path: String?) = when (l) {
+        ServerLight.RUNNING -> "running"
+        ServerLight.STOPPED -> "stopped"
+        ServerLight.PROBLEM -> if (path == null) "binary not found" else "stopped unexpectedly"
     }
 
     override fun getClickConsumer(): Consumer<MouseEvent>? = null
@@ -110,35 +118,21 @@ internal class BasedPythonStatusBarWidget(private val project: Project) :
         statusBar?.updateWidget(WIDGET_ID)
     }
 
+    /**
+     * Repaint whenever any server changes state. The widget reads live state from
+     * [LspServerStateService] on each paint, so this only needs to trigger the repaint — there is
+     * no state to mirror here.
+     */
     private fun subscribeToLspEvents() {
-        try {
-            val topicCls = Class.forName("com.intellij.platform.lsp.api.LspServerListener")
-            val topicField = topicCls.fields.firstOrNull { it.name == "TOPIC" } ?: return
-            @Suppress("UNCHECKED_CAST")
-            val topic = topicField.get(null) as? com.intellij.util.messages.Topic<Any> ?: return
-            val handler = java.lang.reflect.Proxy.newProxyInstance(
-                topicCls.classLoader,
-                arrayOf(topicCls),
-            ) { _, method, args ->
-                // Best-effort state caching based on method name.
-                val name = method.name
-                val running = name.contains("Initialized", ignoreCase = true) ||
-                    name.contains("Started", ignoreCase = true)
-                val stopped = name.contains("Stopped", ignoreCase = true) ||
-                    name.contains("Terminated", ignoreCase = true)
-                val cache = LspServerStateService.getInstance(project)
-                val arg0 = args?.firstOrNull()?.toString()?.lowercase().orEmpty()
-                when {
-                    arg0.contains("buff") -> if (running) cache.markBuffRunning(true) else if (stopped) cache.markBuffRunning(false)
-                    else -> if (running) cache.markByRunning(true) else if (stopped) cache.markByRunning(false)
+        LspServerManager.getInstance(project).addLspServerManagerListener(
+            object : LspServerManagerListener {
+                override fun serverStateChanged(lspServer: LspServer) {
+                    ApplicationManager.getApplication().invokeLater { update() }
                 }
-                ApplicationManager.getApplication().invokeLater { update() }
-                null
-            }
-            project.messageBus.connect(this).subscribe(topic, handler)
-        } catch (_: Throwable) {
-            // Stream B not merged yet — widget still functions via cached state.
-        }
+            },
+            this,
+            false,
+        )
     }
 
     private fun restartLsp() {
