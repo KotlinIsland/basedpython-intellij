@@ -3,62 +3,97 @@ package dev.basedpython.pycharm.statusbar
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
+import com.intellij.platform.lsp.api.LspServerManager
+import com.intellij.platform.lsp.api.LspServerState
+import com.intellij.platform.lsp.api.LspServerSupportProvider
 import dev.basedpython.pycharm.lsp.BasedPythonBinaries
+import dev.basedpython.pycharm.lsp.BuffLspServerSupportProvider
+import dev.basedpython.pycharm.lsp.ByLspServerSupportProvider
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import java.nio.file.Files
-import java.nio.file.Paths
-import java.util.concurrent.atomic.AtomicReference
+import java.nio.file.Path
 
-internal enum class ServerLight { GREEN, GRAY, RED }
+/**
+ * What the status bar reports for one server. Named for meaning rather than colour: a healthy
+ * server is deliberately unobtrusive, and only a genuine problem is allowed to draw the eye.
+ */
+internal enum class ServerLight {
+    /** Up, or on its way up. */
+    RUNNING,
+
+    /** Deliberately not running — switched off in settings, or shut down cleanly. */
+    STOPPED,
+
+    /** Wanted, but broken: the binary is missing, or the server died on its own. */
+    PROBLEM,
+}
 
 internal data class ServerSnapshot(
     val byLight: ServerLight,
     val buffLight: ServerLight,
     val byPath: String?,
     val buffPath: String?,
-    val byRunning: Boolean,
-    val buffRunning: Boolean,
 )
 
 /**
- * Convenience cache so widget can poll cheaply.
- * Stream B's LspServerListener pushes via [markRunning]; the widget reads [snapshot].
+ * Pure state mapping, split out so it can be unit-tested without an IDE fixture.
+ *
+ * The distinction that matters is [LspServerState.ShutdownNormally] versus
+ * [LspServerState.ShutdownUnexpectedly]: a server we stopped is fine, a server that stopped itself
+ * is not. Collapsing those two into one "not running" state is what previously let a server that
+ * never came up look identical to one that was simply switched off.
+ */
+internal object ServerLightMapping {
+
+    /**
+     * @param enabled the per-server toggle from settings.
+     * @param binaryMissing the resolved binary is absent or not executable.
+     * @param state the platform's view of the server, or `null` when no server has been created yet.
+     */
+    fun lightFor(enabled: Boolean, binaryMissing: Boolean, state: LspServerState?): ServerLight {
+        // A server that's switched off isn't broken, even if its binary is missing.
+        if (!enabled) return ServerLight.STOPPED
+        if (binaryMissing) return ServerLight.PROBLEM
+        return when (state) {
+            LspServerState.Running, LspServerState.Initializing -> ServerLight.RUNNING
+            LspServerState.ShutdownUnexpectedly -> ServerLight.PROBLEM
+            // Cleanly stopped, or enabled-but-never-started.
+            LspServerState.ShutdownNormally, null -> ServerLight.STOPPED
+        }
+    }
+}
+
+/**
+ * Reads live server state for the status bar widget. State comes from [LspServerManager] rather
+ * than being cached locally, so a server that fails to start is reported as such instead of being
+ * indistinguishable from one that was never asked to start.
  */
 @Service(Service.Level.PROJECT)
 internal class LspServerStateService(private val project: Project) {
-    private val byRunning = AtomicReference(false)
-    private val buffRunning = AtomicReference(false)
-
-    fun markByRunning(running: Boolean) { byRunning.set(running) }
-    fun markBuffRunning(running: Boolean) { buffRunning.set(running) }
 
     fun snapshot(): ServerSnapshot {
         val settings = BasedPythonSettings.getInstance(project)
         val byResolved = BasedPythonBinaries.resolveBy(project)
         val buffResolved = BasedPythonBinaries.resolveBuff(project)
-        val byMissing = byResolved == null || !Files.isExecutable(byResolved)
-        val buffMissing = buffResolved == null || !Files.isExecutable(buffResolved)
-        val byLight = when {
-            !settings.byEnabled -> ServerLight.GRAY
-            byMissing -> ServerLight.RED
-            byRunning.get() -> ServerLight.GREEN
-            else -> ServerLight.GRAY
-        }
-        val buffLight = when {
-            !settings.buffEnabled -> ServerLight.GRAY
-            buffMissing -> ServerLight.RED
-            buffRunning.get() -> ServerLight.GREEN
-            else -> ServerLight.GRAY
-        }
         return ServerSnapshot(
-            byLight = byLight,
-            buffLight = buffLight,
+            byLight = lightFor(settings.byEnabled, byResolved, ByLspServerSupportProvider::class.java),
+            buffLight = lightFor(settings.buffEnabled, buffResolved, BuffLspServerSupportProvider::class.java),
             byPath = byResolved?.toString(),
             buffPath = buffResolved?.toString(),
-            byRunning = byRunning.get(),
-            buffRunning = buffRunning.get(),
         )
     }
+
+    private fun lightFor(
+        enabled: Boolean,
+        resolved: Path?,
+        providerClass: Class<out LspServerSupportProvider>,
+    ): ServerLight {
+        val missing = resolved == null || !Files.isExecutable(resolved)
+        return ServerLightMapping.lightFor(enabled, missing, serverState(providerClass))
+    }
+
+    private fun serverState(providerClass: Class<out LspServerSupportProvider>): LspServerState? =
+        LspServerManager.getInstance(project).getServersForProvider(providerClass).firstOrNull()?.state
 
     companion object {
         fun getInstance(project: Project): LspServerStateService = project.service()
