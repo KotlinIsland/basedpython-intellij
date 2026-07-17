@@ -1,6 +1,7 @@
 import org.jetbrains.changelog.Changelog
 import org.jetbrains.changelog.markdownToHTML
 import org.jetbrains.intellij.platform.gradle.TestFrameworkType
+import org.jetbrains.intellij.platform.gradle.tasks.VerifyPluginTask
 
 plugins {
   id("org.jetbrains.kotlin.jvm")
@@ -13,11 +14,14 @@ dependencies {
 
   // IntelliJ Platform Gradle Plugin Dependencies Extension - read more: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin-dependencies-extension.html
   intellijPlatform {
-    intellijIdea("2026.1.1")
+    intellijIdea("2026.2")
     testFramework(TestFrameworkType.Platform)
 
     // Bundled plugins used by features (present in IDEA/PyCharm 2026.1+)
     bundledPlugin("org.toml.lang")
+    // The SM test runner (SMTRunnerConsoleProperties, TestConsoleProperties, …) left the core
+    // platform in 2026.2 and now ships as this bundled plugin.
+    bundledPlugin("intellij.testRunner.plugin")
     // Spellchecker ships as a platform module, not a bundled plugin.
     bundledModule("intellij.spellchecker")
   }
@@ -26,6 +30,14 @@ dependencies {
 // Configure IntelliJ Platform Gradle Plugin - read more: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin-extension.html
 intellijPlatform {
   pluginVerification {
+    // Fail on things that actually break at runtime. Deprecated/experimental/internal usages stay
+    // informational: observing LSP server state needs `LspServerManagerListener`, which is marked
+    // internal but has no public equivalent, and both the reloader and the status widget need it.
+    failureLevel = listOf(
+      VerifyPluginTask.FailureLevel.COMPATIBILITY_PROBLEMS,
+      VerifyPluginTask.FailureLevel.MISSING_DEPENDENCIES,
+      VerifyPluginTask.FailureLevel.INVALID_PLUGIN,
+    )
     ides {
       recommended()
     }
@@ -34,7 +46,7 @@ intellijPlatform {
   pluginConfiguration {
     ideaVersion {
       sinceBuild = "261"
-      untilBuild = "262.*"
+      untilBuild = "263.*"
     }
 
     // Extract the <!-- Plugin description --> section from README.md and provide for the plugin's manifest
