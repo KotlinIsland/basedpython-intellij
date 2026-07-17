@@ -8,7 +8,7 @@ import dev.basedpython.pycharm.lang.BasedPythonFile
 
 /**
  * Provides Quick Documentation (Ctrl+Q / F1) and external docs links for
- * BasedPython-specific keywords, modifiers and operators in `.by` files.
+ * basedpython-specific keywords, modifiers and operators in `.by` files.
  *
  * The PSI for `.by` files is flat (token-only), so this provider works off the
  * raw element text and the surrounding line in the document rather than a real

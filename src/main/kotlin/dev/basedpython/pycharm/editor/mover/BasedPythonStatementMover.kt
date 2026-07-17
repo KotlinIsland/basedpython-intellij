@@ -8,7 +8,7 @@ import com.intellij.psi.PsiFile
 import dev.basedpython.pycharm.lang.BasedPythonFile
 
 /**
- * Move Statement Up/Down support for BasedPython (`.by`) files.
+ * Move Statement Up/Down support for basedpython (`.by`) files.
  *
  * The PSI for `.by` files is flat (token-only), so block ranges are computed
  * purely from the [Document] text using indentation, mirroring the logic in

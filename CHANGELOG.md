@@ -2,14 +2,14 @@
 
 ### Added
 
-- BasedPython language registration with `.by` file type, icon, and lexer-driven syntax
+- basedpython language registration with `.by` file type, icon, and lexer-driven syntax
   highlighting (Python 3.10+ plus `final`, `override`, `abstract`, `static`, `protocol`,
   `let`, `newtype`, `public`, `private`, `data class`, `frozen data class`, `enum class`,
   `?.`, `??`). Commenter, brace matcher, and quote handler for `.by` files.
 - `by` and `buff` LSP integration with capability scoping (formatting/lint/code-actions
   routed to `buff`; completion/navigation/rename to `by`).
 - Automatic `.venv` binary discovery with `PATH` fallback and manual override;
-  `BasedPython.RestartLsp` action; missing-binary notification group.
+  `basedpython.RestartLsp` action; missing-binary notification group.
 - Project-level persistent settings (`basedpython.xml`): `by`/`buff` paths, extra args,
   per-server enable toggles, target Python version.
 - Run configuration type with `by run`, `by build`, and `by check` factories, plus
@@ -18,10 +18,10 @@
 - Tools menu group with seven `by`/`buff` actions: Transpile, Reverse Transpile,
   Generate api.lock, Format with buff (`Ctrl+Alt+Shift+L`), Check Project, Clean Caches,
   Explain Rule. Transpile actions also in editor and project-view popups.
-- Settings page (*Languages & Frameworks → BasedPython*) and an optional status bar
+- Settings page (*Languages & Frameworks → basedpython*) and an optional status bar
   widget surfacing real-time `by` / `buff` LSP state.
 - Color settings page; file templates (Empty, Class, Data Class, Protocol) under
-  *New → BasedPython File*; live templates `cdef`, `dcl`, `fdcl`, `ecl`, `proto`, `ovr`,
+  *New → basedpython File*; live templates `cdef`, `dcl`, `fdcl`, `ecl`, `proto`, `ovr`,
   `nt`, `let`.
 - Semantic highlighting annotator (no LSP needed): built-in names, `self`/`cls`,
   decorators, type names, declarations, parameters, keyword args, string escapes,
@@ -38,7 +38,7 @@
   (line length, quote style).
 - Transpilation views: side-by-side `.py` diff, go-to-generated, api.lock diff, in-place
   `.by` ↔ `.py` conversion.
-- **New Project → BasedPython** wizard; `pyproject.toml` `[tool.ruff]`/buff config
+- **New Project → basedpython** wizard; `pyproject.toml` `[tool.ruff]`/buff config
   completion; `out/` excluded from indexing.
 - i18n message bundle, unit tests (lexer, file type), and `sinceBuild`/`untilBuild`
   compatibility range.
@@ -47,7 +47,7 @@
 - Gutter run icons on `if __name__ == "__main__":` / top-level `main()`, and a `by test`
   run configuration.
 - Quick Documentation (Ctrl+Q) and External Documentation for basedpython keywords,
-  modifiers, and `?.` / `??`; **BasedPython Syntax Quick Reference** action.
+  modifiers, and `?.` / `??`; **basedpython Syntax Quick Reference** action.
 - Settings: format-on-save toggle, inlay-hint toggles (parameter/type/return), and LSP
   trace level (off/messages/verbose).
 - Smart editing: Enter auto-indents after `:` block headers; Backspace dedents by a full

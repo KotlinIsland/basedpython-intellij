@@ -141,7 +141,7 @@ Status key: `[x]` done · `[~]` partial · `[ ]` todo
 - [x] LSP trace level (off/messages/verbose)
 - [x] Per-server enable + capability toggles — byEnabled/buffEnabled plus per-capability switches (by: completion, goto-def, references, rename, semantic tokens, code lens, highlight usages, signature help; buff: formatting, code actions, hover) wired into LspServers descriptors + Configurable; restart-on-change
 - [x] Import/export settings (actions.settings.Export/ImportSettingsAction)
-- [x] Application-level defaults vs project override — settings.app.BasedPythonAppSettings (APP service) + BasedPythonDefaults resolver; BasedPythonSettings.effective* getters fall back to IDE-wide defaults; BasedPythonAppConfigurable UI ("BasedPython Defaults")
+- [x] Application-level defaults vs project override — settings.app.BasedPythonAppSettings (APP service) + BasedPythonDefaults resolver; BasedPythonSettings.effective* getters fall back to IDE-wide defaults; BasedPythonAppConfigurable UI ("basedpython Defaults")
 
 ## 15. Status / UX
 - [x] Status bar widget (LSP health)

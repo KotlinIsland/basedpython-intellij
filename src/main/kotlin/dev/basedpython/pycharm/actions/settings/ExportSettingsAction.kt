@@ -67,7 +67,7 @@ class ExportSettingsAction : AnAction(), DumbAware {
     }
 
     private companion object {
-        const val NOTIFICATION_GROUP_ID = "BasedPython.Actions"
+        const val NOTIFICATION_GROUP_ID = "basedpython.Actions"
         const val DEFAULT_FILE_NAME = "basedpython-settings.xml"
     }
 }

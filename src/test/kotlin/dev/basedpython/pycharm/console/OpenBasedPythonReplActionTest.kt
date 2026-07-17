@@ -87,7 +87,7 @@ class OpenBasedPythonReplActionTest : BasePlatformTestCase() {
     fun testActionManagerHasNoStaleRegistration() {
         // Defensive: ensure our action id is not already taken by something else in
         // the test classpath (the orchestrator registers it via plugin.xml later).
-        val existing = ActionManager.getInstance().getAction("BasedPython.OpenRepl")
+        val existing = ActionManager.getInstance().getAction("basedpython.OpenRepl")
         // Either unregistered (null) in tests, or — if a previous run registered it —
         // it must be our class. Both are acceptable; we just must not crash.
         if (existing != null) {

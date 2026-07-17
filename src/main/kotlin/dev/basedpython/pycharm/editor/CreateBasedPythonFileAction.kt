@@ -19,10 +19,10 @@ class CreateBasedPythonFileAction : CreateFileFromTemplateAction(
     ) {
         builder
             .setTitle(BasedPythonBundle.message("newFile.dialog.title"))
-            .addKind(BasedPythonBundle.message("newFile.kind.emptyFile"), BasedPythonFileType.INSTANCE.icon, "BasedPython File")
-            .addKind(BasedPythonBundle.message("newFile.kind.class"), BasedPythonFileType.INSTANCE.icon, "BasedPython Class")
-            .addKind(BasedPythonBundle.message("newFile.kind.dataClass"), BasedPythonFileType.INSTANCE.icon, "BasedPython Data Class")
-            .addKind(BasedPythonBundle.message("newFile.kind.protocol"), BasedPythonFileType.INSTANCE.icon, "BasedPython Protocol")
+            .addKind(BasedPythonBundle.message("newFile.kind.emptyFile"), BasedPythonFileType.INSTANCE.icon, "basedpython File")
+            .addKind(BasedPythonBundle.message("newFile.kind.class"), BasedPythonFileType.INSTANCE.icon, "basedpython Class")
+            .addKind(BasedPythonBundle.message("newFile.kind.dataClass"), BasedPythonFileType.INSTANCE.icon, "basedpython Data Class")
+            .addKind(BasedPythonBundle.message("newFile.kind.protocol"), BasedPythonFileType.INSTANCE.icon, "basedpython Protocol")
     }
 
     override fun getActionName(directory: PsiDirectory?, newName: String, templateName: String?): String =

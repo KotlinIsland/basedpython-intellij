@@ -9,10 +9,10 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
 
-/** Shared helpers for locating `uv` and reporting through the "BasedPython" notification group. */
+/** Shared helpers for locating `uv` and reporting through the "basedpython" notification group. */
 internal object UvSupport {
 
-    const val NOTIFICATION_GROUP_ID: String = "BasedPython"
+    const val NOTIFICATION_GROUP_ID: String = "basedpython"
 
     /** Locate a `uv` executable on PATH, or `null`. */
     fun findUv(): Path? {

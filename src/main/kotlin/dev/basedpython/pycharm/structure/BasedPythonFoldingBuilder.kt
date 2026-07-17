@@ -10,7 +10,7 @@ import com.intellij.psi.PsiElement
 import dev.basedpython.pycharm.lang.BasedPythonFile
 
 /**
- * Folding for BasedPython (.by) files. DumbAware — works without indexing.
+ * Folding for basedpython (.by) files. DumbAware — works without indexing.
  *
  * Folds:
  * 1. Function / class bodies  (collapsed by default: false)

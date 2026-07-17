@@ -18,7 +18,7 @@ import java.nio.file.Path
  */
 internal object ByCli {
 
-    const val NOTIFICATION_GROUP_ID: String = "BasedPython.Actions"
+    const val NOTIFICATION_GROUP_ID: String = "basedpython.Actions"
 
     /**
      * Run `by` with [args]. Returns `null` if the binary cannot be located.

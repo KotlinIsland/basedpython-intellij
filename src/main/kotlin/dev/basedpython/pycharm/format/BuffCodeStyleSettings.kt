@@ -5,7 +5,7 @@ import com.intellij.psi.codeStyle.CustomCodeStyleSettings
 import dev.basedpython.pycharm.lang.BasedPythonLanguage
 
 /**
- * Persisted code-style options for BasedPython files.
+ * Persisted code-style options for basedpython files.
  *
  * These values shadow buff's own configuration; the panel is read-friendly
  * (shows what buff will do) but also writes here so project-level overrides

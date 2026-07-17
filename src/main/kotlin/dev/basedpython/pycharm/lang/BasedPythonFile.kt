@@ -6,5 +6,5 @@ import com.intellij.psi.FileViewProvider
 
 class BasedPythonFile(viewProvider: FileViewProvider) : PsiFileBase(viewProvider, BasedPythonLanguage) {
     override fun getFileType(): FileType = BasedPythonFileType.INSTANCE
-    override fun toString(): String = "BasedPython File"
+    override fun toString(): String = "basedpython File"
 }

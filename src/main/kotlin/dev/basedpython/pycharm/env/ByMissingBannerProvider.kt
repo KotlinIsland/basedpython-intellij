@@ -26,7 +26,7 @@ import javax.swing.JComponent
  *
  * Detection delegates to [BasedPythonBinaries.resolveBy]; a `null` result means "missing"
  * and the banner is shown. Actions: install via `uv add --dev basedpython`, open the
- * BasedPython settings page, or dismiss for the current editor session.
+ * basedpython settings page, or dismiss for the current editor session.
  */
 class ByMissingBannerProvider : EditorNotificationProvider {
 

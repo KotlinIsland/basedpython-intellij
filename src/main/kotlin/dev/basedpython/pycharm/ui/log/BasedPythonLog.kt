@@ -11,7 +11,7 @@ import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 
 /**
- * Project-level log sink for the BasedPython plugin and its LSP servers.
+ * Project-level log sink for the basedpython plugin and its LSP servers.
  *
  * Lines are timestamped, appended to the "basedpython" tool window console
  * (created lazily, see [attachConsole]), and mirrored to [Logger]. Lines emitted

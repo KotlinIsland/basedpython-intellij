@@ -9,7 +9,7 @@ import com.intellij.openapi.components.service
 import com.intellij.util.xmlb.XmlSerializerUtil
 
 /**
- * Application-level (IDE-wide) default settings for the BasedPython plugin.
+ * Application-level (IDE-wide) default settings for the basedpython plugin.
  *
  * These hold the *defaults* that new projects inherit unless the project-level
  * [dev.basedpython.pycharm.settings.BasedPythonSettings] overrides them. The

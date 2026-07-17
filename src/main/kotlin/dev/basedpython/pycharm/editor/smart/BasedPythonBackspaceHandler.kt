@@ -5,7 +5,7 @@ import com.intellij.openapi.editor.Editor
 import com.intellij.psi.PsiFile
 
 /**
- * Backspace handler for BasedPython (.by) files.
+ * Backspace handler for basedpython (.by) files.
  *
  * When the caret is inside the leading indentation of a line (only whitespace precedes it on the
  * line) and the user presses Backspace, an entire indent step is removed — i.e. the caret snaps

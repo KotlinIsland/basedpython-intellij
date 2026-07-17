@@ -15,7 +15,7 @@ import dev.basedpython.pycharm.lang.BasedPythonTokenTypes
  * Detects mutable default arguments in `def` parameter lists:
  *   def f(x=[], y={}, z=set())
  *
- * BasedPython auto-rewrites these, so severity is WEAK_WARNING.
+ * basedpython auto-rewrites these, so severity is WEAK_WARNING.
  * The quick-fix just explains the rewrite behaviour — no text mutation is needed.
  */
 class MutableDefaultArgInspection : LocalInspectionTool() {

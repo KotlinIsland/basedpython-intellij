@@ -7,14 +7,14 @@ import dev.basedpython.pycharm.util.BasedPythonBundle
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * Surfaces user-visible warnings for the BasedPython plugin via the `BasedPython`
+ * Surfaces user-visible warnings for the basedpython plugin via the `basedpython`
  * notification group (registered in plugin.xml).
  *
  * Each `(project, key)` pair only fires once per IDE session to avoid balloon spam
  * (e.g. one warning per file opened when a binary is missing).
  */
 internal object BasedPythonNotifications {
-  private const val GROUP_ID = "BasedPython"
+  private const val GROUP_ID = "basedpython"
   private val shown = ConcurrentHashMap.newKeySet<String>()
 
   fun warnBinaryMissing(project: Project, binary: String) {

@@ -10,7 +10,7 @@ import com.intellij.util.Consumer
 import dev.basedpython.pycharm.lang.BasedPythonFile
 
 /**
- * "Matched same-keyword" highlighting for BasedPython (.by) files.
+ * "Matched same-keyword" highlighting for basedpython (.by) files.
  *
  * When the caret sits on a block-construct keyword (`if` / `elif` / `else`,
  * `try` / `except` / `finally` / `else`, `for` / `while` / `else`) we highlight all

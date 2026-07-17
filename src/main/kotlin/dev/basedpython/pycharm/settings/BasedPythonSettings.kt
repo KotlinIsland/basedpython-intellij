@@ -9,7 +9,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.util.xmlb.XmlSerializerUtil
 
 /**
- * Project-level persistent settings for the BasedPython plugin.
+ * Project-level persistent settings for the basedpython plugin.
  *
  * Persisted to `.idea/basedpython.xml`. Null `byPath` / `buffPath` means
  * "autodetect" — see [dev.basedpython.pycharm.lsp.BasedPythonBinaries].

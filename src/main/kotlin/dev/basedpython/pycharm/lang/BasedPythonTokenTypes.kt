@@ -43,7 +43,7 @@ object BasedPythonTokenTypes {
         "while", "with", "yield", "match", "case", "type",
     )
 
-    // BasedPython extras
+    // basedpython extras
     // Modifier keywords (may precede def/class/let/assignment, in any order) plus the
     // class-kind / binding introducers. Matches the parser's `is_modifier_kw` list, with
     // `protocol`/`let`/`newtype` (introducers) added.

@@ -8,7 +8,7 @@ import com.intellij.psi.PsiDocumentManager
 import com.intellij.psi.PsiFile
 
 /**
- * Enter handler for BasedPython (.by) files.
+ * Enter handler for basedpython (.by) files.
  *
  * When Enter is pressed:
  *  - if the line that the caret left ends with `:` (a block header such as `def f():`, `if x:`,
@@ -17,7 +17,7 @@ import com.intellij.psi.PsiFile
  *  - otherwise the new line simply inherits the previous line's leading indentation.
  *
  * All work is done against the [com.intellij.openapi.editor.Document] text (offsets/lines) because
- * the BasedPython PSI is flat (token-only).
+ * the basedpython PSI is flat (token-only).
  */
 class BasedPythonEnterHandler : EnterHandlerDelegateAdapter() {
 

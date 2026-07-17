@@ -9,7 +9,7 @@ import com.intellij.openapi.util.IconLoader
 import javax.swing.Icon
 
 class BasedPythonFacetType :
-    FacetType<BasedPythonFacet, BasedPythonFacetConfiguration>(ID, "basedpython", "BasedPython") {
+    FacetType<BasedPythonFacet, BasedPythonFacetConfiguration>(ID, "basedpython", "basedpython") {
 
     override fun createDefaultConfiguration(): BasedPythonFacetConfiguration =
         BasedPythonFacetConfiguration()

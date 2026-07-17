@@ -47,9 +47,9 @@ class BasedPythonBundleTest {
     @Test
     fun `every required key is present`() {
         val required = listOf(
-            "group.BasedPython.ActionGroup.text",
-            "action.BasedPython.RestartLsp.text",
-            "action.BasedPython.RestartLsp.description",
+            "group.basedpython.ActionGroup.text",
+            "action.basedpython.RestartLsp.text",
+            "action.basedpython.RestartLsp.description",
             "settings.title",
             "notification.basedPython.title",
             "notification.exitCode",

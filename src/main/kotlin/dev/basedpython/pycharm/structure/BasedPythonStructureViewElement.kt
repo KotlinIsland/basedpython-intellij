@@ -11,7 +11,7 @@ import dev.basedpython.pycharm.structure.IndentScanner.ScopeNode
 import javax.swing.Icon
 
 /**
- * A single node in the Structure View tree for a BasedPython file.
+ * A single node in the Structure View tree for a basedpython file.
  *
  * File-level element navigates to the file; all other elements navigate to the
  * start offset of the declaration within the editor.

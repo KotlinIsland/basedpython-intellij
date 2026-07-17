@@ -72,6 +72,6 @@ class ImportSettingsAction : AnAction(), DumbAware {
     }
 
     private companion object {
-        const val NOTIFICATION_GROUP_ID = "BasedPython.Actions"
+        const val NOTIFICATION_GROUP_ID = "basedpython.Actions"
     }
 }

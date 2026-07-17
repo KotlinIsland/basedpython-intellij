@@ -4,7 +4,7 @@ import com.intellij.openapi.help.WebHelpProvider
 import dev.basedpython.pycharm.docs.BasedPythonDocEntries
 
 /**
- * Routes BasedPython help topics (e.g. the "?" button in the BasedPython
+ * Routes basedpython help topics (e.g. the "?" button in the basedpython
  * Settings dialog) to the online documentation in an external browser.
  *
  * The platform matches a requested `helpTopicId` against registered
@@ -33,7 +33,7 @@ class BasedPythonWebHelpProvider : WebHelpProvider() {
     }
 
     private companion object {
-        /** Shared prefix for all BasedPython help topics. */
+        /** Shared prefix for all basedpython help topics. */
         const val HELP_TOPIC_PREFIX: String = "dev.basedpython.pycharm."
 
         /** Maps a topic suffix to a docs sub-path appended to [BasedPythonDocEntries.DOCS_BASE]. */

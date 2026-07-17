@@ -10,7 +10,7 @@ import dev.basedpython.pycharm.lang.BasedPythonLexer
 import dev.basedpython.pycharm.lang.BasedPythonTokenTypes
 
 /**
- * Registers BasedPython (.by) comment tokens with the IDE's index pattern infrastructure
+ * Registers basedpython (.by) comment tokens with the IDE's index pattern infrastructure
  * so that TODO/FIXME markers inside `#` comments appear in the TODO tool window.
  */
 class BasedPythonIndexPatternBuilder : IndexPatternBuilder {
