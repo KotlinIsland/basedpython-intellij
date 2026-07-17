@@ -67,4 +67,30 @@ class BundledColorSchemeTest {
             )
         }
     }
+
+    /**
+     * A parent_scheme is resolved by name at startup, and an unresolvable one throws
+     * InvalidDataException out of AbstractColorsScheme.resolveParent, taking the plugin's schemes
+     * down with it. Only these base schemes ship with every IDE.
+     *
+     * "Islands Dark" looks available but is not: it is tagged `ide=idea`, so PyCharm reports
+     * "Theme Islands Dark refers to unknown color scheme Islands Dark" for its own theme. To colour
+     * an optional scheme like that, use `additionalTextAttributes scheme="..."`, which is ignored
+     * when the scheme is absent, rather than inheriting from it.
+     */
+    @Test
+    fun `parent scheme is one that ships with every IDE`() {
+        val universal = setOf("Darcula", "Default", "High contrast")
+        for (path in declaredSchemePaths()) {
+            val body = checkNotNull(javaClass.getResourceAsStream("$path.xml")).use {
+                it.readBytes().decodeToString()
+            }
+            val parent = Regex("""parent_scheme="([^"]+)"""").find(body)?.groupValues?.get(1)
+            assertTrue(
+                "$path.xml has parent_scheme=\"$parent\", which is not guaranteed to exist in " +
+                    "every IDE. Allowed: $universal",
+                parent in universal,
+            )
+        }
+    }
 }

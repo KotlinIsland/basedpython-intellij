@@ -1,4 +1,4 @@
-<scheme name="basedpython dark islands" version="142" parent_scheme="Islands Dark">
+<scheme name="basedpython dark" version="142" parent_scheme="Darcula">
   <metaInfo>
     <property name="created">2026-05-29</property>
     <property name="ide">PyCharm</property>
