@@ -11,7 +11,10 @@ import com.intellij.openapi.ui.popup.JBPopupFactory
 import com.intellij.openapi.wm.StatusBar
 import com.intellij.openapi.wm.StatusBarWidget
 import com.intellij.openapi.wm.StatusBarWidget.WidgetPresentation
+import com.intellij.platform.lsp.api.LspServerManager
 import com.intellij.util.Consumer
+import dev.basedpython.pycharm.lsp.BuffLspServerSupportProvider
+import dev.basedpython.pycharm.lsp.ByLspServerSupportProvider
 import dev.basedpython.pycharm.settings.ui.BasedPythonConfigurable
 import java.awt.event.MouseEvent
 
@@ -139,23 +142,9 @@ internal class BasedPythonStatusBarWidget(private val project: Project) :
     }
 
     private fun restartLsp() {
-        try {
-            val mgrClass = Class.forName("com.intellij.platform.lsp.api.LspServerManager")
-            val getInstance = mgrClass.getMethod("getInstance", Project::class.java)
-            val mgr = getInstance.invoke(null, project)
-            val m = mgrClass.methods.firstOrNull { it.name == "stopAndRestartIfNeeded" } ?: return
-            val candidates = listOf(
-                "dev.basedpython.pycharm.lsp.BasedPythonLspServerDescriptor",
-                "dev.basedpython.pycharm.lsp.ByLspServerDescriptor",
-                "dev.basedpython.pycharm.lsp.BuffLspServerDescriptor",
-            )
-            for (fqn in candidates) {
-                val cls = runCatching { Class.forName(fqn) }.getOrNull() ?: continue
-                runCatching {
-                    if (m.parameterCount == 1) m.invoke(mgr, cls) else m.invoke(mgr, cls, null)
-                }
-            }
-        } catch (_: Throwable) { /* ignore */ }
+        val mgr = LspServerManager.getInstance(project)
+        mgr.stopAndRestartIfNeeded(ByLspServerSupportProvider::class.java)
+        mgr.stopAndRestartIfNeeded(BuffLspServerSupportProvider::class.java)
         update()
         refreshVersions()
     }
@@ -163,7 +152,7 @@ internal class BasedPythonStatusBarWidget(private val project: Project) :
     private fun showLogs() {
         val mgr = com.intellij.openapi.wm.ToolWindowManager.getInstance(project)
         val toolWindow = mgr.getToolWindow("basedpython")
-            ?: mgr.getToolWindow("BasedPython")
+            ?: mgr.getToolWindow("basedpython")
             ?: mgr.getToolWindow("Language Servers")
         toolWindow?.activate(null)
     }
