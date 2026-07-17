@@ -116,7 +116,7 @@ class ExplainTranspilationAction : AnAction() {
                     append("<b>").append(escape(note.constructName)).append("</b>")
                     append(" (line ").append(note.lineNumber).append(")<br/>")
                     append("<code>").append(escape(note.bySnippet)).append("</code><br/>")
-                    append(escape(note.explanation))
+                    append(codeSpans(escape(note.explanation)))
                     append("</li>")
                 }
                 append("</ul>")
@@ -128,5 +128,13 @@ class ExplainTranspilationAction : AnAction() {
             .replace("&", "&amp;")
             .replace("<", "&lt;")
             .replace(">", "&gt;")
+
+        /**
+         * Render markdown-style `code` spans in explanation text as real `<code>` elements, so the
+         * backticks don't reach the user verbatim. Must run *after* [escape], otherwise the tags it
+         * emits would themselves be escaped. An unpaired backtick is left alone.
+         */
+        private fun codeSpans(escaped: String): String =
+            escaped.replace(Regex("`([^`]+)`"), "<code>$1</code>")
     }
 }

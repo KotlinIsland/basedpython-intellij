@@ -15,8 +15,8 @@ import javax.swing.Icon
  * does not need editing.
  */
 class ByTestConfigurationType : ConfigurationType {
-    override fun getDisplayName(): String = "BasedPython Test"
-    override fun getConfigurationTypeDescription(): String = "Run BasedPython tests via `by test`"
+    override fun getDisplayName(): String = "basedpython Test"
+    override fun getConfigurationTypeDescription(): String = "Run basedpython tests via by test"
     override fun getIcon(): Icon = AllIcons.RunConfigurations.TestState.Run
     override fun getId(): String = ID
 

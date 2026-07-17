@@ -33,7 +33,7 @@ class BinaryNotConfiguredInspection : LocalInspectionTool() {
         val firstElement = file.firstChild ?: return ProblemDescriptor.EMPTY_ARRAY
         val descriptor = manager.createProblemDescriptor(
             firstElement,
-            "The `by` binary was not found. Type checking and LSP features are unavailable.",
+            "The by binary was not found. Type checking and LSP features are unavailable.",
             OpenBasedPythonSettingsFix(),
             ProblemHighlightType.WEAK_WARNING,
             isOnTheFly

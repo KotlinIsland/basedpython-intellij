@@ -38,7 +38,7 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
     private val byPathField = TextFieldWithBrowseButton().apply {
         textField.toolTipText = "Autodetect from .venv/"
         addBrowseFolderListener(
-            "Select `by` binary",
+            "Select the by Binary",
             "Path to the by language server binary",
             project,
             FileChooserDescriptorFactory.createSingleFileDescriptor(),
@@ -47,22 +47,22 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
     private val buffPathField = TextFieldWithBrowseButton().apply {
         textField.toolTipText = "Autodetect from .venv/"
         addBrowseFolderListener(
-            "Select `buff` binary",
+            "Select the buff Binary",
             "Path to the buff formatter/linter binary",
             project,
             FileChooserDescriptorFactory.createSingleFileDescriptor(),
         )
     }
 
-    private val byEnabled = JCheckBox("Enable `by` language server")
-    private val buffEnabled = JCheckBox("Enable `buff` (formatter/linter) server")
+    private val byEnabled = JCheckBox("Enable the by language server")
+    private val buffEnabled = JCheckBox("Enable the buff (formatter/linter) server")
 
     private val byExtraArgs = JBTextField()
     private val buffExtraArgs = JBTextField()
 
     private val pythonVersionCombo = ComboBox(arrayOf("3.10", "3.11", "3.12", "3.13"))
 
-    private val formatOnSave = JCheckBox("Reformat with `buff` on save")
+    private val formatOnSave = JCheckBox("Reformat with buff on save")
     private val inlayParameterHints = JCheckBox("Parameter name hints")
     private val inlayTypeHints = JCheckBox("Variable type hints")
     private val inlayReturnHints = JCheckBox("Return type hints")
@@ -100,8 +100,8 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
 
         val panel = panel {
             group("Binaries") {
-                row("Path to `by`:") { cell(byRow).align(AlignX.FILL) }
-                row("Path to `buff`:") { cell(buffRow).align(AlignX.FILL) }
+                row("Path to by:") { cell(byRow).align(AlignX.FILL) }
+                row("Path to buff:") { cell(buffRow).align(AlignX.FILL) }
                 row { cell(detectedVenvLabel) }
             }
             group("Servers") {
@@ -109,8 +109,8 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
                 row { cell(buffEnabled) }
             }
             group("Args") {
-                row("Extra args for `by`:") { cell(byExtraArgs).align(AlignX.FILL) }
-                row("Extra args for `buff`:") { cell(buffExtraArgs).align(AlignX.FILL) }
+                row("Extra args for by:") { cell(byExtraArgs).align(AlignX.FILL) }
+                row("Extra args for buff:") { cell(buffExtraArgs).align(AlignX.FILL) }
             }
             group("Target") {
                 row("Min Python version:") { cell(pythonVersionCombo) }
@@ -129,7 +129,7 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
             group("Python interop") {
                 row { cell(indexGeneratedPython) }
             }
-            group("`by` server capabilities") {
+            group("by server capabilities") {
                 row { cell(byCompletion) }
                 row { cell(byGoToDefinition) }
                 row { cell(byFindReferences) }
@@ -139,7 +139,7 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
                 row { cell(byDocumentHighlight) }
                 row { cell(bySignatureHelp) }
             }
-            group("`buff` server capabilities") {
+            group("buff server capabilities") {
                 row { cell(buffFormatting) }
                 row { cell(buffCodeActions) }
                 row { cell(buffHover) }
@@ -168,13 +168,13 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
     }
 
     private fun updateDetectedLabel() {
-        val resolved = BasedPythonBinaries.resolveBy(project)?.toString() ?: "(none — install `by` or set path above)"
+        val resolved = BasedPythonBinaries.resolveBy(project)?.toString() ?: "(none — install by or set path above)"
         detectedVenvLabel.text = "Detected venv binary: $resolved"
     }
 
     private fun runVersionCheck(path: String, name: String) {
         val trimmed = path.trim().ifEmpty {
-            JOptionPane.showMessageDialog(rootPanel, "No path set for `$name`.", "Test `$name`", JOptionPane.WARNING_MESSAGE)
+            JOptionPane.showMessageDialog(rootPanel, "No path set for $name.", "Test $name", JOptionPane.WARNING_MESSAGE)
             return
         }
         try {
@@ -182,14 +182,14 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
             val finished = proc.waitFor(5, TimeUnit.SECONDS)
             if (!finished) {
                 proc.destroyForcibly()
-                JOptionPane.showMessageDialog(rootPanel, "Timed out running `$trimmed version`.", "Test `$name`", JOptionPane.ERROR_MESSAGE)
+                JOptionPane.showMessageDialog(rootPanel, "Timed out running $trimmed version.", "Test $name", JOptionPane.ERROR_MESSAGE)
                 return
             }
             val out = BufferedReader(InputStreamReader(proc.inputStream)).use { it.readText() }.trim()
             val icon = if (proc.exitValue() == 0) JOptionPane.INFORMATION_MESSAGE else JOptionPane.ERROR_MESSAGE
-            JOptionPane.showMessageDialog(rootPanel, out.ifEmpty { "(no output)" }, "Test `$name` (exit ${proc.exitValue()})", icon)
+            JOptionPane.showMessageDialog(rootPanel, out.ifEmpty { "(no output)" }, "Test $name (exit ${proc.exitValue()})", icon)
         } catch (t: Throwable) {
-            JOptionPane.showMessageDialog(rootPanel, "Failed: ${t.message}", "Test `$name`", JOptionPane.ERROR_MESSAGE)
+            JOptionPane.showMessageDialog(rootPanel, "Failed: ${t.message}", "Test $name", JOptionPane.ERROR_MESSAGE)
         }
     }
 

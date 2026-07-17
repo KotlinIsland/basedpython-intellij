@@ -45,7 +45,7 @@ class ByTestRunLineMarkerContributor : RunLineMarkerContributor() {
         return Info(
             AllIcons.RunConfigurations.TestState.Run,
             ExecutorAction.getActions(0),
-        ) { "Run test with `by`" }
+        ) { "Run test with by" }
     }
 }
 

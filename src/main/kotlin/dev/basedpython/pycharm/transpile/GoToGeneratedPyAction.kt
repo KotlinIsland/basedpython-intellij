@@ -54,7 +54,7 @@ class GoToGeneratedPyAction : AnAction() {
         ApplicationManager.getApplication().invokeLater {
             val choice = Messages.showYesNoDialog(
                 project,
-                "Generated file not found:\n${outPath}\n\nRun `by build` to generate it?",
+                "Generated file not found:\n${outPath}\n\nRun by build to generate it?",
                 "Go to Generated .py",
                 Messages.getQuestionIcon(),
             )

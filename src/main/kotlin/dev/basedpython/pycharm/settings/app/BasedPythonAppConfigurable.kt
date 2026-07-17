@@ -11,8 +11,8 @@ import javax.swing.JCheckBox
 import javax.swing.JComponent
 
 /**
- * Application-level Configurable for BasedPython defaults. Lives at
- * Settings → Languages & Frameworks → BasedPython Defaults (IDE-wide).
+ * Application-level Configurable for basedpython defaults. Lives at
+ * Settings → Languages & Frameworks → basedpython Defaults (IDE-wide).
  *
  * Edits [BasedPythonAppSettings]; new projects inherit these unless their
  * project-level settings override them (see [BasedPythonDefaults]).
@@ -22,26 +22,26 @@ internal class BasedPythonAppConfigurable : Configurable {
     private val settings get() = BasedPythonAppSettings.getInstance()
 
     private val byPathField = TextFieldWithBrowseButton().apply {
-        textField.toolTipText = "Default `by` binary for new projects (blank = autodetect)"
+        textField.toolTipText = "Default by binary for new projects (blank = autodetect)"
         addBrowseFolderListener(
-            "Select default `by` binary",
+            "Select the Default by Binary",
             "Default path to the by language server binary",
             null,
             FileChooserDescriptorFactory.createSingleFileDescriptor(),
         )
     }
     private val buffPathField = TextFieldWithBrowseButton().apply {
-        textField.toolTipText = "Default `buff` binary for new projects (blank = autodetect)"
+        textField.toolTipText = "Default buff binary for new projects (blank = autodetect)"
         addBrowseFolderListener(
-            "Select default `buff` binary",
+            "Select the Default buff Binary",
             "Default path to the buff formatter/linter binary",
             null,
             FileChooserDescriptorFactory.createSingleFileDescriptor(),
         )
     }
 
-    private val byEnabled = JCheckBox("Enable `by` language server by default")
-    private val buffEnabled = JCheckBox("Enable `buff` (formatter/linter) server by default")
+    private val byEnabled = JCheckBox("Enable the by language server by default")
+    private val buffEnabled = JCheckBox("Enable the buff (formatter/linter) server by default")
 
     private val byExtraArgs = JBTextField()
     private val buffExtraArgs = JBTextField()
@@ -58,16 +58,16 @@ internal class BasedPythonAppConfigurable : Configurable {
     override fun createComponent(): JComponent {
         val panel = panel {
             group("Default binaries") {
-                row("Default path to `by`:") { cell(byPathField).align(AlignX.FILL) }
-                row("Default path to `buff`:") { cell(buffPathField).align(AlignX.FILL) }
+                row("Default path to by:") { cell(byPathField).align(AlignX.FILL) }
+                row("Default path to buff:") { cell(buffPathField).align(AlignX.FILL) }
             }
             group("Default servers") {
                 row { cell(byEnabled) }
                 row { cell(buffEnabled) }
             }
             group("Default args") {
-                row("Extra args for `by`:") { cell(byExtraArgs).align(AlignX.FILL) }
-                row("Extra args for `buff`:") { cell(buffExtraArgs).align(AlignX.FILL) }
+                row("Extra args for by:") { cell(byExtraArgs).align(AlignX.FILL) }
+                row("Extra args for buff:") { cell(buffExtraArgs).align(AlignX.FILL) }
             }
             group("Default target") {
                 row("Min Python version:") { cell(pythonVersionCombo) }

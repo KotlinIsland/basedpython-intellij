@@ -15,7 +15,7 @@ class ByRunSettingsEditor : SettingsEditor<ByRunConfiguration>() {
         @Suppress("DEPRECATION")
         addBrowseFolderListener(
             "Working Directory",
-            "Directory the `by run` command is invoked from",
+            "Directory the by run command is invoked from",
             null,
             FileChooserDescriptorFactory.createSingleFolderDescriptor()
         )

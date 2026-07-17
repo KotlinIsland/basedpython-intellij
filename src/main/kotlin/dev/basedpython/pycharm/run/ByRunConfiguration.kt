@@ -21,10 +21,10 @@ class ByRunConfiguration(project: Project, factory: ConfigurationFactory, name: 
 
     override fun checkConfiguration() {
         if (options.module.isBlank()) {
-            throw RuntimeConfigurationException("Module is required (e.g. `mypkg.main`)")
+            throw RuntimeConfigurationException("Module is required (e.g. mypkg.main)")
         }
         if (BasedPythonBinaries.resolveBy(project) == null) {
-            throw RuntimeConfigurationException("`by` binary not found — set path in Settings | BasedPython")
+            throw RuntimeConfigurationException("by binary not found — set path in Settings | basedpython")
         }
     }
 
