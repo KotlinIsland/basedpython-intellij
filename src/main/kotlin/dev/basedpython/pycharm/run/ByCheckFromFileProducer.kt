@@ -1,5 +1,7 @@
 package dev.basedpython.pycharm.run
 
+import com.intellij.execution.RunManager
+import com.intellij.execution.RunnerAndConfigurationSettings
 import com.intellij.execution.actions.ConfigurationContext
 import com.intellij.execution.actions.LazyRunConfigurationProducer
 import com.intellij.execution.configurations.ConfigurationFactory
@@ -12,6 +14,19 @@ class ByCheckFromFileProducer : LazyRunConfigurationProducer<ByCheckConfiguratio
 
     override fun getConfigurationFactory(): ConfigurationFactory =
         BasedPythonRunConfigurationType.getInstance().checkFactory
+
+    /**
+     * Only look at `by check` configurations.
+     *
+     * The base implementation scans `runManager.getConfigurationSettingsList(factory.type)` — that
+     * is, it filters by configuration *type*, not by factory. `by run`, `by build` and `by check`
+     * share one type, so it hands this producer a [ByRunConfiguration] or [ByBuildConfiguration],
+     * and the compiler-generated bridge for [isConfigurationFromContext] casts it to
+     * [ByCheckConfiguration] — a ClassCastException out of findExistingConfiguration on any context
+     * run, as soon as one `by run` configuration has been saved.
+     */
+    override fun getConfigurationSettingsList(runManager: RunManager): List<RunnerAndConfigurationSettings> =
+        super.getConfigurationSettingsList(runManager).filter { it.configuration is ByCheckConfiguration }
 
     override fun setupConfigurationFromContext(
         configuration: ByCheckConfiguration,

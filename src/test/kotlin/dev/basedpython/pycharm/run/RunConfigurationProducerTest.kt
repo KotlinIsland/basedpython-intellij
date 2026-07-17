@@ -1,5 +1,7 @@
 package dev.basedpython.pycharm.run
 
+import com.intellij.execution.RunManager
+import com.intellij.execution.RunnerAndConfigurationSettings
 import com.intellij.execution.actions.ConfigurationContext
 import com.intellij.execution.actions.RunConfigurationProducer
 import com.intellij.psi.PsiFile
@@ -162,6 +164,43 @@ class RunConfigurationProducerTest : BasePlatformTestCase() {
             "if check also displaced run, the winner would be arbitrary",
             producer<ByCheckFromFileProducer>().shouldReplace(check!!, run!!),
         )
+    }
+
+    // ------------------------------------------------------------------
+    // Cross-factory scanning
+    //
+    // findExistingConfiguration scans by configuration *type*, and `by run`/`by build`/`by check`
+    // share one. Each producer must narrow to its own configuration class, or the generic bridge
+    // casts a sibling and throws ClassCastException on rerun.
+    // ------------------------------------------------------------------
+
+    /** Saves a real `by run` configuration, the way a first context run would. */
+    private fun saveByRunConfiguration(): RunnerAndConfigurationSettings {
+        val type = BasedPythonRunConfigurationType.getInstance()
+        val settings = RunManager.getInstance(project)
+            .createConfiguration("by run pkg.saved", type.runFactory)
+        (settings.configuration as ByRunConfiguration).options.module = "pkg.saved"
+        RunManager.getInstance(project).addConfiguration(settings)
+        return settings
+    }
+
+    fun `test check producer does not choke on a saved by run configuration`() {
+        saveByRunConfiguration()
+        val file = myFixture.addFileToProject("pkg/saved.by", "x = 1\n")
+        // Before the fix this threw:
+        //   ByRunConfiguration cannot be cast to ByCheckConfiguration
+        producer<ByCheckFromFileProducer>().findExistingConfiguration(contextFor(file))
+    }
+
+    fun `test run producer does not choke on a saved by check configuration`() {
+        val type = BasedPythonRunConfigurationType.getInstance()
+        val settings = RunManager.getInstance(project)
+            .createConfiguration("by check pkg/saved.by", type.checkFactory)
+        (settings.configuration as ByCheckConfiguration).options.paths = "pkg/saved.by"
+        RunManager.getInstance(project).addConfiguration(settings)
+
+        val file = myFixture.addFileToProject("pkg/saved2.by", "x = 1\n")
+        producer<ByRunFromFileProducer>().findExistingConfiguration(contextFor(file))
     }
 
     fun `test by run yields to by test so the chain holds`() {
