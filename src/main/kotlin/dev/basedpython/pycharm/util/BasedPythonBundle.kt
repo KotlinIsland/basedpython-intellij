@@ -5,7 +5,7 @@ import org.jetbrains.annotations.NonNls
 import org.jetbrains.annotations.PropertyKey
 
 /**
- * Localisation bundle for all user-visible strings in the BasedPython plugin.
+ * Localisation bundle for all user-visible strings in the basedpython plugin.
  *
  * Usage:
  * ```kotlin

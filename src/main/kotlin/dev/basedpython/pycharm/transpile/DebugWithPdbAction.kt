@@ -29,7 +29,7 @@ import java.nio.file.Paths
  * sidecar by the CLI), so this action gives the next best thing without depending
  * on the optional Python plugin: it runs `by build`, then launches the generated
  * `.py` under the standard library debugger (`python -m pdb`) in an interactive
- * console. pdb's `> path(line)` frames are clickable thanks to the BasedPython
+ * console. pdb's `> path(line)` frames are clickable thanks to the basedpython
  * console filter, and "Go to Generated .py" maps frames back to the `.by` source.
  */
 class DebugWithPdbAction : AnAction() {

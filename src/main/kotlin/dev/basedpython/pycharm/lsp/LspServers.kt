@@ -34,7 +34,7 @@ import java.nio.file.Path
 
 private val LOG = Logger.getInstance("dev.basedpython.pycharm.lsp")
 
-private val SUPPORTED_EXTENSIONS = setOf("by", "py", "pyi")
+private val SUPPORTED_EXTENSIONS = setOf("by", "byi", "py", "pyi")
 
 private fun VirtualFile.isBasedPythonSource(): Boolean = extension in SUPPORTED_EXTENSIONS
 

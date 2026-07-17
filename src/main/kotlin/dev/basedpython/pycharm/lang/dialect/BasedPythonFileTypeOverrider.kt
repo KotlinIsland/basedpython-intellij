@@ -7,7 +7,7 @@ import com.intellij.openapi.vfs.VirtualFile
 import dev.basedpython.pycharm.lang.BasedPythonFileType
 
 /**
- * Treats plain `.py` files inside a basedpython project as BasedPython source
+ * Treats plain `.py` files inside a basedpython project as basedpython source
  * (FEATURES.md §16).
  *
  * Rationale: the IDE target ships **no** bundled Python plugin, so a `.py` file in a

@@ -4,7 +4,7 @@ import com.intellij.psi.tree.IElementType
 import dev.basedpython.pycharm.lang.BasedPythonTokenTypes
 
 /**
- * Contextual classification of BasedPython *soft* keywords.
+ * Contextual classification of basedpython *soft* keywords.
  *
  * The lexer is context-free: it emits [BasedPythonTokenTypes.KEYWORD] for every word in the
  * keyword set, including soft keywords that are also valid identifiers (`match`, `case`, `type`,

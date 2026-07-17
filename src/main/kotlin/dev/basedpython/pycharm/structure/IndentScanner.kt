@@ -1,7 +1,7 @@
 package dev.basedpython.pycharm.structure
 
 /**
- * Shared helper: scans BasedPython/.by file text and returns a flat list of [ScopeNode]s
+ * Shared helper: scans basedpython/.by file text and returns a flat list of [ScopeNode]s
  * ordered by start offset. Used by structure view, folding builder, and breadcrumbs.
  *
  * Detection rules (indentation-based, no composite PSI required):

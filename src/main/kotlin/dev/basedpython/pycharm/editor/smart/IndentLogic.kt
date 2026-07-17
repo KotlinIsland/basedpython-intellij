@@ -6,18 +6,18 @@ import dev.basedpython.pycharm.lang.BasedPythonFile
 import dev.basedpython.pycharm.lang.BasedPythonFileType
 
 /**
- * Shared, document-text-based indentation helpers for BasedPython (.by) smart editing.
+ * Shared, document-text-based indentation helpers for basedpython (.by) smart editing.
  *
- * The BasedPython PSI is intentionally flat (token-only), so all indentation logic here
+ * The basedpython PSI is intentionally flat (token-only), so all indentation logic here
  * operates purely on the [Document] text using line offsets — never composite PSI.
  */
 internal object IndentLogic {
 
-    /** One indentation level. BasedPython uses 4-space indents. */
+    /** One indentation level. basedpython uses 4-space indents. */
     const val INDENT_SIZE: Int = 4
     val INDENT_UNIT: String = " ".repeat(INDENT_SIZE)
 
-    /** True when [file] is a BasedPython `.by` file. */
+    /** True when [file] is a basedpython `.by` file. */
     fun isBasedPython(file: PsiFile?): Boolean =
         file is BasedPythonFile || file?.fileType == BasedPythonFileType.INSTANCE
 

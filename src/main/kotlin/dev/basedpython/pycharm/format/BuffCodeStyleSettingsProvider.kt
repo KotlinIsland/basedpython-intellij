@@ -23,7 +23,7 @@ import java.awt.GridBagLayout
 import java.awt.Insets
 
 // ---------------------------------------------------------------------------
-// CodeStyleSettingsProvider — registers the top-level "BasedPython" entry
+// CodeStyleSettingsProvider — registers the top-level "basedpython" entry
 // under Editor → Code Style.
 // ---------------------------------------------------------------------------
 
@@ -40,7 +40,7 @@ class BuffCodeStyleSettingsProvider : CodeStyleSettingsProvider() {
                 BuffCodeStyleMainPanel(currentSettings, settings)
         }
 
-    override fun getConfigurableDisplayName(): String = "BasedPython"
+    override fun getConfigurableDisplayName(): String = "basedpython"
 
     override fun createCustomSettings(settings: CodeStyleSettings): CustomCodeStyleSettings =
         BuffCodeStyleSettings(settings)
@@ -162,7 +162,7 @@ private class BuffOptionsTab(settings: CodeStyleSettings) :
             custom.quoteStyle != quoteStyleCombo.selectedIndex
     }
 
-    // --- Preview panel (not used — no PSI for BasedPython yet) -------------
+    // --- Preview panel (not used — no PSI for basedpython yet) -------------
 
     override fun getPreviewText(): String? = null
 

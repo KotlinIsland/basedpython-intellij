@@ -73,7 +73,7 @@ class BasedPythonFileTypeOverriderTest : BasePlatformTestCase() {
     // pure decision logic
     // =========================================================================
 
-    fun `test decide returns BasedPython for py in basedpython project`() {
+    fun `test decide returns basedpython for py in basedpython project`() {
         assertSame(
             BasedPythonFileType.INSTANCE,
             BasedPythonFileTypeOverrider.decide("py", isBasedPythonProject = true),
@@ -119,7 +119,7 @@ class BasedPythonFileTypeOverriderTest : BasePlatformTestCase() {
     // full getOverriddenFileType path with real VirtualFiles
     // =========================================================================
 
-    fun `test py in basedpython project is overridden to BasedPython`() {
+    fun `test py in basedpython project is overridden to basedpython`() {
         makeBasedPythonProject()
         val file = fixtureFile("script.py")
         assertSame(BasedPythonFileType.INSTANCE, overrider.getOverriddenFileType(file))

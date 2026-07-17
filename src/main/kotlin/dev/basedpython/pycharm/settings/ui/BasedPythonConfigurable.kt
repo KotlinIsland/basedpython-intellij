@@ -25,8 +25,8 @@ import javax.swing.JOptionPane
 import javax.swing.JPanel
 
 /**
- * Project-level Configurable for BasedPython. Lives at
- * Settings → Languages & Frameworks → BasedPython.
+ * Project-level Configurable for basedpython. Lives at
+ * Settings → Languages & Frameworks → basedpython.
  */
 internal class BasedPythonConfigurable(private val project: Project) : Configurable {
 

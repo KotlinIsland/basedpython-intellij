@@ -16,7 +16,7 @@ support, run configurations, CLI actions, and editor tooling.
   `data class`, `frozen data class`, `enum class`), strings, numbers, comments, and
   operators (including `?.` and `??`) — works even when the LSP is offline.
 - Line commenting (`#`), brace matching for `()` / `[]` / `{}`, quote auto-pairing.
-- Configurable color scheme under *Settings → Editor → Color Scheme → BasedPython*.
+- Configurable color scheme under *Settings → Editor → Color Scheme → basedpython*.
 
 ### Language servers (LSP)
 - **`by` server** — completion, hover, goto definition/declaration/type, find
@@ -26,14 +26,14 @@ support, run configurations, CLI actions, and editor tooling.
   diagnostics. Capability-scoped so it never collides with `by`.
 - Automatic `.venv` binary discovery (walks up for `.venv/bin/by`, `.venv/Scripts/by.exe`
   on Windows), with `PATH` fallback and manual override.
-- "Restart BasedPython LSP Servers" action to pick up env/binary changes.
+- "Restart basedpython LSP Servers" action to pick up env/binary changes.
 
 ### Run configurations
 - First-class `by run`, `by build`, and `by check` configurations with editable working
   directory, extra CLI args, `--min-version`, and environment variables.
 - Right-click a `.by` file to "Run by run &lt;module&gt;" or "Check with by".
 
-### Actions (Tools | BasedPython)
+### Actions (Tools | basedpython)
 - **Transpile to .py** / **Reverse Transpile to .by** (also in editor & project popups).
 - **Generate api.lock** — `by generate-api-file`.
 - **Format with buff** (`Ctrl+Alt+Shift+L`) — works without the LSP.
@@ -42,7 +42,7 @@ support, run configurations, CLI actions, and editor tooling.
 - **Explain Rule...** — looks up the rule under the caret via `buff rule` / `by explain`.
 
 ### Settings & status
-- Project settings page at *Settings → Languages & Frameworks → BasedPython*: binary
+- Project settings page at *Settings → Languages & Frameworks → basedpython*: binary
   paths (with **Test** buttons + live detection), per-server toggles, extra args, target
   Python version, format-on-save, inlay-hint toggles, and LSP trace level.
 - Optional status bar widget showing live `by` / `buff` LSP health (green = running,
@@ -71,7 +71,7 @@ support, run configurations, CLI actions, and editor tooling.
 ### Formatting
 - Format-on-save via `buff` (toggle in settings) and `buff`-backed import optimizer.
 - Code style settings page (line length, quote style) under
-  *Settings → Editor → Code Style → BasedPython*.
+  *Settings → Editor → Code Style → basedpython*.
 
 ### Transpilation views
 - Show transpiled `.py` in a side-by-side diff, "Go to generated .py" in `out/`,
@@ -89,7 +89,7 @@ support, run configurations, CLI actions, and editor tooling.
 ### Docs & help
 - Quick Documentation (Ctrl+Q) for basedpython keywords, modifiers, and the `?.` / `??`
   operators; External Documentation (Ctrl+Shift+I) opens the basedpython docs.
-- **BasedPython Syntax Quick Reference** action with a bundled cheat-sheet.
+- **basedpython Syntax Quick Reference** action with a bundled cheat-sheet.
 
 ### Smart editing & environment
 - Enter auto-indents after a `:` block header; Backspace dedents by a full indent step.
@@ -97,13 +97,13 @@ support, run configurations, CLI actions, and editor tooling.
   (`uv add --dev basedpython`) or jump to settings; **uv sync** action.
 
 ### Project & config
-- **New Project → BasedPython** wizard scaffolds `pyproject.toml`, `src/main.by`,
+- **New Project → basedpython** wizard scaffolds `pyproject.toml`, `src/main.by`,
   `.gitignore`, and `README.md`.
 - Completion for `[tool.ruff]` / buff config keys in `pyproject.toml`.
 - `out/` excluded from indexing so generated `.py` don't pollute search.
 
 ### Templates
-- File templates (Empty, Class, Data Class, Protocol) under **New → BasedPython File**.
+- File templates (Empty, Class, Data Class, Protocol) under **New → basedpython File**.
 - Live templates: `cdef`, `dcl`, `fdcl`, `ecl`, `proto`, `ovr`, `nt`, `let`, plus main
   guard, async def, match/case, enum, and pytest fixture.
 

@@ -20,7 +20,7 @@ import java.nio.file.Path
 import java.nio.file.Paths
 
 /**
- * Action `BasedPython.OpenRepl`: open an interactive console running the `by`
+ * Action `basedpython.OpenRepl`: open an interactive console running the `by`
  * binary (`by repl`, falling back to `by run`).
  *
  * Process resolution + start happen off the EDT (inside a background task);

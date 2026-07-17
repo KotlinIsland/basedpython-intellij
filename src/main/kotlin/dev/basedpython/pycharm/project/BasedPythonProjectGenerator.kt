@@ -15,7 +15,7 @@ import com.intellij.openapi.vfs.VirtualFile
 import javax.swing.Icon
 
 /**
- * New-project generator for BasedPython projects.
+ * New-project generator for basedpython projects.
  *
  * Shown in the "New Project" wizard under the generator list.
  * Scaffolds: pyproject.toml, src/main.by, .gitignore, README.md.
@@ -27,7 +27,7 @@ import javax.swing.Icon
  */
 class BasedPythonProjectGenerator : GeneratorNewProjectWizard {
 
-    override val id: String = "BasedPython"
+    override val id: String = "basedpython"
 
     override val name: String = "basedpython"
 

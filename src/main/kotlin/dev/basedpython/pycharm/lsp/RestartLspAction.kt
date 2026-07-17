@@ -6,9 +6,9 @@ import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.platform.lsp.api.LspServerManager
 
 /**
- * Stops and (if needed) restarts both BasedPython LSP servers (`by`, `buff`).
+ * Stops and (if needed) restarts both basedpython LSP servers (`by`, `buff`).
  *
- * Registered as `BasedPython.RestartLsp` in plugin.xml.
+ * Registered as `basedpython.RestartLsp` in plugin.xml.
  */
 internal class RestartLspAction : AnAction() {
 

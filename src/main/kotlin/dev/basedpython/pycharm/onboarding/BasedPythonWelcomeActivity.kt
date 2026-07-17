@@ -88,7 +88,7 @@ internal class BasedPythonWelcomeActivity : ProjectActivity {
     }
 
     private companion object {
-        const val NOTIFICATION_GROUP_ID: String = "BasedPython.Actions"
+        const val NOTIFICATION_GROUP_ID: String = "basedpython.Actions"
         const val WELCOME_SHOWN_KEY: String = "dev.basedpython.pycharm.welcomeShown"
 
         /** Matches the `<projectConfigurable id>` registered in plugin.xml. */

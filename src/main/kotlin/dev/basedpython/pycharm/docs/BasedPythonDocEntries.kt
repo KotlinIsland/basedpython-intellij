@@ -1,7 +1,7 @@
 package dev.basedpython.pycharm.docs
 
 /**
- * Bundled descriptions for BasedPython-specific keywords, modifiers and operators.
+ * Bundled descriptions for basedpython-specific keywords, modifiers and operators.
  *
  * Each entry holds a concise HTML body (used for Quick Documentation) and a
  * best-effort docs anchor (used for "External Documentation").

@@ -29,7 +29,7 @@ abstract class ByCommandLineState(
 
     override fun startProcess(): ProcessHandler {
         val by: Path = BasedPythonBinaries.resolveBy(project)
-            ?: throw ExecutionException("by binary not found — set path in Settings | BasedPython")
+            ?: throw ExecutionException("by binary not found — set path in Settings | basedpython")
 
         val cmd = GeneralCommandLine()
             .withExePath(by.toString())

@@ -23,7 +23,7 @@ internal class ToggleWatchModeAction : AnAction(), DumbAware {
         val enabled = WatchModeState.toggle(project)
         ByCli.notifyInfo(
             project,
-            "BasedPython Watch Mode",
+            "basedpython Watch Mode",
             "Watch mode: " + if (enabled) "ON" else "OFF",
         )
     }

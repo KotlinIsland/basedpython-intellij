@@ -12,7 +12,7 @@ import javax.swing.Icon
 
 class BasedPythonColorSettingsPage : ColorSettingsPage {
 
-    override fun getDisplayName(): String = "BasedPython"
+    override fun getDisplayName(): String = "basedpython"
 
     override fun getIcon(): Icon = BasedPythonFileType.INSTANCE.icon
 
@@ -49,7 +49,7 @@ class BasedPythonColorSettingsPage : ColorSettingsPage {
         )
 
         private val DEMO_TEXT: String = """
-            # BasedPython demo
+            # basedpython demo
 
             from __future__ import annotations
 

@@ -7,7 +7,7 @@ import dev.basedpython.pycharm.lang.BasedPythonFile
 import dev.basedpython.pycharm.lang.BasedPythonTokenTypes
 
 /**
- * Runtime spellchecking strategy for BasedPython. Spell-checks comments, string
+ * Runtime spellchecking strategy for basedpython. Spell-checks comments, string
  * literals, and identifiers; the platform's word splitter already handles
  * camelCase / snake_case boundaries (see [IdentifierSplitter] for the standalone
  * version used in tests).
@@ -26,7 +26,7 @@ class BasedPythonSpellcheckingStrategy : SpellcheckingStrategy() {
 }
 
 /**
- * Spell-checking support for BasedPython (.by) files.
+ * Spell-checking support for basedpython (.by) files.
  *
  * The EP registration in plugin.xml points to this class as the spellchecker.support
  * implementationClass. At runtime the IDE resolves this against intellij.spellchecker

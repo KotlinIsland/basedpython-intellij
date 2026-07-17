@@ -22,13 +22,13 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * Project service that polishes the BasedPython LSP lifecycle:
+ * Project service that polishes the basedpython LSP lifecycle:
  *
  *  1. **Restart-on-settings-change** — [onSettingsChanged] debounces (~1s) and then
  *     restarts both servers via the same [LspServerManager.stopAndRestartIfNeeded] call
- *     used by the manual "Restart BasedPython LSP Servers" action.
+ *     used by the manual "Restart basedpython LSP Servers" action.
  *  2. **Crash recovery** — subscribes to [LspServerManagerListener] and, when a server
- *     reaches [LspServerState.ShutdownUnexpectedly], posts a `BasedPython.Actions`
+ *     reaches [LspServerState.ShutdownUnexpectedly], posts a `basedpython.Actions`
  *     notification with a one-click "Restart" action.
  *
  * Created via [getInstance]; lifecycle activation (listener registration) is performed by
@@ -50,7 +50,7 @@ internal class BasedPythonLspReloader(private val project: Project) : Disposable
   private val notifiedCrash = ConcurrentHashMap.newKeySet<String>()
 
   /**
-   * Called when BasedPython settings (binary paths, args, toggles) change. Debounces with
+   * Called when basedpython settings (binary paths, args, toggles) change. Debounces with
    * a ~1s [Alarm] so a flurry of edits collapses into a single restart, then restarts the
    * servers so the new settings take effect without a manual restart.
    */
@@ -139,7 +139,7 @@ internal class BasedPythonLspReloader(private val project: Project) : Disposable
   }
 
   companion object {
-    private const val GROUP_ID = "BasedPython.Actions"
+    private const val GROUP_ID = "basedpython.Actions"
     private const val DEBOUNCE_MS = 1000
 
     @JvmStatic

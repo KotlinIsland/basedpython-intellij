@@ -10,7 +10,7 @@ import com.intellij.ui.awt.RelativePoint
 import dev.basedpython.pycharm.util.BasedPythonBundle
 
 /**
- * Shows a bundled, self-contained syntax quick-reference for BasedPython in an
+ * Shows a bundled, self-contained syntax quick-reference for basedpython in an
  * HTML popup. No external services are required.
  */
 class BasedPythonQuickReferenceAction : AnAction() {

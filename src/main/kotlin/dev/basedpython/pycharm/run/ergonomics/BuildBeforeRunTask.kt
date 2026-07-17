@@ -13,6 +13,6 @@ import com.intellij.openapi.util.Key
 class BuildBeforeRunTask : BeforeRunTask<BuildBeforeRunTask>(PROVIDER_ID) {
     companion object {
         @JvmField
-        val PROVIDER_ID: Key<BuildBeforeRunTask> = Key.create("BasedPython.ByBuildBeforeRunTask")
+        val PROVIDER_ID: Key<BuildBeforeRunTask> = Key.create("basedpython.ByBuildBeforeRunTask")
     }
 }

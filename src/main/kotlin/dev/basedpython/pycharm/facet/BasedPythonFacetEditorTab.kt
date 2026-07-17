@@ -39,5 +39,5 @@ class BasedPythonFacetEditorTab(
         extraArgsField.text = state.extraArgs
     }
 
-    override fun getDisplayName(): String = "BasedPython"
+    override fun getDisplayName(): String = "basedpython"
 }

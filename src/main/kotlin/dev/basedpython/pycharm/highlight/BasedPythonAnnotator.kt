@@ -13,14 +13,14 @@ import dev.basedpython.pycharm.lang.BasedPythonLexer
 import dev.basedpython.pycharm.lang.BasedPythonTokenTypes
 
 /**
- * Semantic annotator for BasedPython (.by) files.
+ * Semantic annotator for basedpython (.by) files.
  *
  * Because the PSI tree is flat (all content is token leaves under the file root) we run
  * the annotator only on the top-level PsiFile element, walking the entire token stream once
  * per file pass. This avoids re-entering per child-leaf and keeps allocations low.
  *
  * Highlights applied (lexer-driven fallbacks — LSP semantic tokens take priority when server runs):
- *   - Python / BasedPython builtins → BUILTIN_NAME
+ *   - Python / basedpython builtins → BUILTIN_NAME
  *   - `self` / `cls` (first-param or general reference) → SELF_PARAMETER
  *   - `@decorator` spans → DECORATOR
  *   - name immediately following `def` / `class` / `data class` / `protocol` → FUNCTION/CLASS_DECLARATION

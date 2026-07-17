@@ -10,7 +10,7 @@ import com.intellij.openapi.editor.Editor
 import dev.basedpython.pycharm.lang.BasedPythonFile
 
 /**
- * Structure view model for BasedPython files.
+ * Structure view model for basedpython files.
  * Supports alphabetical sorting and narrows-to-editor-selection.
  */
 class BasedPythonStructureViewModel(

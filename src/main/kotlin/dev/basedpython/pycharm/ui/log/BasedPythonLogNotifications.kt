@@ -14,19 +14,19 @@ import com.intellij.openapi.wm.ToolWindowManager
 import dev.basedpython.pycharm.util.BasedPythonBundle
 
 /**
- * Builds `BasedPython.Actions` notifications carrying the common plugin actions:
+ * Builds `basedpython.Actions` notifications carrying the common plugin actions:
  * Open Settings, Restart LSP, and View Log.
  */
 internal object BasedPythonLogNotifications {
 
     /** Notification group id (see [dev.basedpython.pycharm.actions.ByCli]). */
-    private const val GROUP_ID = "BasedPython.Actions"
+    private const val GROUP_ID = "basedpython.Actions"
 
     /** Settings configurable id (see plugin.xml / BasedPythonWelcomeActivity). */
     private const val SETTINGS_ID = "dev.basedpython.pycharm.settings"
 
     /** Action id of the existing Restart LSP action (plugin.xml). */
-    private const val RESTART_LSP_ACTION_ID = "BasedPython.RestartLsp"
+    private const val RESTART_LSP_ACTION_ID = "basedpython.RestartLsp"
 
     /** Tool window id of the basedpython log console. */
     const val TOOL_WINDOW_ID = "basedpython"

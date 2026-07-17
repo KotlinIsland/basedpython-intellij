@@ -57,9 +57,10 @@ class LspServerDescriptorTest : BasePlatformTestCase() {
   // supported-file recognition
   // ---------------------------------------------------------------------------
 
-  fun `test by descriptor supports by py and pyi files`() {
+  fun `test by descriptor supports by byi py and pyi files`() {
     val desc = byDescriptor()
     assertTrue(desc.isSupportedFile(makeFile("a.by")))
+    assertTrue(desc.isSupportedFile(makeFile("a.byi")))
     assertTrue(desc.isSupportedFile(makeFile("b.py")))
     assertTrue(desc.isSupportedFile(makeFile("c.pyi")))
   }
@@ -74,7 +75,7 @@ class LspServerDescriptorTest : BasePlatformTestCase() {
   fun `test buff descriptor recognizes the same source extensions as by`() {
     val buff = buffDescriptor()
     val by = byDescriptor()
-    for (name in listOf("a.by", "b.py", "c.pyi", "x.txt", "noext")) {
+    for (name in listOf("a.by", "a.byi", "b.py", "c.pyi", "x.txt", "noext")) {
       val f = makeFile(name)
       assertEquals(
         "buff and by should agree on supported-file recognition for $name",

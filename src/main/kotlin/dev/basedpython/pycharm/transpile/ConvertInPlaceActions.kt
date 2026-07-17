@@ -92,7 +92,7 @@ class ConvertByToPyAction : AnAction() {
 /**
  * Action: "Convert .py → .by (in place)"
  *
- * Runs `by transpile --reverse <currentFile>` and writes the BasedPython output
+ * Runs `by transpile --reverse <currentFile>` and writes the basedpython output
  * to a `.by` sibling file next to the source `.py`.  Opens the result in the editor.
  */
 class ConvertPyToByAction : AnAction() {

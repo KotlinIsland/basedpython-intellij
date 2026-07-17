@@ -13,7 +13,7 @@ import dev.basedpython.pycharm.lang.BasedPythonLexer
 import dev.basedpython.pycharm.lang.BasedPythonTokenTypes
 
 /**
- * Distinct coloring for "interesting" numeric literals in BasedPython (.by) files:
+ * Distinct coloring for "interesting" numeric literals in basedpython (.by) files:
  *   - separators with underscores  (e.g. `1_000_000`, `0xFF_FF`)
  *   - hex / octal / binary radix   (`0x1A`, `0o17`, `0b1010`)
  *   - complex literals             (`3j`, `2.5J`)
@@ -28,7 +28,7 @@ import dev.basedpython.pycharm.lang.BasedPythonTokenTypes
 class BasedPythonNumericLiteralAnnotator : Annotator {
 
     override fun annotate(element: PsiElement, holder: AnnotationHolder) {
-        // Run once per file, on the BasedPython file root only.
+        // Run once per file, on the basedpython file root only.
         val file = element as? PsiFile ?: return
         if (file !is BasedPythonFile) return
         val text = file.text ?: return

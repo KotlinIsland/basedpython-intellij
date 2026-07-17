@@ -9,7 +9,7 @@ import dev.basedpython.pycharm.structure.IndentScanner.NodeKind
 import dev.basedpython.pycharm.structure.IndentScanner.ScopeNode
 
 /**
- * Breadcrumbs for BasedPython (.by) files.
+ * Breadcrumbs for basedpython (.by) files.
  *
  * Because the PSI tree is flat (all tokens are direct children of the file node),
  * we cannot rely on PSI parent traversal. Instead:
