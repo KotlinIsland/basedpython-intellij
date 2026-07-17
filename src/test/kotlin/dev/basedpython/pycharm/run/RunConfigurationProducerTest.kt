@@ -125,4 +125,62 @@ class RunConfigurationProducerTest : BasePlatformTestCase() {
             testConfig,
         )
     }
+
+    // ------------------------------------------------------------------
+    // Precedence: test > run > check
+    //
+    // `by run` and `by check` both match every .by file. With nothing arbitrating, a context run
+    // (Ctrl+Shift+R) offers a chooser — and that chooser labels entries by configuration *type*,
+    // which is the same type for both factories, so it reads "basedpython" twice with no way to
+    // tell them apart.
+    // ------------------------------------------------------------------
+
+    fun `test by run takes precedence over by check on a plain by file`() {
+        val file = myFixture.addFileToProject("pkg/app.by", "x = 1\n")
+        val context = contextFor(file)
+        val run = producer<ByRunFromFileProducer>().createConfigurationFromContext(context)
+        val check = producer<ByCheckFromFileProducer>().createConfigurationFromContext(context)
+        assertNotNull("by run should match a plain .by file", run)
+        assertNotNull("by check should also match it — that is the ambiguity", check)
+
+        assertTrue(
+            "by run must be preferred over by check, or a context run is ambiguous",
+            producer<ByRunFromFileProducer>().isPreferredConfiguration(run, check),
+        )
+        assertTrue(
+            "by run must replace by check, or the platform shows an unreadable chooser",
+            producer<ByRunFromFileProducer>().shouldReplace(run!!, check!!),
+        )
+    }
+
+    fun `test precedence between run and check is not mutual`() {
+        val file = myFixture.addFileToProject("pkg/other.by", "x = 1\n")
+        val context = contextFor(file)
+        val run = producer<ByRunFromFileProducer>().createConfigurationFromContext(context)
+        val check = producer<ByCheckFromFileProducer>().createConfigurationFromContext(context)
+        assertFalse(
+            "if check also displaced run, the winner would be arbitrary",
+            producer<ByCheckFromFileProducer>().shouldReplace(check!!, run!!),
+        )
+    }
+
+    fun `test by run yields to by test so the chain holds`() {
+        val file = myFixture.addFileToProject(
+            "test_chain.by",
+            "def test_x():\n    assert True\n",
+        )
+        val context = contextFor(file)
+        val run = producer<ByRunFromFileProducer>().createConfigurationFromContext(context)
+        val test = producer<ByTestFromFileProducer>().createConfigurationFromContext(context)
+        assertNotNull("by test should match a test declaration", test)
+        assertNotNull("by run also matches the file, which is why test must win", run)
+        assertTrue(
+            "by test must replace by run on a test line",
+            producer<ByTestFromFileProducer>().shouldReplace(test!!, run!!),
+        )
+        assertFalse(
+            "by run must not replace by test",
+            producer<ByRunFromFileProducer>().shouldReplace(run, test),
+        )
+    }
 }

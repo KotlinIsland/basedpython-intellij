@@ -1,6 +1,7 @@
 package dev.basedpython.pycharm.run
 
 import com.intellij.execution.actions.ConfigurationContext
+import com.intellij.execution.actions.ConfigurationFromContext
 import com.intellij.execution.actions.LazyRunConfigurationProducer
 import com.intellij.execution.configurations.ConfigurationFactory
 import com.intellij.openapi.module.ModuleUtilCore
@@ -42,6 +43,21 @@ class ByRunFromFileProducer : LazyRunConfigurationProducer<ByRunConfiguration>()
         val module = moduleNameFor(context, file) ?: return false
         return configuration.options.module == module
     }
+
+    /**
+     * Running a file is the natural context action; checking it is not. Both producers match every
+     * `.by` file, and with nothing arbitrating between them the platform offers a chooser on every
+     * context run — one that is unreadable here, because it labels entries by configuration *type*
+     * and `by run` / `by check` are two factories of the same type, so both render as "basedpython".
+     *
+     * Precedence is therefore `by test` > `by run` > `by check`; see [ByTestFromFileProducer],
+     * which claims the same relationship over this producer.
+     */
+    override fun isPreferredConfiguration(self: ConfigurationFromContext?, other: ConfigurationFromContext?): Boolean =
+        other?.configuration is ByCheckConfiguration
+
+    override fun shouldReplace(self: ConfigurationFromContext, other: ConfigurationFromContext): Boolean =
+        other.configuration is ByCheckConfiguration
 
     private fun contextFile(context: ConfigurationContext): VirtualFile? =
         context.psiLocation?.containingFile?.virtualFile
