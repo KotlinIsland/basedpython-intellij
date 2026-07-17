@@ -15,7 +15,7 @@ class ByTestSettingsEditor : SettingsEditor<ByTestConfiguration>() {
         @Suppress("DEPRECATION")
         addBrowseFolderListener(
             "Working Directory",
-            "Directory the `by test` command is invoked from",
+            "Directory the by test command is invoked from",
             null,
             FileChooserDescriptorFactory.createSingleFolderDescriptor()
         )

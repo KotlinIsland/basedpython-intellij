@@ -14,7 +14,7 @@ class ByBuildSettingsEditor : SettingsEditor<ByBuildConfiguration>() {
         @Suppress("DEPRECATION")
         addBrowseFolderListener(
             "Working Directory",
-            "Directory the `by build` command is invoked from",
+            "Directory the by build command is invoked from",
             null,
             FileChooserDescriptorFactory.createSingleFolderDescriptor()
         )

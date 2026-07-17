@@ -15,7 +15,7 @@ class ByCheckSettingsEditor : SettingsEditor<ByCheckConfiguration>() {
         @Suppress("DEPRECATION")
         addBrowseFolderListener(
             "Working Directory",
-            "Directory the `by check` command is invoked from",
+            "Directory the by check command is invoked from",
             null,
             FileChooserDescriptorFactory.createSingleFolderDescriptor()
         )

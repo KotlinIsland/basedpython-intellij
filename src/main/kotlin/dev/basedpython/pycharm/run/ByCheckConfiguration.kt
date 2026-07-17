@@ -21,7 +21,7 @@ class ByCheckConfiguration(project: Project, factory: ConfigurationFactory, name
 
     override fun checkConfiguration() {
         if (BasedPythonBinaries.resolveBy(project) == null) {
-            throw RuntimeConfigurationException("`by` binary not found — set path in Settings | BasedPython")
+            throw RuntimeConfigurationException("by binary not found — set path in Settings | basedpython")
         }
     }
 

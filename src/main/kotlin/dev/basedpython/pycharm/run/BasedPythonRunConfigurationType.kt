@@ -8,8 +8,8 @@ import com.intellij.openapi.project.Project
 import javax.swing.Icon
 
 class BasedPythonRunConfigurationType : ConfigurationType {
-    override fun getDisplayName(): String = "BasedPython"
-    override fun getConfigurationTypeDescription(): String = "Run, build and check BasedPython sources via the `by` CLI"
+    override fun getDisplayName(): String = "basedpython"
+    override fun getConfigurationTypeDescription(): String = "Run, build and check basedpython sources via the by CLI"
     override fun getIcon(): Icon = AllIcons.RunConfigurations.Application
     override fun getId(): String = ID
 

@@ -33,6 +33,23 @@ class BasedPythonBundleTest {
         return v!!
     }
 
+    /**
+     * These strings land in tooltips, notification titles, banners, run-config names and Swing
+     * labels — all plain text, none of which renders markdown. A backtick written out of editing
+     * habit therefore reaches the user as a literal character.
+     */
+    @Test
+    fun `no bundle value contains a markdown backtick`() {
+        val offenders = props.stringPropertyNames()
+            .filter { props.getProperty(it).contains('`') }
+            .sorted()
+        assertTrue(
+            "bundle values must not contain backticks; these surfaces are plain text:\n" +
+                offenders.joinToString("\n") { "  $it = ${props.getProperty(it)}" },
+            offenders.isEmpty(),
+        )
+    }
+
     /** Resolve a key the same way BasedPythonBundle.message(key, *args) would. */
     private fun msg(key: String, vararg args: Any?): String =
         MessageFormat.format(value(key), *args)
@@ -207,7 +224,7 @@ class BasedPythonBundleTest {
     @Test
     fun `multi-arg messages format`() {
         assertEquals(
-            "Detected `by` version 1.0, but 2.0 or newer is recommended. Some language features may not work correctly.",
+            "Detected by version 1.0, but 2.0 or newer is recommended. Some language features may not work correctly.",
             msg("notification.byOutdated.content", "1.0", "2.0"),
         )
         val confirm = msg("download.confirm.message", "by and buff", "darwin-arm64", "/tmp/bin")
