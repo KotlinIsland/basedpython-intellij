@@ -1,5 +1,7 @@
 package dev.basedpython.pycharm.run
 
+import com.intellij.execution.RunManager
+import com.intellij.execution.RunnerAndConfigurationSettings
 import com.intellij.execution.actions.ConfigurationContext
 import com.intellij.execution.actions.ConfigurationFromContext
 import com.intellij.execution.actions.LazyRunConfigurationProducer
@@ -16,6 +18,14 @@ class ByRunFromFileProducer : LazyRunConfigurationProducer<ByRunConfiguration>()
 
     override fun getConfigurationFactory(): ConfigurationFactory =
         BasedPythonRunConfigurationType.getInstance().runFactory
+
+    /**
+     * Only look at `by run` configurations — see the same override in [ByCheckFromFileProducer].
+     * The base implementation filters by configuration *type*, which `by run`, `by build` and
+     * `by check` share, so without this a saved `by check` would be cast to [ByRunConfiguration].
+     */
+    override fun getConfigurationSettingsList(runManager: RunManager): List<RunnerAndConfigurationSettings> =
+        super.getConfigurationSettingsList(runManager).filter { it.configuration is ByRunConfiguration }
 
     override fun setupConfigurationFromContext(
         configuration: ByRunConfiguration,
