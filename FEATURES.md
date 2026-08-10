@@ -77,11 +77,11 @@ lexical colour only. Don't reintroduce guessed semantic colour; fix the LSP path
 ## 6. Run / debug
 - [x] `by run` / `by build` / `by check` run configs + producers
 - [x] Working dir, env vars, extra args, `--min-version`
-- [~] **Debugger** — "Debug .by (pdb)" builds then runs generated `.py` under `python -m pdb` in an interactive console; pdb frames clickable. Full source-mapped IDE debug blocked upstream: the transpiler's line map (`by_transforms/source_map.rs`) is internal and not emitted by the CLI as a sidecar.
+- [~] **Debugger** — "Debug .by (pdb)" builds then runs generated `.py` under `python -m pdb` in an interactive console; pdb frames clickable. Full source-mapped IDE debug is **not** blocked upstream, contrary to what this line used to say: `by run` writes `_by_sourcemap.py` (generated line → `.by` line, per file) into its temp directory, and `_by_runner.py` already uses it to rewrite tracebacks. See [docs/debugging.md](docs/debugging.md) for the design — debugpy's `setPydevdSourceMap` does the translation in the debuggee, because IntelliJ's DAP client offers no hook to remap a breakpoint's line on the way out.
 - [x] Gutter run icons on `if __name__ == "__main__"` / top-level
 - [x] Test runner integration — `by test` run config + factory + SMTRunner test tree (green/red nodes) via run.test.tree.ByTestOutputParser (pure pytest/unittest parser) → ByServiceMessages → ByTestEventsConverter, wired through SMTestRunnerConnectionUtil in ByTestConfiguration.getState; ByTestLocator for source nav
 - [x] Test gutter icons + run-single-test (run.testmarker.ByTestRunLineMarkerContributor)
-- [~] Coverage support — `by test` runs the test tree (§66). Mapping line coverage back onto `.by` source is BLOCKED by the same upstream gap as the debugger (§64): the transpiler does not emit a public source map, so coverage gathered on the generated `.py` cannot be projected onto `.by` lines. Coverage on the generated `.py` would additionally require the Python plugin's CoverageEngine (absent in IU-261)
+- [~] Coverage support — `by test` runs the test tree (§66), though `by test` is not a subcommand the CLI actually has. Mapping line coverage back onto `.by` is unblocked by the same finding as the debugger (§64): `by run`'s `_by_sourcemap.py` can project coverage gathered on the generated `.py` onto `.by` lines. It would still additionally require the Python plugin's CoverageEngine (absent in the IDE target)
 - [x] Build output (`out/`) console with clickable paths
 - [x] Before-run task: `by build`
 - [x] Macro support in config (`$FilePath$`, `$ModuleName$`) — `ByMacros` helper
