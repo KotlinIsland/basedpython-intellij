@@ -12,6 +12,7 @@ import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
+import dev.basedpython.pycharm.env.ByLaunch
 import dev.basedpython.pycharm.lsp.BasedPythonBinaries
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import dev.basedpython.pycharm.ui.log.BasedPythonLogNotifications
@@ -52,27 +53,27 @@ class OpenBasedPythonReplAction : AnAction() {
             object : Task.Backgroundable(project, BasedPythonBundle.message("repl.starting"), true) {
                 override fun run(indicator: ProgressIndicator) {
                     indicator.isIndeterminate = true
-                    val bin = BasedPythonBinaries.resolveBy(project)
-                    if (bin == null) {
+                    val launch = BasedPythonBinaries.launchBy(project)
+                    if (launch == null) {
                         notifyMissing(project)
                         return
                     }
                     val workDir = project.basePath?.let { Paths.get(it) }
                     ApplicationManager.getApplication().invokeLater {
-                        startConsole(project, bin, workDir)
+                        startConsole(project, launch, workDir)
                     }
                 }
             },
         )
     }
 
-    private fun startConsole(project: Project, byExe: Path, workDir: Path?) {
+    private fun startConsole(project: Project, launch: ByLaunch, workDir: Path?) {
         val settings = BasedPythonSettings.getInstance(project)
         val subcommand = replSubcommand()
-        val extraArgs = settings.byExtraArgs
+        val extraArgs = settings.effectiveByExtraArgs
 
         val handler = try {
-            val cmd = ByReplCommandLine.build(byExe, subcommand, extraArgs, workDir)
+            val cmd = ByReplCommandLine.build(launch, subcommand, extraArgs, workDir)
             KillableProcessHandler(cmd)
         } catch (t: Throwable) {
             notifyStartFailed(project, t)

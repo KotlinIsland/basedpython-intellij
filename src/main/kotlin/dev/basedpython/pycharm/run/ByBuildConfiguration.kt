@@ -19,13 +19,14 @@ class ByBuildConfiguration(project: Project, factory: ConfigurationFactory, name
         ByBuildSettingsEditor()
 
     override fun checkConfiguration() {
-        if (BasedPythonBinaries.resolveBy(project) == null) {
+        if (!BasedPythonBinaries.isByAvailable(project)) {
             throw RuntimeConfigurationException("by binary not found — set path in Settings | basedpython")
         }
     }
 
     override fun getState(executor: Executor, environment: ExecutionEnvironment): RunProfileState =
         object : ByCommandLineState(project, options, environment) {
-            override fun buildSubcommandArgs(): List<String> = listOf("build")
+            override val subcommand = "build"
+            override fun buildSubcommandArgs(): List<String> = emptyList()
         }
 }

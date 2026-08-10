@@ -34,9 +34,10 @@ import com.intellij.platform.lsp.api.customization.LspSelectionRangeDisabled
 import com.intellij.platform.lsp.api.customization.LspSemanticTokensDisabled
 import com.intellij.platform.lsp.api.customization.LspSignatureHelpDisabled
 import com.intellij.platform.lsp.api.customization.LspTypeHierarchyDisabled
+import dev.basedpython.pycharm.env.ByLaunch
+import dev.basedpython.pycharm.lang.dialect.BasedPythonProjectDetector
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import dev.basedpython.pycharm.ui.log.BasedPythonLog
-import java.nio.file.Path
 
 private val LOG = Logger.getInstance("dev.basedpython.pycharm.lsp")
 
@@ -69,7 +70,20 @@ private fun isServerError(text: String): Boolean =
 
 private val SUPPORTED_EXTENSIONS = setOf("by", "byi", "py", "pyi")
 
+/** Extensions that are basedpython's own, whatever the surrounding project looks like. */
+private val OWN_EXTENSIONS = setOf("by", "byi")
+
 private fun VirtualFile.isBasedPythonSource(): Boolean = extension in SUPPORTED_EXTENSIONS
+
+/**
+ * Whether opening [file] should start a language server for [project].
+ *
+ * A `.by` file is ours no matter where it lives, so it always does. A `.py` file only does in a
+ * project that carries a basedpython marker — otherwise a lone script in a Rust or JS repo would
+ * spawn `by`, which is the "don't activate in non-python projects" complaint.
+ */
+private fun shouldServe(project: Project, file: VirtualFile): Boolean =
+  file.extension in OWN_EXTENSIONS || BasedPythonProjectDetector.isBasedPythonProject(project)
 
 private fun splitArgs(raw: String): List<String> =
   raw.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
@@ -79,32 +93,36 @@ private fun splitArgs(raw: String): List<String> =
 internal class ByLspServerSupportProvider : LspServerSupportProvider {
   override fun fileOpened(project: Project, file: VirtualFile, serverStarter: LspServerStarter) {
     if (!file.isBasedPythonSource()) return
+    if (!shouldServe(project, file)) return
     val settings = BasedPythonSettings.getInstance(project)
     if (!settings.byEnabled) return
-    val binary = BasedPythonBinaries.resolveBy(project)
-    if (binary == null) {
+    // `file` makes resolution content-root-aware, so a per-module `.venv` wins over the
+    // workspace-level one (FEATURES.md §186) for the server too, not just for `ByCli`.
+    val launch = BasedPythonBinaries.launchBy(project, file)
+    if (launch == null) {
       LOG.warn("`by` binary not found — skipping LSP startup for ${file.path}")
       BasedPythonNotifications.warnBinaryMissing(project, "by")
       return
     }
-    serverStarter.ensureServerStarted(ByLspServerDescriptor(project, binary, splitArgs(settings.byExtraArgs)))
+    serverStarter.ensureServerStarted(ByLspServerDescriptor(project, launch, splitArgs(settings.effectiveByExtraArgs)))
   }
 }
 
 internal class ByLspServerDescriptor(
   project: Project,
-  private val binary: Path,
+  private val launch: ByLaunch,
   private val extraArgs: List<String>,
 ) : ProjectWideLspServerDescriptor(project, "basedpython") {
 
   override fun isSupportedFile(file: VirtualFile): Boolean = file.isBasedPythonSource()
 
   override fun createCommandLine(): GeneralCommandLine =
-    GeneralCommandLine(buildList(2 + extraArgs.size) {
-      add(binary.toString())
+    GeneralCommandLine(buildList(2 + launch.prependArgs.size + extraArgs.size) {
+      add(launch.exe.toString())
+      addAll(launch.prependArgs)
       add("server")
       addAll(extraArgs)
-    })
+    }).withEnvironment(launch.env)
 
   override fun startServerProcess(): OSProcessHandler =
     super.startServerProcess().mirrorStderrTo(project, "by")
@@ -157,32 +175,34 @@ internal class ByLspServerDescriptor(
 internal class BuffLspServerSupportProvider : LspServerSupportProvider {
   override fun fileOpened(project: Project, file: VirtualFile, serverStarter: LspServerStarter) {
     if (!file.isBasedPythonSource()) return
+    if (!shouldServe(project, file)) return
     val settings = BasedPythonSettings.getInstance(project)
     if (!settings.buffEnabled) return
-    val binary = BasedPythonBinaries.resolveBuff(project)
-    if (binary == null) {
+    val launch = BasedPythonBinaries.launchBuff(project, file)
+    if (launch == null) {
       LOG.warn("`buff` binary not found — skipping LSP startup for ${file.path}")
       BasedPythonNotifications.warnBinaryMissing(project, "buff")
       return
     }
-    serverStarter.ensureServerStarted(BuffLspServerDescriptor(project, binary, splitArgs(settings.buffExtraArgs)))
+    serverStarter.ensureServerStarted(BuffLspServerDescriptor(project, launch, splitArgs(settings.effectiveBuffExtraArgs)))
   }
 }
 
 internal class BuffLspServerDescriptor(
   project: Project,
-  private val binary: Path,
+  private val launch: ByLaunch,
   private val extraArgs: List<String>,
 ) : ProjectWideLspServerDescriptor(project, "buff") {
 
   override fun isSupportedFile(file: VirtualFile): Boolean = file.isBasedPythonSource()
 
   override fun createCommandLine(): GeneralCommandLine =
-    GeneralCommandLine(buildList(2 + extraArgs.size) {
-      add(binary.toString())
+    GeneralCommandLine(buildList(2 + launch.prependArgs.size + extraArgs.size) {
+      add(launch.exe.toString())
+      addAll(launch.prependArgs)
       add("server")
       addAll(extraArgs)
-    })
+    }).withEnvironment(launch.env)
 
   override fun startServerProcess(): OSProcessHandler =
     super.startServerProcess().mirrorStderrTo(project, "buff")

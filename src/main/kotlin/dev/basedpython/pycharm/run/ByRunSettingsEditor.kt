@@ -11,6 +11,7 @@ import javax.swing.JPanel
 
 class ByRunSettingsEditor : SettingsEditor<ByRunConfiguration>() {
     private val moduleField = JBTextField()
+    private val environmentCombo = ByEnvironmentComboBox()
     private val workingDirField = TextFieldWithBrowseButton().apply {
         @Suppress("DEPRECATION")
         addBrowseFolderListener(
@@ -26,6 +27,7 @@ class ByRunSettingsEditor : SettingsEditor<ByRunConfiguration>() {
 
     private val panel: JPanel = FormBuilder.createFormBuilder()
         .addLabeledComponent("Module:", moduleField)
+        .addLabeledComponent("Environment:", environmentCombo)
         .addLabeledComponent("Working directory:", workingDirField)
         .addLabeledComponent("Extra args:", extraArgsField)
         .addLabeledComponent("Min Python version:", pythonVersionField)
@@ -35,6 +37,7 @@ class ByRunSettingsEditor : SettingsEditor<ByRunConfiguration>() {
     override fun resetEditorFrom(s: ByRunConfiguration) {
         val o = s.options
         moduleField.text = o.module
+        environmentCombo.kind = o.environmentKind
         workingDirField.text = o.workingDir
         extraArgsField.text = o.extraArgs
         pythonVersionField.text = o.pythonVersion
@@ -45,6 +48,7 @@ class ByRunSettingsEditor : SettingsEditor<ByRunConfiguration>() {
     override fun applyEditorTo(s: ByRunConfiguration) {
         val o = s.options
         o.module = moduleField.text.trim()
+        o.environmentKind = environmentCombo.kind
         o.workingDir = workingDirField.text.trim()
         o.extraArgs = extraArgsField.text.trim()
         o.pythonVersion = pythonVersionField.text.trim()

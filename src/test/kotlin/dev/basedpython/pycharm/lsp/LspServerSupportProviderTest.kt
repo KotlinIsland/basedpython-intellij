@@ -92,7 +92,7 @@ class LspServerSupportProviderTest : BasePlatformTestCase() {
     ByLspServerSupportProvider().fileOpened(project, byFile(), starter)
     // With a bogus override and (in CI) nothing on PATH, no server should start.
     // On a dev box `by` could be on PATH; tolerate that by only asserting no crash.
-    if (BasedPythonBinaries.resolveBy(project) == null) {
+    if (!BasedPythonBinaries.isByAvailable(project)) {
       assertTrue("missing `by` binary must not start a server", starter.started.isEmpty())
     }
   }
@@ -103,7 +103,7 @@ class LspServerSupportProviderTest : BasePlatformTestCase() {
     s.buffPath = "/definitely/not/here/buff"
     val starter = RecordingStarter()
     BuffLspServerSupportProvider().fileOpened(project, byFile(), starter)
-    if (BasedPythonBinaries.resolveBuff(project) == null) {
+    if (!BasedPythonBinaries.isBuffAvailable(project)) {
       assertTrue("missing `buff` binary must not start a server", starter.started.isEmpty())
     }
   }

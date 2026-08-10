@@ -2,6 +2,7 @@ package dev.basedpython.pycharm.lsp.reload
 
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.startup.ProjectActivity
+import dev.basedpython.pycharm.lang.dialect.BasedPythonProjectDetector
 
 /**
  * Wires up the basedpython LSP crash-recovery listener once per project on open.
@@ -11,6 +12,8 @@ import com.intellij.openapi.startup.ProjectActivity
  */
 internal class BasedPythonLspReloadActivity : ProjectActivity {
   override suspend fun execute(project: Project) {
+    // Nothing to recover in a project that will never start a server.
+    if (!BasedPythonProjectDetector.isPythonProject(project)) return
     BasedPythonLspReloader.getInstance(project).ensureListenerRegistered()
   }
 }

@@ -5,7 +5,6 @@ import com.intellij.execution.util.ExecUtil
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
 import dev.basedpython.pycharm.lsp.BasedPythonBinaries
-import java.nio.file.Path
 
 /**
  * Reusable helper that reports the versions of the resolved `by` / `buff` binaries.
@@ -21,23 +20,25 @@ object BasedPythonVersions {
     private const val TIMEOUT_MS = 5_000
 
     fun byVersion(project: Project): String? =
-        version(BasedPythonBinaries.resolveBy(project))
+        version(BasedPythonBinaries.launchBy(project))
 
     fun buffVersion(project: Project): String? =
-        version(BasedPythonBinaries.resolveBuff(project))
+        version(BasedPythonBinaries.launchBuff(project))
 
-    private fun version(bin: Path?): String? {
-        if (bin == null) return null
+    private fun version(launch: ByLaunch?): String? {
+        if (launch == null) return null
         return try {
             val cmd = GeneralCommandLine()
-                .withExePath(bin.toString())
+                .withExePath(launch.exe.toString())
+                .withParameters(launch.prependArgs)
                 .withParameters("version")
                 .withCharset(Charsets.UTF_8)
+                .withEnvironment(launch.env)
             val output = ExecUtil.execAndGetOutput(cmd, TIMEOUT_MS)
             if (output.isTimeout || output.exitCode != 0) return null
             output.stdout.lineSequence().firstOrNull { it.isNotBlank() }?.trim()?.takeIf { it.isNotEmpty() }
         } catch (e: Exception) {
-            LOG.warn("Failed to read version from $bin", e)
+            LOG.warn("Failed to read version from ${launch.describe()}", e)
             null
         }
     }

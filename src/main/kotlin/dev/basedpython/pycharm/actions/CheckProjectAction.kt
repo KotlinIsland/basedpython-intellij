@@ -1,5 +1,6 @@
 package dev.basedpython.pycharm.actions
 
+import dev.basedpython.pycharm.env.ByLaunch
 import dev.basedpython.pycharm.lsp.BasedPythonBinaries
 import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.execution.executors.DefaultRunExecutor
@@ -34,23 +35,27 @@ class CheckProjectAction : AnAction() {
         val project = e.project ?: return
         val basePath = project.basePath ?: return
 
-        val bin = BasedPythonBinaries.resolveBy(project)
-        if (bin == null) {
+        val launch = BasedPythonBinaries.launchBy(project)
+        if (launch == null) {
             ByCli.notifyBinaryMissing(project, "by")
             return
         }
 
         ApplicationManager.getApplication().invokeLater {
-            startConsole(project, bin.toString(), basePath)
+            startConsole(project, launch, basePath)
         }
     }
 
-    private fun startConsole(project: Project, byExe: String, cwd: String) {
+    private fun startConsole(project: Project, launch: ByLaunch, cwd: String) {
         val cmd = GeneralCommandLine()
-            .withExePath(byExe)
+            .withExePath(launch.exe.toString())
+            // Must precede "check": for a uv launch the exe is `uv`, so without the prefix this
+            // would run `uv check` — a different tool entirely, not the basedpython type checker.
+            .withParameters(launch.prependArgs)
             .withParameters("check")
             .withWorkDirectory(Paths.get(cwd).toFile())
             .withCharset(Charsets.UTF_8)
+            .withEnvironment(launch.env)
 
         val handler = ColoredProcessHandler(cmd)
         ProcessTerminatedListener.attach(handler)

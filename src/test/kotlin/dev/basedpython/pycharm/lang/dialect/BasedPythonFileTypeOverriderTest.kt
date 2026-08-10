@@ -28,12 +28,16 @@ class BasedPythonFileTypeOverriderTest : BasePlatformTestCase() {
 
     private fun makeBasedPythonProject() {
         settings().byEnabled = true
+        // Pin the ownership choice so the outcome does not depend on whether the IDE running the
+        // tests happens to provide the Python language.
+        settings().pyFileHandling = PyFileHandling.ALWAYS
         val base = base()
         if (!Files.exists(base)) {
             Files.createDirectories(base)
             createdMarkers.add(base)
         }
-        val marker = base.resolve("pyproject.toml")
+        // A bare pyproject.toml is no longer enough — it has to mention basedpython.
+        val marker = base.resolve("api.lock")
         if (!Files.exists(marker)) {
             Files.createFile(marker)
             createdMarkers.add(marker)
@@ -43,7 +47,7 @@ class BasedPythonFileTypeOverriderTest : BasePlatformTestCase() {
     private fun makeVanillaProject() {
         settings().byEnabled = true
         // Ensure no markers linger at base from a previous run.
-        for (name in listOf("pyproject.toml", "api.lock")) {
+        for (name in listOf("pyproject.toml", "api.lock", "basedpython.toml")) {
             try {
                 Files.deleteIfExists(base().resolve(name))
             } catch (_: Exception) {
@@ -73,38 +77,63 @@ class BasedPythonFileTypeOverriderTest : BasePlatformTestCase() {
     // pure decision logic
     // =========================================================================
 
+    /** [BasedPythonFileTypeOverrider.decide] with the settings that make it claim the file. */
+    private fun decide(
+        extension: String?,
+        isBasedPythonProject: Boolean = true,
+        handling: PyFileHandling = PyFileHandling.ALWAYS,
+        pythonLanguageAvailable: Boolean = false,
+    ) = BasedPythonFileTypeOverrider.decide(
+        extension, isBasedPythonProject, handling, pythonLanguageAvailable,
+    )
+
     fun `test decide returns basedpython for py in basedpython project`() {
-        assertSame(
-            BasedPythonFileType.INSTANCE,
-            BasedPythonFileTypeOverrider.decide("py", isBasedPythonProject = true),
-        )
+        assertSame(BasedPythonFileType.INSTANCE, decide("py"))
     }
 
     fun `test decide returns null for py in non-basedpython project`() {
-        assertNull(BasedPythonFileTypeOverrider.decide("py", isBasedPythonProject = false))
+        assertNull(decide("py", isBasedPythonProject = false))
     }
 
     fun `test decide returns null for pyi even in basedpython project`() {
-        assertNull(BasedPythonFileTypeOverrider.decide("pyi", isBasedPythonProject = true))
+        assertNull(decide("pyi"))
     }
 
     fun `test decide returns null for by which is already handled`() {
-        assertNull(BasedPythonFileTypeOverrider.decide("by", isBasedPythonProject = true))
+        assertNull(decide("by"))
     }
 
     fun `test decide returns null for unrelated extension`() {
-        assertNull(BasedPythonFileTypeOverrider.decide("md", isBasedPythonProject = true))
+        assertNull(decide("md"))
     }
 
     fun `test decide returns null for null extension`() {
-        assertNull(BasedPythonFileTypeOverrider.decide(null, isBasedPythonProject = true))
+        assertNull(decide(null))
     }
 
     fun `test decide is case insensitive on extension`() {
+        assertSame(BasedPythonFileType.INSTANCE, decide("PY"))
+    }
+
+    // ---- who owns .py (§ "work alongside PyCharm") ----
+
+    fun `test NEVER leaves py alone even in a basedpython project`() {
+        assertNull(decide("py", handling = PyFileHandling.NEVER, pythonLanguageAvailable = false))
+    }
+
+    fun `test ALWAYS claims py even when a Python plugin is present`() {
         assertSame(
             BasedPythonFileType.INSTANCE,
-            BasedPythonFileTypeOverrider.decide("PY", isBasedPythonProject = true),
+            decide("py", handling = PyFileHandling.ALWAYS, pythonLanguageAvailable = true),
         )
+    }
+
+    fun `test AUTO claims py only when nothing else provides Python`() {
+        assertSame(
+            BasedPythonFileType.INSTANCE,
+            decide("py", handling = PyFileHandling.AUTO, pythonLanguageAvailable = false),
+        )
+        assertNull(decide("py", handling = PyFileHandling.AUTO, pythonLanguageAvailable = true))
     }
 
     fun `test isOverridableExtension only accepts py`() {

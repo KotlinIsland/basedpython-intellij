@@ -1,0 +1,7 @@
+<!-- Loaded only when the Markdown plugin is present; see the optional <depends> in plugin.xml. -->
+<idea-plugin>
+    <extensions defaultExtensionNs="org.intellij.markdown">
+        <additionalFenceLanguageSuggester
+            implementation="dev.basedpython.pycharm.lang.markdown.BasedPythonFenceLanguageSuggester"/>
+    </extensions>
+</idea-plugin>

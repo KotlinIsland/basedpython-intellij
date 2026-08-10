@@ -11,6 +11,7 @@ import javax.swing.JPanel
 
 class ByCheckSettingsEditor : SettingsEditor<ByCheckConfiguration>() {
     private val pathsField = JBTextField()
+    private val environmentCombo = ByEnvironmentComboBox()
     private val workingDirField = TextFieldWithBrowseButton().apply {
         @Suppress("DEPRECATION")
         addBrowseFolderListener(
@@ -26,15 +27,17 @@ class ByCheckSettingsEditor : SettingsEditor<ByCheckConfiguration>() {
 
     private val panel: JPanel = FormBuilder.createFormBuilder()
         .addLabeledComponent("Paths (space-separated):", pathsField)
+        .addLabeledComponent("Environment:", environmentCombo)
         .addLabeledComponent("Working directory:", workingDirField)
         .addLabeledComponent("Extra args:", extraArgsField)
-        .addLabeledComponent("Min Python version:", pythonVersionField)
+        .addLabeledComponent("Assumed Python version:", pythonVersionField)
         .addComponent(envVarsComponent)
         .panel
 
     override fun resetEditorFrom(s: ByCheckConfiguration) {
         val o = s.options
         pathsField.text = o.paths
+        environmentCombo.kind = o.environmentKind
         workingDirField.text = o.workingDir
         extraArgsField.text = o.extraArgs
         pythonVersionField.text = o.pythonVersion
@@ -45,6 +48,7 @@ class ByCheckSettingsEditor : SettingsEditor<ByCheckConfiguration>() {
     override fun applyEditorTo(s: ByCheckConfiguration) {
         val o = s.options
         o.paths = pathsField.text.trim()
+        o.environmentKind = environmentCombo.kind
         o.workingDir = workingDirField.text.trim()
         o.extraArgs = extraArgsField.text.trim()
         o.pythonVersion = pythonVersionField.text.trim()

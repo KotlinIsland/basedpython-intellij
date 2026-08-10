@@ -14,14 +14,13 @@ import com.intellij.psi.search.FileTypeIndex
 import com.intellij.psi.search.GlobalSearchScope
 import dev.basedpython.pycharm.docs.BasedPythonDocEntries
 import dev.basedpython.pycharm.lang.BasedPythonFileType
-import dev.basedpython.pycharm.lsp.BasedPythonBinaries
+import dev.basedpython.pycharm.lang.dialect.BasedPythonProjectDetector
 import dev.basedpython.pycharm.util.BasedPythonBundle
 
 /**
  * First-run welcome notification.
  *
- * The first time a project that contains `.by` files (or that has a resolvable
- * `by`/`buff` binary) is opened after the plugin is installed, this shows a
+ * The first time a basedpython project is opened after the plugin is installed, this shows a
  * single, sticky "Welcome to basedpython" notification with quick links to the
  * settings page and the online documentation. The notification is shown at most
  * once ever, gated by an application-level flag in [PropertiesComponent].
@@ -42,9 +41,17 @@ internal class BasedPythonWelcomeActivity : ProjectActivity {
         showWelcome(project)
     }
 
+    /**
+     * True when this project has anything to do with basedpython.
+     *
+     * A resolvable `by` binary used to count on its own, which meant installing the CLI once made
+     * every project — Rust, JS, anything — greet the user. It now takes actual basedpython content:
+     * a `.by` file somewhere in the project, or a basedpython marker at the project base.
+     */
     private suspend fun Project.isBasedPythonProject(): Boolean {
         val project = this
-        val hasByFiles = readAction {
+        if (BasedPythonProjectDetector.isBasedPythonProject(project)) return true
+        return readAction {
             DumbService.getInstance(project).runReadActionInSmartMode<Boolean> {
                 FileTypeIndex.getFiles(
                     BasedPythonFileType.INSTANCE,
@@ -52,9 +59,6 @@ internal class BasedPythonWelcomeActivity : ProjectActivity {
                 ).isNotEmpty()
             }
         }
-        if (hasByFiles) return true
-        return BasedPythonBinaries.resolveBy(project) != null ||
-            BasedPythonBinaries.resolveBuff(project) != null
     }
 
     private fun showWelcome(project: Project) {

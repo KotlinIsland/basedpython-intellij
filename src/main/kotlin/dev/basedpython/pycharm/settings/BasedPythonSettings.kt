@@ -38,6 +38,14 @@ class BasedPythonSettings : PersistentStateComponent<BasedPythonSettings.State> 
      * keep `.by` files as the single source of truth and avoid duplicate symbols.
      */
     var indexGeneratedPython: Boolean = false,
+    /**
+     * Who owns `.py` files, as a [dev.basedpython.pycharm.lang.dialect.PyFileHandling.id].
+     *
+     * A `String` rather than the enum for the same reason as `ByCommonOptions.environment`: the
+     * serializer would persist the constant name and throw on any value it cannot match, so a
+     * settings file written by a newer plugin would fail to load instead of degrading.
+     */
+    var pyFileHandling: String = "",
     // ---- Per-server capability toggles (§142). All default-on. ----
     // `by` server capabilities:
     var byCompletion: Boolean = true,
@@ -112,6 +120,14 @@ class BasedPythonSettings : PersistentStateComponent<BasedPythonSettings.State> 
   var indexGeneratedPython: Boolean
     get() = state.indexGeneratedPython
     set(value) { state.indexGeneratedPython = value }
+
+  /** [State.pyFileHandling] as an enum. Not serialised — the string is the persisted form. */
+  var pyFileHandling: dev.basedpython.pycharm.lang.dialect.PyFileHandling
+    get() = dev.basedpython.pycharm.lang.dialect.PyFileHandling.fromId(state.pyFileHandling)
+    set(value) {
+      state.pyFileHandling =
+        if (value == dev.basedpython.pycharm.lang.dialect.PyFileHandling.AUTO) "" else value.id
+    }
 
   // ---- Per-server capability toggles (§142) ----
 

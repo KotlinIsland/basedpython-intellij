@@ -10,6 +10,7 @@ import com.intellij.openapi.options.ShowSettingsUtil
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.startup.ProjectActivity
 import dev.basedpython.pycharm.actions.ByCli
+import dev.basedpython.pycharm.lang.dialect.BasedPythonProjectDetector
 import dev.basedpython.pycharm.util.BasedPythonBundle
 
 /**
@@ -24,6 +25,9 @@ internal class ByVersionCheckActivity : ProjectActivity {
 
     override suspend fun execute(project: Project) {
         if (project.isDisposed) return
+        // Don't spawn `by` just because a project was opened: a project with no basedpython marker
+        // has no use for the version warning, and a Rust or JS repo should never see the process.
+        if (!BasedPythonProjectDetector.isBasedPythonProject(project)) return
 
         // ByCli.run resolves the binary; returns null (and notifies) when missing.
         // Detect missing-ness up front so we stay silent per the contract.

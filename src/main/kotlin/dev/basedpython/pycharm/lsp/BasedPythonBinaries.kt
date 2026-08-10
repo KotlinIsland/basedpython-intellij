@@ -1,83 +1,71 @@
 package dev.basedpython.pycharm.lsp
 
-import com.intellij.execution.configurations.PathEnvironmentVariableUtil
-import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.roots.ProjectFileIndex
-import com.intellij.openapi.util.SystemInfo
 import com.intellij.openapi.vfs.VirtualFile
+import dev.basedpython.pycharm.env.ByEnvironmentKind
+import dev.basedpython.pycharm.env.ByEnvironments
+import dev.basedpython.pycharm.env.ByLaunch
 import dev.basedpython.pycharm.settings.BasedPythonSettings
-import java.nio.file.Files
 import java.nio.file.Path
-import java.nio.file.Paths
 
 /**
  * Resolves the `by` (type-checker LSP) and `buff` (formatter LSP) binaries.
  *
- * Resolution order:
- *   1. User-supplied override path from [BasedPythonSettings] (if non-blank and exists).
- *   2. Walk up (max 5 dirs) from the search roots looking for `.venv/bin/<name>`
- *      (or `.venv/Scripts/<name>.exe` on Windows). In a multi-root / multi-module
- *      workspace the file's own content root is searched first, then `project.basePath`,
- *      so a per-module `.venv` wins over a workspace-level one.
- *   3. `PATH` lookup via [PathEnvironmentVariableUtil].
+ * A thin, binary-naming layer over [ByEnvironments], which owns the resolution order, venv
+ * activation, and uv support. See [ByEnvironments.resolve] for the order.
  *
- * Returns `null` when nothing is found — callers must not start the LSP in that case.
+ * The path override comes from [BasedPythonSettings.effectiveByPath] / [BasedPythonSettings.effectiveBuffPath],
+ * so an IDE-wide default set on the "basedpython Defaults" page applies when the project leaves
+ * its own path blank.
+ *
+ * Returns `null` when nothing is found — callers must not start a process in that case.
  */
 object BasedPythonBinaries {
-  private val LOG = Logger.getInstance(BasedPythonBinaries::class.java)
-  private const val MAX_WALK_UP = 5
 
-  fun resolveBy(project: Project, contextFile: VirtualFile? = null): Path? =
-    resolve(project, contextFile, BIN_BY, BasedPythonSettings.getInstance(project).byPath)
+  const val BIN_BY: String = "by"
+  const val BIN_BUFF: String = "buff"
 
-  fun resolveBuff(project: Project, contextFile: VirtualFile? = null): Path? =
-    resolve(project, contextFile, BIN_BUFF, BasedPythonSettings.getInstance(project).buffPath)
+  /** Full launch for `by`: executable, any argument prefix (uv), and the environment to run in. */
+  fun launchBy(
+    project: Project,
+    contextFile: VirtualFile? = null,
+    kind: ByEnvironmentKind = ByEnvironmentKind.AUTO,
+  ): ByLaunch? = ByEnvironments.resolve(
+    project, BIN_BY, contextFile, kind, BasedPythonSettings.getInstance(project).effectiveByPath,
+  )
 
-  private fun resolve(project: Project, contextFile: VirtualFile?, binary: String, override: String?): Path? {
-    if (!override.isNullOrBlank()) {
-      val p = Paths.get(override)
-      if (Files.isExecutable(p)) return p
-      LOG.warn("Configured $binary override path does not exist or is not executable: $override")
-    }
+  /** Full launch for `buff`. */
+  fun launchBuff(
+    project: Project,
+    contextFile: VirtualFile? = null,
+    kind: ByEnvironmentKind = ByEnvironmentKind.AUTO,
+  ): ByLaunch? = ByEnvironments.resolve(
+    project, BIN_BUFF, contextFile, kind, BasedPythonSettings.getInstance(project).effectiveBuffPath,
+  )
 
-    for (start in searchStartDirs(contentRootPath(project, contextFile), project.basePath?.let { Paths.get(it) })) {
-      var dir: Path? = start
-      var hops = 0
-      while (dir != null && hops <= MAX_WALK_UP) {
-        val candidate = venvBinary(dir, binary)
-        if (Files.isExecutable(candidate)) return candidate
-        dir = dir.parent
-        hops++
-      }
-    }
+  /** True when `by` can be located. For availability checks (banners, inspections, gating). */
+  fun isByAvailable(project: Project, contextFile: VirtualFile? = null): Boolean =
+    launchBy(project, contextFile) != null
 
-    val onPath = PathEnvironmentVariableUtil.findInPath(binary)
-    if (onPath != null) return onPath.toPath()
-
-    return null
-  }
+  /** True when `buff` can be located. */
+  fun isBuffAvailable(project: Project, contextFile: VirtualFile? = null): Boolean =
+    launchBuff(project, contextFile) != null
 
   /**
-   * Ordered, de-duplicated list of directories to begin the venv walk-up from.
-   * The file's content root takes precedence over the project base so a per-module
-   * `.venv` is preferred. Pure function — unit tested.
+   * The `by` executable path — for display and tests only.
+   *
+   * There is deliberately no "just give me the path" API for callers that execute. The executable
+   * alone is not enough to run the toolchain: a uv-backed launch execs `uv` and names `by` in
+   * [ByLaunch.prependArgs], so appending arguments to the bare path would invoke a different tool.
+   * Anything that starts a process must use [launchBy] and honour the prefix and the environment.
    */
+  fun resolveByExe(project: Project, contextFile: VirtualFile? = null): Path? = launchBy(project, contextFile)?.exe
+
+  /** The `buff` executable path. See [resolveByExe] — display and tests only. */
+  fun resolveBuffExe(project: Project, contextFile: VirtualFile? = null): Path? =
+    launchBuff(project, contextFile)?.exe
+
+  /** Kept as the resolution-order entry point for tests; delegates to [ByEnvironments]. */
   fun searchStartDirs(contentRoot: Path?, projectBase: Path?): List<Path> =
-    listOfNotNull(contentRoot, projectBase).distinct()
-
-  /** The content root (as an NIO [Path]) of [file] within [project], or `null`. */
-  private fun contentRootPath(project: Project, file: VirtualFile?): Path? {
-    if (file == null || project.isDefault) return null
-    val index = ProjectFileIndex.getInstance(project)
-    val root = index.getContentRootForFile(file) ?: index.getSourceRootForFile(file) ?: return null
-    return runCatching { root.toNioPath() }.getOrNull()
-  }
-
-  private fun venvBinary(root: Path, binary: String): Path =
-    if (SystemInfo.isWindows) root.resolve(".venv").resolve("Scripts").resolve("$binary.exe")
-    else root.resolve(".venv").resolve("bin").resolve(binary)
-
-  private const val BIN_BY = "by"
-  private const val BIN_BUFF = "buff"
+    ByEnvironments.searchStartDirs(contentRoot, projectBase)
 }
