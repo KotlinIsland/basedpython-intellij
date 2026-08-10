@@ -43,7 +43,7 @@ lexical colour only. Don't reintroduce guessed semantic colour; fix the LSP path
 - [x] Completion, hover, goto def/decl/type, references, rename, signature help, diagnostics, inlay hints, semantic tokens, code actions, symbols, folding, type hierarchy
 - [x] Inlay hint toggle settings (param names, types, return types)
 - [x] Call hierarchy (LSP — enabled on `by`)
-- [x] Document link support (LSP — enabled on `by`)
+- [ ] Document link support — left enabled on the `by` client, but `by` advertises no `documentLinkProvider` (checked against 0.0.1a9: 25 capabilities, not one of them document links), so nothing is ever requested and the feature does not exist. Harmless as configured; it becomes real if and when the server grows the capability
 - [x] Code lens (run/references counts) — `by` LSP codeLens enabled
 - [x] Pull-diagnostics workspace mode — platform LSP integration consumes `by` pull diagnostics when the server advertises them, surfacing them in the editor + Problems tool window and feeding WolfTheProblemSolver (project-view error stripes / red filenames) automatically; no extra wiring required
 - [x] LSP server version check + min-version warning (lsp.version.ByVersionCheckActivity)
@@ -101,7 +101,7 @@ lexical colour only. Don't reintroduce guessed semantic colour; fix the LSP path
 - [x] Show transpiled `.py` side-by-side diff view (live, updates on edit)
 - [x] "Reveal generated .py in out/" navigation
 - [x] api.lock diff viewer (what changed in public API)
-- [x] Convert Python file → basedpython in-place (apply reverse transpile to file)
+- [x] Convert Python file → basedpython in-place (apply reverse transpile to file) — plumbing verified against `by` 0.0.1a9, but be aware how little the CLI currently does: `by transpile --reverse` returns the source **unchanged** on stdout, and its directory form only renames `.py` to `.by`. No idiom rewriting yet (`@dataclass` stays `@dataclass`, `Optional[int]` stays `Optional[int]`), so these actions look like no-ops. Nothing to fix on this side; the value arrives when the CLI grows it
 - [x] Inline "transpile this snippet" for selection (transpile.selection.TranspileSelectionAction)
 
 ## 8. Code intelligence (beyond LSP)
