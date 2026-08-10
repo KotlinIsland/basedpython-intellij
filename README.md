@@ -34,6 +34,18 @@ support, run configurations, CLI actions, and editor tooling.
   directory, extra CLI args, `--min-version`, and environment variables.
 - Right-click a `.by` file to "Run by run &lt;module&gt;" or "Check with by".
 
+### Debugging
+- Debug a `by run` configuration and stop on breakpoints set in `.by` files — stepping,
+  frames, variables and expression evaluation all report `.by` sources, not the transpiled
+  output. Built on the platform's Debug Adapter Protocol client and `debugpy`; the line
+  translation is done by pydevd in the debuggee, from the map `by run` already writes.
+- Requires `debugpy` in the interpreter `by run` uses (`PYTHON`, otherwise `python3` on
+  `PATH` — not necessarily the project's `.venv`). If it is missing, the debugger says so
+  and names that interpreter.
+- **Debug .by (pdb)** remains as a fallback that needs no extra package: builds, then runs
+  the generated `.py` under `python -m pdb` with clickable frames.
+- See [docs/debugging.md](docs/debugging.md) for how it works and what it does not cover.
+
 ### Actions (Tools | basedpython)
 - **Transpile to .py** / **Reverse Transpile to .by** (also in editor & project popups).
 - **Generate api.lock** — `by generate-api-file`.

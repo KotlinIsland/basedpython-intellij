@@ -39,6 +39,9 @@ dependencies {
     bundledPlugin("intellij.testRunner.plugin")
     // Spellchecker ships as a platform module, not a bundled plugin.
     bundledModule("intellij.spellchecker")
+    // The platform's Debug Adapter Protocol client (DebugAdapterSupportProvider, DapProcessStarter,
+    // …), also a platform module rather than a bundled plugin. Powers `.by` debugging.
+    bundledModule("intellij.platform.dap")
   }
 }
 

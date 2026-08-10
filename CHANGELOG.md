@@ -59,6 +59,12 @@
 - Move Statement Up/Down (Ctrl+Shift+Up/Down) that respects indentation blocks.
 - **Debug .by (pdb)** action: builds, then runs the generated `.py` under `python -m pdb`
   in an interactive console (frames are clickable).
+- Source-mapped debugging for `by run` configurations: breakpoints in `.by` files, stepping,
+  frames and variables reported against `.by` sources. Built on the platform's Debug Adapter
+  Protocol client and `debugpy`; `by run`'s own `_by_sourcemap.py` is handed to pydevd with
+  `setPydevdSourceMap`, so the line translation happens in the debuggee. Requires `debugpy`
+  in the interpreter `by run` uses — a missing one is reported with the interpreter's path
+  and the `pip install` line. See [docs/debugging.md](docs/debugging.md).
 
 ### Changed
 

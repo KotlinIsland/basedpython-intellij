@@ -10,6 +10,13 @@
     <!-- Optional: adds `by` / `bython` markdown code fences when the Markdown plugin is present. -->
     <depends optional="true" config-file="basedpython-markdown.xml">org.intellij.plugins.markdown</depends>
 
+    <!-- The platform's Debug Adapter Protocol client, which `.by` debugging is built on. A platform
+         module rather than a plugin, so it is declared the v2 way; the legacy <depends> entries
+         above still apply. -->
+    <dependencies>
+        <module name="intellij.platform.dap"/>
+    </dependencies>
+
     <resource-bundle>messages.BasedPythonBundle</resource-bundle>
 
     <extensions defaultExtensionNs="com.intellij">
@@ -52,6 +59,20 @@
         <runConfigurationProducer implementation="dev.basedpython.pycharm.run.ByRunFromFileProducer"/>
         <runConfigurationProducer implementation="dev.basedpython.pycharm.run.ByCheckFromFileProducer"/>
         <runConfigurationProducer implementation="dev.basedpython.pycharm.run.ByTestFromFileProducer"/>
+
+        <!-- ===== Stream C2: source-mapped debugging (§64) =====
+             `by run` writes `_by_sourcemap.py` next to its transpiled output; the bootstrap in
+             /debug/sitecustomize.py hands that map to pydevd via `setPydevdSourceMap`, so
+             breakpoints set on `.by` lines land on the generated ones and frames come back as
+             `.by`. See docs/debugging.md. -->
+        <platform.dap.debugAdapterSupportProvider
+            implementation="dev.basedpython.pycharm.debug.ByDebugAdapterSupportProvider"/>
+        <platform.dap.launchArgumentsProvider
+            implementation="dev.basedpython.pycharm.debug.ByDapLaunchArgumentsProvider"/>
+        <xdebugger.breakpointType
+            implementation="dev.basedpython.pycharm.debug.ByLineBreakpointType"/>
+        <xdebugger.breakpointType
+            implementation="dev.basedpython.pycharm.debug.ByExceptionBreakpointType"/>
 
         <!-- ===== Stream D: action notification group ===== -->
         <notificationGroup id="basedpython.Actions" displayType="BALLOON"/>
