@@ -15,6 +15,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VfsUtil
 import dev.basedpython.pycharm.actions.ByCli
+import dev.basedpython.pycharm.env.ByEnvironments
 import dev.basedpython.pycharm.lang.BasedPythonFileType
 import com.intellij.openapi.vfs.VirtualFile
 import java.nio.file.Files
@@ -74,11 +75,18 @@ class DebugWithPdbAction : AnAction() {
     }
 
     private fun launchPdb(project: Project, cwd: Path, outPath: Path, label: String) {
-        val python = resolvePython(cwd)
-        val cmd = GeneralCommandLine(python)
+        val python = ByEnvironments.resolvePython(project) ?: run {
+            ByCli.notifyError(
+                project, "Debug .by (pdb)",
+                "No Python interpreter found — create a .venv, configure a Python interpreter, or put python3 on PATH.",
+            )
+            return
+        }
+        val cmd = GeneralCommandLine(python.exe.toString())
             .withParameters("-m", "pdb", outPath.toString())
             .withWorkDirectory(cwd.toFile())
             .withCharset(Charsets.UTF_8)
+            .withEnvironment(python.env)
         val handler = OSProcessHandler(cmd)
         RunContentExecutor(project, handler)
             .withTitle("Debug (pdb): $label")
@@ -87,15 +95,6 @@ class DebugWithPdbAction : AnAction() {
             .run()
     }
 
-    /** Prefer the project `.venv` interpreter; fall back to `python3` / `python` on PATH. */
-    private fun resolvePython(base: Path): String {
-        val candidates = listOf(
-            base.resolve(".venv/bin/python"),
-            base.resolve(".venv/Scripts/python.exe"),
-        )
-        candidates.firstOrNull { Files.isExecutable(it) }?.let { return it.toString() }
-        return if (System.getProperty("os.name").startsWith("Windows")) "python" else "python3"
-    }
 
     private fun resolveOutPath(file: VirtualFile, basePath: String): Path? {
         val base = Paths.get(basePath)

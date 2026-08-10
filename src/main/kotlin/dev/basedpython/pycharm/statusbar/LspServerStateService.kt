@@ -6,12 +6,12 @@ import com.intellij.openapi.project.Project
 import com.intellij.platform.lsp.api.LspServerManager
 import com.intellij.platform.lsp.api.LspServerState
 import com.intellij.platform.lsp.api.LspServerSupportProvider
+import dev.basedpython.pycharm.env.ByLaunch
 import dev.basedpython.pycharm.lsp.BasedPythonBinaries
 import dev.basedpython.pycharm.lsp.BuffLspServerSupportProvider
 import dev.basedpython.pycharm.lsp.ByLspServerSupportProvider
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import java.nio.file.Files
-import java.nio.file.Path
 
 /**
  * What the status bar reports for one server. Named for meaning rather than colour: a healthy
@@ -73,22 +73,24 @@ internal class LspServerStateService(private val project: Project) {
 
     fun snapshot(): ServerSnapshot {
         val settings = BasedPythonSettings.getInstance(project)
-        val byResolved = BasedPythonBinaries.resolveBy(project)
-        val buffResolved = BasedPythonBinaries.resolveBuff(project)
+        val byLaunch = BasedPythonBinaries.launchBy(project)
+        val buffLaunch = BasedPythonBinaries.launchBuff(project)
         return ServerSnapshot(
-            byLight = lightFor(settings.byEnabled, byResolved, ByLspServerSupportProvider::class.java),
-            buffLight = lightFor(settings.buffEnabled, buffResolved, BuffLspServerSupportProvider::class.java),
-            byPath = byResolved?.toString(),
-            buffPath = buffResolved?.toString(),
+            byLight = lightFor(settings.byEnabled, byLaunch, ByLspServerSupportProvider::class.java),
+            buffLight = lightFor(settings.buffEnabled, buffLaunch, BuffLspServerSupportProvider::class.java),
+            // The full command, not just the exe: for a uv launch the exe alone reads as "uv",
+            // which tells the user nothing about which toolchain is actually running.
+            byPath = byLaunch?.describe(),
+            buffPath = buffLaunch?.describe(),
         )
     }
 
     private fun lightFor(
         enabled: Boolean,
-        resolved: Path?,
+        launch: ByLaunch?,
         providerClass: Class<out LspServerSupportProvider>,
     ): ServerLight {
-        val missing = resolved == null || !Files.isExecutable(resolved)
+        val missing = launch == null || !Files.isExecutable(launch.exe)
         return ServerLightMapping.lightFor(enabled, missing, serverState(providerClass))
     }
 

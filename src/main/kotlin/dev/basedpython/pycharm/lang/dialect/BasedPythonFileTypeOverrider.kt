@@ -5,24 +5,28 @@ import com.intellij.openapi.fileTypes.impl.FileTypeOverrider
 import com.intellij.openapi.project.ProjectLocator
 import com.intellij.openapi.vfs.VirtualFile
 import dev.basedpython.pycharm.lang.BasedPythonFileType
+import dev.basedpython.pycharm.settings.BasedPythonSettings
 
 /**
- * Treats plain `.py` files inside a basedpython project as basedpython source
- * (FEATURES.md §16).
+ * Treats plain `.py` files inside a basedpython project as basedpython source (FEATURES.md §16).
  *
- * Rationale: the IDE target ships **no** bundled Python plugin, so a `.py` file in a
- * basedpython project would otherwise open as plain text — no highlighting, no LSP.
- * Re-typing such files to [BasedPythonFileType] gives them basedpython highlighting and
- * routes them through the `by` / `buff` LSP servers (whose supported extensions already
- * include `py`).
+ * Rationale: an IDE with no Python plugin opens a `.py` file as plain text — no highlighting, no
+ * LSP. Re-typing it to [BasedPythonFileType] gives it basedpython highlighting and routes it
+ * through the `by` / `buff` servers (whose supported extensions already include `py`).
  *
- * Scope is intentionally narrow:
- *   - Only `.py` is overridden. `.by` is already handled by the file-type registration,
- *     and `.pyi` stub files are left alone.
- *   - Only files that resolve to a basedpython project (see [BasedPythonProjectDetector])
- *     are overridden; in a vanilla project `.py` is left untouched.
+ * In PyCharm that same move is a downgrade: it takes `.py` away from a plugin that understands
+ * Python properly. So the default ([PyFileHandling.AUTO]) only claims `.py` when nothing else
+ * provides the Python language, and [PyFileHandling.NEVER] / [PyFileHandling.ALWAYS] let the user
+ * override either way. Either way the `by` server still attaches to `.py` — see
+ * `ByLspServerSupportProvider`. This is only about who owns the file type.
  *
- * Resolving a {@code Project} from a {@code VirtualFile} here is best-effort via
+ * Scope is otherwise narrow:
+ *   - Only `.py` is overridden. `.by` is handled by the file-type registration itself, and `.pyi`
+ *     stub files are left alone.
+ *   - Only projects that actually carry a basedpython marker (see [BasedPythonProjectDetector])
+ *     are affected; a plain Python project keeps its `.py` files.
+ *
+ * Resolving a `Project` from a `VirtualFile` here is best-effort via
  * [ProjectLocator.guessProjectForFile]; a null project means "don't override".
  */
 class BasedPythonFileTypeOverrider : FileTypeOverrider {
@@ -34,6 +38,8 @@ class BasedPythonFileTypeOverrider : FileTypeOverrider {
         return decide(
             extension = file.extension,
             isBasedPythonProject = BasedPythonProjectDetector.isBasedPythonProject(project),
+            handling = BasedPythonSettings.getInstance(project).pyFileHandling,
+            pythonLanguageAvailable = PyFileHandling.isPythonLanguageAvailable(),
         )
     }
 
@@ -48,13 +54,23 @@ class BasedPythonFileTypeOverrider : FileTypeOverrider {
         /**
          * Pure decision used by [getOverriddenFileType], extracted for unit testing.
          *
-         * @return [BasedPythonFileType.INSTANCE] when [extension] is `py` (case-insensitive)
-         *   and [isBasedPythonProject] is true; otherwise null (normal handling applies).
+         * @return [BasedPythonFileType.INSTANCE] when the file should be re-typed, else null
+         *   (normal handling applies).
          */
-        fun decide(extension: String?, isBasedPythonProject: Boolean): FileType? {
+        fun decide(
+            extension: String?,
+            isBasedPythonProject: Boolean,
+            handling: PyFileHandling,
+            pythonLanguageAvailable: Boolean,
+        ): FileType? {
             if (!isOverridableExtension(extension)) return null
             if (!isBasedPythonProject) return null
-            return BasedPythonFileType.INSTANCE
+            val claim = when (handling) {
+                PyFileHandling.ALWAYS -> true
+                PyFileHandling.NEVER -> false
+                PyFileHandling.AUTO -> !pythonLanguageAvailable
+            }
+            return if (claim) BasedPythonFileType.INSTANCE else null
         }
     }
 }

@@ -1,5 +1,6 @@
 package dev.basedpython.pycharm.actions
 
+import dev.basedpython.pycharm.env.ByLaunch
 import dev.basedpython.pycharm.lsp.BasedPythonBinaries
 import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.execution.process.ProcessOutput
@@ -33,12 +34,12 @@ internal object ByCli {
         contextFile: VirtualFile? = null,
         @Suppress("UNUSED_PARAMETER") title: String = "by",
     ): ProcessOutput? {
-        val bin = BasedPythonBinaries.resolveBy(project, contextFile)
-        if (bin == null) {
+        val launch = BasedPythonBinaries.launchBy(project, contextFile)
+        if (launch == null) {
             notifyBinaryMissing(project, "by")
             return null
         }
-        return exec(bin, args.toList(), cwd)
+        return exec(launch, args.toList(), cwd)
     }
 
     /** Run `buff` with [args]. Returns `null` if the binary cannot be located. */
@@ -49,19 +50,21 @@ internal object ByCli {
         contextFile: VirtualFile? = null,
         @Suppress("UNUSED_PARAMETER") title: String = "buff",
     ): ProcessOutput? {
-        val bin = BasedPythonBinaries.resolveBuff(project, contextFile)
-        if (bin == null) {
+        val launch = BasedPythonBinaries.launchBuff(project, contextFile)
+        if (launch == null) {
             notifyBinaryMissing(project, "buff")
             return null
         }
-        return exec(bin, args.toList(), cwd)
+        return exec(launch, args.toList(), cwd)
     }
 
-    private fun exec(bin: Path, args: List<String>, cwd: Path?): ProcessOutput {
+    private fun exec(launch: ByLaunch, args: List<String>, cwd: Path?): ProcessOutput {
         val cmd = GeneralCommandLine()
-            .withExePath(bin.toString())
+            .withExePath(launch.exe.toString())
+            .withParameters(launch.prependArgs)
             .withParameters(args)
             .withCharset(Charsets.UTF_8)
+            .withEnvironment(launch.env)
         if (cwd != null) cmd.withWorkDirectory(cwd.toFile())
         return ExecUtil.execAndGetOutput(cmd)
     }

@@ -39,8 +39,8 @@ class DownloadBinariesAction : AnAction() {
     /** Names of the binaries that currently fail to resolve for [project]. */
     private fun missingBinaries(project: Project): List<String> {
         val missing = mutableListOf<String>()
-        if (BasedPythonBinaries.resolveBy(project) == null) missing.add("by")
-        if (BasedPythonBinaries.resolveBuff(project) == null) missing.add("buff")
+        if (!BasedPythonBinaries.isByAvailable(project)) missing.add("by")
+        if (!BasedPythonBinaries.isBuffAvailable(project)) missing.add("buff")
         return missing
     }
 

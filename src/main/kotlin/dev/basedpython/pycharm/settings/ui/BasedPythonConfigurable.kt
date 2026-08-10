@@ -3,7 +3,10 @@ package dev.basedpython.pycharm.settings.ui
 import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
 import com.intellij.openapi.options.Configurable
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.fileTypes.ex.FileTypeManagerEx
 import com.intellij.openapi.ui.ComboBox
+import com.intellij.ui.SimpleListCellRenderer
+import dev.basedpython.pycharm.lang.dialect.PyFileHandling
 import com.intellij.openapi.ui.TextFieldWithBrowseButton
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBTextField
@@ -72,6 +75,11 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
         "Index generated .py in out/ (enables native Python support — requires a Python plugin)",
     )
 
+    /** Renders a [PyFileHandling] by its user-facing text while the model holds the enum. */
+    private val pyFileHandlingCombo = ComboBox(PyFileHandling.entries.toTypedArray()).apply {
+        renderer = SimpleListCellRenderer.create("") { it.display }
+    }
+
     // Per-server capability toggles (§142)
     private val byCompletion = JCheckBox("Completion")
     private val byGoToDefinition = JCheckBox("Go to definition / type definition")
@@ -127,6 +135,11 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
                 row("LSP trace level:") { cell(lspTraceCombo) }
             }
             group("Python interop") {
+                row("Treat .py as basedpython:") { cell(pyFileHandlingCombo) }
+                    .comment(
+                        "Only affects who owns the .py file type. The by server still checks .py " +
+                            "files in a basedpython project either way.",
+                    )
                 row { cell(indexGeneratedPython) }
             }
             group("by server capabilities") {
@@ -167,9 +180,18 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
         return p
     }
 
+    /**
+     * Shows the resolved command *and* which source produced it. With several sources feeding
+     * auto-detection (.venv, interpreter, uv, PATH), "what did it actually pick, and why" is the
+     * question this label exists to answer.
+     */
     private fun updateDetectedLabel() {
-        val resolved = BasedPythonBinaries.resolveBy(project)?.toString() ?: "(none — install by or set path above)"
-        detectedVenvLabel.text = "Detected venv binary: $resolved"
+        val launch = BasedPythonBinaries.launchBy(project)
+        detectedVenvLabel.text = if (launch == null) {
+            "Detected by: (none — install by or set path above)"
+        } else {
+            "Detected by: ${launch.describe()}  [${launch.sourceLabel}]"
+        }
     }
 
     private fun runVersionCheck(path: String, name: String) {
@@ -208,6 +230,7 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
             inlayReturnHints.isSelected != s.inlayReturnHints ||
             (lspTraceCombo.selectedItem as? String ?: "off") != s.lspTraceLevel ||
             indexGeneratedPython.isSelected != s.indexGeneratedPython ||
+            pyFileHandlingCombo.selectedItem != s.pyFileHandling ||
             byCompletion.isSelected != s.byCompletion ||
             byGoToDefinition.isSelected != s.byGoToDefinition ||
             byFindReferences.isSelected != s.byFindReferences ||
@@ -239,6 +262,13 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
         val indexChanged = indexGeneratedPython.isSelected != s.indexGeneratedPython
         s.indexGeneratedPython = indexGeneratedPython.isSelected
         if (indexChanged) fireRootsRescan()
+
+        val handlingChanged = pyFileHandlingCombo.selectedItem != s.pyFileHandling
+        s.pyFileHandling = pyFileHandlingCombo.selectedItem as? PyFileHandling ?: PyFileHandling.AUTO
+        // File types are cached per file; without this, open .py editors keep the old one.
+        if (handlingChanged) FileTypeManagerEx.getInstanceEx().makeFileTypesChange(
+            "basedpython .py handling changed",
+        ) {}
 
         s.byCompletion = byCompletion.isSelected
         s.byGoToDefinition = byGoToDefinition.isSelected
@@ -288,6 +318,7 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
         inlayReturnHints.isSelected = s.inlayReturnHints
         lspTraceCombo.selectedItem = s.lspTraceLevel
         indexGeneratedPython.isSelected = s.indexGeneratedPython
+        pyFileHandlingCombo.selectedItem = s.pyFileHandling
         byCompletion.isSelected = s.byCompletion
         byGoToDefinition.isSelected = s.byGoToDefinition
         byFindReferences.isSelected = s.byFindReferences

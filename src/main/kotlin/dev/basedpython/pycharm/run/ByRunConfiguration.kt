@@ -23,7 +23,7 @@ class ByRunConfiguration(project: Project, factory: ConfigurationFactory, name: 
         if (options.module.isBlank()) {
             throw RuntimeConfigurationException("Module is required (e.g. mypkg.main)")
         }
-        if (BasedPythonBinaries.resolveBy(project) == null) {
+        if (!BasedPythonBinaries.isByAvailable(project)) {
             throw RuntimeConfigurationException("by binary not found — set path in Settings | basedpython")
         }
     }
@@ -31,10 +31,8 @@ class ByRunConfiguration(project: Project, factory: ConfigurationFactory, name: 
     override fun getState(executor: Executor, environment: ExecutionEnvironment): RunProfileState {
         val opts = options
         return object : ByCommandLineState(project, opts, environment) {
-            override fun buildSubcommandArgs(): List<String> = buildList {
-                add("run")
-                add(opts.module.trim())
-            }
+            override val subcommand = "run"
+            override fun buildSubcommandArgs(): List<String> = listOf(opts.module.trim())
         }
     }
 }

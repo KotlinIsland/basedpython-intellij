@@ -20,7 +20,7 @@ class ByCheckConfiguration(project: Project, factory: ConfigurationFactory, name
         ByCheckSettingsEditor()
 
     override fun checkConfiguration() {
-        if (BasedPythonBinaries.resolveBy(project) == null) {
+        if (!BasedPythonBinaries.isByAvailable(project)) {
             throw RuntimeConfigurationException("by binary not found — set path in Settings | basedpython")
         }
     }
@@ -28,10 +28,14 @@ class ByCheckConfiguration(project: Project, factory: ConfigurationFactory, name
     override fun getState(executor: Executor, environment: ExecutionEnvironment): RunProfileState {
         val opts = options
         return object : ByCommandLineState(project, opts, environment) {
-            override fun buildSubcommandArgs(): List<String> = buildList {
-                add("check")
-                if (opts.paths.isNotBlank()) addAll(ParametersListUtil.parse(opts.paths))
-            }
+            override val subcommand = "check"
+
+            // `by check` has no `--min-version`: it type-checks rather than emitting code, so the
+            // version it cares about is the one to assume while resolving types.
+            override val pythonVersionFlag = "--python-version"
+
+            override fun buildSubcommandArgs(): List<String> =
+                if (opts.paths.isBlank()) emptyList() else ParametersListUtil.parse(opts.paths)
         }
     }
 }

@@ -2,6 +2,7 @@ package dev.basedpython.pycharm.console
 
 import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.util.execution.ParametersListUtil
+import dev.basedpython.pycharm.env.ByLaunch
 import java.nio.file.Path
 
 /**
@@ -27,21 +28,25 @@ internal object ByReplCommandLine {
     /**
      * Build the command line.
      *
-     * @param byExe      absolute path to the resolved `by` binary.
+     * @param launch     the resolved `by` launch — executable, argument prefix, and environment.
      * @param subcommand the subcommand to run; blank means "no subcommand" (bare `by`).
      * @param extraArgs  raw extra-args string (e.g. [BasedPythonSettings.byExtraArgs]);
      *                   split honoring quotes via [ParametersListUtil].
      * @param workDir    working directory for the process, or null to inherit.
      */
     fun build(
-        byExe: Path,
+        launch: ByLaunch,
         subcommand: String = DEFAULT_SUBCOMMAND,
         extraArgs: String = "",
         workDir: Path? = null,
     ): GeneralCommandLine {
         val cmd = GeneralCommandLine()
-            .withExePath(byExe.toString())
+            .withExePath(launch.exe.toString())
             .withCharset(Charsets.UTF_8)
+            .withEnvironment(launch.env)
+        // The launch prefix must precede the subcommand: for a uv launch the executable is `uv` and
+        // the prefix is what names `by`, so `repl` ahead of it would run a uv subcommand instead.
+        cmd.addParameters(launch.prependArgs)
         cmd.addParameters(parameters(subcommand, extraArgs))
         if (workDir != null) cmd.withWorkDirectory(workDir.toFile())
         return cmd

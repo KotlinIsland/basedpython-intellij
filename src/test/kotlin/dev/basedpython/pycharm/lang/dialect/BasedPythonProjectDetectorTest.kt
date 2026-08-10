@@ -1,155 +1,103 @@
 package dev.basedpython.pycharm.lang.dialect
 
-import com.intellij.testFramework.fixtures.BasePlatformTestCase
-import dev.basedpython.pycharm.settings.BasedPythonSettings
-import java.nio.file.Files
-import java.nio.file.Path
-import java.nio.file.Paths
+import junit.framework.TestCase
 
 /**
- * Decision-logic tests for [BasedPythonProjectDetector].
+ * Decision logic for [BasedPythonProjectDetector].
  *
- * The detector reads marker files directly off the project base path via `java.nio`,
- * so each test materialises (or removes) real files at [BasePlatformTestCase.getProject]'s
- * base path and then asserts the boolean outcome. Any files created are tracked and
- * deleted in [tearDown] so tests stay isolated.
+ * Everything interesting is in [BasedPythonProjectDetector.classify], which takes a base-directory
+ * listing and the head of `pyproject.toml` and answers what kind of project this is — so it can be
+ * tested without a project, a fixture, or files on disk.
+ *
+ * The behaviour these tests pin down is the fix for "don't activate in non-python projects": a bare
+ * `pyproject.toml` used to be enough to call a project basedpython, which meant every Python
+ * project had its `.py` files re-typed and a `by` server spawned.
  */
-class BasedPythonProjectDetectorTest : BasePlatformTestCase() {
+class BasedPythonProjectDetectorTest : TestCase() {
 
-    private val created = mutableListOf<Path>()
+    private fun classify(vararg names: String, pyproject: String? = null): ProjectKind =
+        BasedPythonProjectDetector.classify(names.toSet(), pyproject)
 
-    private fun base(): Path = Paths.get(project.basePath!!)
+    // ---- basedpython ----
 
-    private fun settings() = BasedPythonSettings.getInstance(project)
-
-    private fun ensureBaseDir(): Path {
-        val base = base()
-        if (!Files.exists(base)) {
-            Files.createDirectories(base)
-            created.add(base)
-        }
-        return base
+    fun `test an api lock marks a basedpython project`() {
+        assertEquals(ProjectKind.BASEDPYTHON, classify("api.lock"))
     }
 
-    /** Create a regular file named [name] at the project base; track for cleanup. */
-    private fun createMarker(name: String) {
-        val base = ensureBaseDir()
-        val p = base.resolve(name)
-        if (!Files.exists(p)) {
-            Files.createFile(p)
-            created.add(p)
-        }
+    fun `test a basedpython toml marks a basedpython project`() {
+        assertEquals(ProjectKind.BASEDPYTHON, classify("basedpython.toml"))
     }
 
-    override fun setUp() {
-        super.setUp()
-        // Documented default is byEnabled = true; make tests explicit anyway.
-        settings().byEnabled = true
+    fun `test a top-level by source marks a basedpython project`() {
+        assertEquals(ProjectKind.BASEDPYTHON, classify("main.by"))
+        assertEquals(ProjectKind.BASEDPYTHON, classify("stub.byi"))
     }
 
-    override fun tearDown() {
-        try {
-            // Delete in reverse so files go before the dir we may have made.
-            for (p in created.reversed()) {
-                try {
-                    Files.deleteIfExists(p)
-                } catch (_: Exception) {
-                    // best-effort cleanup
-                }
-            }
-            created.clear()
-        } finally {
-            super.tearDown()
-        }
+    fun `test a pyproject that mentions basedpython marks a basedpython project`() {
+        val manifest = """
+            [project]
+            name = "demo"
+            dependencies = ["basedpython"]
+        """.trimIndent()
+        assertEquals(ProjectKind.BASEDPYTHON, classify("pyproject.toml", pyproject = manifest))
     }
 
-    // -------------------------------------------------------------------------
-    // positive cases: byEnabled + a marker
-    // -------------------------------------------------------------------------
-
-    fun `test pyproject marker with by enabled is a basedpython project`() {
-        createMarker("pyproject.toml")
-        assertTrue(BasedPythonProjectDetector.isBasedPythonProject(project))
-    }
-
-    fun `test api lock marker with by enabled is a basedpython project`() {
-        createMarker("api.lock")
-        assertTrue(BasedPythonProjectDetector.isBasedPythonProject(project))
-    }
-
-    fun `test top-level by file with by enabled is a basedpython project`() {
-        createMarker("main.by")
-        assertTrue(BasedPythonProjectDetector.isBasedPythonProject(project))
-    }
-
-    fun `test any one of several markers is enough`() {
-        createMarker("pyproject.toml")
-        createMarker("api.lock")
-        createMarker("module.by")
-        assertTrue(BasedPythonProjectDetector.isBasedPythonProject(project))
-    }
-
-    // -------------------------------------------------------------------------
-    // negative: no marker
-    // -------------------------------------------------------------------------
-
-    fun `test vanilla project with no markers is not basedpython`() {
-        // No markers created.
-        assertFalse(BasedPythonProjectDetector.isBasedPythonProject(project))
-    }
-
-    fun `test unrelated file at base is not a marker`() {
-        createMarker("README.md")
-        createMarker("notes.txt")
-        assertFalse(BasedPythonProjectDetector.isBasedPythonProject(project))
-    }
-
-    fun `test a py file at base is not a marker on its own`() {
-        // Only `.by` (not `.py`) counts as a source marker.
-        createMarker("script.py")
-        assertFalse(BasedPythonProjectDetector.isBasedPythonProject(project))
-    }
-
-    // -------------------------------------------------------------------------
-    // negative: byEnabled gate
-    // -------------------------------------------------------------------------
-
-    fun `test marker present but by disabled is not basedpython`() {
-        createMarker("pyproject.toml")
-        settings().byEnabled = false
-        assertFalse(BasedPythonProjectDetector.isBasedPythonProject(project))
-    }
-
-    fun `test by file present but by disabled is not basedpython`() {
-        createMarker("main.by")
-        settings().byEnabled = false
-        assertFalse(BasedPythonProjectDetector.isBasedPythonProject(project))
-    }
-
-    fun `test disabling then re-enabling by flips the result`() {
-        createMarker("api.lock")
-
-        settings().byEnabled = false
-        assertFalse(BasedPythonProjectDetector.isBasedPythonProject(project))
-
-        settings().byEnabled = true
-        assertTrue(BasedPythonProjectDetector.isBasedPythonProject(project))
-    }
-
-    // -------------------------------------------------------------------------
-    // stability / purity
-    // -------------------------------------------------------------------------
-
-    fun `test repeated calls are stable and side-effect free`() {
-        createMarker("pyproject.toml")
-        val first = BasedPythonProjectDetector.isBasedPythonProject(project)
-        val second = BasedPythonProjectDetector.isBasedPythonProject(project)
-        assertEquals(first, second)
-        assertTrue(first)
-        // Calling the detector must not have created any files.
-        assertFalse(
-            "detector must not create api.lock",
-            Files.exists(base().resolve("api.lock")),
+    fun `test a tool basedpython table marks a basedpython project`() {
+        assertEquals(
+            ProjectKind.BASEDPYTHON,
+            classify("pyproject.toml", pyproject = "[tool.basedpython]\nstrict = true\n"),
         )
+    }
+
+    // ---- plain python ----
+
+    fun `test a bare pyproject is only a python project`() {
+        val manifest = """
+            [project]
+            name = "demo"
+            dependencies = ["requests"]
+        """.trimIndent()
+        assertEquals(ProjectKind.PYTHON, classify("pyproject.toml", pyproject = manifest))
+    }
+
+    fun `test the usual python layout markers are python`() {
+        assertEquals(ProjectKind.PYTHON, classify("setup.py"))
+        assertEquals(ProjectKind.PYTHON, classify("requirements.txt"))
+        assertEquals(ProjectKind.PYTHON, classify("uv.lock"))
+        assertEquals(ProjectKind.PYTHON, classify(".venv"))
+    }
+
+    fun `test a py source at the base is a python project`() {
+        assertEquals(ProjectKind.PYTHON, classify("script.py"))
+        assertEquals(ProjectKind.PYTHON, classify("stub.pyi"))
+    }
+
+    // ---- neither ----
+
+    fun `test a project with nothing python in it is other`() {
+        assertEquals(ProjectKind.OTHER, classify("Cargo.toml", "src", "README.md"))
+    }
+
+    fun `test an empty base directory is other`() {
+        assertEquals(ProjectKind.OTHER, classify())
+    }
+
+    fun `test unrelated files are not markers`() {
+        assertEquals(ProjectKind.OTHER, classify("README.md", "notes.txt", "index.js"))
+    }
+
+    // ---- details ----
+
+    fun `test extensions are matched case-insensitively`() {
+        assertEquals(ProjectKind.BASEDPYTHON, classify("MAIN.BY"))
+        assertEquals(ProjectKind.PYTHON, classify("SCRIPT.PY"))
+    }
+
+    fun `test a basedpython marker wins over plain python markers`() {
+        assertEquals(ProjectKind.BASEDPYTHON, classify("setup.py", "requirements.txt", "main.by"))
+    }
+
+    fun `test a name that merely starts like a marker does not count`() {
+        assertEquals(ProjectKind.OTHER, classify("pyproject.toml.bak", "apilock"))
     }
 }

@@ -39,7 +39,7 @@ class ByTestConfiguration(project: Project, factory: ConfigurationFactory, name:
         ByTestSettingsEditor()
 
     override fun checkConfiguration() {
-        if (BasedPythonBinaries.resolveBy(project) == null) {
+        if (!BasedPythonBinaries.isByAvailable(project)) {
             throw RuntimeConfigurationException("by binary not found — set path in Settings | basedpython")
         }
     }
@@ -48,10 +48,13 @@ class ByTestConfiguration(project: Project, factory: ConfigurationFactory, name:
         val opts = options
         val config = this
         return object : ByCommandLineState(project, opts, environment) {
-            override fun buildSubcommandArgs(): List<String> = buildList {
-                add("test")
-                if (opts.paths.isNotBlank()) addAll(ParametersListUtil.parse(opts.paths))
-            }
+            override val subcommand = "test"
+
+            // `by test` takes no version flag.
+            override val pythonVersionFlag: String? = null
+
+            override fun buildSubcommandArgs(): List<String> =
+                if (opts.paths.isBlank()) emptyList() else ParametersListUtil.parse(opts.paths)
 
             override fun createConsole(executor: Executor): ConsoleView {
                 val props = object : SMTRunnerConsoleProperties(config, FRAMEWORK_NAME, executor),

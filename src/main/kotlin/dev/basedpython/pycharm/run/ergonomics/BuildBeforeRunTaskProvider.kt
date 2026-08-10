@@ -49,7 +49,7 @@ class BuildBeforeRunTaskProvider : BeforeRunTaskProvider<BuildBeforeRunTask>() {
         BuildBeforeRunTask().apply { isEnabled = false }
 
     override fun canExecuteTask(configuration: RunConfiguration, task: BuildBeforeRunTask): Boolean =
-        BasedPythonBinaries.resolveBy(configuration.project) != null
+        BasedPythonBinaries.isByAvailable(configuration.project)
 
     override fun executeTask(
         context: DataContext,
@@ -58,19 +58,23 @@ class BuildBeforeRunTaskProvider : BeforeRunTaskProvider<BuildBeforeRunTask>() {
         task: BuildBeforeRunTask,
     ): Boolean {
         val project = configuration.project
-        val by = BasedPythonBinaries.resolveBy(project)
-        if (by == null) {
+        val launch = BasedPythonBinaries.launchBy(project)
+        if (launch == null) {
             reportFailure(project, BasedPythonBundle.message("runConfig.buildBeforeRun.binaryMissing"))
             return false
         }
 
         val workDir = resolveWorkingDir(project, configuration)
         val cmd = GeneralCommandLine()
-            .withExePath(by.toString())
+            .withExePath(launch.exe.toString())
             .withCharset(Charsets.UTF_8)
+            // Must precede "build": for a uv launch the exe is `uv`, so without the prefix this
+            // would run `uv build` — packaging the project into dist/ instead of transpiling it.
+            .withParameters(launch.prependArgs)
             .withParameters("build")
             .withWorkDirectory(FileUtil.toSystemDependentName(workDir))
             .withParentEnvironmentType(GeneralCommandLine.ParentEnvironmentType.CONSOLE)
+            .withEnvironment(launch.env)
 
         return try {
             val output = CapturingProcessHandler(cmd).runProcess(BUILD_TIMEOUT_MS)

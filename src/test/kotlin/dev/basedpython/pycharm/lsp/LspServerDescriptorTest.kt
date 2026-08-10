@@ -20,6 +20,8 @@ import com.intellij.platform.lsp.api.customization.LspTypeHierarchyDisabled
 import com.intellij.testFramework.LightVirtualFile
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
+import dev.basedpython.pycharm.env.ByEnvironmentKind
+import dev.basedpython.pycharm.env.ByLaunch
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import java.nio.file.Paths
 
@@ -38,8 +40,14 @@ class LspServerDescriptorTest : BasePlatformTestCase() {
 
   private val dummyBinary = Paths.get("/nonexistent/fake-binary")
 
-  private fun byDescriptor() = ByLspServerDescriptor(project, dummyBinary, emptyList())
-  private fun buffDescriptor() = BuffLspServerDescriptor(project, dummyBinary, emptyList())
+  private fun launch(
+    exe: java.nio.file.Path = dummyBinary,
+    prependArgs: List<String> = emptyList(),
+    env: Map<String, String> = emptyMap(),
+  ) = ByLaunch(exe, prependArgs, env, venvRoot = null, kind = ByEnvironmentKind.PATH)
+
+  private fun byDescriptor() = ByLspServerDescriptor(project, launch(), emptyList())
+  private fun buffDescriptor() = BuffLspServerDescriptor(project, launch(), emptyList())
 
   // ---------------------------------------------------------------------------
   // presentable names
@@ -158,6 +166,50 @@ class LspServerDescriptorTest : BasePlatformTestCase() {
     assertNotSame(LspCompletionDisabled, c.completionCustomizer)
     assertNotSame(LspFindReferencesDisabled, c.findReferencesCustomizer)
     assertNotSame(LspRenameDisabled, c.renameCustomizer)
+  }
+
+  // ---------------------------------------------------------------------------
+  // command line assembly (builds a command line; never launches it)
+  // ---------------------------------------------------------------------------
+
+  fun `test a direct binary launch is exe then server`() {
+    val cmd = ByLspServerDescriptor(project, launch(), emptyList()).createCommandLine()
+    assertEquals(dummyBinary.toString(), cmd.exePath)
+    assertEquals(listOf("server"), cmd.parametersList.list)
+  }
+
+  fun `test a uv launch puts the prepend args before the server subcommand`() {
+    // uv is only "just another source" if its argument prefix lands in the right place:
+    // `uv run --project <dir> by server`, not `uv server run …`.
+    val uv = Paths.get("/usr/local/bin/uv")
+    val desc = ByLspServerDescriptor(
+      project,
+      launch(exe = uv, prependArgs = listOf("run", "--project", "/w", "by")),
+      emptyList(),
+    )
+    val cmd = desc.createCommandLine()
+    assertEquals(uv.toString(), cmd.exePath)
+    assertEquals(listOf("run", "--project", "/w", "by", "server"), cmd.parametersList.list)
+  }
+
+  fun `test extra args follow the server subcommand`() {
+    val desc = ByLspServerDescriptor(project, launch(), listOf("--verbose"))
+    assertEquals(listOf("server", "--verbose"), desc.createCommandLine().parametersList.list)
+  }
+
+  fun `test the activation environment reaches the server process`() {
+    // Resolving `.venv/bin/by` but running it with the IDE's own environment lets anything the
+    // server spawns escape the venv it came from; the descriptor must carry activation through.
+    val env = mapOf("VIRTUAL_ENV" to "/w/.venv", "PATH" to "/w/.venv/bin")
+    val cmd = ByLspServerDescriptor(project, launch(env = env), emptyList()).createCommandLine()
+    assertEquals("/w/.venv", cmd.environment["VIRTUAL_ENV"])
+    assertEquals("/w/.venv/bin", cmd.environment["PATH"])
+  }
+
+  fun `test buff assembles its command line the same way`() {
+    val cmd = BuffLspServerDescriptor(project, launch(), emptyList()).createCommandLine()
+    assertEquals(dummyBinary.toString(), cmd.exePath)
+    assertEquals(listOf("server"), cmd.parametersList.list)
   }
 
   override fun tearDown() {

@@ -1,41 +1,140 @@
 package dev.basedpython.pycharm.lang.dialect
 
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.vfs.VirtualFileManager
+import com.intellij.psi.util.CachedValueProvider
+import com.intellij.psi.util.CachedValuesManager
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
 
 /**
- * Cheap, side-effect-free detection of whether a [Project] should be treated as a
- * basedpython project (FEATURES.md §16).
+ * What kind of project this is, from cheapest evidence available.
  *
- * A project counts as basedpython when:
- *   1. the `by` LSP server is enabled in [BasedPythonSettings] (`byEnabled`), **and**
- *   2. the project carries a basedpython marker at its base path — either a project
- *      manifest (`pyproject.toml` / `api.lock`) or a top-level `.by` source file.
+ * Ordered: every basedpython project is also a Python project.
+ */
+enum class ProjectKind {
+    /** Nothing Python-shaped at the project base. */
+    OTHER,
+
+    /** Python, but nothing says basedpython. */
+    PYTHON,
+
+    /** Carries a basedpython marker. */
+    BASEDPYTHON,
+}
+
+/**
+ * Cheap, side-effect-free detection of what a [Project] is (FEATURES.md §16).
  *
- * The marker check is deliberately shallow: it inspects only the project base
- * directory (a single, bounded directory listing) so it never triggers indexing or
- * deep file-system walks. All file-system access is null-safe and swallows IO
- * errors (returning `false`), so the detector is safe to call from hot paths such as
- * a {@code FileTypeOverrider}.
+ * Two questions, deliberately separated:
+ *
+ *  - [isBasedPythonProject] gates anything that claims files or speaks to `by`: re-typing `.py`,
+ *    starting the language servers for `.py`, the welcome notification.
+ *  - [isPythonProject] gates the merely-visible: the status bar widget. A Rust project with one
+ *    stray script should not grow a basedpython widget, and it definitely should not spawn `by`.
+ *
+ * A bare `pyproject.toml` used to be enough to call a project basedpython, which meant *every*
+ * Python project got its `.py` files re-typed and a language server spawned. It now only counts
+ * when the manifest actually mentions basedpython.
+ *
+ * The scan is a single, bounded listing of the project base directory — no indexing, no deep walks
+ * — and the verdict is cached until the VFS structure changes, because [isBasedPythonProject] sits
+ * on the file-type resolution hot path.
  */
 object BasedPythonProjectDetector {
 
-    /** Manifest files that, when present at the base, mark a basedpython project. */
-    private val MARKER_FILES: List<String> = listOf("pyproject.toml", "api.lock")
+    /** Manifests that mark a project as basedpython on their own. */
+    private val BASEDPYTHON_MARKER_FILES = setOf("api.lock", "basedpython.toml")
+
+    /** Extensions whose presence at the base marks a basedpython project. */
+    private val BASEDPYTHON_EXTENSIONS = setOf("by", "byi")
+
+    /** Manifests and layout markers that mark a project as Python. */
+    private val PYTHON_MARKER_FILES = setOf(
+        "pyproject.toml",
+        "setup.py",
+        "setup.cfg",
+        "requirements.txt",
+        "Pipfile",
+        "poetry.lock",
+        "uv.lock",
+        "tox.ini",
+        "conftest.py",
+        ".venv",
+        "ty.toml",
+    )
+
+    /** Extensions whose presence at the base marks a Python project. */
+    private val PYTHON_EXTENSIONS = setOf("py", "pyi", "pyx")
+
+    /** Only this much of `pyproject.toml` is read; the interesting tables are near the top. */
+    private const val PYPROJECT_READ_LIMIT = 64 * 1024
 
     /**
-     * @return true when [project] looks like a basedpython project per the heuristic above.
+     * True when [project] should be treated as basedpython: the `by` server is enabled and the base
+     * directory carries a basedpython marker.
      */
-    fun isBasedPythonProject(project: Project): Boolean {
-        if (!BasedPythonSettings.getInstance(project).byEnabled) return false
-        val base = basePath(project) ?: return false
-        return hasManifestMarker(base) || hasTopLevelByFile(base)
+    fun isBasedPythonProject(project: Project): Boolean =
+        BasedPythonSettings.getInstance(project).byEnabled && kind(project) == ProjectKind.BASEDPYTHON
+
+    /**
+     * True when [project] looks like Python at all, basedpython or otherwise.
+     *
+     * Not gated on `byEnabled`: this answers "would a basedpython user expect to see us here",
+     * which stays true while the server is switched off.
+     */
+    fun isPythonProject(project: Project): Boolean = kind(project) != ProjectKind.OTHER
+
+    /** The cached verdict for [project], recomputed when the VFS structure changes. */
+    fun kind(project: Project): ProjectKind =
+        CachedValuesManager.getManager(project).getCachedValue(project) {
+            CachedValueProvider.Result.create(
+                scan(project),
+                VirtualFileManager.VFS_STRUCTURE_MODIFICATIONS,
+            )
+        }
+
+    private fun scan(project: Project): ProjectKind {
+        val base = basePath(project) ?: return ProjectKind.OTHER
+        val names = baseEntryNames(base) ?: return ProjectKind.OTHER
+        val pyproject =
+            if ("pyproject.toml" in names) readHead(base.resolve("pyproject.toml")) else null
+        return classify(names, pyproject)
     }
 
-    /** Project base path as a [Path], or null when the project has no base path. */
+    /**
+     * The verdict for a base directory listing, as pure logic.
+     *
+     * @param names entry names directly inside the project base directory
+     * @param pyprojectText the head of `pyproject.toml`, or null when there is none
+     */
+    fun classify(names: Set<String>, pyprojectText: String?): ProjectKind {
+        val hasBasedPythonMarker =
+            names.any { it in BASEDPYTHON_MARKER_FILES || extensionOf(it) in BASEDPYTHON_EXTENSIONS } ||
+                (pyprojectText != null && mentionsBasedPython(pyprojectText))
+        if (hasBasedPythonMarker) return ProjectKind.BASEDPYTHON
+
+        val hasPythonMarker =
+            names.any { it in PYTHON_MARKER_FILES || extensionOf(it) in PYTHON_EXTENSIONS }
+        return if (hasPythonMarker) ProjectKind.PYTHON else ProjectKind.OTHER
+    }
+
+    /**
+     * True when a `pyproject.toml` opts into basedpython — either a `[tool.basedpython]` table or
+     * `basedpython` among the requirements.
+     *
+     * Matched textually rather than by parsing TOML: this runs before anything is indexed, the
+     * answer only has to be right about the word appearing, and a false positive costs a language
+     * server the user was already asking for.
+     */
+    private fun mentionsBasedPython(text: String): Boolean = text.contains("basedpython")
+
+    /** Lowercased extension of [name], or "" when it has none. */
+    private fun extensionOf(name: String): String =
+        name.substringAfterLast('.', "").lowercase()
+
     private fun basePath(project: Project): Path? =
         project.basePath?.let {
             try {
@@ -45,35 +144,25 @@ object BasedPythonProjectDetector {
             }
         }
 
-    /** True when a basedpython manifest file exists directly at [base]. */
-    private fun hasManifestMarker(base: Path): Boolean =
-        MARKER_FILES.any { name ->
-            try {
-                Files.isRegularFile(base.resolve(name))
-            } catch (_: RuntimeException) {
-                false
-            }
-        }
-
-    /**
-     * True when the base directory contains at least one top-level `.by` source file.
-     * Only the base directory itself is scanned (no recursion) to keep the check cheap.
-     */
-    private fun hasTopLevelByFile(base: Path): Boolean {
-        if (!safeIsDirectory(base)) return false
-        return try {
-            Files.newDirectoryStream(base, "*.by").use { stream ->
-                stream.iterator().hasNext()
+    /** Names of the entries directly inside [base], or null when it cannot be listed. */
+    private fun baseEntryNames(base: Path): Set<String>? =
+        try {
+            Files.newDirectoryStream(base).use { stream ->
+                stream.mapTo(mutableSetOf()) { it.fileName.toString() }
             }
         } catch (_: Exception) {
-            false
+            null
         }
-    }
 
-    private fun safeIsDirectory(path: Path): Boolean =
+    /** The first [PYPROJECT_READ_LIMIT] bytes of [file], or null when it cannot be read. */
+    private fun readHead(file: Path): String? =
         try {
-            Files.isDirectory(path)
-        } catch (_: RuntimeException) {
-            false
+            Files.newInputStream(file).use { input ->
+                val buffer = ByteArray(PYPROJECT_READ_LIMIT)
+                val read = input.readNBytes(buffer, 0, buffer.size)
+                String(buffer, 0, read, Charsets.UTF_8)
+            }
+        } catch (_: Exception) {
+            null
         }
 }

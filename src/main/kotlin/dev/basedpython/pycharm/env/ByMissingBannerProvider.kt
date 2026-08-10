@@ -24,9 +24,12 @@ import javax.swing.JComponent
 /**
  * Shows a banner above open `.by` files when the `by` binary cannot be resolved.
  *
- * Detection delegates to [BasedPythonBinaries.resolveBy]; a `null` result means "missing"
- * and the banner is shown. Actions: install via `uv add --dev basedpython`, open the
- * basedpython settings page, or dismiss for the current editor session.
+ * Detection delegates to [BasedPythonBinaries.isByAvailable]; the banner shows when `by` cannot be
+ * resolved. Actions: install via `uv add --dev basedpython`, open the basedpython settings page, or
+ * dismiss for the current editor session.
+ *
+ * This is the consent-gated bootstrap path. Auto-detection deliberately never invokes uv itself
+ * (see [ByEnvironmentKind.UV]), so an environment only ever gets created because the user clicked.
  */
 class ByMissingBannerProvider : EditorNotificationProvider {
 
@@ -37,7 +40,7 @@ class ByMissingBannerProvider : EditorNotificationProvider {
         if (file.fileType !is BasedPythonFileType) return null
         if (dismissed.contains(file)) return null
         // Show only when `by` is unresolved.
-        if (BasedPythonBinaries.resolveBy(project) != null) return null
+        if (BasedPythonBinaries.isByAvailable(project)) return null
 
         return Function { _ -> buildPanel(project, file) }
     }

@@ -19,6 +19,9 @@ dependencies {
 
     // Bundled plugins used by features (present in IDEA/PyCharm 2026.1+)
     bundledPlugin("org.toml.lang")
+    // Optional at runtime (see the optional <depends> in plugin.xml); needed to compile the
+    // code-fence language suggester.
+    bundledPlugin("org.intellij.plugins.markdown")
     // The SM test runner (SMTRunnerConsoleProperties, TestConsoleProperties, …) left the core
     // platform in 2026.2 and now ships as this bundled plugin.
     bundledPlugin("intellij.testRunner.plugin")

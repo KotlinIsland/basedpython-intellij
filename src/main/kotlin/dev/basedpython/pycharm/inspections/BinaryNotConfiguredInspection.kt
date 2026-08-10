@@ -28,7 +28,7 @@ class BinaryNotConfiguredInspection : LocalInspectionTool() {
     ): Array<ProblemDescriptor> {
         if (file !is BasedPythonFile) return ProblemDescriptor.EMPTY_ARRAY
         val project = file.project
-        if (BasedPythonBinaries.resolveBy(project) != null) return ProblemDescriptor.EMPTY_ARRAY
+        if (BasedPythonBinaries.isByAvailable(project)) return ProblemDescriptor.EMPTY_ARRAY
 
         val firstElement = file.firstChild ?: return ProblemDescriptor.EMPTY_ARRAY
         val descriptor = manager.createProblemDescriptor(
