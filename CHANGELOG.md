@@ -82,6 +82,10 @@
   tracebacks onto `.by` sources, but the console filter only understood `file.by:12:5`
   and not CPython's `File "…", line 12`, so every frame opened at line 1. pytest failure
   lines now resolve to the `.by` file they were transpiled from, too.
+- The `by` version check no longer reports every up-to-date install as outdated. Its
+  floor was `0.1.0` while basedpython is at `0.0.1a9`, so any `by` that reported a real
+  version would have been flagged forever; it was quiet only because the binary answers
+  `by unknown`.
 - Running tests no longer executes the suite twice. The console was built by calling
   `startProcess()` a second time, which spawned a second `by run pytest`; every test showed
   up twice in the tree and Stop killed only one of the two processes.

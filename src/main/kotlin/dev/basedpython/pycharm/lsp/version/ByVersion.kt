@@ -2,9 +2,19 @@ package dev.basedpython.pycharm.lsp.version
 
 /**
  * Minimum supported `by` CLI version. Versions below this trigger a one-time
- * warning notification on project open. Kept as a low floor on purpose.
+ * warning notification on project open.
+ *
+ * **This must never exceed a version that actually exists.** basedpython is at `0.0.1a9`, so the
+ * previous floor of `0.1.0` was above every release there has ever been: it stayed quiet only
+ * because the binary currently answers `by --version` with `by unknown`, which parses to nothing.
+ * The moment `by` stamps its real version, that floor would have told every user their up-to-date
+ * install was out of date, forever.
+ *
+ * There is no known-bad older release to warn about, so the floor sits at the bottom of the
+ * current series and the check is effectively a guard against something ancient. Raise it only for
+ * a version the plugin genuinely requires, and never past the latest published one.
  */
-const val MIN_BY_VERSION: String = "0.1.0"
+const val MIN_BY_VERSION: String = "0.0.1"
 
 /**
  * A parsed semantic-ish version (`major.minor.patch`). Trailing components
