@@ -9,6 +9,8 @@
     <depends>org.toml.lang</depends>
     <!-- Optional: adds `by` / `bython` markdown code fences when the Markdown plugin is present. -->
     <depends optional="true" config-file="basedpython-markdown.xml">org.intellij.plugins.markdown</depends>
+    <!-- The SM test runner left the core platform in 2026.2; see basedpython-testrunner.xml. -->
+    <depends optional="true" config-file="basedpython-testrunner.xml">intellij.testRunner.plugin</depends>
 
     <!-- The platform's Debug Adapter Protocol client, which `.by` debugging is built on. A platform
          module rather than a plugin, so it is declared the v2 way; the legacy <depends> entries

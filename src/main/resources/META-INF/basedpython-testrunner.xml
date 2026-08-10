@@ -1,0 +1,12 @@
+<!--
+  Loaded only when the Test Runner plugin is present.
+
+  It carries no extensions: the point is the dependency itself. The SM test runner
+  (SMTRunnerConsoleProperties, OutputToGeneralTestEventsConverter, SMTestLocator, …) left the core
+  platform in 2026.2 and now ships as the bundled `intellij.testRunner.plugin`, so without this the
+  test configuration's classes do not resolve there — 19 NoSuchClassError risks, which is what the
+  plugin verifier reports against IU-262. Declared *optional* because on 2026.1 those classes are
+  still in the platform and no such plugin exists; a hard dependency would make this plugin fail to
+  load there outright.
+-->
+<idea-plugin/>
