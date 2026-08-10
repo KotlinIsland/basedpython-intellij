@@ -89,7 +89,7 @@ see FEATURES.md §5), and `ByDapXDebugProcess` puts the run configuration's own 
 handler back, since `DapXDebugProcess` otherwise builds a console over the adapter's process and
 `by run`'s output — the transpile step included — never travels over DAP.
 
-## The three things that are easy to get wrong
+## The four things that are easy to get wrong
 
 **Ordering against the breakpoints.** The platform answers `initialized` by submitting a command
 that releases the configuration sender, which sends `setBreakpoints` for every file — addressed to
@@ -126,7 +126,21 @@ The JSON file is the readiness signal *and* the error channel. Waiting on it rat
 port is what lets a failure be reported instead of merely timing out: `by run` transpiles the whole
 project before the interpreter starts, which can outlast any reasonable connect-retry budget, and
 an interpreter with no `debugpy` never opens a port at all. A debuggee that cannot import `debugpy`
-writes an error naming its own `sys.executable` and the `pip install` line for it.
+writes an error naming its own `sys.executable`, and the IDE turns that into a notification with
+an **Install debugpy** action on it. The command behind that action is chosen on the IDE side, not
+in the bootstrap: a uv-managed project gets `uv add --dev debugpy`, because a bare `pip install`
+there lands in an environment the next sync rebuilds from the lock file and the package silently
+disappears again; everything else gets `<interpreter> -m pip install debugpy`, aimed at the exact
+executable that reported the failure.
+
+Reporting it this way rather than by throwing is deliberate. `DapDebugSession.initialize` wraps
+anything `launchDebugAdapter` throws in a `DapInitializationException` whose `userVisible` flag is
+`e !is CantRunException.CustomProcessedCantRunException`, and `DapXDebugProcess` rethrows the
+user-visible ones out of a coroutine — where a missing package surfaces as an "Unhandled exception"
+box naming `CoroutineScheduler` and `Rete`. So the notification is raised here and the throw is the
+silenced kind. The debuggee is killed on the way out, too: the bootstrap fails at interpreter
+startup, before the program body runs, so otherwise pressing Debug would hit no breakpoints and
+still run the program to completion with all its side effects.
 
 Which interpreter that is deserves care. `by run` uses `PYTHON`, or else `python3` from `PATH` —
 **not** the project `.venv` by construction. But every `by` launch from this plugin goes out with

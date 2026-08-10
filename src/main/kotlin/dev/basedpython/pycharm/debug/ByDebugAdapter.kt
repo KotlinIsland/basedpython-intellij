@@ -1,5 +1,6 @@
 package dev.basedpython.pycharm.debug
 
+import com.intellij.execution.CantRunException
 import com.intellij.execution.ExecutionException
 import com.intellij.execution.ExecutionResult
 import com.intellij.execution.configurations.RunProfileState
@@ -106,11 +107,13 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
         val processHandler = executionResult?.processHandler
 
         val info = awaitDebuggeeInfo(setup.infoFile) { processHandler?.isProcessTerminated != true }
-            ?: throw ExecutionException(BasedPythonBundle.message("debug.error.noReport"))
+            ?: fail(BasedPythonBundle.message("debug.error.noReport"), null, processHandler)
 
         if (!info.isListening) {
-            throw ExecutionException(
-                info.message ?: BasedPythonBundle.message("debug.error.bootstrapFailedGeneric")
+            fail(
+                info.message ?: BasedPythonBundle.message("debug.error.bootstrapFailedGeneric"),
+                info.python,
+                processHandler,
             )
         }
 
@@ -158,6 +161,26 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
         startRequestType,
         startRequestArguments,
     )
+
+    /**
+     * Report why the session cannot start, then abort without the platform turning it into an
+     * "Unhandled exception" box.
+     *
+     * `DapDebugSession.initialize` wraps whatever [launchDebugAdapter] throws in a
+     * `DapInitializationException` whose `userVisible` flag is `e !is CustomProcessedCantRunException`,
+     * and `DapXDebugProcess` rethrows the user-visible ones out of a coroutine — where they surface
+     * as an IDE error naming `CoroutineScheduler` and `Rete`. A missing `debugpy` is an ordinary,
+     * one-command-away situation; it gets a notification with that command on it instead.
+     *
+     * The debuggee is killed on the way out. The bootstrap reports a failure at interpreter startup
+     * — before the program body runs — so without this the user would press Debug, get no
+     * breakpoints, and still have the program run to completion with all its side effects.
+     */
+    private fun fail(message: String, python: String?, processHandler: ProcessHandler?): Nothing {
+        processHandler?.destroyProcess()
+        reportDebugStartFailure(project, message, ByDebugpyInstall.plan(project, python))
+        throw CantRunException.CustomProcessedCantRunException()
+    }
 
     /**
      * A session can be perfectly healthy and still have nothing to map — an older `by` that does

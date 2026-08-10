@@ -102,8 +102,11 @@ def _activate(port):
             "status": "error",
             "python": sys.executable,
             "runDir": run_dir,
-            "message": "cannot import debugpy ({0}) — install it into the interpreter that "
-                       "by run uses: {1} -m pip install debugpy".format(exc, sys.executable),
+            # States the fact and names the interpreter; it deliberately does not prescribe a
+            # command. Only the IDE knows whether this project is uv-managed, where a plain
+            # `pip install` would be undone by the next sync.
+            "message": "debugpy is not installed in the interpreter by run uses ({0}): {1}"
+                       .format(exc, sys.executable),
         })
         return
 
