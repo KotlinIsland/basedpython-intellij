@@ -8,27 +8,30 @@ Status key: `[x]` done · `[~]` partial · `[ ]` todo
 
 ## 1. Language registration & file type
 - [x] `.by` file type + icon
-- [x] Language singleton, parser definition (flat)
-- [x] Real PSI tree (composite nodes: defs, classes, imports, params, blocks, decorators) — lang.psi.BasedPythonPsiElements + lang.parser.BasedPythonParser
-- [x] Indentation-aware lexer (INDENT/DEDENT/STATEMENT_BREAK tokens) — lang.parser.BasedPythonIndentingLexer
+- [x] Language singleton, parser definition (flat — file node plus one leaf per token, nothing more)
+- [x] ~~Real PSI tree (composite nodes)~~ **removed**: a second, always-behind implementation of a grammar the `by` server already knows. Its only consumer was the structure view, which now comes from LSP document symbols. `lang.parser.BasedPythonParser`, `lang.parser.BasedPythonIndentingLexer` and `lang.psi.*` are gone
 - [x] f-string interpolation sub-lexing (highlight `{expr}` inside strings) — highlight.fstring.FStringInterpolation (pure helper) + FStringInterpolationAnnotator; reuses FSTRING_INTERP color key
 - [x] Associate `.pyi` stubs + `.by` variants (no separate `.by` stub variant exists; `.pyi` handled by Python support — N/A)
-- [x] Dialect detection: treat `.py` in basedpython project as basedpython-aware — lang.dialect.BasedPythonFileTypeOverrider + BasedPythonProjectDetector (byEnabled + marker file: pyproject.toml/api.lock/top-level .by); only overrides .py in basedpython projects
+- [x] Dialect detection: treat `.py` in basedpython project as basedpython-aware — lang.dialect.BasedPythonFileTypeOverrider + BasedPythonProjectDetector. A basedpython marker is `api.lock`, `basedpython.toml`, a top-level `.by`/`.byi`, or a `pyproject.toml` that mentions basedpython — a *bare* `pyproject.toml` is only a Python project, and claiming those was what made the plugin activate everywhere
+- [x] Who owns `.py` is a setting (lang.dialect.PyFileHandling: auto / never / always), defaulting to "only when no other plugin provides the Python language" so the plugin works alongside PyCharm instead of taking `.py` from it. The `by` server still attaches to `.py` either way
 - [x] File-type icon + marketplace logo (pluginIcon.svg light/dark)
 
 ## 2. Syntax highlighting
 
 **Policy: the `by` LSP is the source of truth for semantic colour and is always preferred when
-available.** It knows the types and symbols the annotator can only guess at, and it tracks the
-language on its own — new syntax colours with no plugin change. The lexer stays regardless (the
-platform requires a lexer to register the language, and semantic tokens never cover strings,
-comments, numbers, operators or brackets). Everything marked *no-LSP fallback* below is **very low
-priority**: basedpython is unusable without `by`, so don't invest in fallback fidelity, and never
-let it override a semantic token.
+available.** It knows the types and symbols a token-stream heuristic can only guess at, and it
+tracks the language on its own — new syntax colours with no plugin change. The lexer stays
+regardless (the platform requires one to register the language, and semantic tokens never cover
+strings, comments, numbers, operators or brackets).
+
+There is no longer a no-LSP fallback for anything *semantic*, and that is deliberate: basedpython is
+not usable without `by`, so an approximate second implementation bought nothing and cost a
+permanent maintenance debt against a language that keeps moving. Without a server a `.by` file gets
+lexical colour only. Don't reintroduce guessed semantic colour; fix the LSP path instead.
 
 - [x] Lexer-driven keyword/string/number/comment/operator highlighting (needed in all modes)
-- [x] basedpython extras (`?.`, `??`, `final`, `override`, `protocol`, `let`, `newtype`, `data class`, etc.) — keyword set is a *no-LSP fallback*; a stale list is tolerable since the server reports keywords itself
-- [x] Annotator-level semantic coloring (builtins, self/cls, decorators, type names) — *no-LSP fallback, very low priority*; approximate by design, superseded by semantic tokens
+- [x] basedpython extras (`?.`, `??`, `final`, `override`, `protocol`, `let`, `newtype`, `data class`, etc.) — lexer keyword set; a stale list is tolerable since the server reports keywords itself
+- [x] ~~Annotator-level semantic coloring (builtins, self/cls, decorators, type names)~~ **removed**: every one of those is a question about what the code means, which `by` answers from real types and reports as a semantic token. `highlight.BasedPythonAnnotator` and `highlight.BasedPythonSoftKeywords` are gone; `highlight.StringEscapeAnnotator` keeps the one part a semantic token cannot carry (escapes inside a literal)
 - [x] LSP semantic tokens → color scheme keys — lsp.semantic.BasedPythonSemanticTokensMapping (pure) + BasedPythonLspSemanticTokensSupport, wired into ByLspServerDescriptor.semanticTokensCustomizer; maps LSP token types/modifiers to basedpython TextAttributesKeys (themeable)
 - [x] String escape sequence highlighting
 - [x] f-string interpolation highlighting
@@ -93,9 +96,9 @@ let it override a semantic token.
 - [x] Inline "transpile this snippet" for selection (transpile.selection.TranspileSelectionAction)
 
 ## 8. Code intelligence (beyond LSP)
-- [x] Structure view (classes, methods, fields) — indent-scanner based
-- [x] Breadcrumbs
-- [x] Code folding (imports, functions, classes, multiline strings, regions)
+- [x] Structure view — LSP document symbols. The platform's `LspStructureViewFactory` is registered for every language; the plugin's own factory shadowed it
+- [x] Breadcrumbs — LSP document symbols (`LspFileBreadcrumbsCollector`)
+- [x] Code folding — LSP folding ranges (`LspFoldingBuilder`). Folding collects builders via `allForLanguageOrAny`, so the plugin's own builder ran *alongside* the LSP one and doubled up the regions
 - [x] Surround-with (try/except, if, while, brackets)
 - [x] Smart enter / smart backspace (dedent)
 - [x] Move statement up/down (indentation-block aware)
@@ -131,7 +134,7 @@ let it override a semantic token.
 - [~] Move file/symbol + update imports — moving a file is supported by the platform; auto-rewriting import statements across the project needs cross-file symbol resolution, delegated to the `by` LSP (which updates references on rename). Native move-with-import-update needs a local resolver the plugin defers to the LSP
 
 ## 12. Navigation / search
-- [x] Go to class / symbol / file (`.by` indexed)
+- [x] Go to class / symbol / file — LSP workspace symbols (`LspGoToSymbolContributor` / `LspGoToClassContributor`). The plugin's own contributors listed every result a second time
 - [x] Find usages (LSP references — enabled on `by`)
 - [x] Highlight usages in file (LSP document highlight — enabled on `by`)
 - [x] Bookmarks / mnemonics work in `.by` (platform-automatic for registered file type)

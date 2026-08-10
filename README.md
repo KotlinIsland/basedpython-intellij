@@ -54,14 +54,15 @@ support, run configurations, CLI actions, and editor tooling.
   symbols behind each name, and it tracks the language on its own — new basedpython syntax
   colors correctly with no plugin update.
 - String escape-sequence and f-string interpolation (`{expr}`) highlighting.
-- With no server running, an annotator guesses at built-in names, `self`/`cls`, decorators,
-  type names, function/class declarations, parameters, and keyword arguments from the token
-  stream alone. It exists so a file isn't monochrome without `by`, which is a very low
-  priority case — basedpython isn't usable without `by` — so it is approximate by design.
+- With no server running, a `.by` file gets lexical color only. There is deliberately no
+  second, guessed implementation of semantic color: basedpython isn't usable without `by`,
+  and an approximation would only ever be a worse answer that also had to be kept in step
+  with a language that keeps moving.
 
 ### Code intelligence
-- Structure view, breadcrumbs, and code folding (imports, functions, classes, multiline
-  strings, `# region` blocks) driven by an indentation scanner — works without the LSP.
+- Structure view, breadcrumbs, code folding and Go to Symbol / Go to Class come from the
+  `by` server — document symbols, folding ranges and workspace symbols — through the
+  platform's LSP integration.
 - Surround-with (try/except, if, while, brackets) and postfix templates
   (`.if`, `.for`, `.while`, `.not`, `.return`/`.ret`, `.print`, `.len`, `.var`,
   `.none`, `.notnone`, `.else`).
