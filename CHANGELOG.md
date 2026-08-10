@@ -63,12 +63,13 @@
   frames and variables reported against `.by` sources. Built on the platform's Debug Adapter
   Protocol client and `debugpy`; `by run`'s own `_by_sourcemap.py` is handed to pydevd with
   `setPydevdSourceMap`, so the line translation happens in the debuggee. Requires `debugpy`
-  in the interpreter `by run` uses — a missing one is reported with the interpreter's path
-  and the `pip install` line. See [docs/debugging.md](docs/debugging.md).
-
+  in the interpreter `by run` uses (`uv add --dev debugpy`). See
+  [docs/debugging.md](docs/debugging.md).
 - Test tree nodes navigate to their `.by` source, and a test class is its own node in the
   tree rather than being flattened into the file.
 - Test configurations can be debugged, with breakpoints in `.by` test files.
+- Exception breakpoints for `.by` programs (*Breakpoints | basedpython Exceptions*), with
+  On raise / On termination.
 
 ### Fixed
 
