@@ -85,6 +85,11 @@
 - "Explain Rule" works for `by`'s own rules. It invoked `by explain <code>`, but `explain`
   is a command group, so every checker-owned rule (as opposed to a `buff` lint code) failed
   with `unrecognized subcommand` and reported "no explanation".
+- The test runner no longer risks `NoSuchClassError` on 2026.2. The SM test runner
+  (`SMTRunnerConsoleProperties`, `OutputToGeneralTestEventsConverter`, `SMTestLocator`)
+  left the core platform there and ships as a bundled plugin the plugin did not declare;
+  it is now an optional dependency, so 2026.1 — where those classes are still in the
+  platform — keeps loading too.
 - The `by` version check no longer reports every up-to-date install as outdated. Its
   floor was `0.1.0` while basedpython is at `0.0.1a9`, so any `by` that reported a real
   version would have been flagged forever; it was quiet only because the binary answers
