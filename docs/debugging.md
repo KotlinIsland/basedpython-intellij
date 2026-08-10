@@ -175,8 +175,11 @@ Nothing in the bootstrap may take the user's program down with it: every step ru
   maps describe the same transpiled tree; verified live, with a breakpoint in a `.by` test
   stopping and reporting its frame against the source. `by build` and `by check` produce no
   running program to attach to.
-- **Only `.by` files.** A plain `.py` in a basedpython project has no source-map entry, so a
-  breakpoint in it will not bind.
+- **Only `.by` files — and that one is not the debugger's doing.** `by run` does not copy plain
+  `.py` files into its temp directory at all: a project mixing `helper.py` with `main.by` dies on
+  `ImportError: No module named 'helper'` before any debugger is involved. So there is nothing for
+  a breakpoint in a `.py` file to bind *to*, and no amount of path mapping on this side would
+  change that. Fixing it means changing `by run`.
 - **Exception breakpoints have no "ignore library code" option.** pydevd spells it as a
   `:ignoreLibraries` suffix on the filter id, and with it the breakpoint never fires: the
   transpiled program lives in a temp directory pydevd does not count as project code, and setting
