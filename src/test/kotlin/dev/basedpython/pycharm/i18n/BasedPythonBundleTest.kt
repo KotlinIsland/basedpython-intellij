@@ -1,10 +1,10 @@
 package dev.basedpython.pycharm.i18n
 
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Test
 import java.text.MessageFormat
 import java.util.Properties
 
@@ -44,9 +44,9 @@ class BasedPythonBundleTest {
             .filter { props.getProperty(it).contains('`') }
             .sorted()
         assertTrue(
+            offenders.isEmpty(),
             "bundle values must not contain backticks; these surfaces are plain text:\n" +
                 offenders.joinToString("\n") { "  $it = ${props.getProperty(it)}" },
-            offenders.isEmpty(),
         )
     }
 
@@ -56,7 +56,7 @@ class BasedPythonBundleTest {
 
     @Test
     fun `bundle loads and is non-trivial`() {
-        assertTrue("bundle should define many keys", props.size > 100)
+        assertTrue(props.size > 100, "bundle should define many keys")
     }
 
     // ----- Keys that MUST exist (sampled across every feature area touched by i18n) -----
@@ -177,7 +177,7 @@ class BasedPythonBundleTest {
             "runConfig.buildBeforeRun.failed.title",
         )
         val missing = required.filter { props.getProperty(it) == null }
-        assertTrue("missing bundle keys: $missing", missing.isEmpty())
+        assertTrue(missing.isEmpty(), "missing bundle keys: $missing")
     }
 
     // ----- Plain (no-placeholder) values -----
@@ -229,7 +229,7 @@ class BasedPythonBundleTest {
         )
         val confirm = msg("download.confirm.message", "by and buff", "darwin-arm64", "/tmp/bin")
         assertTrue(confirm.startsWith("Download prebuilt by and buff for darwin-arm64 into"))
-        assertTrue("newline expected in confirm message", confirm.contains("\n"))
+        assertTrue(confirm.contains("\n"), "newline expected in confirm message")
         assertTrue(confirm.endsWith("/tmp/bin?"))
     }
 
@@ -245,7 +245,7 @@ class BasedPythonBundleTest {
     fun `multiline named-tuple explanation has structure`() {
         val m = value("intention.explainNamedTuple.message")
         assertTrue(m.contains("NamedTuple"))
-        assertTrue("should contain literal newlines", m.contains("\n"))
+        assertTrue(m.contains("\n"), "should contain literal newlines")
         assertTrue(m.contains("(name: str, age: int)"))
     }
 
@@ -269,12 +269,12 @@ class BasedPythonBundleTest {
                 runCatching { MessageFormat(v) }.onFailure { bad += "$name (${it.message})" }
             }
         }
-        assertTrue("malformed MessageFormat patterns: $bad", bad.isEmpty())
+        assertTrue(bad.isEmpty(), "malformed MessageFormat patterns: $bad")
     }
 
     @Test
     fun `no value is left as the raw key (empty)`() {
         val empties = props.stringPropertyNames().filter { props.getProperty(it).isBlank() }
-        assertFalse("blank bundle values: $empties", empties.isNotEmpty())
+        assertFalse(empties.isNotEmpty(), "blank bundle values: $empties")
     }
 }

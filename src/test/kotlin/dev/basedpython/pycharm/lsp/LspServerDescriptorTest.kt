@@ -19,10 +19,20 @@ import com.intellij.platform.lsp.api.customization.LspSignatureHelpDisabled
 import com.intellij.platform.lsp.api.customization.LspTypeHierarchyDisabled
 import com.intellij.testFramework.LightVirtualFile
 import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.testFramework.fixtures.BasePlatformTestCase
+import com.intellij.testFramework.junit5.RunInEdt
+import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.env.ByEnvironmentKind
 import dev.basedpython.pycharm.env.ByLaunch
 import dev.basedpython.pycharm.settings.BasedPythonSettings
+import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNotSame
+import org.junit.jupiter.api.Assertions.assertSame
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Test
 import java.nio.file.Paths
 
 /**
@@ -36,7 +46,13 @@ import java.nio.file.Paths
  * The descriptors and provider classes are `internal`, so this test lives in the same
  * package to reach them.
  */
-class LspServerDescriptorTest : BasePlatformTestCase() {
+@TestFixtures
+@RunInEdt(writeIntent = true)
+class LspServerDescriptorTest {
+
+  private val fixture by codeInsightFixture()
+
+  private val project get() = fixture.project
 
   private val dummyBinary = Paths.get("/nonexistent/fake-binary")
 
@@ -53,11 +69,13 @@ class LspServerDescriptorTest : BasePlatformTestCase() {
   // presentable names
   // ---------------------------------------------------------------------------
 
-  fun `test by descriptor presentable name is basedpython`() {
+  @Test
+  fun `by descriptor presentable name is basedpython`() {
     assertEquals("basedpython", byDescriptor().presentableName)
   }
 
-  fun `test buff descriptor presentable name is buff`() {
+  @Test
+  fun `buff descriptor presentable name is buff`() {
     assertEquals("buff", buffDescriptor().presentableName)
   }
 
@@ -65,7 +83,8 @@ class LspServerDescriptorTest : BasePlatformTestCase() {
   // supported-file recognition
   // ---------------------------------------------------------------------------
 
-  fun `test by descriptor supports by byi py and pyi files`() {
+  @Test
+  fun `by descriptor supports by byi py and pyi files`() {
     val desc = byDescriptor()
     assertTrue(desc.isSupportedFile(makeFile("a.by")))
     assertTrue(desc.isSupportedFile(makeFile("a.byi")))
@@ -73,22 +92,24 @@ class LspServerDescriptorTest : BasePlatformTestCase() {
     assertTrue(desc.isSupportedFile(makeFile("c.pyi")))
   }
 
-  fun `test by descriptor rejects unrelated files`() {
+  @Test
+  fun `by descriptor rejects unrelated files`() {
     val desc = byDescriptor()
     assertFalse(desc.isSupportedFile(makeFile("readme.md")))
     assertFalse(desc.isSupportedFile(makeFile("data.json")))
     assertFalse(desc.isSupportedFile(makeFile("noext")))
   }
 
-  fun `test buff descriptor recognizes the same source extensions as by`() {
+  @Test
+  fun `buff descriptor recognizes the same source extensions as by`() {
     val buff = buffDescriptor()
     val by = byDescriptor()
     for (name in listOf("a.by", "a.byi", "b.py", "c.pyi", "x.txt", "noext")) {
       val f = makeFile(name)
       assertEquals(
-        "buff and by should agree on supported-file recognition for $name",
         by.isSupportedFile(f),
         buff.isSupportedFile(f),
+        "buff and by should agree on supported-file recognition for $name",
       )
     }
   }
@@ -97,7 +118,8 @@ class LspServerDescriptorTest : BasePlatformTestCase() {
   // buff capability customization: only format/lint/hover/code-actions stay on
   // ---------------------------------------------------------------------------
 
-  fun `test buff disables navigation completion and structural capabilities`() {
+  @Test
+  fun `buff disables navigation completion and structural capabilities`() {
     val c = buffDescriptor().lspCustomization
     assertSame(LspGoToDefinitionDisabled, c.goToDefinitionCustomizer)
     assertSame(LspGoToTypeDefinitionDisabled, c.goToTypeDefinitionCustomizer)
@@ -118,7 +140,8 @@ class LspServerDescriptorTest : BasePlatformTestCase() {
     assertSame(LspDocumentLinkDisabled, c.documentLinkCustomizer)
   }
 
-  fun `test buff keeps formatting hover and code-actions enabled`() {
+  @Test
+  fun `buff keeps formatting hover and code-actions enabled`() {
     val c = buffDescriptor().lspCustomization
     // These are NOT replaced with a Disabled singleton, so they keep the default
     // (enabled) customizer. Asserting they differ from the obvious disabled markers
@@ -134,20 +157,22 @@ class LspServerDescriptorTest : BasePlatformTestCase() {
   // by capability customization: inlay hints gated on settings
   // ---------------------------------------------------------------------------
 
-  fun `test by keeps inlay hints enabled when any inlay setting is on`() {
+  @Test
+  fun `by keeps inlay hints enabled when any inlay setting is on`() {
     val s = BasedPythonSettings.getInstance(project)
     s.inlayParameterHints = true
     s.inlayTypeHints = false
     s.inlayReturnHints = false
     val c = byDescriptor().lspCustomization
     assertNotSame(
-      "inlay hints should remain enabled while at least one inlay toggle is on",
       LspInlayHintDisabled,
       c.inlayHintCustomizer,
+      "inlay hints should remain enabled while at least one inlay toggle is on",
     )
   }
 
-  fun `test by disables inlay hints when all inlay settings are off`() {
+  @Test
+  fun `by disables inlay hints when all inlay settings are off`() {
     val s = BasedPythonSettings.getInstance(project)
     s.inlayParameterHints = false
     s.inlayTypeHints = false
@@ -156,7 +181,8 @@ class LspServerDescriptorTest : BasePlatformTestCase() {
     assertSame(LspInlayHintDisabled, c.inlayHintCustomizer)
   }
 
-  fun `test by does not blanket-disable navigation capabilities`() {
+  @Test
+  fun `by does not blanket-disable navigation capabilities`() {
     // Unlike buff, the `by` type-checker advertises full navigation; assert these are
     // NOT the disabled singletons.
     val s = BasedPythonSettings.getInstance(project)
@@ -172,13 +198,15 @@ class LspServerDescriptorTest : BasePlatformTestCase() {
   // command line assembly (builds a command line; never launches it)
   // ---------------------------------------------------------------------------
 
-  fun `test a direct binary launch is exe then server`() {
+  @Test
+  fun `a direct binary launch is exe then server`() {
     val cmd = ByLspServerDescriptor(project, launch(), emptyList()).createCommandLine()
     assertEquals(dummyBinary.toString(), cmd.exePath)
     assertEquals(listOf("server"), cmd.parametersList.list)
   }
 
-  fun `test a uv launch puts the prepend args before the server subcommand`() {
+  @Test
+  fun `a uv launch puts the prepend args before the server subcommand`() {
     // uv is only "just another source" if its argument prefix lands in the right place:
     // `uv run --project <dir> by server`, not `uv server run …`.
     val uv = Paths.get("/usr/local/bin/uv")
@@ -192,12 +220,14 @@ class LspServerDescriptorTest : BasePlatformTestCase() {
     assertEquals(listOf("run", "--project", "/w", "by", "server"), cmd.parametersList.list)
   }
 
-  fun `test extra args follow the server subcommand`() {
+  @Test
+  fun `extra args follow the server subcommand`() {
     val desc = ByLspServerDescriptor(project, launch(), listOf("--verbose"))
     assertEquals(listOf("server", "--verbose"), desc.createCommandLine().parametersList.list)
   }
 
-  fun `test the activation environment reaches the server process`() {
+  @Test
+  fun `the activation environment reaches the server process`() {
     // Resolving `.venv/bin/by` but running it with the IDE's own environment lets anything the
     // server spawns escape the venv it came from; the descriptor must carry activation through.
     val env = mapOf("VIRTUAL_ENV" to "/w/.venv", "PATH" to "/w/.venv/bin")
@@ -206,21 +236,19 @@ class LspServerDescriptorTest : BasePlatformTestCase() {
     assertEquals("/w/.venv/bin", cmd.environment["PATH"])
   }
 
-  fun `test buff assembles its command line the same way`() {
+  @Test
+  fun `buff assembles its command line the same way`() {
     val cmd = BuffLspServerDescriptor(project, launch(), emptyList()).createCommandLine()
     assertEquals(dummyBinary.toString(), cmd.exePath)
     assertEquals(listOf("server"), cmd.parametersList.list)
   }
 
-  override fun tearDown() {
-    try {
-      val s = BasedPythonSettings.getInstance(project)
-      s.inlayParameterHints = true
-      s.inlayTypeHints = true
-      s.inlayReturnHints = true
-    } finally {
-      super.tearDown()
-    }
+  @AfterEach
+  fun resetSettings() {
+    val s = BasedPythonSettings.getInstance(project)
+    s.inlayParameterHints = true
+    s.inlayTypeHints = true
+    s.inlayReturnHints = true
   }
 
   /** Creates an in-memory virtual file with the given name (extension drives support). */

@@ -3,8 +3,8 @@ package dev.basedpython.pycharm
 import com.intellij.psi.tree.IElementType
 import dev.basedpython.pycharm.lang.BasedPythonLexer
 import dev.basedpython.pycharm.lang.BasedPythonTokenTypes
-import org.junit.Assert.assertEquals
-import org.junit.Test
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Test
 
 /**
  * Pure unit tests for [BasedPythonLexer] — no IDE fixture needed because the lexer
@@ -53,7 +53,7 @@ class LexerTest {
         val src = extras.joinToString(" ")
         val types = tokenTypes(src)
         assertEquals(extras.size, types.size)
-        types.forEach { assertEquals("token should be KEYWORD", BasedPythonTokenTypes.KEYWORD, it) }
+        types.forEach { assertEquals(BasedPythonTokenTypes.KEYWORD, it, "token should be KEYWORD") }
     }
 
     @Test

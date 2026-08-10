@@ -1,8 +1,8 @@
 package dev.basedpython.pycharm.statusbar
 
 import com.intellij.platform.lsp.api.LspServerState
-import org.junit.Assert.assertEquals
-import org.junit.Test
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Test
 
 /**
  * The widget's whole job is to stay quiet when things are fine and speak up when they aren't, so

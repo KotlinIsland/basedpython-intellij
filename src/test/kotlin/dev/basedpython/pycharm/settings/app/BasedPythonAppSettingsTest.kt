@@ -1,35 +1,53 @@
 package dev.basedpython.pycharm.settings.app
 
-import com.intellij.testFramework.fixtures.BasePlatformTestCase
+import com.intellij.testFramework.junit5.RunInEdt
+import com.intellij.testFramework.junit5.fixture.TestFixtures
 import com.intellij.util.xmlb.XmlSerializerUtil
+import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertSame
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Test
 
 /**
  * Verifies persistence semantics of the application-level
  * [BasedPythonAppSettings] (load/get/set + loadState round-trip) and that the
  * [BasedPythonDefaults] convenience overloads consult the live app service.
  *
- * JUnit3 style (methods begin with `test`) because we need the application
- * service registered by the platform test fixture.
+ * The settings are application-level, but the fixture is still what stands the test application up,
+ * so it is declared here the same way the project-scoped tests declare it.
  */
-class BasedPythonAppSettingsTest : BasePlatformTestCase() {
+@TestFixtures
+@RunInEdt(writeIntent = true)
+class BasedPythonAppSettingsTest {
+
+    @Suppress("unused")
+    private val fixture by codeInsightFixture()
 
     private val settings get() = BasedPythonAppSettings.getInstance()
 
     // --- defaults -----------------------------------------------------------
 
-    fun `test default state path defaults are null`() {
+    @Test
+    fun `default state path defaults are null`() {
         val s = BasedPythonAppSettings.State()
         assertNull(s.defaultByPath)
         assertNull(s.defaultBuffPath)
     }
 
-    fun `test default state toggles enabled`() {
+    @Test
+    fun `default state toggles enabled`() {
         val s = BasedPythonAppSettings.State()
         assertTrue(s.defaultByEnabled)
         assertTrue(s.defaultBuffEnabled)
     }
 
-    fun `test default state scalar defaults`() {
+    @Test
+    fun `default state scalar defaults`() {
         val s = BasedPythonAppSettings.State()
         assertEquals("", s.defaultByExtraArgs)
         assertEquals("", s.defaultBuffExtraArgs)
@@ -39,14 +57,16 @@ class BasedPythonAppSettingsTest : BasePlatformTestCase() {
 
     // --- service registration ----------------------------------------------
 
-    fun `test getInstance returns app service`() {
+    @Test
+    fun `getInstance returns app service`() {
         assertNotNull(settings)
         assertSame(settings, BasedPythonAppSettings.getInstance())
     }
 
     // --- get and set --------------------------------------------------------
 
-    fun `test setters mutate state`() {
+    @Test
+    fun `setters mutate state`() {
         settings.defaultByPath = "/opt/by"
         settings.defaultBuffPath = "/opt/buff"
         settings.defaultByEnabled = false
@@ -66,14 +86,16 @@ class BasedPythonAppSettingsTest : BasePlatformTestCase() {
         assertEquals("verbose", settings.defaultLspTraceLevel)
     }
 
-    fun `test getState reflects setter`() {
+    @Test
+    fun `getState reflects setter`() {
         settings.defaultByPath = "/x/by"
         assertEquals("/x/by", settings.state.defaultByPath)
     }
 
     // --- loadState round-trip ----------------------------------------------
 
-    fun `test loadState copies all fields`() {
+    @Test
+    fun `loadState copies all fields`() {
         val incoming = BasedPythonAppSettings.State(
             defaultByPath = "/g/by",
             defaultBuffPath = "/g/buff",
@@ -95,7 +117,8 @@ class BasedPythonAppSettingsTest : BasePlatformTestCase() {
         assertEquals("messages", settings.defaultLspTraceLevel)
     }
 
-    fun `test loadState then getState round-trips bean`() {
+    @Test
+    fun `loadState then getState round-trips bean`() {
         val incoming = BasedPythonAppSettings.State(
             defaultByPath = "/r/by",
             defaultPythonVersion = "3.11",
@@ -106,7 +129,8 @@ class BasedPythonAppSettingsTest : BasePlatformTestCase() {
         assertEquals(incoming.defaultPythonVersion, out.defaultPythonVersion)
     }
 
-    fun `test copyBean produces equal independent state`() {
+    @Test
+    fun `copyBean produces equal independent state`() {
         val src = BasedPythonAppSettings.State(
             defaultByPath = "/c/by",
             defaultBuffExtraArgs = "--copy",
@@ -122,20 +146,23 @@ class BasedPythonAppSettingsTest : BasePlatformTestCase() {
 
     // --- resolution helper through live service -----------------------------
 
-    fun `test convenience byPath uses app default when project unset`() {
+    @Test
+    fun `convenience byPath uses app default when project unset`() {
         settings.defaultByPath = "/app/by"
         assertEquals("/app/by", BasedPythonDefaults.effectiveByPath(null))
         assertEquals("/app/by", BasedPythonDefaults.effectiveByPath(""))
         assertEquals("/proj/by", BasedPythonDefaults.effectiveByPath("/proj/by"))
     }
 
-    fun `test convenience buffPath uses app default when project unset`() {
+    @Test
+    fun `convenience buffPath uses app default when project unset`() {
         settings.defaultBuffPath = "/app/buff"
         assertEquals("/app/buff", BasedPythonDefaults.effectiveBuffPath(null))
         assertEquals("/proj/buff", BasedPythonDefaults.effectiveBuffPath("/proj/buff"))
     }
 
-    fun `test convenience extra args use app defaults`() {
+    @Test
+    fun `convenience extra args use app defaults`() {
         settings.defaultByExtraArgs = "--gby"
         settings.defaultBuffExtraArgs = "--gbuff"
         assertEquals("--gby", BasedPythonDefaults.effectiveByExtraArgs(null))
@@ -143,24 +170,23 @@ class BasedPythonAppSettingsTest : BasePlatformTestCase() {
         assertEquals("--p", BasedPythonDefaults.effectiveByExtraArgs("--p"))
     }
 
-    fun `test convenience python version uses app default`() {
+    @Test
+    fun `convenience python version uses app default`() {
         settings.defaultPythonVersion = "3.12"
         assertEquals("3.12", BasedPythonDefaults.effectivePythonVersion(null))
         assertEquals("3.13", BasedPythonDefaults.effectivePythonVersion("3.13"))
     }
 
-    fun `test convenience lsp trace uses app default`() {
+    @Test
+    fun `convenience lsp trace uses app default`() {
         settings.defaultLspTraceLevel = "messages"
         assertEquals("messages", BasedPythonDefaults.effectiveLspTraceLevel(""))
         assertEquals("verbose", BasedPythonDefaults.effectiveLspTraceLevel("verbose"))
     }
 
-    override fun tearDown() {
-        try {
-            // Reset to defaults so we don't leak app-level state between fixtures.
-            settings.loadState(BasedPythonAppSettings.State())
-        } finally {
-            super.tearDown()
-        }
+    @AfterEach
+    fun resetSettings() {
+        // Reset to defaults so we don't leak app-level state between tests.
+        settings.loadState(BasedPythonAppSettings.State())
     }
 }

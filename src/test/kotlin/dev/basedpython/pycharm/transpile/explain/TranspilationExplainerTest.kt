@@ -1,10 +1,10 @@
 package dev.basedpython.pycharm.transpile.explain
 
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Test
 
 /**
  * Exhaustive pure-logic unit tests for [TranspilationExplainer]. No IDE fixture required.
@@ -293,8 +293,8 @@ class TranspilationExplainerTest {
     fun `every note carries non-blank explanation`() {
         val src = "v = user?.name ?: maybe!! \n match x:\n  case 1:\n val k = 1 |> f"
         for (note in explain(src)) {
-            assertTrue("explanation blank for ${note.constructName}", note.explanation.isNotBlank())
-            assertTrue("snippet blank for ${note.constructName}", note.bySnippet.isNotBlank())
+            assertTrue(note.explanation.isNotBlank(), "explanation blank for ${note.constructName}")
+            assertTrue(note.bySnippet.isNotBlank(), "snippet blank for ${note.constructName}")
         }
     }
 
@@ -374,7 +374,7 @@ class TranspilationExplainerTest {
         val emitted = explain(src).map { it.constructName }.toSet()
         // Every emitted name must be declared in recognizedConstructs.
         for (name in emitted) {
-            assertTrue("$name missing from recognizedConstructs", TranspilationExplainer.recognizedConstructs.contains(name))
+            assertTrue(TranspilationExplainer.recognizedConstructs.contains(name), "$name missing from recognizedConstructs")
         }
         // And the headline constructs are all present.
         assertTrue(emitted.containsAll(setOf(

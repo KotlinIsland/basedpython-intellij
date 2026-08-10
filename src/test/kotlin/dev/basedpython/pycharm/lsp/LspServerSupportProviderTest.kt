@@ -4,8 +4,14 @@ import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.platform.lsp.api.LspServerDescriptor
 import com.intellij.platform.lsp.api.LspServerSupportProvider.LspServerStarter
 import com.intellij.testFramework.LightVirtualFile
-import com.intellij.testFramework.fixtures.BasePlatformTestCase
+import com.intellij.testFramework.junit5.RunInEdt
+import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.settings.BasedPythonSettings
+import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Test
 
 /**
  * Binary-free guard-logic tests for [ByLspServerSupportProvider] and
@@ -19,7 +25,13 @@ import dev.basedpython.pycharm.settings.BasedPythonSettings
  * early-return guards: wrong extension, and feature-disabled in settings. The
  * binary-missing branch is asserted to be graceful (no throw, no server started).
  */
-class LspServerSupportProviderTest : BasePlatformTestCase() {
+@TestFixtures
+@RunInEdt(writeIntent = true)
+class LspServerSupportProviderTest {
+
+  private val fixture by codeInsightFixture()
+
+  private val project get() = fixture.project
 
   /** Captures descriptors the provider asks to start. */
   private class RecordingStarter : LspServerStarter {
@@ -32,57 +44,59 @@ class LspServerSupportProviderTest : BasePlatformTestCase() {
   private fun byFile(): VirtualFile = LightVirtualFile("module.by", "")
   private fun nonSourceFile(): VirtualFile = LightVirtualFile("notes.md", "")
 
-  override fun tearDown() {
-    try {
-      val s = BasedPythonSettings.getInstance(project)
-      s.byEnabled = true
-      s.buffEnabled = true
-      s.byPath = null
-      s.buffPath = null
-    } finally {
-      super.tearDown()
-    }
+  @AfterEach
+  fun resetSettings() {
+    val s = BasedPythonSettings.getInstance(project)
+    s.byEnabled = true
+    s.buffEnabled = true
+    s.byPath = null
+    s.buffPath = null
   }
 
   // ---------------------------------------------------------------------------
   // extension guard
   // ---------------------------------------------------------------------------
 
-  fun `test by provider ignores non-source files`() {
+  @Test
+  fun `by provider ignores non-source files`() {
     val starter = RecordingStarter()
     ByLspServerSupportProvider().fileOpened(project, nonSourceFile(), starter)
-    assertTrue("must not start a server for a .md file", starter.started.isEmpty())
+    assertTrue(starter.started.isEmpty(), "must not start a server for a .md file")
   }
 
-  fun `test buff provider ignores non-source files`() {
+  @Test
+  fun `buff provider ignores non-source files`() {
     val starter = RecordingStarter()
     BuffLspServerSupportProvider().fileOpened(project, nonSourceFile(), starter)
-    assertTrue("must not start a server for a .md file", starter.started.isEmpty())
+    assertTrue(starter.started.isEmpty(), "must not start a server for a .md file")
   }
 
   // ---------------------------------------------------------------------------
   // settings disabled guard
   // ---------------------------------------------------------------------------
 
-  fun `test by provider does nothing when by is disabled`() {
+  @Test
+  fun `by provider does nothing when by is disabled`() {
     BasedPythonSettings.getInstance(project).byEnabled = false
     val starter = RecordingStarter()
     ByLspServerSupportProvider().fileOpened(project, byFile(), starter)
-    assertTrue("disabled `by` must not start a server", starter.started.isEmpty())
+    assertTrue(starter.started.isEmpty(), "disabled `by` must not start a server")
   }
 
-  fun `test buff provider does nothing when buff is disabled`() {
+  @Test
+  fun `buff provider does nothing when buff is disabled`() {
     BasedPythonSettings.getInstance(project).buffEnabled = false
     val starter = RecordingStarter()
     BuffLspServerSupportProvider().fileOpened(project, byFile(), starter)
-    assertTrue("disabled `buff` must not start a server", starter.started.isEmpty())
+    assertTrue(starter.started.isEmpty(), "disabled `buff` must not start a server")
   }
 
   // ---------------------------------------------------------------------------
   // binary-missing branch is graceful
   // ---------------------------------------------------------------------------
 
-  fun `test by provider handles a missing binary without throwing`() {
+  @Test
+  fun `by provider handles a missing binary without throwing`() {
     val s = BasedPythonSettings.getInstance(project)
     s.byEnabled = true
     // Point at a path guaranteed not to exist so resolution returns null in CI.
@@ -93,18 +107,19 @@ class LspServerSupportProviderTest : BasePlatformTestCase() {
     // With a bogus override and (in CI) nothing on PATH, no server should start.
     // On a dev box `by` could be on PATH; tolerate that by only asserting no crash.
     if (!BasedPythonBinaries.isByAvailable(project)) {
-      assertTrue("missing `by` binary must not start a server", starter.started.isEmpty())
+      assertTrue(starter.started.isEmpty(), "missing `by` binary must not start a server")
     }
   }
 
-  fun `test buff provider handles a missing binary without throwing`() {
+  @Test
+  fun `buff provider handles a missing binary without throwing`() {
     val s = BasedPythonSettings.getInstance(project)
     s.buffEnabled = true
     s.buffPath = "/definitely/not/here/buff"
     val starter = RecordingStarter()
     BuffLspServerSupportProvider().fileOpened(project, byFile(), starter)
     if (!BasedPythonBinaries.isBuffAvailable(project)) {
-      assertTrue("missing `buff` binary must not start a server", starter.started.isEmpty())
+      assertTrue(starter.started.isEmpty(), "missing `buff` binary must not start a server")
     }
   }
 
@@ -112,7 +127,8 @@ class LspServerSupportProviderTest : BasePlatformTestCase() {
   // when a binary IS available, the provider starts the matching descriptor type
   // ---------------------------------------------------------------------------
 
-  fun `test by provider starts a basedpython descriptor when a binary resolves`() {
+  @Test
+  fun `by provider starts a basedpython descriptor when a binary resolves`() {
     val s = BasedPythonSettings.getInstance(project)
     s.byEnabled = true
     val exe = makeFakeExecutable("by")

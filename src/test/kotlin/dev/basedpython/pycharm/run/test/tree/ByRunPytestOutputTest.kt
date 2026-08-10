@@ -1,6 +1,7 @@
 package dev.basedpython.pycharm.run.test.tree
 
-import junit.framework.TestCase
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Test
 
 /**
  * The parser against output a real `by run pytest -v` actually produced.
@@ -10,7 +11,7 @@ import junit.framework.TestCase
  * of pinning the real bytes is that the configuration used to invoke a `by test` subcommand that
  * does not exist, so nothing had ever confirmed that what the CLI prints is what this parser reads.
  */
-class ByRunPytestOutputTest : TestCase() {
+class ByRunPytestOutputTest {
 
     private val output = """
         ============================= test session starts ==============================
@@ -39,7 +40,8 @@ class ByRunPytestOutputTest : TestCase() {
         ========================= 1 failed, 4 passed in 0.01s ==========================
     """.trimIndent()
 
-    fun `test every test in the run becomes a tree event`() {
+    @Test
+    fun `every test in the run becomes a tree event`() {
         val events = ByTestOutputParser().parseAll(output)
         val started = events.filterIsInstance<ByTestEvent.TestStarted>().map { it.name }
         assertEquals(
@@ -54,7 +56,8 @@ class ByRunPytestOutputTest : TestCase() {
         )
     }
 
-    fun `test outcomes match the run`() {
+    @Test
+    fun `outcomes match the run`() {
         val events = ByTestOutputParser().parseAll(output)
         assertEquals(
             listOf("test_add_positive", "test_add_negative", "test_in_class", "test_nested_one"),
@@ -66,7 +69,8 @@ class ByRunPytestOutputTest : TestCase() {
         )
     }
 
-    fun `test one suite per file, opened and closed`() {
+    @Test
+    fun `one suite per file, opened and closed`() {
         val events = ByTestOutputParser().parseAll(output)
         assertEquals(
             listOf("test_math.py", "tests/test_nested.py"),
@@ -78,7 +82,8 @@ class ByRunPytestOutputTest : TestCase() {
         )
     }
 
-    fun `test the short summary line does not report a second failure`() {
+    @Test
+    fun `the short summary line does not report a second failure`() {
         // `FAILED test_math.py::test_fails - assert 2 == 3` in the footer names the same test
         // again; counting it would show two failures for one failing test.
         val parser = ByTestOutputParser()
@@ -87,7 +92,8 @@ class ByRunPytestOutputTest : TestCase() {
         assertEquals(1, parser.failed)
     }
 
-    fun `test the tally matches pytest's own footer`() {
+    @Test
+    fun `the tally matches pytest's own footer`() {
         val parser = ByTestOutputParser()
         parser.parseAll(output)
         // `1 failed, 4 passed in 0.01s`

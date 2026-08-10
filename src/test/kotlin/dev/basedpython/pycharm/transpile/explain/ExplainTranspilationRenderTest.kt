@@ -1,9 +1,9 @@
 package dev.basedpython.pycharm.transpile.explain
 
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Test
 
 /**
  * The explain report is HTML, and explanation text is written with markdown-style `code` spans.
@@ -26,14 +26,14 @@ class ExplainTranspilationRenderTest {
     @Test
     fun `code spans in explanations render as code elements`() {
         val html = render(note("The `??` operator becomes `a if a is not None else b`."))
-        assertTrue(html, html.contains("<code>??</code>"))
-        assertTrue(html, html.contains("<code>a if a is not None else b</code>"))
+        assertTrue(html.contains("<code>??</code>"), html)
+        assertTrue(html.contains("<code>a if a is not None else b</code>"), html)
     }
 
     @Test
     fun `no raw backtick survives into the report`() {
         val html = render(note("The `?.` access becomes `a.b if a is not None else None`."))
-        assertFalse("raw backtick leaked into user-visible HTML: $html", html.contains("`"))
+        assertFalse(html.contains("`"), "raw backtick leaked into user-visible HTML: $html")
     }
 
     /** Every real explanation the explainer can emit must survive the same rule. */
@@ -46,17 +46,17 @@ class ExplainTranspilationRenderTest {
             i = j ?: k
         """.trimIndent()
         val notes = TranspilationExplainer.explain(src)
-        assertTrue("expected the explainer to recognize constructs", notes.isNotEmpty())
+        assertTrue(notes.isNotEmpty(), "expected the explainer to recognize constructs")
         val html = ExplainTranspilationAction.renderHtml("main.by", notes)
-        assertFalse("raw backtick leaked into user-visible HTML: $html", html.contains("`"))
+        assertFalse(html.contains("`"), "raw backtick leaked into user-visible HTML: $html")
     }
 
     @Test
     fun `markup in the source snippet is still escaped`() {
         // codeSpans runs after escape(), so it must not become an injection hole.
         val html = render(note("plain text", snippet = "<b>x</b>"))
-        assertTrue(html, html.contains("&lt;b&gt;x&lt;/b&gt;"))
-        assertFalse(html, html.contains("<b>x</b>"))
+        assertTrue(html.contains("&lt;b&gt;x&lt;/b&gt;"), html)
+        assertFalse(html.contains("<b>x</b>"), html)
     }
 
     /**
@@ -69,6 +69,6 @@ class ExplainTranspilationRenderTest {
         val html = render(note("a lone ` tick"))
         // The snippet always contributes one <code>; the explanation must contribute none.
         assertEquals(1, Regex("<code>").findAll(html).count())
-        assertTrue(html, html.contains("a lone ` tick"))
+        assertTrue(html.contains("a lone ` tick"), html)
     }
 }

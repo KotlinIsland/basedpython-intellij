@@ -1,9 +1,9 @@
 package dev.basedpython.pycharm
 
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Test
 
 /**
  * The `bundledColorScheme` extension point takes a resource path *without* an extension and
@@ -42,9 +42,9 @@ class BundledColorSchemeTest {
         for (path in declaredSchemePaths()) {
             val resource = "$path.xml"
             assertNotNull(
+                javaClass.getResource(resource),
                 "bundledColorScheme path=\"$path\" resolves to no resource. The platform appends " +
                     "\".xml\"; a file named \"$path.icls\" will not be found.",
-                javaClass.getResource(resource),
             )
         }
     }
@@ -58,12 +58,12 @@ class BundledColorSchemeTest {
                 it.readBytes().decodeToString()
             }
             assertTrue(
-                "$path.xml must be a <scheme> document, but starts with: ${body.take(60)}",
                 body.contains("<scheme "),
+                "$path.xml must be a <scheme> document, but starts with: ${body.take(60)}",
             )
             assertTrue(
-                "$path.xml must declare a parent_scheme",
                 body.contains("parent_scheme="),
+                "$path.xml must declare a parent_scheme",
             )
         }
     }
@@ -87,9 +87,9 @@ class BundledColorSchemeTest {
             }
             val parent = Regex("""parent_scheme="([^"]+)"""").find(body)?.groupValues?.get(1)
             assertTrue(
+                parent in universal,
                 "$path.xml has parent_scheme=\"$parent\", which is not guaranteed to exist in " +
                     "every IDE. Allowed: $universal",
-                parent in universal,
             )
         }
     }

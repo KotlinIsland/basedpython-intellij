@@ -1,6 +1,7 @@
 package dev.basedpython.pycharm.lang.dialect
 
-import junit.framework.TestCase
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Test
 
 /**
  * Decision logic for [BasedPythonProjectDetector].
@@ -13,27 +14,31 @@ import junit.framework.TestCase
  * `pyproject.toml` used to be enough to call a project basedpython, which meant every Python
  * project had its `.py` files re-typed and a `by` server spawned.
  */
-class BasedPythonProjectDetectorTest : TestCase() {
+class BasedPythonProjectDetectorTest {
 
     private fun classify(vararg names: String, pyproject: String? = null): ProjectKind =
         BasedPythonProjectDetector.classify(names.toSet(), pyproject)
 
     // ---- basedpython ----
 
-    fun `test an api lock marks a basedpython project`() {
+    @Test
+    fun `an api lock marks a basedpython project`() {
         assertEquals(ProjectKind.BASEDPYTHON, classify("api.lock"))
     }
 
-    fun `test a basedpython toml marks a basedpython project`() {
+    @Test
+    fun `a basedpython toml marks a basedpython project`() {
         assertEquals(ProjectKind.BASEDPYTHON, classify("basedpython.toml"))
     }
 
-    fun `test a top-level by source marks a basedpython project`() {
+    @Test
+    fun `a top-level by source marks a basedpython project`() {
         assertEquals(ProjectKind.BASEDPYTHON, classify("main.by"))
         assertEquals(ProjectKind.BASEDPYTHON, classify("stub.byi"))
     }
 
-    fun `test a pyproject that mentions basedpython marks a basedpython project`() {
+    @Test
+    fun `a pyproject that mentions basedpython marks a basedpython project`() {
         val manifest = """
             [project]
             name = "demo"
@@ -42,7 +47,8 @@ class BasedPythonProjectDetectorTest : TestCase() {
         assertEquals(ProjectKind.BASEDPYTHON, classify("pyproject.toml", pyproject = manifest))
     }
 
-    fun `test a tool basedpython table marks a basedpython project`() {
+    @Test
+    fun `a tool basedpython table marks a basedpython project`() {
         assertEquals(
             ProjectKind.BASEDPYTHON,
             classify("pyproject.toml", pyproject = "[tool.basedpython]\nstrict = true\n"),
@@ -51,7 +57,8 @@ class BasedPythonProjectDetectorTest : TestCase() {
 
     // ---- plain python ----
 
-    fun `test a bare pyproject is only a python project`() {
+    @Test
+    fun `a bare pyproject is only a python project`() {
         val manifest = """
             [project]
             name = "demo"
@@ -60,44 +67,52 @@ class BasedPythonProjectDetectorTest : TestCase() {
         assertEquals(ProjectKind.PYTHON, classify("pyproject.toml", pyproject = manifest))
     }
 
-    fun `test the usual python layout markers are python`() {
+    @Test
+    fun `the usual python layout markers are python`() {
         assertEquals(ProjectKind.PYTHON, classify("setup.py"))
         assertEquals(ProjectKind.PYTHON, classify("requirements.txt"))
         assertEquals(ProjectKind.PYTHON, classify("uv.lock"))
         assertEquals(ProjectKind.PYTHON, classify(".venv"))
     }
 
-    fun `test a py source at the base is a python project`() {
+    @Test
+    fun `a py source at the base is a python project`() {
         assertEquals(ProjectKind.PYTHON, classify("script.py"))
         assertEquals(ProjectKind.PYTHON, classify("stub.pyi"))
     }
 
     // ---- neither ----
 
-    fun `test a project with nothing python in it is other`() {
+    @Test
+    fun `a project with nothing python in it is other`() {
         assertEquals(ProjectKind.OTHER, classify("Cargo.toml", "src", "README.md"))
     }
 
-    fun `test an empty base directory is other`() {
+    @Test
+    fun `an empty base directory is other`() {
         assertEquals(ProjectKind.OTHER, classify())
     }
 
-    fun `test unrelated files are not markers`() {
+    @Test
+    fun `unrelated files are not markers`() {
         assertEquals(ProjectKind.OTHER, classify("README.md", "notes.txt", "index.js"))
     }
 
     // ---- details ----
 
-    fun `test extensions are matched case-insensitively`() {
+    @Test
+    fun `extensions are matched case-insensitively`() {
         assertEquals(ProjectKind.BASEDPYTHON, classify("MAIN.BY"))
         assertEquals(ProjectKind.PYTHON, classify("SCRIPT.PY"))
     }
 
-    fun `test a basedpython marker wins over plain python markers`() {
+    @Test
+    fun `a basedpython marker wins over plain python markers`() {
         assertEquals(ProjectKind.BASEDPYTHON, classify("setup.py", "requirements.txt", "main.by"))
     }
 
-    fun `test a name that merely starts like a marker does not count`() {
+    @Test
+    fun `a name that merely starts like a marker does not count`() {
         assertEquals(ProjectKind.OTHER, classify("pyproject.toml.bak", "apilock"))
     }
 }
