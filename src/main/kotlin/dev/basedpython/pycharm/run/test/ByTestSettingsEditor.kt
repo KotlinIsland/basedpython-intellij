@@ -17,19 +17,21 @@ class ByTestSettingsEditor : SettingsEditor<ByTestConfiguration>() {
         @Suppress("DEPRECATION")
         addBrowseFolderListener(
             "Working Directory",
-            "Directory the by test command is invoked from",
+            "Directory the by run pytest command is invoked from",
             null,
             FileChooserDescriptorFactory.createSingleFolderDescriptor()
         )
     }
     private val extraArgsField = JBTextField()
+    private val pythonVersionField = JBTextField()
     private val envVarsComponent = EnvironmentVariablesComponent()
 
     private val panel: JPanel = FormBuilder.createFormBuilder()
-        .addLabeledComponent("Test paths (space-separated):", pathsField)
+        .addLabeledComponent("Test targets (space-separated .by paths):", pathsField)
         .addLabeledComponent("Environment:", environmentCombo)
         .addLabeledComponent("Working directory:", workingDirField)
-        .addLabeledComponent("Extra args:", extraArgsField)
+        .addLabeledComponent("Extra pytest args:", extraArgsField)
+        .addLabeledComponent("Min Python version:", pythonVersionField)
         .addComponent(envVarsComponent)
         .panel
 
@@ -39,6 +41,7 @@ class ByTestSettingsEditor : SettingsEditor<ByTestConfiguration>() {
         environmentCombo.kind = o.environmentKind
         workingDirField.text = o.workingDir
         extraArgsField.text = o.extraArgs
+        pythonVersionField.text = o.pythonVersion
         envVarsComponent.envs = o.envVars
         envVarsComponent.isPassParentEnvs = o.passParentEnv
     }
@@ -49,6 +52,7 @@ class ByTestSettingsEditor : SettingsEditor<ByTestConfiguration>() {
         o.environmentKind = environmentCombo.kind
         o.workingDir = workingDirField.text.trim()
         o.extraArgs = extraArgsField.text.trim()
+        o.pythonVersion = pythonVersionField.text.trim()
         o.envVars = LinkedHashMap(envVarsComponent.envs)
         o.passParentEnv = envVarsComponent.isPassParentEnvs
     }

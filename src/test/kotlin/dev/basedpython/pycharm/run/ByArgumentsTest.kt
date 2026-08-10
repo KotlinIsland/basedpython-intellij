@@ -34,7 +34,8 @@ class ByArgumentsTest : TestCase() {
     }
 
     fun `test a subcommand with no version flag never emits one`() {
-        // `by test` takes no version flag; the value is still persisted on the shared options.
+        // Not every subcommand takes a version flag; the value is still persisted on the
+        // shared options either way.
         val args = byArguments("test", null, "3.14", listOf("tests"), "")
         assertEquals(listOf("test", "tests"), args)
     }

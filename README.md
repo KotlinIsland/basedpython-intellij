@@ -89,7 +89,9 @@ support, run configurations, CLI actions, and editor tooling.
   `.by` source and its generated `.py` in `out/`.
 - Gutter run icons on `if __name__ == "__main__":` and top-level `main()` — one click
   runs the file's `by run` configuration.
-- `by test` run configuration (working dir, args, env).
+- Test run configuration — runs pytest against the transpiled output via `by run pytest`,
+  with results in the standard test tree. Gutter icons on `def test_...` and `class Test...`
+  run a single test. Needs `pytest` importable by the interpreter `by run` uses.
 - **Debug .by (pdb)** — builds, then runs the generated `.py` under `python -m pdb` in an
   interactive console with clickable frames.
 

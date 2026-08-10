@@ -60,7 +60,7 @@ class ByRunFromFileProducer : LazyRunConfigurationProducer<ByRunConfiguration>()
      * context run — one that is unreadable here, because it labels entries by configuration *type*
      * and `by run` / `by check` are two factories of the same type, so both render as "basedpython".
      *
-     * Precedence is therefore `by test` > `by run` > `by check`; see [ByTestFromFileProducer],
+     * Precedence is therefore pytest > `by run` > `by check`; see [ByTestFromFileProducer],
      * which claims the same relationship over this producer.
      */
     override fun isPreferredConfiguration(self: ConfigurationFromContext?, other: ConfigurationFromContext?): Boolean =

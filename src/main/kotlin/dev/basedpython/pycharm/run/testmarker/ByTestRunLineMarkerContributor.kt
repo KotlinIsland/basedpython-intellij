@@ -10,8 +10,9 @@ import com.intellij.psi.PsiElement
 /**
  * Puts a green "run test" gutter icon next to pytest-style test declarations in `.by` files:
  * `def test_...` / `async def test_...` functions and `class Test...` classes. Clicking it runs
- * the test on that line via the same context-run path as the existing `by test` configuration
- * (resolved through [ExecutorAction.getActions]).
+ * the test on that line through [dev.basedpython.pycharm.run.ByTestFromFileProducer], which
+ * builds a `by run pytest` configuration for that node id (resolved via
+ * [ExecutorAction.getActions]).
  *
  * The PSI is flat (token leaves only), so detection is done against the raw document line text.
  * To avoid duplicate icons, a non-null [Info] is returned only for the FIRST non-whitespace leaf
@@ -45,7 +46,7 @@ class ByTestRunLineMarkerContributor : RunLineMarkerContributor() {
         return Info(
             AllIcons.RunConfigurations.TestState.Run,
             ExecutorAction.getActions(0),
-        ) { "Run test with by" }
+        ) { "Run test with pytest" }
     }
 }
 

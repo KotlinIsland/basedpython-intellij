@@ -1,7 +1,8 @@
 package dev.basedpython.pycharm.run.test.tree
 
 /**
- * Pure, line-oriented parser for `by test` output (which is pytest/unittest-like).
+ * Pure, line-oriented parser for the test output of `by run pytest -v` (see
+ * [dev.basedpython.pycharm.run.test.ByPytest]). Unittest's verbose format is recognised too.
  *
  * The parser is intentionally tolerant: it is fed one raw output line at a time via
  * [parseLine] and returns the (possibly empty) list of [ByTestEvent]s that line
@@ -10,7 +11,9 @@ package dev.basedpython.pycharm.run.test.tree
  *
  * Recognized signals:
  *  - pytest verbose: `path/to/test_x.py::test_name PASSED|FAILED|SKIPPED|ERROR`
- *    optionally trailed by a progress tag like `[ 12%]`.
+ *    optionally trailed by a progress tag like `[ 12%]`. Verbose is why the configuration
+ *    always passes `-v`: without it pytest prints only a one-character progress line, which
+ *    carries no names to build a tree from.
  *  - unittest verbose: `test_name (module.Class) ... ok|FAIL|ERROR|skipped`.
  *  - the pytest summary line: `=== 3 passed, 1 failed in 0.12s ===`.
  *  - a pytest one-char progress/summary line such as `....F..s` (fallback count only;

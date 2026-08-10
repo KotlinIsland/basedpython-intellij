@@ -66,17 +66,17 @@ class RunConfigurationProducerTest : BasePlatformTestCase() {
     }
 
     // ------------------------------------------------------------------
-    // by test (gutter "Run test" icon must resolve to a ByTestConfiguration)
+    // pytest (gutter "Run test" icon must resolve to a ByTestConfiguration)
     // ------------------------------------------------------------------
 
-    fun `test by test producer targets a top-level test function`() {
+    fun `test the pytest producer targets a top-level test function`() {
         val file = myFixture.addFileToProject(
             "test_thing.by",
             "def test_addition():\n    assert 1 + 1 == 2\n",
         )
         val fromContext = producer<ByTestFromFileProducer>()
             .createConfigurationFromContext(contextFor(file))
-        assertNotNull("by test producer should fire on a `def test_…` line", fromContext)
+        assertNotNull("the pytest producer should fire on a `def test_…` line", fromContext)
         val config = fromContext!!.configuration as ByTestConfiguration
         // The path prefix is project-relative; in the in-memory fixture it stays absolute, so
         // assert on the meaningful node-id suffix.
@@ -84,11 +84,11 @@ class RunConfigurationProducerTest : BasePlatformTestCase() {
             "paths was '${config.options.paths}'",
             config.options.paths.endsWith("test_thing.by::test_addition"),
         )
-        assertTrue("name was '${config.name}'", config.name.startsWith("by test "))
+        assertTrue("name was '${config.name}'", config.name.startsWith("pytest "))
         assertTrue("name was '${config.name}'", config.name.endsWith("test_thing.by::test_addition"))
     }
 
-    fun `test by test producer qualifies a method with its enclosing class`() {
+    fun `test the pytest producer qualifies a method with its enclosing class`() {
         val file = myFixture.addFileToProject(
             "test_thing.by",
             "class TestMath:\n    def test_add(self):\n        assert True\n",
@@ -98,7 +98,7 @@ class RunConfigurationProducerTest : BasePlatformTestCase() {
         val element = file.findElementAt(offset) ?: file
         val fromContext = producer<ByTestFromFileProducer>()
             .createConfigurationFromContext(ConfigurationContext(element))
-        assertNotNull("by test producer should fire on a nested `def test_…` method", fromContext)
+        assertNotNull("the pytest producer should fire on a nested `def test_…` method", fromContext)
         val config = fromContext!!.configuration as ByTestConfiguration
         assertTrue(
             "paths was '${config.options.paths}'",
@@ -106,14 +106,14 @@ class RunConfigurationProducerTest : BasePlatformTestCase() {
         )
     }
 
-    fun `test by test producer ignores non-test lines`() {
+    fun `test the pytest producer ignores non-test lines`() {
         val file = myFixture.addFileToProject("plain.by", "x = 1\n")
         val fromContext = producer<ByTestFromFileProducer>()
             .createConfigurationFromContext(contextFor(file))
-        assertNull("by test producer should not fire on a non-test line", fromContext)
+        assertNull("the pytest producer should not fire on a non-test line", fromContext)
     }
 
-    fun `test gutter context on a test line resolves to a by test config`() {
+    fun `test gutter context on a test line resolves to a test config`() {
         val file = myFixture.addFileToProject(
             "test_thing.by",
             "def test_addition():\n    assert 1 + 1 == 2\n",
@@ -123,7 +123,7 @@ class RunConfigurationProducerTest : BasePlatformTestCase() {
             .mapNotNull { it.createConfigurationFromContext(context)?.configuration }
         val testConfig = produced.filterIsInstance<ByTestConfiguration>().firstOrNull()
         assertNotNull(
-            "a .by test line should yield a `by test` configuration; produced=${produced.map { it::class.simpleName }}",
+            "a .by test line should yield a test configuration; produced=${produced.map { it::class.simpleName }}",
             testConfig,
         )
     }
@@ -203,7 +203,7 @@ class RunConfigurationProducerTest : BasePlatformTestCase() {
         producer<ByRunFromFileProducer>().findExistingConfiguration(contextFor(file))
     }
 
-    fun `test by run yields to by test so the chain holds`() {
+    fun `test by run yields to the pytest producer so the chain holds`() {
         val file = myFixture.addFileToProject(
             "test_chain.by",
             "def test_x():\n    assert True\n",
@@ -211,14 +211,14 @@ class RunConfigurationProducerTest : BasePlatformTestCase() {
         val context = contextFor(file)
         val run = producer<ByRunFromFileProducer>().createConfigurationFromContext(context)
         val test = producer<ByTestFromFileProducer>().createConfigurationFromContext(context)
-        assertNotNull("by test should match a test declaration", test)
+        assertNotNull("the pytest producer should match a test declaration", test)
         assertNotNull("by run also matches the file, which is why test must win", run)
         assertTrue(
-            "by test must replace by run on a test line",
+            "the pytest producer must replace by run on a test line",
             producer<ByTestFromFileProducer>().shouldReplace(test!!, run!!),
         )
         assertFalse(
-            "by run must not replace by test",
+            "by run must not replace the pytest producer",
             producer<ByRunFromFileProducer>().shouldReplace(run, test),
         )
     }

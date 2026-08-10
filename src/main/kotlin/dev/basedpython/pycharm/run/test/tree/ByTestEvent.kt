@@ -1,7 +1,7 @@
 package dev.basedpython.pycharm.run.test.tree
 
 /**
- * A normalized, IDE-agnostic test event parsed from `by test` output.
+ * A normalized, IDE-agnostic test event parsed from `by run pytest` output.
  *
  * The parser ([ByTestOutputParser]) emits these so that the conversion to
  * TeamCity service messages ([ByServiceMessages]) and the wiring into the

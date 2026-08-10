@@ -10,13 +10,17 @@ import com.intellij.openapi.project.Project
 import javax.swing.Icon
 
 /**
- * Standalone configuration type for `by test`. Kept separate from
+ * Standalone configuration type for running basedpython tests. Kept separate from
  * `BasedPythonRunConfigurationType` (whose factory list is hardcoded) so the shared file
  * does not need editing.
+ *
+ * [ID] and the factory's `getId` are the persisted form and must not change; the names below are
+ * only what the user reads, and they used to promise a `by test` subcommand that does not exist.
  */
 class ByTestConfigurationType : ConfigurationType {
     override fun getDisplayName(): String = "basedpython Test"
-    override fun getConfigurationTypeDescription(): String = "Run basedpython tests via by test"
+    override fun getConfigurationTypeDescription(): String =
+        "Run basedpython tests with pytest, via by run"
     override fun getIcon(): Icon = AllIcons.RunConfigurations.TestState.Run
     override fun getId(): String = ID
 
@@ -33,9 +37,9 @@ class ByTestConfigurationType : ConfigurationType {
 
     class TestFactory(type: ByTestConfigurationType) : ConfigurationFactory(type) {
         override fun getId(): String = "Test"
-        override fun getName(): String = "by test"
+        override fun getName(): String = "pytest"
         override fun createTemplateConfiguration(project: Project): RunConfiguration =
-            ByTestConfiguration(project, this, "by test")
+            ByTestConfiguration(project, this, "pytest")
         override fun getOptionsClass(): Class<out RunConfigurationOptions> =
             ByTestOptions::class.java
     }
