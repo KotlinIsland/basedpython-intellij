@@ -13,7 +13,11 @@ import com.intellij.execution.process.ProcessTerminatedListener
 import com.intellij.execution.runners.ExecutionEnvironment
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.io.FileUtil
+import com.intellij.util.EnvironmentUtil
 import com.intellij.util.execution.ParametersListUtil
+import java.io.File
+
+private const val PYTHONPATH = "PYTHONPATH"
 
 /**
  * Shared `CommandLineState` for all `by` configurations. Subclasses name the [subcommand] and
@@ -41,6 +45,20 @@ abstract class ByCommandLineState(
     /** Positional arguments and flags that follow [subcommand], e.g. `["pkg.mod"]`. */
     protected abstract fun buildSubcommandArgs(): List<String>
 
+    /**
+     * Environment set by the infrastructure around the run rather than by the user, applied after
+     * [ByCommonOptions.envVars] so it cannot be shadowed by a stale project setting.
+     *
+     * Written by [dev.basedpython.pycharm.debug.ByDebugAdapterDescriptor] from
+     * `DebugAdapterDescriptor.configureProfileState`, which the DAP runner calls after building
+     * this state and before executing it — the platform's hook for "this process needs extra
+     * parameters for a debugger to connect".
+     */
+    val infrastructureEnv: MutableMap<String, String> = linkedMapOf()
+
+    /** Directories to put in front of `PYTHONPATH`; see [composePythonPath]. */
+    val pythonPathPrefix: MutableList<String> = mutableListOf()
+
     override fun startProcess(): ProcessHandler {
         val launch = BasedPythonBinaries.launchBy(project, kind = options.environmentKind)
             ?: throw ExecutionException(notFoundMessage())
@@ -63,6 +81,10 @@ abstract class ByCommandLineState(
         // Activation first so a user-set variable of the same name still wins.
         cmd.withEnvironment(activationEnv(launch))
         cmd.withEnvironment(options.envVars)
+        cmd.withEnvironment(infrastructureEnv)
+        if (pythonPathPrefix.isNotEmpty()) {
+            cmd.withEnvironment(PYTHONPATH, composePythonPath(pythonPathPrefix, inheritedPythonPath()))
+        }
 
         val handler = KillableColoredProcessHandler(cmd)
         ProcessTerminatedListener.attach(handler)
@@ -92,6 +114,17 @@ abstract class ByCommandLineState(
         return ByEnvironments.activationEnv(venv, parentPath = null)
     }
 
+    /**
+     * The `PYTHONPATH` [pythonPathPrefix] has to be prepended to.
+     *
+     * A user-set value wins, then the IDE's own — but only when the run inherits the parent
+     * environment. A hermetic run has no inherited `PYTHONPATH` to extend, and pulling the IDE's
+     * back in here would be the same leak [activationEnv] avoids for `PATH`.
+     */
+    private fun inheritedPythonPath(): String? =
+        options.envVars[PYTHONPATH]
+            ?: if (options.passParentEnv) EnvironmentUtil.getValue(PYTHONPATH) else null
+
     private fun notFoundMessage(): String =
         if (options.environmentKind == ByEnvironmentKind.AUTO) {
             "by binary not found — set path in Settings | basedpython"
@@ -100,6 +133,20 @@ abstract class ByCommandLineState(
                 "setting of this run configuration, or set a path in Settings | basedpython"
         }
 }
+
+/**
+ * `PYTHONPATH` with [prefixes] in front of whatever the run already had.
+ *
+ * Prepending rather than replacing matters: `by run` passes its environment straight through to the
+ * interpreter, and a project that sets `PYTHONPATH` to reach its own sources would stop importing
+ * if the debugger's bootstrap directory overwrote it. A blank or absent [existing] contributes
+ * nothing rather than a trailing separator, which CPython would read as "the current directory".
+ */
+internal fun composePythonPath(prefixes: List<String>, existing: String?): String =
+    (prefixes + (existing?.split(File.pathSeparatorChar) ?: emptyList()))
+        .filter { it.isNotBlank() }
+        .distinct()
+        .joinToString(File.pathSeparator)
 
 /**
  * The `by` argument list for one subcommand: the subcommand, its own flags, then its positionals.

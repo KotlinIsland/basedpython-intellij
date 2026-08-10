@@ -87,6 +87,13 @@ internal object ByCli {
             .notify(project)
     }
 
+    fun notifyWarning(project: Project, title: String, content: String) {
+        NotificationGroupManager.getInstance()
+            .getNotificationGroup(NOTIFICATION_GROUP_ID)
+            .createNotification(title, content, NotificationType.WARNING)
+            .notify(project)
+    }
+
     fun notifyError(project: Project, title: String, content: String) {
         NotificationGroupManager.getInstance()
             .getNotificationGroup(NOTIFICATION_GROUP_ID)

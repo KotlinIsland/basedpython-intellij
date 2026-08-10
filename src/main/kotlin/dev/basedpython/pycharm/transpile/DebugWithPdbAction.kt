@@ -25,17 +25,16 @@ import java.nio.file.Paths
 /**
  * Action: "Debug .by (pdb)".
  *
- * basedpython transpiles `.by` to Python under `out/`. There is no source-mapped IDE debugger
- * yet, so this action gives the next best thing without depending on the optional Python plugin:
- * it runs `by build`, then launches the generated `.py` under the standard library debugger
- * (`python -m pdb`) in an interactive console. pdb's `> path(line)` frames are clickable thanks to
- * the basedpython console filter, and "Go to Generated .py" maps frames back to the `.by` source.
+ * The fallback for when the real debugger cannot run. Source-mapped IDE debugging of `.by` files
+ * now exists — Debug a `by run` configuration; see [dev.basedpython.pycharm.debug.ByDebugAdapter]
+ * and docs/debugging.md — but it needs `debugpy` installed in the interpreter `by run` chooses.
+ * This action needs nothing beyond the standard library: it runs `by build`, then launches the
+ * generated `.py` under `python -m pdb` in an interactive console. pdb's `> path(line)` frames are
+ * clickable thanks to the basedpython console filter, and "Go to Generated .py" maps frames back to
+ * the `.by` source.
  *
- * A line map *does* exist, contrary to what this comment used to claim: `by run` writes
- * `_by_sourcemap.py` next to the transpiled output in its temp directory, holding
- * `{generated.py: (source.by, [by_line_index_or_None, ...])}`, and `_by_runner.py` uses it to
- * rewrite tracebacks. `by build` does not emit it, which is why this pdb path cannot use it — but
- * a real debugger built on `by run` could.
+ * It cannot be source-mapped itself: the line map lives in `_by_sourcemap.py`, which `by run`
+ * writes into its temp directory and `by build` does not emit at all.
  */
 class DebugWithPdbAction : AnAction() {
 
