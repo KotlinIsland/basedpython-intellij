@@ -39,9 +39,10 @@ support, run configurations, CLI actions, and editor tooling.
   frames, variables and expression evaluation all report `.by` sources, not the transpiled
   output. Built on the platform's Debug Adapter Protocol client and `debugpy`; the line
   translation is done by pydevd in the debuggee, from the map `by run` already writes.
-- Requires `debugpy` in the interpreter `by run` uses (`PYTHON`, otherwise `python3` on
-  `PATH` — not necessarily the project's `.venv`). If it is missing, the debugger says so
-  and names that interpreter.
+- Requires `debugpy`: `uv add --dev debugpy`. `by run` picks `PYTHON`, else `python3` on
+  `PATH`, and since every `by` launch here goes out with the project venv activated, that
+  is the project's own interpreter. If `debugpy` is missing, the debugger says so and
+  names the exact interpreter that could not import it.
 - **Debug .by (pdb)** remains as a fallback that needs no extra package: builds, then runs
   the generated `.py` under `python -m pdb` with clickable frames.
 - See [docs/debugging.md](docs/debugging.md) for how it works and what it does not cover.

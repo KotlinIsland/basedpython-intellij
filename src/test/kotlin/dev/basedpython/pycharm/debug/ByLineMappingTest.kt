@@ -81,6 +81,26 @@ class ByLineMappingTest {
         assertEquals(listOf("a.by"), ByLineMapping.invert(listOf(mapped, prelude)).map { it.source })
     }
 
+    /**
+     * The real thing, captured from `by run` 0.0.1a9 on a file that starts with a `data class`.
+     *
+     * 83 lines of prelude, then `data class Point:` claiming two generated lines, then the rest
+     * one for one — which is the whole file in exactly two runs. Verified live: with these runs
+     * registered, every breakpoint lands on the right generated line and frames come back as
+     * `demo.by`.
+     */
+    @Test
+    fun `the map by run actually emits collapses to two runs`() {
+        val lines = List(83) { null } + listOf(0, 0) + (1..15).toList()
+        assertEquals(
+            listOf(
+                ByLineRun(line = 1, endLine = 1, runtimeLine = 84),
+                ByLineRun(line = 2, endLine = 16, runtimeLine = 86),
+            ),
+            ByLineMapping.invertLines(lines),
+        )
+    }
+
     /** Gson leaves absent keys null regardless of the Kotlin defaults; nothing here may throw. */
     @Test
     fun `files with missing paths or no line list are dropped`() {
