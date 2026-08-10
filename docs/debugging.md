@@ -156,8 +156,11 @@ Nothing in the bootstrap may take the user's program down with it: every step ru
   which is correct. Note that some of this is inherent rather than a pydevd bug: a
   `SourceMappingEntry` can only express a bijective run, and `data class Point:` becoming two
   generated lines is not bijective, so no set of entries gets both directions exactly right.
-- **Only `by run` configurations.** `by build` and `by check` produce no running program;
-  debugging the test configuration would work the same way but is not wired up.
+- **Only `by run` and test configurations.** A test run *is* a `by run` — the configuration
+  invokes `by run pytest -v` — so the same bootstrap reaches the same interpreter and the same
+  maps describe the same transpiled tree; verified live, with a breakpoint in a `.by` test
+  stopping and reporting its frame against the source. `by build` and `by check` produce no
+  running program to attach to.
 - **Only `.by` files.** A plain `.py` in a basedpython project has no source-map entry, so a
   breakpoint in it will not bind.
 - **No exception breakpoints.** `ByExceptionBreakpointType` exists because

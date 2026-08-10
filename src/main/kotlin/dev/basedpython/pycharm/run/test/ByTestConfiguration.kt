@@ -5,19 +5,22 @@ import dev.basedpython.pycharm.run.ByCommandLineState
 import dev.basedpython.pycharm.run.ByCommonOptions
 import dev.basedpython.pycharm.run.test.tree.ByTestEventsConverter
 import dev.basedpython.pycharm.run.test.tree.ByTestLocator
+import com.intellij.execution.DefaultExecutionResult
+import com.intellij.execution.ExecutionResult
 import com.intellij.execution.Executor
+import com.intellij.execution.configurations.CommandLineState
 import com.intellij.execution.configurations.ConfigurationFactory
 import com.intellij.execution.configurations.RunConfigurationBase
 import com.intellij.execution.configurations.RunProfileState
 import com.intellij.execution.configurations.RuntimeConfigurationException
 import com.intellij.execution.runners.ExecutionEnvironment
+import com.intellij.execution.runners.ProgramRunner
 import com.intellij.execution.testframework.TestConsoleProperties
 import com.intellij.execution.testframework.sm.SMCustomMessagesParsing
 import com.intellij.execution.testframework.sm.SMTestRunnerConnectionUtil
 import com.intellij.execution.testframework.sm.runner.OutputToGeneralTestEventsConverter
 import com.intellij.execution.testframework.sm.runner.SMTRunnerConsoleProperties
 import com.intellij.execution.testframework.sm.runner.SMTestLocator
-import com.intellij.execution.ui.ConsoleView
 import com.intellij.openapi.options.SettingsEditor
 import com.intellij.openapi.project.Project
 
@@ -52,21 +55,41 @@ class ByTestConfiguration(project: Project, factory: ConfigurationFactory, name:
 
             override fun buildSubcommandArgs(): List<String> = ByPytest.arguments(opts.paths)
 
-            override fun createConsole(executor: Executor): ConsoleView {
-                val props = object : SMTRunnerConsoleProperties(config, FRAMEWORK_NAME, executor),
-                    SMCustomMessagesParsing {
-                    override fun createTestEventsConverter(
-                        testFrameworkName: String,
-                        consoleProperties: TestConsoleProperties,
-                    ): OutputToGeneralTestEventsConverter =
-                        ByTestEventsConverter(testFrameworkName, consoleProperties)
-
-                    override fun getTestLocator(): SMTestLocator = ByTestLocator
-                }
-                return SMTestRunnerConnectionUtil.createAndAttachConsole(FRAMEWORK_NAME, startProcess(), props)
+            /**
+             * Assembled here rather than in `createConsole` because the SM runner attaches the
+             * console itself.
+             *
+             * [CommandLineState.execute] starts the process, *then* asks for a console, then
+             * attaches that console to the process it started. Building the console with
+             * `SMTestRunnerConnectionUtil.createAndAttachConsole(…, startProcess(), …)` therefore
+             * started a second `by run pytest` — the whole suite ran twice — and left the console
+             * attached to both, so every test appeared twice in the tree while the Stop button
+             * killed only one of the two processes.
+             */
+            override fun execute(executor: Executor, runner: ProgramRunner<*>): ExecutionResult {
+                val handler = startProcess()
+                val console = SMTestRunnerConnectionUtil.createAndAttachConsole(
+                    FRAMEWORK_NAME, handler, testConsoleProperties(config, executor),
+                )
+                return DefaultExecutionResult(console, handler, *createActions(console, handler, executor))
             }
         }
     }
+
+    /** Wires the `by`-specific output parser and source locator into the SM test runner. */
+    private fun testConsoleProperties(
+        config: ByTestConfiguration,
+        executor: Executor,
+    ): SMTRunnerConsoleProperties =
+        object : SMTRunnerConsoleProperties(config, FRAMEWORK_NAME, executor), SMCustomMessagesParsing {
+            override fun createTestEventsConverter(
+                testFrameworkName: String,
+                consoleProperties: TestConsoleProperties,
+            ): OutputToGeneralTestEventsConverter =
+                ByTestEventsConverter(testFrameworkName, consoleProperties)
+
+            override fun getTestLocator(): SMTestLocator = ByTestLocator
+        }
 
     private companion object {
         const val FRAMEWORK_NAME = "pytest (by)"
