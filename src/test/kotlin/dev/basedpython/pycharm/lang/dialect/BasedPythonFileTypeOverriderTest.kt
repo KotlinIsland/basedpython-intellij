@@ -1,9 +1,17 @@
 package dev.basedpython.pycharm.lang.dialect
 
 import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.testFramework.fixtures.BasePlatformTestCase
+import com.intellij.testFramework.junit5.RunInEdt
+import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.lang.BasedPythonFileType
 import dev.basedpython.pycharm.settings.BasedPythonSettings
+import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertSame
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Test
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -15,10 +23,16 @@ import java.nio.file.Paths
  *   1. The pure [BasedPythonFileTypeOverrider.decide] / [isOverridableExtension] logic,
  *      which needs no IDE state.
  *   2. The full [BasedPythonFileTypeOverrider.getOverriddenFileType] path against real
- *      [VirtualFile]s created through `myFixture`, with the project toggled into / out of
+ *      [VirtualFile]s created through the fixture, with the project toggled into / out of
  *      "basedpython project" mode via on-disk markers at the base path.
  */
-class BasedPythonFileTypeOverriderTest : BasePlatformTestCase() {
+@TestFixtures
+@RunInEdt(writeIntent = true)
+class BasedPythonFileTypeOverriderTest {
+
+    private val fixture by codeInsightFixture()
+
+    private val project get() = fixture.project
 
     private val overrider = BasedPythonFileTypeOverrider()
     private val createdMarkers = mutableListOf<Path>()
@@ -57,20 +71,17 @@ class BasedPythonFileTypeOverriderTest : BasePlatformTestCase() {
 
     /** Creates a real project file via the fixture and returns its [VirtualFile]. */
     private fun fixtureFile(relPath: String): VirtualFile =
-        myFixture.addFileToProject(relPath, "x = 1\n").virtualFile
+        fixture.addFileToProject(relPath, "x = 1\n").virtualFile
 
-    override fun tearDown() {
-        try {
-            for (p in createdMarkers.reversed()) {
-                try {
-                    Files.deleteIfExists(p)
-                } catch (_: Exception) {
-                }
+    @AfterEach
+    fun removeMarkers() {
+        for (p in createdMarkers.reversed()) {
+            try {
+                Files.deleteIfExists(p)
+            } catch (_: Exception) {
             }
-            createdMarkers.clear()
-        } finally {
-            super.tearDown()
         }
+        createdMarkers.clear()
     }
 
     // =========================================================================
@@ -87,48 +98,58 @@ class BasedPythonFileTypeOverriderTest : BasePlatformTestCase() {
         extension, isBasedPythonProject, handling, pythonLanguageAvailable,
     )
 
-    fun `test decide returns basedpython for py in basedpython project`() {
+    @Test
+    fun `decide returns basedpython for py in basedpython project`() {
         assertSame(BasedPythonFileType.INSTANCE, decide("py"))
     }
 
-    fun `test decide returns null for py in non-basedpython project`() {
+    @Test
+    fun `decide returns null for py in non-basedpython project`() {
         assertNull(decide("py", isBasedPythonProject = false))
     }
 
-    fun `test decide returns null for pyi even in basedpython project`() {
+    @Test
+    fun `decide returns null for pyi even in basedpython project`() {
         assertNull(decide("pyi"))
     }
 
-    fun `test decide returns null for by which is already handled`() {
+    @Test
+    fun `decide returns null for by which is already handled`() {
         assertNull(decide("by"))
     }
 
-    fun `test decide returns null for unrelated extension`() {
+    @Test
+    fun `decide returns null for unrelated extension`() {
         assertNull(decide("md"))
     }
 
-    fun `test decide returns null for null extension`() {
+    @Test
+    fun `decide returns null for null extension`() {
         assertNull(decide(null))
     }
 
-    fun `test decide is case insensitive on extension`() {
+    @Test
+    fun `decide is case insensitive on extension`() {
         assertSame(BasedPythonFileType.INSTANCE, decide("PY"))
     }
 
     // ---- who owns .py (§ "work alongside PyCharm") ----
 
-    fun `test NEVER leaves py alone even in a basedpython project`() {
+    @Test
+    fun `NEVER leaves py alone even in a basedpython project`() {
         assertNull(decide("py", handling = PyFileHandling.NEVER, pythonLanguageAvailable = false))
     }
 
-    fun `test ALWAYS claims py even when a Python plugin is present`() {
+    @Test
+    fun `ALWAYS claims py even when a Python plugin is present`() {
         assertSame(
             BasedPythonFileType.INSTANCE,
             decide("py", handling = PyFileHandling.ALWAYS, pythonLanguageAvailable = true),
         )
     }
 
-    fun `test AUTO claims py only when nothing else provides Python`() {
+    @Test
+    fun `AUTO claims py only when nothing else provides Python`() {
         assertSame(
             BasedPythonFileType.INSTANCE,
             decide("py", handling = PyFileHandling.AUTO, pythonLanguageAvailable = false),
@@ -136,7 +157,8 @@ class BasedPythonFileTypeOverriderTest : BasePlatformTestCase() {
         assertNull(decide("py", handling = PyFileHandling.AUTO, pythonLanguageAvailable = true))
     }
 
-    fun `test isOverridableExtension only accepts py`() {
+    @Test
+    fun `isOverridableExtension only accepts py`() {
         assertTrue(BasedPythonFileTypeOverrider.isOverridableExtension("py"))
         assertTrue(BasedPythonFileTypeOverrider.isOverridableExtension("PY"))
         assertFalse(BasedPythonFileTypeOverrider.isOverridableExtension("pyi"))
@@ -148,37 +170,43 @@ class BasedPythonFileTypeOverriderTest : BasePlatformTestCase() {
     // full getOverriddenFileType path with real VirtualFiles
     // =========================================================================
 
-    fun `test py in basedpython project is overridden to basedpython`() {
+    @Test
+    fun `py in basedpython project is overridden to basedpython`() {
         makeBasedPythonProject()
         val file = fixtureFile("script.py")
         assertSame(BasedPythonFileType.INSTANCE, overrider.getOverriddenFileType(file))
     }
 
-    fun `test py in vanilla project is not overridden`() {
+    @Test
+    fun `py in vanilla project is not overridden`() {
         makeVanillaProject()
         val file = fixtureFile("script.py")
         assertNull(overrider.getOverriddenFileType(file))
     }
 
-    fun `test pyi is never overridden even in basedpython project`() {
+    @Test
+    fun `pyi is never overridden even in basedpython project`() {
         makeBasedPythonProject()
         val file = fixtureFile("stub.pyi")
         assertNull(overrider.getOverriddenFileType(file))
     }
 
-    fun `test by file is not overridden by this overrider`() {
+    @Test
+    fun `by file is not overridden by this overrider`() {
         makeBasedPythonProject()
         val file = fixtureFile("module.by")
         assertNull(overrider.getOverriddenFileType(file))
     }
 
-    fun `test non-source extension is not overridden`() {
+    @Test
+    fun `non-source extension is not overridden`() {
         makeBasedPythonProject()
         val file = fixtureFile("notes.md")
         assertNull(overrider.getOverriddenFileType(file))
     }
 
-    fun `test py with by disabled is not overridden`() {
+    @Test
+    fun `py with by disabled is not overridden`() {
         makeBasedPythonProject()
         settings().byEnabled = false
         val file = fixtureFile("script.py")

@@ -1,7 +1,12 @@
 package dev.basedpython.pycharm.lsp.semantic
 
 import com.intellij.platform.lsp.api.customization.LspSemanticTokensSupport
-import com.intellij.testFramework.fixtures.BasePlatformTestCase
+import com.intellij.testFramework.junit5.RunInEdt
+import com.intellij.testFramework.junit5.fixture.TestFixtures
+import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Test
 
 /**
  * The platform gates semantic-token requests behind
@@ -13,24 +18,30 @@ import com.intellij.testFramework.fixtures.BasePlatformTestCase
  * every identifier keeps its lexer colour, while diagnostics and completion still work because they
  * aren't gated. The failure is silent: no exception, no log line.
  */
-class BasedPythonLspSemanticTokensSupportTest : BasePlatformTestCase() {
+@TestFixtures
+@RunInEdt(writeIntent = true)
+class BasedPythonLspSemanticTokensSupportTest {
 
-    fun testAsksServerForSemanticTokensOnByFiles() {
-        val psiFile = myFixture.configureByText("a.by", "a = 1 cast int")
+    private val fixture by codeInsightFixture()
+
+    @Test
+    fun `asks server for semantic tokens on by files`() {
+        val psiFile = fixture.configureByText("a.by", "a = 1 cast int")
         assertTrue(
+            BasedPythonLspSemanticTokensSupport().shouldAskServerForSemanticTokens(psiFile),
             "basedpython files must ask `by` for semantic tokens; the platform default returns " +
                 "true only for TEXT/textmate files, so inheriting it stops the request entirely",
-            BasedPythonLspSemanticTokensSupport().shouldAskServerForSemanticTokens(psiFile),
         )
     }
 
     /** The exact condition that made this bite: our language is neither of the two the default allows. */
-    fun testPlatformDefaultWouldNotAskForByFiles() {
-        val psiFile = myFixture.configureByText("a.by", "a = 1 cast int")
+    @Test
+    fun `platform default would not ask for by files`() {
+        val psiFile = fixture.configureByText("a.by", "a = 1 cast int")
         assertFalse(
+            LspSemanticTokensSupport().shouldAskServerForSemanticTokens(psiFile),
             "if this ever becomes TEXT/textmate the override is redundant, but the language ID is " +
                 "load-bearing elsewhere, so the override should stay either way",
-            LspSemanticTokensSupport().shouldAskServerForSemanticTokens(psiFile),
         )
     }
 }

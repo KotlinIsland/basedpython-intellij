@@ -1,10 +1,10 @@
 package dev.basedpython.pycharm.refactoring
 
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Test
 
 /**
  * Pure-logic unit tests for [ExtractMethodLogic]. No IDE fixture required.
@@ -21,7 +21,7 @@ class ExtractMethodLogicTest {
 
     /** Applies a plan to [text] deterministically and returns the resulting document text. */
     private fun apply(text: String, plan: ExtractMethodLogic.ExtractMethodPlan): String {
-        assertTrue("plan should be applicable", plan.ok)
+        assertTrue(plan.ok, "plan should be applicable")
         val sb = StringBuilder(text)
         // Apply higher offset first so the earlier offset stays valid.
         if (plan.insertOffset <= plan.replaceStart) {

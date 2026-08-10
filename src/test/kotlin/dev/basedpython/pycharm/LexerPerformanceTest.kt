@@ -1,8 +1,8 @@
 package dev.basedpython.pycharm
 
 import dev.basedpython.pycharm.lang.BasedPythonLexer
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Test
 
 /**
  * Performance benchmark for [BasedPythonLexer].
@@ -72,7 +72,7 @@ class LexerPerformanceTest {
         val repetitions = 1500
         val src = buildLargeSource(repetitions)
         val lines = src.count { it == '\n' }
-        assertTrue("generated source should exceed 10k lines (was $lines)", lines >= 10_000)
+        assertTrue(lines >= 10_000, "generated source should exceed 10k lines (was $lines)")
 
         // Warm up (JIT) on a single pass; result intentionally ignored.
         tokenize(src)
@@ -94,12 +94,12 @@ class LexerPerformanceTest {
                 .format(tokensPerSec, charsPerSec)
         )
 
-        assertTrue("lexer produced no tokens", tokens > 0)
+        assertTrue(tokens > 0, "lexer produced no tokens")
         // Generous bound: a healthy linear lexer finishes this in tens of ms.
         // 5 seconds catches only catastrophic (quadratic) regressions.
         assertTrue(
-            "tokenization took %.2f ms, exceeding the 5000 ms bound".format(elapsedMs),
-            elapsedMs < 5_000.0
+            elapsedMs < 5_000.0,
+            "tokenization took %.2f ms, exceeding the 5000 ms bound".format(elapsedMs)
         )
     }
 }

@@ -1,9 +1,9 @@
 package dev.basedpython.pycharm.run.test.tree
 
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Test
 
 /**
  * Tests that [ByServiceMessages] produces correct TeamCity `##teamcity[...]`
@@ -167,8 +167,8 @@ class ByServiceMessagesTest {
         )
         for (e in events) {
             val m = msg(e)
-            assertTrue(m, m.startsWith("##teamcity["))
-            assertTrue(m, m.endsWith("]"))
+            assertTrue(m.startsWith("##teamcity["), m)
+            assertTrue(m.endsWith("]"), m)
         }
     }
 }

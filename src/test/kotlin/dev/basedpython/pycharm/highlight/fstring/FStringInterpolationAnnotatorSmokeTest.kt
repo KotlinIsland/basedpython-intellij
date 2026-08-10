@@ -1,6 +1,11 @@
 package dev.basedpython.pycharm.highlight.fstring
 
-import com.intellij.testFramework.fixtures.BasePlatformTestCase
+import com.intellij.testFramework.junit5.RunInEdt
+import com.intellij.testFramework.junit5.fixture.TestFixtures
+import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Test
 
 /**
  * Lightweight smoke test for [FStringInterpolationAnnotator]. We only assert that running
@@ -11,9 +16,14 @@ import com.intellij.testFramework.fixtures.BasePlatformTestCase
  * orchestrator integration step), so this test exercises the PSI plumbing of the annotator's
  * code path indirectly through [FStringInterpolation] on real PSI text.
  */
-class FStringInterpolationAnnotatorSmokeTest : BasePlatformTestCase() {
+@TestFixtures
+@RunInEdt(writeIntent = true)
+class FStringInterpolationAnnotatorSmokeTest {
 
-    fun testDoHighlightingDoesNotThrow() {
+    private val fixture by codeInsightFixture()
+
+    @Test
+    fun `doHighlighting does not throw`() {
         val src = """
             x = f"{a}"
             y = f"hi {name!r} bye"
@@ -22,13 +32,14 @@ class FStringInterpolationAnnotatorSmokeTest : BasePlatformTestCase() {
             esc = f"{{literal}} {real}"
             plain = "{not_interpolated}"
         """.trimIndent()
-        myFixture.configureByText("a.by", src)
+        fixture.configureByText("a.by", src)
         // Should not throw.
-        myFixture.doHighlighting()
+        fixture.doHighlighting()
     }
 
-    fun testAnnotatorAnalyzesFStringPsiText() {
-        myFixture.configureByText("b.by", "v = f\"{value}\"\n")
+    @Test
+    fun `annotator analyzes f-string psi text`() {
+        fixture.configureByText("b.by", "v = f\"{value}\"\n")
         // Find the f-string literal text via the helper to confirm PSI text round-trips.
         val analysis = FStringInterpolation.analyze("f\"{value}\"")
         assertTrue(analysis.isFString)

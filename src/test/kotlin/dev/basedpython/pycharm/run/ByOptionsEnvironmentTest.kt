@@ -3,7 +3,10 @@ package dev.basedpython.pycharm.run
 import com.intellij.openapi.util.JDOMUtil
 import com.intellij.util.xmlb.XmlSerializer
 import dev.basedpython.pycharm.env.ByEnvironmentKind
-import junit.framework.TestCase
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Test
 
 /**
  * Persistence contract for [ByCommonOptions.environment] / [ByCommonOptions.environmentKind].
@@ -13,16 +16,18 @@ import junit.framework.TestCase
  * tests pin the string form and the degradation behaviour that keeps a shared run configuration
  * loadable across plugin versions.
  */
-class ByOptionsEnvironmentTest : TestCase() {
+class ByOptionsEnvironmentTest {
 
-    fun `test the default is AUTO and persists as blank`() {
+    @Test
+    fun `the default is AUTO and persists as blank`() {
         val o = ByCommonOptions()
         assertEquals(ByEnvironmentKind.AUTO, o.environmentKind)
         // Blank matches the property default, so an untouched configuration writes no option line.
         assertEquals("", o.environment)
     }
 
-    fun `test setting AUTO explicitly still persists as blank`() {
+    @Test
+    fun `setting AUTO explicitly still persists as blank`() {
         // Otherwise opening and OK-ing any existing run config would dirty VCS-tracked XML.
         val o = ByCommonOptions()
         o.environmentKind = ByEnvironmentKind.UV
@@ -30,33 +35,38 @@ class ByOptionsEnvironmentTest : TestCase() {
         assertEquals("", o.environment)
     }
 
-    fun `test each kind round-trips through the persisted string`() {
+    @Test
+    fun `each kind round-trips through the persisted string`() {
         for (kind in ByEnvironmentKind.entries) {
             val o = ByCommonOptions()
             o.environmentKind = kind
-            assertEquals("round-trip failed for $kind", kind, o.environmentKind)
+            assertEquals(kind, o.environmentKind, "round-trip failed for $kind")
         }
     }
 
-    fun `test the persisted form is the stable id not the enum constant name`() {
+    @Test
+    fun `the persisted form is the stable id not the enum constant name`() {
         val o = ByCommonOptions()
         o.environmentKind = ByEnvironmentKind.UV
         assertEquals("uv", o.environment)
     }
 
-    fun `test an unknown persisted value degrades to AUTO instead of throwing`() {
+    @Test
+    fun `an unknown persisted value degrades to AUTO instead of throwing`() {
         val o = ByCommonOptions()
         o.environment = "conda"
         assertEquals(ByEnvironmentKind.AUTO, o.environmentKind)
     }
 
-    fun `test a legacy configuration with no value deserialises to AUTO`() {
+    @Test
+    fun `a legacy configuration with no value deserialises to AUTO`() {
         val o = ByCommonOptions()
         o.environment = ""
         assertEquals(ByEnvironmentKind.AUTO, o.environmentKind)
     }
 
-    fun `test subclasses inherit the environment option`() {
+    @Test
+    fun `subclasses inherit the environment option`() {
         for (o in listOf(ByRunOptions(), ByBuildOptions(), ByCheckOptions())) {
             o.environmentKind = ByEnvironmentKind.VENV
             assertEquals(ByEnvironmentKind.VENV, o.environmentKind)
@@ -69,26 +79,29 @@ class ByOptionsEnvironmentTest : TestCase() {
     private fun serialize(o: ByCommonOptions): String =
         JDOMUtil.write(XmlSerializer.serialize(o))
 
-    fun `test the XML stores the id and not the enum constant name`() {
+    @Test
+    fun `the XML stores the id and not the enum constant name`() {
         val o = ByCommonOptions()
         o.environmentKind = ByEnvironmentKind.UV
         val xml = serialize(o)
-        assertTrue("expected the stable id in $xml", xml.contains("value=\"uv\""))
-        assertFalse("the enum constant name must not be persisted: $xml", xml.contains("value=\"UV\""))
+        assertTrue(xml.contains("value=\"uv\""), "expected the stable id in $xml")
+        assertFalse(xml.contains("value=\"UV\""), "the enum constant name must not be persisted: $xml")
     }
 
-    fun `test the derived kind property is not serialised`() {
+    @Test
+    fun `the derived kind property is not serialised`() {
         // Two writable views of one value; only `environment` may reach the XML, or the file would
         // carry a second, conflicting copy.
         val o = ByCommonOptions()
         o.environmentKind = ByEnvironmentKind.UV
-        assertFalse("environmentKind must be @Transient: ${serialize(o)}", serialize(o).contains("environmentKind"))
+        assertFalse(serialize(o).contains("environmentKind"), "environmentKind must be @Transient: ${serialize(o)}")
     }
 
-    fun `test an untouched configuration writes no environment option`() {
+    @Test
+    fun `an untouched configuration writes no environment option`() {
         assertFalse(
-            "AUTO is the default and must not add an option line",
             serialize(ByCommonOptions()).contains("environment"),
+            "AUTO is the default and must not add an option line",
         )
     }
 }

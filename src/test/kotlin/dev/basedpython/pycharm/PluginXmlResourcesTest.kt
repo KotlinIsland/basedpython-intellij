@@ -1,8 +1,8 @@
 package dev.basedpython.pycharm
 
-import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Test
 
 /**
  * plugin.xml points at resources by path, and nothing in the build checks those paths resolve — a
@@ -31,12 +31,12 @@ class PluginXmlResourcesTest {
     @Test
     fun `every declared live template file resolves`() {
         val declared = attr("defaultLiveTemplates", "file")
-        assertTrue("expected live templates to be declared", declared.isNotEmpty())
+        assertTrue(declared.isNotEmpty(), "expected live templates to be declared")
         for (path in declared) {
             assertNotNull(
+                javaClass.getResource("/$path.xml"),
                 "defaultLiveTemplates file=\"$path\" resolves to no resource; the platform appends " +
                     "\".xml\" and the lookup is case-sensitive",
-                javaClass.getResource("/$path.xml"),
             )
         }
     }
@@ -51,13 +51,13 @@ class PluginXmlResourcesTest {
             .findAll(pluginXml)
             .map { it.groupValues[1].substringAfterLast('.') }
             .toList()
-        assertTrue("expected intention actions to be declared", classNames.isNotEmpty())
+        assertTrue(classNames.isNotEmpty(), "expected intention actions to be declared")
         val missing = classNames.filter {
             javaClass.getResource("/intentionDescriptions/$it/description.html") == null
         }
         assertTrue(
-            "intentions with no intentionDescriptions/<ClassName>/description.html: $missing",
             missing.isEmpty(),
+            "intentions with no intentionDescriptions/<ClassName>/description.html: $missing",
         )
     }
 }

@@ -1,39 +1,55 @@
 package dev.basedpython.pycharm.settings
 
-import com.intellij.testFramework.fixtures.BasePlatformTestCase
+import com.intellij.testFramework.junit5.RunInEdt
+import com.intellij.testFramework.junit5.fixture.TestFixtures
+import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Test
 
 /**
  * Verifies persistence semantics of [BasedPythonSettings], focusing on the
  * [BasedPythonSettings.indexGeneratedPython] Python-interop toggle and that
  * loadState round-trips the full bean.
  */
-class BasedPythonSettingsTest : BasePlatformTestCase() {
+@TestFixtures
+@RunInEdt(writeIntent = true)
+class BasedPythonSettingsTest {
 
-    private val settings get() = BasedPythonSettings.getInstance(project)
+    private val fixture by codeInsightFixture()
 
-    fun `test index generated python defaults to false`() {
+    private val settings get() = BasedPythonSettings.getInstance(fixture.project)
+
+    @Test
+    fun `index generated python defaults to false`() {
         assertFalse(BasedPythonSettings.State().indexGeneratedPython)
     }
 
-    fun `test index generated python is mutable`() {
+    @Test
+    fun `index generated python is mutable`() {
         settings.indexGeneratedPython = true
         assertTrue(settings.indexGeneratedPython)
         settings.indexGeneratedPython = false
         assertFalse(settings.indexGeneratedPython)
     }
 
-    fun `test getState reflects setter`() {
+    @Test
+    fun `getState reflects setter`() {
         settings.indexGeneratedPython = true
         assertTrue(settings.state.indexGeneratedPython)
     }
 
-    fun `test loadState round-trips index flag`() {
+    @Test
+    fun `loadState round-trips index flag`() {
         val incoming = BasedPythonSettings.State(indexGeneratedPython = true)
         settings.loadState(incoming)
         assertTrue(settings.indexGeneratedPython)
     }
 
-    fun `test loadState copies all fields`() {
+    @Test
+    fun `loadState copies all fields`() {
         val incoming = BasedPythonSettings.State(
             byPath = "/tmp/by",
             buffPath = "/tmp/buff",
@@ -67,7 +83,8 @@ class BasedPythonSettingsTest : BasePlatformTestCase() {
 
     // ---- §142 per-server capability toggles ----
 
-    fun `test capability toggles default to true`() {
+    @Test
+    fun `capability toggles default to true`() {
         val d = BasedPythonSettings.State()
         assertTrue(d.byCompletion)
         assertTrue(d.byGoToDefinition)
@@ -82,7 +99,8 @@ class BasedPythonSettingsTest : BasePlatformTestCase() {
         assertTrue(d.buffHover)
     }
 
-    fun `test capability toggles are mutable`() {
+    @Test
+    fun `capability toggles are mutable`() {
         settings.byCompletion = false
         settings.buffFormatting = false
         assertFalse(settings.byCompletion)
@@ -90,7 +108,8 @@ class BasedPythonSettingsTest : BasePlatformTestCase() {
         assertTrue(settings.byRename)
     }
 
-    fun `test loadState round-trips capability toggles`() {
+    @Test
+    fun `loadState round-trips capability toggles`() {
         val incoming = BasedPythonSettings.State(
             byCompletion = false,
             byGoToDefinition = false,
@@ -118,12 +137,9 @@ class BasedPythonSettingsTest : BasePlatformTestCase() {
         assertFalse(settings.buffHover)
     }
 
-    override fun tearDown() {
-        try {
-            // Reset to defaults so we don't leak state between fixtures.
-            settings.loadState(BasedPythonSettings.State())
-        } finally {
-            super.tearDown()
-        }
+    @AfterEach
+    fun resetSettings() {
+        // Reset to defaults so we don't leak state between fixtures.
+        settings.loadState(BasedPythonSettings.State())
     }
 }

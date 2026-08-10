@@ -5,7 +5,12 @@ import com.intellij.openapi.actionSystem.Presentation
 import com.intellij.openapi.actionSystem.impl.SimpleDataContext
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.testFramework.TestActionEvent
-import com.intellij.testFramework.fixtures.BasePlatformTestCase
+import com.intellij.testFramework.junit5.RunInEdt
+import com.intellij.testFramework.junit5.fixture.TestFixtures
+import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Test
 
 /**
  * End-to-end tests that drive the inline document mutation through a real editor + document,
@@ -15,11 +20,17 @@ import com.intellij.testFramework.fixtures.BasePlatformTestCase
  * only document-mutating code path the action runs. Action enable/disable is exercised separately
  * via `update()` (we never call `actionPerformed`, which can pop a modal info dialog in headless).
  */
-class InlineVariableEndToEndTest : BasePlatformTestCase() {
+@TestFixtures
+@RunInEdt(writeIntent = true)
+class InlineVariableEndToEndTest {
+
+    private val fixture by codeInsightFixture()
+
+    private val project get() = fixture.project
 
     /** Applies the inline plan for the identifier at the editor caret. */
     private fun applyInlineAtCaret() {
-        val editor = myFixture.editor
+        val editor = fixture.editor
         val text = editor.document.charsSequence.toString()
         val plan = InlineLogic.planInline(text, editor.caretModel.offset) ?: return
         WriteCommandAction.runWriteCommandAction(project) {
@@ -32,9 +43,9 @@ class InlineVariableEndToEndTest : BasePlatformTestCase() {
     private fun updatePresentation(): Presentation {
         val action = InlineVariableAction()
         val context = SimpleDataContext.builder()
-            .add(CommonDataKeys.EDITOR, myFixture.editor)
+            .add(CommonDataKeys.EDITOR, fixture.editor)
             .add(CommonDataKeys.PROJECT, project)
-            .add(CommonDataKeys.VIRTUAL_FILE, myFixture.file!!.virtualFile)
+            .add(CommonDataKeys.VIRTUAL_FILE, fixture.file!!.virtualFile)
             .build()
         val event = TestActionEvent.createTestEvent(action, context)
         action.update(event)
@@ -45,94 +56,109 @@ class InlineVariableEndToEndTest : BasePlatformTestCase() {
     // Apply behaviour
     // ------------------------------------------------------------------
 
-    fun `test inline single usage compound rhs`() {
-        myFixture.configureByText("a.by", "x = a + b\nresult = <caret>x * 2\n")
+    @Test
+    fun `inline single usage compound rhs`() {
+        fixture.configureByText("a.by", "x = a + b\nresult = <caret>x * 2\n")
         // caret is on the usage of x; identifierAt resolves it
         applyInlineAtCaret()
-        myFixture.checkResult("result = (a + b) * 2\n")
+        fixture.checkResult("result = (a + b) * 2\n")
     }
 
-    fun `test inline from definition caret`() {
-        myFixture.configureByText("a.by", "<caret>x = a + b\ny = x\n")
+    @Test
+    fun `inline from definition caret`() {
+        fixture.configureByText("a.by", "<caret>x = a + b\ny = x\n")
         applyInlineAtCaret()
-        myFixture.checkResult("y = (a + b)\n")
+        fixture.checkResult("y = (a + b)\n")
     }
 
-    fun `test inline multiple usages`() {
-        myFixture.configureByText("a.by", "x = a + b\ny = <caret>x + x\n")
+    @Test
+    fun `inline multiple usages`() {
+        fixture.configureByText("a.by", "x = a + b\ny = <caret>x + x\n")
         applyInlineAtCaret()
-        myFixture.checkResult("y = (a + b) + (a + b)\n")
+        fixture.checkResult("y = (a + b) + (a + b)\n")
     }
 
-    fun `test inline atomic rhs not parenthesized`() {
-        myFixture.configureByText("a.by", "x = foo\ny = <caret>x\n")
+    @Test
+    fun `inline atomic rhs not parenthesized`() {
+        fixture.configureByText("a.by", "x = foo\ny = <caret>x\n")
         applyInlineAtCaret()
-        myFixture.checkResult("y = foo\n")
+        fixture.checkResult("y = foo\n")
     }
 
-    fun `test inline inside function preserves indentation`() {
-        myFixture.configureByText("a.by", "def f():\n    x = a + b\n    return <caret>x\n")
+    @Test
+    fun `inline inside function preserves indentation`() {
+        fixture.configureByText("a.by", "def f():\n    x = a + b\n    return <caret>x\n")
         applyInlineAtCaret()
-        myFixture.checkResult("def f():\n    return (a + b)\n")
+        fixture.checkResult("def f():\n    return (a + b)\n")
     }
 
-    fun `test inline tab indentation`() {
-        myFixture.configureByText("a.by", "def f():\n\tx = a + b\n\treturn <caret>x\n")
+    @Test
+    fun `inline tab indentation`() {
+        fixture.configureByText("a.by", "def f():\n\tx = a + b\n\treturn <caret>x\n")
         applyInlineAtCaret()
-        myFixture.checkResult("def f():\n\treturn (a + b)\n")
+        fixture.checkResult("def f():\n\treturn (a + b)\n")
     }
 
-    fun `test inline does not touch similar names`() {
-        myFixture.configureByText("a.by", "x = 1\ny = <caret>x + xs + x_y + x\n")
+    @Test
+    fun `inline does not touch similar names`() {
+        fixture.configureByText("a.by", "x = 1\ny = <caret>x + xs + x_y + x\n")
         applyInlineAtCaret()
-        myFixture.checkResult("y = 1 + xs + x_y + 1\n")
+        fixture.checkResult("y = 1 + xs + x_y + 1\n")
     }
 
-    fun `test inline no trailing newline`() {
-        myFixture.configureByText("a.by", "x = a + b\ny = <caret>x")
+    @Test
+    fun `inline no trailing newline`() {
+        fixture.configureByText("a.by", "x = a + b\ny = <caret>x")
         applyInlineAtCaret()
-        myFixture.checkResult("y = (a + b)")
+        fixture.checkResult("y = (a + b)")
     }
 
-    fun `test inline call expression parenthesized`() {
-        myFixture.configureByText("a.by", "x = foo(1)\ny = <caret>x + 2\n")
+    @Test
+    fun `inline call expression parenthesized`() {
+        fixture.configureByText("a.by", "x = foo(1)\ny = <caret>x + 2\n")
         applyInlineAtCaret()
-        myFixture.checkResult("y = (foo(1)) + 2\n")
+        fixture.checkResult("y = (foo(1)) + 2\n")
     }
 
-    fun `test multiple assignments leaves text unchanged`() {
-        myFixture.configureByText("a.by", "x = 1\nx = 2\ny = <caret>x\n")
+    @Test
+    fun `multiple assignments leaves text unchanged`() {
+        fixture.configureByText("a.by", "x = 1\nx = 2\ny = <caret>x\n")
         applyInlineAtCaret()
-        myFixture.checkResult("x = 1\nx = 2\ny = x\n")
+        fixture.checkResult("x = 1\nx = 2\ny = x\n")
     }
 
-    fun `test no usages leaves text unchanged`() {
-        myFixture.configureByText("a.by", "<caret>x = a + b\ny = 1\n")
+    @Test
+    fun `no usages leaves text unchanged`() {
+        fixture.configureByText("a.by", "<caret>x = a + b\ny = 1\n")
         applyInlineAtCaret()
-        myFixture.checkResult("x = a + b\ny = 1\n")
+        fixture.checkResult("x = a + b\ny = 1\n")
     }
 
     // ------------------------------------------------------------------
     // Action update() enable/disable
     // ------------------------------------------------------------------
 
-    fun `test action enabled on identifier in by file`() {
-        myFixture.configureByText("a.by", "x = 1\ny = <caret>x\n")
-        assertTrue("enabled on identifier", updatePresentation().isEnabled)
+    @Test
+    fun `action enabled on identifier in by file`() {
+        fixture.configureByText("a.by", "x = 1\ny = <caret>x\n")
+        assertTrue(updatePresentation().isEnabled, "enabled on identifier")
     }
 
-    fun `test action disabled on whitespace`() {
-        myFixture.configureByText("a.by", "x = 1\n<caret> y = x\n")
-        assertFalse("disabled when caret not on identifier", updatePresentation().isEnabled)
+    @Test
+    fun `action disabled on whitespace`() {
+        fixture.configureByText("a.by", "x = 1\n<caret> y = x\n")
+        assertFalse(updatePresentation().isEnabled, "disabled when caret not on identifier")
     }
 
-    fun `test action disabled on non-by file`() {
-        myFixture.configureByText("a.txt", "x = 1\ny = <caret>x\n")
-        assertFalse("disabled on non-.by file", updatePresentation().isEnabled)
+    @Test
+    fun `action disabled on non-by file`() {
+        fixture.configureByText("a.txt", "x = 1\ny = <caret>x\n")
+        assertFalse(updatePresentation().isEnabled, "disabled on non-.by file")
     }
 
-    fun `test action visible on by file`() {
-        myFixture.configureByText("a.by", "x = 1\ny = <caret>x\n")
-        assertTrue("visible on .by file", updatePresentation().isVisible)
+    @Test
+    fun `action visible on by file`() {
+        fixture.configureByText("a.by", "x = 1\ny = <caret>x\n")
+        assertTrue(updatePresentation().isVisible, "visible on .by file")
     }
 }

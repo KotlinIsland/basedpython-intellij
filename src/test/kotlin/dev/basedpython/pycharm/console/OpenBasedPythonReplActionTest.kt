@@ -2,59 +2,74 @@ package dev.basedpython.pycharm.console
 
 import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.testFramework.TestActionEvent
-import com.intellij.testFramework.fixtures.BasePlatformTestCase
+import com.intellij.testFramework.junit5.RunInEdt
+import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.settings.BasedPythonSettings
+import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Test
 
 /**
  * Project-backed tests for [OpenBasedPythonReplAction]. None of these spawn a
  * real process: they exercise presentation/enablement logic, the configured
  * subcommand, and the graceful "binary missing" notification path (in CI no
  * `by` binary is resolvable, so `openRepl` must no-op without throwing).
- *
- * JUnit3-style ([BasePlatformTestCase]) — methods start with `test`.
  */
-class OpenBasedPythonReplActionTest : BasePlatformTestCase() {
+@TestFixtures
+@RunInEdt(writeIntent = true)
+class OpenBasedPythonReplActionTest {
+
+    private val fixture by codeInsightFixture()
+
+    private val project get() = fixture.project
 
     private val action = OpenBasedPythonReplAction()
 
-    override fun tearDown() {
-        try {
-            val s = BasedPythonSettings.getInstance(project)
-            s.byPath = null
-            s.byExtraArgs = ""
-        } finally {
-            super.tearDown()
-        }
+    @AfterEach
+    fun resetSettings() {
+        val s = BasedPythonSettings.getInstance(project)
+        s.byPath = null
+        s.byExtraArgs = ""
     }
 
-    fun testIsEnabledWithProject() {
-        // BasePlatformTestCase always has a base path.
+    @Test
+    fun `is enabled with project`() {
+        // The light fixture project always has a base path.
         assertTrue(action.isEnabled(project))
     }
 
-    fun testIsDisabledWithNullProject() {
+    @Test
+    fun `is disabled with null project`() {
         assertFalse(action.isEnabled(null))
     }
 
-    fun testDefaultSubcommandIsRepl() {
+    @Test
+    fun `default subcommand is repl`() {
         assertEquals("repl", action.replSubcommand())
     }
 
-    fun testUpdateEnablesActionWhenProjectPresent() {
+    @Test
+    fun `update enables action when project present`() {
         val event = TestActionEvent.createTestEvent(action)
         action.update(event)
         assertTrue(event.presentation.isEnabled)
         assertTrue(event.presentation.isVisible)
     }
 
-    fun testActionUpdateThreadIsBackground() {
+    @Test
+    fun `action update thread is background`() {
         assertEquals(
             com.intellij.openapi.actionSystem.ActionUpdateThread.BGT,
             action.actionUpdateThread,
         )
     }
 
-    fun testOpenReplWithNoBinaryDoesNotThrow() {
+    @Test
+    fun `open repl with no binary does not throw`() {
         // No override + (in CI) no `by` on PATH -> resolves null -> notify, no crash.
         BasedPythonSettings.getInstance(project).byPath = null
         action.openRepl(project)
@@ -62,19 +77,22 @@ class OpenBasedPythonReplActionTest : BasePlatformTestCase() {
         assertTrue(true)
     }
 
-    fun testOpenReplWithBogusBinaryDoesNotThrow() {
+    @Test
+    fun `open repl with bogus binary does not throw`() {
         BasedPythonSettings.getInstance(project).byPath = "/definitely/not/a/real/path/by-xyz"
         action.openRepl(project)
         assertTrue(true)
     }
 
-    fun testActionIsRegisteredViaConstructor() {
+    @Test
+    fun `action is registered via constructor`() {
         // The action can be instantiated with the no-arg ctor the platform requires.
         val fresh = OpenBasedPythonReplAction()
         assertNotNull(fresh)
     }
 
-    fun testExtraArgsFlowIntoParameters() {
+    @Test
+    fun `extra args flow into parameters`() {
         // Independent of process launch: verify the args the action would pass.
         BasedPythonSettings.getInstance(project).byExtraArgs = "--verbose \"a b\""
         val params = ByReplCommandLine.parameters(
@@ -84,7 +102,8 @@ class OpenBasedPythonReplActionTest : BasePlatformTestCase() {
         assertEquals(listOf("repl", "--verbose", "a b"), params)
     }
 
-    fun testActionManagerHasNoStaleRegistration() {
+    @Test
+    fun `action manager has no stale registration`() {
         // Defensive: ensure our action id is not already taken by something else in
         // the test classpath (the orchestrator registers it via plugin.xml later).
         val existing = ActionManager.getInstance().getAction("basedpython.OpenRepl")

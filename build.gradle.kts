@@ -10,12 +10,24 @@ plugins {
 }
 
 dependencies {
-  testImplementation("junit:junit:4.13.2")
+  testImplementation(platform("org.junit:junit-bom:5.14.2"))
+  testImplementation("org.junit.jupiter:junit-jupiter")
+  // Gradle needs the launcher on the test runtime classpath to drive the JUnit Platform.
+  testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+  // The platform's own test bootstrap (com.intellij.tests.JUnit5TestSessionListener, auto-registered
+  // as a LauncherSessionListener) dereferences junit.framework.TestCase in its constructor, so the
+  // old JUnit jar has to be present at runtime or no test process starts at all. Runtime-only on
+  // purpose: it is off the compile classpath, and with no vintage engine here a JUnit 3/4 test can
+  // neither be written nor discovered.
+  testRuntimeOnly("junit:junit:4.13.2")
 
   // IntelliJ Platform Gradle Plugin Dependencies Extension - read more: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin-dependencies-extension.html
   intellijPlatform {
     intellijIdea("2026.2")
     testFramework(TestFrameworkType.Platform)
+    // The platform's JUnit 5 support: @TestApplication, @TestFixtures, @RunInEdt, projectFixture.
+    // Note it does *not* publish the junit5 `codeInsightFixture`; see testFramework/CodeInsightFixtures.kt.
+    testFramework(TestFrameworkType.JUnit5)
 
     // Bundled plugins used by features (present in IDEA/PyCharm 2026.1+)
     bundledPlugin("org.toml.lang")
@@ -88,6 +100,15 @@ changelog {
 }
 
 tasks {
+  test {
+    useJUnitPlatform()
+    // The platform's test framework ships TestLoggerExtension/TestLoggerInterceptor as
+    // auto-registered extensions (META-INF/services). They are what turns a logged error into a
+    // test failure — the behaviour UsefulTestCase gave the JUnit 3 tests for free, and which
+    // BasedPythonLogTest asserts against. JUnit 5 only picks them up with autodetection on.
+    systemProperty("junit.jupiter.extensions.autodetection.enabled", "true")
+  }
+
   publishPlugin {
     dependsOn(patchChangelog)
   }
