@@ -82,6 +82,9 @@
   tracebacks onto `.by` sources, but the console filter only understood `file.by:12:5`
   and not CPython's `File "…", line 12`, so every frame opened at line 1. pytest failure
   lines now resolve to the `.by` file they were transpiled from, too.
+- "Explain Rule" works for `by`'s own rules. It invoked `by explain <code>`, but `explain`
+  is a command group, so every checker-owned rule (as opposed to a `buff` lint code) failed
+  with `unrecognized subcommand` and reported "no explanation".
 - The `by` version check no longer reports every up-to-date install as outdated. Its
   floor was `0.1.0` while basedpython is at `0.0.1a9`, so any `by` that reported a real
   version would have been flagged forever; it was quiet only because the binary answers

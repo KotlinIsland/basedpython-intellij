@@ -18,6 +18,8 @@ import com.intellij.openapi.ui.popup.JBPopupFactory
 import com.intellij.openapi.wm.WindowManager
 import com.intellij.ui.JBColor
 import com.intellij.ui.awt.RelativePoint
+import dev.basedpython.pycharm.inspections.explain.ByRuleExplainer
+import dev.basedpython.pycharm.inspections.explain.ByRuleExplanation
 import dev.basedpython.pycharm.util.BasedPythonBundle
 
 /** Show a balloon explaining the rule code under the caret (or prompt for one). */
@@ -39,18 +41,14 @@ class ExplainRuleAction : AnAction() {
         ProgressManager.getInstance().run(object : Task.Backgroundable(project, BasedPythonBundle.message("progress.explainingRule", code), true) {
             override fun run(indicator: ProgressIndicator) {
                 indicator.isIndeterminate = true
-                val buff = ByCli.runBuff(project, "rule", code)
-                if (buff != null && buff.exitCode == 0) {
-                    showBalloon(project, editor, code, buff.stdout)
-                    return
+                when (val explanation = ByRuleExplainer.explain(project, code)) {
+                    is ByRuleExplanation.Found -> showBalloon(project, editor, code, explanation.body)
+                    is ByRuleExplanation.NotFound -> ByCli.notifyError(
+                        project,
+                        BasedPythonBundle.message("explainRule.noExplanationFor.title", code),
+                        explanation.message,
+                    )
                 }
-                val by = ByCli.run(project, "explain", code)
-                if (by != null && by.exitCode == 0) {
-                    showBalloon(project, editor, code, by.stdout)
-                    return
-                }
-                val msg = (buff?.stderr ?: by?.stderr ?: BasedPythonBundle.message("explainRule.noExplanation")).ifBlank { BasedPythonBundle.message("explainRule.noExplanation") }
-                ByCli.notifyError(project, BasedPythonBundle.message("explainRule.noExplanationFor.title", code), msg)
             }
         })
     }

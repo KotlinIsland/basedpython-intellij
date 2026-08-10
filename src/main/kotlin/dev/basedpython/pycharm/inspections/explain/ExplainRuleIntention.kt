@@ -56,18 +56,14 @@ class ExplainRuleIntention : IntentionAction {
         ProgressManager.getInstance().run(object : Task.Backgroundable(project, BasedPythonBundle.message("progress.explainingRule", code), true) {
             override fun run(indicator: ProgressIndicator) {
                 indicator.isIndeterminate = true
-                val buff = ByCli.runBuff(project, "rule", code)
-                if (buff != null && buff.exitCode == 0) {
-                    showBalloon(project, editor, code, buff.stdout)
-                    return
+                when (val explanation = ByRuleExplainer.explain(project, code)) {
+                    is ByRuleExplanation.Found -> showBalloon(project, editor, code, explanation.body)
+                    is ByRuleExplanation.NotFound -> ByCli.notifyError(
+                        project,
+                        BasedPythonBundle.message("explainRule.noExplanationFor.title", code),
+                        explanation.message,
+                    )
                 }
-                val by = ByCli.run(project, "explain", code)
-                if (by != null && by.exitCode == 0) {
-                    showBalloon(project, editor, code, by.stdout)
-                    return
-                }
-                val msg = (buff?.stderr ?: by?.stderr ?: BasedPythonBundle.message("explainRule.noExplanation")).ifBlank { BasedPythonBundle.message("explainRule.noExplanation") }
-                ByCli.notifyError(project, BasedPythonBundle.message("explainRule.noExplanationFor.title", code), msg)
             }
         })
     }

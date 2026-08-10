@@ -96,7 +96,8 @@ lexical colour only. Don't reintroduce guessed semantic colour; fix the LSP path
 
 ## 7. Editor actions / Tools menu
 - [x] Transpile / Reverse transpile (popups + Tools)
-- [x] Generate api.lock, Format with buff, Check Project, Clean Caches, Explain Rule
+- [x] Generate api.lock, Format with buff, Check Project, Clean Caches, Explain Rule — the rule lookup asks both tools, since they own disjoint sets: `buff rule <code>` for the linter's codes, `by explain rule <code>` for the checker's. The `by` side used to omit `rule` and died on `unrecognized subcommand`, so every `by`-owned rule reported "no explanation". Shared by the action and the intention through `ByRuleExplainer`
+- [x] Every CLI invocation audited against the real binaries (`by` 0.0.1a9): subcommands `check`/`run`/`build`/`transpile`/`generate-api-file`/`explain` and `buff`'s `rule`/`clean`/`format`, plus the flags `transpile --reverse`, `check --python-version`, `run|build --min-version`. `by build` confirmed to write `out/<relative>.py` preserving directory structure
 - [x] Show transpiled `.py` side-by-side diff view (live, updates on edit)
 - [x] "Reveal generated .py in out/" navigation
 - [x] api.lock diff viewer (what changed in public API)
