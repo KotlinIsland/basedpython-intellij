@@ -69,16 +69,40 @@ class ByRunPytestOutputTest {
         )
     }
 
+    /**
+     * A class in a pytest node id is a level of its own — `test_math.py::TestGroup::test_in_class`
+     * is three parts, not two. Taking everything before the first `::` as the suite used to drop
+     * `TestGroup` from the tree entirely.
+     */
     @Test
-    fun `one suite per file, opened and closed`() {
+    fun `files and classes each open a suite, closed innermost first`() {
         val events = ByTestOutputParser().parseAll(output)
         assertEquals(
-            listOf("test_math.py", "tests/test_nested.py"),
+            listOf("test_math.py", "TestGroup", "tests/test_nested.py"),
             events.filterIsInstance<ByTestEvent.TestSuiteStarted>().map { it.name },
         )
         assertEquals(
-            listOf("test_math.py", "tests/test_nested.py"),
+            listOf("TestGroup", "test_math.py", "tests/test_nested.py"),
             events.filterIsInstance<ByTestEvent.SuiteFinished>().map { it.name },
+        )
+    }
+
+    /** Without a `locationHint` a tree node is inert — SMTRunner has nothing to navigate to. */
+    @Test
+    fun `every node carries a location hint back to its source`() {
+        val events = ByTestOutputParser().parseAll(output)
+        assertEquals(
+            listOf(
+                "by_test://test_math.py",
+                "by_test://test_math.py::TestGroup",
+                "by_test://tests/test_nested.py",
+            ),
+            events.filterIsInstance<ByTestEvent.TestSuiteStarted>().map { it.locationHint },
+        )
+        assertEquals(
+            "by_test://test_math.py::TestGroup::test_in_class",
+            events.filterIsInstance<ByTestEvent.TestStarted>()
+                .single { it.name == "test_in_class" }.locationHint,
         )
     }
 

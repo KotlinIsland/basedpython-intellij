@@ -21,8 +21,15 @@ package dev.basedpython.pycharm.run.test.tree
  */
 class ByTestOutputParser {
 
-    /** A started-but-not-finished suite name, or null when no suite is open. */
-    private var openSuite: String? = null
+    /**
+     * The suites currently open, outermost first — `["tests/test_math.py", "TestGroup"]`.
+     *
+     * A stack rather than a single name because pytest node ids nest: a test in a class is
+     * `tests/test_math.py::TestGroup::test_in_class`, and collapsing that to one level (which is
+     * what taking everything before the first `::` used to do) dropped the class from the tree
+     * entirely.
+     */
+    private val openSuites = ArrayList<String>()
 
     /** Per-test outcome tally derived from emitted events (diagnostic / fallback). */
     var passed: Int = 0; private set
@@ -57,11 +64,7 @@ class ByTestOutputParser {
      * Flush trailing state: closes any suite that is still open. Call once after the
      * last line of output has been parsed.
      */
-    fun finish(): List<ByTestEvent> {
-        val s = openSuite ?: return emptyList()
-        openSuite = null
-        return listOf(ByTestEvent.SuiteFinished(s))
-    }
+    fun finish(): List<ByTestEvent> = closeSuitesBelow(0)
 
     // ---- pytest verbose ----------------------------------------------------
 
@@ -78,19 +81,31 @@ class ByTestOutputParser {
         val m = pytestLine.matchEntire(line) ?: return null
         val nodeId = m.groupValues[1]
         val outcome = m.groupValues[2].uppercase()
-        val suite = suiteOf(nodeId)
-        val testName = nodeId.substringAfterLast("::")
+
+        // "tests/test_math.py::TestGroup::test_in_class" -> suites [file, TestGroup], test last.
+        val parts = nodeId.split("::")
+        val suites = parts.dropLast(1)
+        val testName = parts.last()
 
         val events = ArrayList<ByTestEvent>()
-        events.addAll(ensureSuite(suite))
-        events.add(ByTestEvent.TestStarted(testName))
+        events.addAll(ensureSuites(suites) { depth -> locationHint(parts.take(depth + 1)) })
+        events.add(ByTestEvent.TestStarted(testName, locationHint(parts)))
         events.add(outcomeEvent(testName, outcome, line))
         events.add(ByTestEvent.TestFinished(testName))
         return events
     }
 
-    /** Suite name for a pytest node id: the file path before `::`. */
-    private fun suiteOf(nodeId: String): String = nodeId.substringBefore("::")
+    /**
+     * The `by_test://` URL for a node id, already split on `::`.
+     *
+     * Emitted with the extension pytest reported. The node id names the *transpiled* tree, which
+     * differs from the `.by` source only in that extension (see [dev.basedpython.pycharm.run.test.ByPytest]);
+     * mapping it back is [ByTestLocator]'s job, since only it knows the project layout.
+     */
+    private fun locationHint(parts: List<String>): String? {
+        if (parts.isEmpty() || !parts[0].endsWith(".py", ignoreCase = true)) return null
+        return ByTestLocator.PROTOCOL + "://" + parts.joinToString("::")
+    }
 
     // ---- unittest verbose --------------------------------------------------
 
@@ -111,7 +126,9 @@ class ByTestOutputParser {
         val tail = m.groupValues[4].trim()
 
         val events = ArrayList<ByTestEvent>()
-        events.addAll(ensureSuite(suite))
+        // No location hint: unittest reports a dotted module, not a path, and guessing a file
+        // layout from it would produce nodes that navigate to the wrong place.
+        events.addAll(ensureSuites(listOf(suite)) { null })
         events.add(ByTestEvent.TestStarted(testName))
         events.add(
             when (outcome.lowercase()) {
@@ -138,13 +155,32 @@ class ByTestOutputParser {
             else -> { passed++; ByTestEvent.TestPassed(testName) }
         }
 
-    /** Emit a SuiteFinished/TestSuiteStarted pair when the suite changes. */
-    private fun ensureSuite(suite: String): List<ByTestEvent> {
-        if (openSuite == suite) return emptyList()
+    /**
+     * Reconcile the open suite stack with [suites], closing what no longer applies and opening
+     * what is new. [hintAt] supplies the location hint for the suite at a given depth.
+     *
+     * Only the differing tail moves: consecutive tests in the same class keep both the file and
+     * the class node open, and a jump to another class closes just that one.
+     */
+    private fun ensureSuites(suites: List<String>, hintAt: (Int) -> String?): List<ByTestEvent> {
+        var shared = 0
+        while (shared < suites.size && shared < openSuites.size && suites[shared] == openSuites[shared]) {
+            shared++
+        }
+        val events = ArrayList<ByTestEvent>(closeSuitesBelow(shared))
+        for (depth in shared until suites.size) {
+            events.add(ByTestEvent.TestSuiteStarted(suites[depth], hintAt(depth)))
+            openSuites.add(suites[depth])
+        }
+        return events
+    }
+
+    /** Close every open suite deeper than [depth], innermost first so the pairs stay balanced. */
+    private fun closeSuitesBelow(depth: Int): List<ByTestEvent> {
         val events = ArrayList<ByTestEvent>()
-        openSuite?.let { events.add(ByTestEvent.SuiteFinished(it)) }
-        events.add(ByTestEvent.TestSuiteStarted(suite))
-        openSuite = suite
+        while (openSuites.size > depth) {
+            events.add(ByTestEvent.SuiteFinished(openSuites.removeAt(openSuites.size - 1)))
+        }
         return events
     }
 

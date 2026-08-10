@@ -66,6 +66,9 @@
   in the interpreter `by run` uses — a missing one is reported with the interpreter's path
   and the `pip install` line. See [docs/debugging.md](docs/debugging.md).
 
+- Test tree nodes navigate to their `.by` source, and a test class is its own node in the
+  tree rather than being flattened into the file.
+
 ### Changed
 
 - Extended IDE compatibility range to `262.*` (sinceBuild `261`). Verified Compatible
