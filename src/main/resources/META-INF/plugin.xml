@@ -77,20 +77,19 @@
         <internalFileTemplate name="basedpython Data Class"/>
         <internalFileTemplate name="basedpython Protocol"/>
 
-        <!-- ===== Stream G: structure view, folding, breadcrumbs ===== -->
-        <lang.psiStructureViewFactory
-            language="basedpython"
-            implementationClass="dev.basedpython.pycharm.structure.BasedPythonStructureViewFactory"/>
-        <lang.foldingBuilder
-            language="basedpython"
-            implementationClass="dev.basedpython.pycharm.structure.BasedPythonFoldingBuilder"/>
-        <breadcrumbsInfoProvider
-            implementation="dev.basedpython.pycharm.structure.BasedPythonBreadcrumbsProvider"/>
+        <!-- ===== Stream G: structure view, folding, breadcrumbs =====
+             All three come from the `by` server via the platform's LSP integration, which
+             registers LspStructureViewFactory, LspFoldingBuilder and LspFileBreadcrumbsCollector
+             for every language. Registering our own here shadowed the first two and doubled up
+             the third. -->
 
-        <!-- ===== Stream H: semantic annotator ===== -->
+        <!-- ===== Stream H: string escapes =====
+             Semantic colour comes from the `by` server's semantic tokens. What is left here is
+             the part a semantic token cannot express: a token covers a whole string literal, so
+             escapes and f-string interpolations inside the quotes are ours. -->
         <annotator
             language="basedpython"
-            implementationClass="dev.basedpython.pycharm.highlight.BasedPythonAnnotator"/>
+            implementationClass="dev.basedpython.pycharm.highlight.StringEscapeAnnotator"/>
 
         <!-- ===== Stream I: formatting ===== -->
         <actionOnSaveInfoProvider
@@ -174,11 +173,10 @@
         <directoryIndexExcludePolicy
             implementation="dev.basedpython.pycharm.project.OutDirExcludePolicy"/>
 
-        <!-- ===== Stream R: navigation & search ===== -->
-        <gotoSymbolContributor
-            implementation="dev.basedpython.pycharm.navigation.BasedPythonSymbolContributor"/>
-        <gotoClassContributor
-            implementation="dev.basedpython.pycharm.navigation.BasedPythonClassContributor"/>
+        <!-- ===== Stream R: navigation & search =====
+             Goto Symbol / Goto Class come from the server's workspace symbols: the platform
+             already registers LspGoToSymbolContributor and LspGoToClassContributor, so our own
+             contributors only ever produced a second copy of every result. -->
         <gotoRelatedProvider
             implementation="dev.basedpython.pycharm.navigation.BasedPythonRelatedProvider"/>
 

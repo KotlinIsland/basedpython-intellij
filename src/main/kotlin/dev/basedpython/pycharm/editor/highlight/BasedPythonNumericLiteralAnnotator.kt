@@ -21,9 +21,9 @@ import dev.basedpython.pycharm.lang.BasedPythonTokenTypes
  * Plain decimal integers / floats (`42`, `3.14`) are left to the lexer-based
  * [dev.basedpython.pycharm.lang.BasedPythonColors.NUMBER] coloring.
  *
- * Like the existing [dev.basedpython.pycharm.highlight.BasedPythonAnnotator] this is a
- * flat-PSI plugin: we run once on the file root and lex the full text, applying silent
- * annotations to the sub-ranges of NUMBER tokens that qualify.
+ * The PSI is flat, so this runs once on the file root and lexes the full text, applying silent
+ * annotations to the sub-ranges of NUMBER tokens that qualify. Like string escapes, this is
+ * sub-token detail that an LSP semantic token — one `number` for the whole literal — cannot carry.
  */
 class BasedPythonNumericLiteralAnnotator : Annotator {
 
