@@ -68,6 +68,13 @@
 
 - Test tree nodes navigate to their `.by` source, and a test class is its own node in the
   tree rather than being flattened into the file.
+- Test configurations can be debugged, with breakpoints in `.by` test files.
+
+### Fixed
+
+- Running tests no longer executes the suite twice. The console was built by calling
+  `startProcess()` a second time, which spawned a second `by run pytest`; every test showed
+  up twice in the tree and Stop killed only one of the two processes.
 
 ### Changed
 
