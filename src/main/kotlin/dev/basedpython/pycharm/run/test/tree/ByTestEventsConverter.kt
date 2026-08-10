@@ -6,7 +6,7 @@ import com.intellij.execution.testframework.sm.runner.OutputToGeneralTestEventsC
 import com.intellij.openapi.util.Key
 
 /**
- * Bridges `by test` process output into the SMTRunner test tree.
+ * Bridges `by run pytest` output into the SMTRunner test tree.
  *
  * The base [OutputToGeneralTestEventsConverter] hands us already-buffered,
  * newline-consistent text via [processConsistentText]. We run each line through

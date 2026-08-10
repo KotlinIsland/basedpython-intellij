@@ -20,9 +20,8 @@ import com.intellij.execution.testframework.sm.runner.SMTestLocator
 import com.intellij.execution.ui.ConsoleView
 import com.intellij.openapi.options.SettingsEditor
 import com.intellij.openapi.project.Project
-import com.intellij.util.execution.ParametersListUtil
 
-/** Options for `by test`; reuses common working dir / extra args / env handling. */
+/** Options for a test run; reuses common working dir / extra args / env handling. */
 class ByTestOptions : ByCommonOptions() {
     private val pathsProp = string("").provideDelegate(this, "paths")
     var paths: String
@@ -48,13 +47,10 @@ class ByTestConfiguration(project: Project, factory: ConfigurationFactory, name:
         val opts = options
         val config = this
         return object : ByCommandLineState(project, opts, environment) {
-            override val subcommand = "test"
+            // `by run pytest`, not `by test` — see [ByPytest].
+            override val subcommand = "run"
 
-            // `by test` takes no version flag.
-            override val pythonVersionFlag: String? = null
-
-            override fun buildSubcommandArgs(): List<String> =
-                if (opts.paths.isBlank()) emptyList() else ParametersListUtil.parse(opts.paths)
+            override fun buildSubcommandArgs(): List<String> = ByPytest.arguments(opts.paths)
 
             override fun createConsole(executor: Executor): ConsoleView {
                 val props = object : SMTRunnerConsoleProperties(config, FRAMEWORK_NAME, executor),
@@ -73,6 +69,6 @@ class ByTestConfiguration(project: Project, factory: ConfigurationFactory, name:
     }
 
     private companion object {
-        const val FRAMEWORK_NAME = "by test"
+        const val FRAMEWORK_NAME = "pytest (by)"
     }
 }

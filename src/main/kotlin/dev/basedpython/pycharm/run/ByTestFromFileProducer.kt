@@ -16,14 +16,17 @@ import com.intellij.psi.PsiDocumentManager
 import com.intellij.psi.PsiElement
 
 /**
- * Right-click a `.by` test file (or click the "Run test" gutter icon) → produce a
- * `by test <path>[::Class][::test_name]` configuration.
+ * Right-click a `.by` test file (or click the "Run test" gutter icon) → produce a configuration
+ * that runs `by run pytest -v <path>[::Class][::test_name]`.
+ *
+ * The target names the `.by` source the user is looking at; rewriting it onto the transpiled `.py`
+ * that pytest actually collects happens when the command line is built, in
+ * [dev.basedpython.pycharm.run.test.ByPytest].
  *
  * Without this producer the test gutter icons contributed by
  * [dev.basedpython.pycharm.run.testmarker.ByTestRunLineMarkerContributor] have no configuration
  * to resolve to and silently fall through to `by run <module>`, running the whole module instead
- * of the test. The `path::test` node-id form mirrors the convention already used by
- * [dev.basedpython.pycharm.run.test.tree.ByTestLocator].
+ * of the test.
  */
 class ByTestFromFileProducer : LazyRunConfigurationProducer<ByTestConfiguration>() {
 
@@ -37,7 +40,7 @@ class ByTestFromFileProducer : LazyRunConfigurationProducer<ByTestConfiguration>
     ): Boolean {
         val target = testTargetFor(context) ?: return false
         configuration.options.paths = target
-        configuration.name = "by test $target"
+        configuration.name = "pytest $target"
         val base = context.project.basePath
         if (!base.isNullOrBlank() && configuration.options.workingDir.isBlank()) {
             configuration.options.workingDir = base
@@ -54,8 +57,9 @@ class ByTestFromFileProducer : LazyRunConfigurationProducer<ByTestConfiguration>
     }
 
     /**
-     * `by test` is more specific than `by run` on a test declaration, so prefer it when both
-     * producers match the same context (e.g. the gutter icon on a `def test_…` line).
+     * Running one test is more specific than running the whole module, so prefer this over
+     * [ByRunConfiguration] when both producers match the same context (e.g. the gutter icon on a
+     * `def test_…` line).
      */
     override fun isPreferredConfiguration(self: ConfigurationFromContext?, other: ConfigurationFromContext?): Boolean =
         other?.configuration is ByRunConfiguration
@@ -65,8 +69,9 @@ class ByTestFromFileProducer : LazyRunConfigurationProducer<ByTestConfiguration>
 }
 
 /**
- * Builds the `by test` target string for [context], or null when the context is not a `.by`
- * test declaration. Returns `<relpath>`, `<relpath>::test_name`, or `<relpath>::Class::test_name`.
+ * Builds the pytest target for [context], or null when the context is not a `.by` test
+ * declaration. Returns `<relpath>`, `<relpath>::test_name`, or `<relpath>::Class::test_name`,
+ * with the path still naming the `.by` source.
  */
 private fun testTargetFor(context: ConfigurationContext): String? {
     val element = context.psiLocation ?: return null
