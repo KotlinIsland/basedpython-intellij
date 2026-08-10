@@ -9,7 +9,6 @@ import com.intellij.execution.configurations.RunProfileState
 import com.intellij.execution.runners.ExecutionEnvironment
 import com.intellij.openapi.options.SettingsEditor
 import com.intellij.openapi.project.Project
-import com.intellij.util.execution.ParametersListUtil
 
 class ByRunConfiguration(project: Project, factory: ConfigurationFactory, name: String) :
     RunConfigurationBase<ByRunOptions>(project, factory, name) {
