@@ -37,6 +37,21 @@ class ByDebugBootstrapTest {
         assertTrue(bootstrap.contains("_by_runner.py"), "bootstrap does not check what it was loaded into")
     }
 
+    /**
+     * On macOS the temp directory is reached through `/var` -> `/private/var`, `by` records the
+     * unresolved form in `SOURCEMAP`, and Python reports the resolved one in frames. pydevd matches
+     * `runtimeSource` against a frame's filename with no normalisation of its own, so without this
+     * the breakpoint verifies and then never hits — observed live before the fix. `by run`'s own
+     * `_by_runner.py` calls realpath for the same reason.
+     */
+    @Test
+    fun `the bootstrap resolves generated paths before reporting them`() {
+        assertTrue(
+            bootstrap.contains("os.path.realpath(generated)"),
+            "the generated path must be realpath'd or breakpoints verify but never hit",
+        )
+    }
+
     @Test
     fun `a listening report parses into mappable files`() {
         val info = ByDebuggeeInfo.parse(

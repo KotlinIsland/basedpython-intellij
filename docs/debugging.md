@@ -4,6 +4,11 @@ Implemented. Set a breakpoint in a `.by` file, hit Debug on a `by run` configura
 session stops on that line with frames, variables and stepping all reported against the `.by`
 source.
 
+Verified end to end against `by` 0.0.1a9 and debugpy 1.8.21 by driving the same protocol exchange
+the plugin performs: breakpoint hit, and every user frame reported as `demo.by` at the right line
+(`total` at 8, `main` at 13, `<module>` at 16) with locals intact, while the `_by_runner.py` frames
+below stay unmapped as they should.
+
 This replaces a belief recorded for a long time in FEATURES.md §64 and in a comment on
 `DebugWithPdbAction`: that source-mapped debugging was **blocked upstream** because the transpiler
 kept its line map private. It does not. The map is right there.
@@ -107,30 +112,50 @@ program apart from the `python -c` version probe `by` also runs, which must not 
 `sys.path[0]` is **not** yet the script's directory at that point, though; CPython computes it
 after initialisation. So `_by_sourcemap.py` is loaded by explicit path, not by `import`.
 
+**Resolving the generated path.** `SOURCEMAP`'s keys are not the filenames Python reports in
+frames. On macOS the temp directory is reached through `/var` -> `/private/var`; `by` records the
+unresolved form and the interpreter reports the resolved one. pydevd matches `runtimeSource`
+against a frame's filename with no normalisation of its own, so the first live run produced
+breakpoints that reported `"verified": true` and then never hit. The bootstrap calls
+`os.path.realpath` before reporting, which is exactly what `by run`'s own `_by_runner.py` does, and
+for the same stated reason.
+
 ## Failure reporting
 
 The JSON file is the readiness signal *and* the error channel. Waiting on it rather than on the
 port is what lets a failure be reported instead of merely timing out: `by run` transpiles the whole
 project before the interpreter starts, which can outlast any reasonable connect-retry budget, and
 an interpreter with no `debugpy` never opens a port at all. A debuggee that cannot import `debugpy`
-writes an error naming its own `sys.executable` and the `pip install` line for it, which matters
-because that interpreter is the one named by `PYTHON` or found as `python3` on `PATH` — **not
-necessarily the project's `.venv`**. A `by` too old to emit `_by_sourcemap.py` still debugs, with a
-warning notification that breakpoints in `.by` files will not bind.
+writes an error naming its own `sys.executable` and the `pip install` line for it.
+
+Which interpreter that is deserves care. `by run` uses `PYTHON`, or else `python3` from `PATH` —
+**not** the project `.venv` by construction. But every `by` launch from this plugin goes out with
+venv activation applied (`ByCommandLineState.activationEnv` puts `<venv>/bin` at the front of
+`PATH`), so in practice `python3` resolves to the project's own interpreter: confirmed live, a run
+under activation reports `sys.executable` as `<venv>/bin/python3`. So `uv add --dev debugpy` is the
+right answer for a normal project, and the error message names the actual interpreter for every
+other case.
+
+A `by` too old to emit `_by_sourcemap.py` still debugs, with a warning notification that
+breakpoints in `.by` files will not bind.
 
 Nothing in the bootstrap may take the user's program down with it: every step runs under a broad
 `except`, and a bootstrap that fails means running without a debugger attached.
 
 ## Known limits
 
-- **Frame lines can drift at a run boundary.** pydevd's `SourceMappingEntry.contains_runtime_line`
-  computes its upper bound as `runtime_line + line + end_line` rather than
-  `runtime_line + (end_line - line)`, so every entry claims a wider range of generated lines than
-  it owns, and `map_to_client` returns the first entry that claims a line. Inside a run this is
-  harmless — the entry is linear with slope 1, so a too-wide range still yields the right answer —
-  but a generated line that falls in the gap between two runs can be attributed to the earlier run
-  and reported one or more `.by` lines late. Breakpoints (`map_to_server`) are unaffected: that
-  direction bisects on `contains_line`, which is correct.
+- **Frame lines drift by one at a run boundary.** pydevd's
+  `SourceMappingEntry.contains_runtime_line` computes its upper bound as
+  `runtime_line + line + end_line` rather than `runtime_line + (end_line - line)`, so every entry
+  claims a wider range of generated lines than it owns, and `map_to_client` returns the first entry
+  that claims one. Inside a run this is harmless — the entry is linear with slope 1, so a too-wide
+  range still yields the right answer. Replaying the real map through the real
+  `pydevd_source_mapping` puts the damage at 2 of 17 mapped lines for the sample file, both of them
+  the continuation lines of the one expanded statement, each reported exactly one `.by` line late.
+  **Breakpoints are unaffected — 0 of 17 misplaced:** that direction bisects on `contains_line`,
+  which is correct. Note that some of this is inherent rather than a pydevd bug: a
+  `SourceMappingEntry` can only express a bijective run, and `data class Point:` becoming two
+  generated lines is not bijective, so no set of entries gets both directions exactly right.
 - **Only `by run` configurations.** `by build` and `by check` produce no running program;
   debugging the test configuration would work the same way but is not wired up.
 - **Only `.by` files.** A plain `.py` in a basedpython project has no source-map entry, so a

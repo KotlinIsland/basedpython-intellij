@@ -79,7 +79,16 @@ def _read_source_map(run_dir):
     files = []
     for generated, entry in getattr(module, "SOURCEMAP", {}).items():
         source, lines = entry
-        files.append({"source": source, "generated": generated, "lines": list(lines)})
+        files.append({
+            # realpath, not the key as written: on macOS the temp directory is reached through
+            # /var -> /private/var, `by` records the unresolved form, and Python reports the
+            # resolved one in frames. pydevd matches `runtimeSource` against a frame's filename
+            # with no normalisation of its own, so a mismatch here means breakpoints verify and
+            # then never hit. `by run`'s own `_by_runner.py` calls realpath for the same reason.
+            "generated": os.path.realpath(generated),
+            "source": source,
+            "lines": list(lines),
+        })
     return files
 
 
