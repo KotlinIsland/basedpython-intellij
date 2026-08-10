@@ -72,6 +72,11 @@
 
 ### Fixed
 
+- A debug session that cannot start now reports itself as a notification with an
+  **Install debugpy** action (`uv add --dev debugpy` in a uv project, otherwise
+  `pip install` into the interpreter that reported the failure), instead of an
+  "Unhandled exception" error box. The program is no longer left to run to completion
+  after Debug has already failed.
 - Running tests no longer executes the suite twice. The console was built by calling
   `startProcess()` a second time, which spawned a second `by run pytest`; every test showed
   up twice in the tree and Stop killed only one of the two processes.
