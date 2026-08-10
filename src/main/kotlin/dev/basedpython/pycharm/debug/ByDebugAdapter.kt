@@ -15,6 +15,8 @@ import com.intellij.platform.dap.DapClient
 import com.intellij.platform.dap.DapCommandProcessor
 import com.intellij.platform.dap.DapDebugSession
 import com.intellij.platform.dap.DapEventConsumer
+import com.intellij.platform.dap.DapExceptionBreakpoint
+import com.intellij.platform.dap.DapExceptionInfo
 import com.intellij.platform.dap.DapStartRequest
 import com.intellij.platform.dap.DebugAdapterDescriptor
 import com.intellij.platform.dap.DebugAdapterId
@@ -23,6 +25,7 @@ import com.intellij.platform.dap.connection.DebugAdapterHandle
 import com.intellij.platform.dap.connection.DebugAdapterSocketConnection
 import com.intellij.platform.dap.xdebugger.DapXDebugProcess
 import com.intellij.xdebugger.XDebugSession
+import com.intellij.xdebugger.breakpoints.XBreakpointHandler
 import dev.basedpython.pycharm.actions.ByCli
 import dev.basedpython.pycharm.run.ByCommandLineState
 import dev.basedpython.pycharm.util.BasedPythonBundle
@@ -63,10 +66,20 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
     /** Adds `setPydevdSourceMap`; see [ByDebugProtocolServer]. */
     override val debugAdapterServerClass: Class<out IDebugProtocolServer> = ByDebugProtocolServer::class.java
 
-    override val breakpointsDescription: DapBreakpointsDescription = DapBreakpointsDescription(
+    override val breakpointsDescription: DapBreakpointsDescription = object : DapBreakpointsDescription(
         sourceBreakpointType = ByLineBreakpointType::class.java,
         exceptionBreakpointType = ByExceptionBreakpointType::class.java,
-    )
+    ) {
+        /**
+         * DAP does not say *which* exception breakpoint a stop belongs to, and the platform needs
+         * one to attach the stop to. There is exactly one exception breakpoint here — the type's
+         * single default — so any exception stop is that one.
+         */
+        override fun doesExceptionMatchBreakpoint(
+            exceptionInfo: DapExceptionInfo,
+            breakpoint: DapExceptionBreakpoint,
+        ): Boolean = breakpoint.ideBreakpoint.type is ByExceptionBreakpointType
+    }
 
     /**
      * Points the process the run configuration is about to start at this session's port.
@@ -244,4 +257,14 @@ private class ByDapXDebugProcess(
     override fun doGetProcessHandler(): ProcessHandler? = result?.processHandler ?: super.doGetProcessHandler()
 
     override fun createConsole(): ExecutionConsole = result?.executionConsole ?: super.createConsole()
+
+    /**
+     * `DapXDebugProcess` supplies a line-breakpoint handler only, so exception breakpoints need
+     * theirs adding here or nothing would ever send them to the adapter.
+     */
+    private val handlers: Array<XBreakpointHandler<*>> by lazy {
+        super.getBreakpointHandlers() + ByExceptionBreakpointHandler(dapDebugSession)
+    }
+
+    override fun getBreakpointHandlers(): Array<XBreakpointHandler<*>> = handlers
 }

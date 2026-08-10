@@ -177,17 +177,34 @@ Nothing in the bootstrap may take the user's program down with it: every step ru
   running program to attach to.
 - **Only `.by` files.** A plain `.py` in a basedpython project has no source-map entry, so a
   breakpoint in it will not bind.
-- **No exception breakpoints.** `ByExceptionBreakpointType` exists because
-  `DapBreakpointsDescription` requires one and the platform's breakpoint manager throws without a
-  default, but `DapXDebugProcess` registers a handler for line breakpoints only, so nothing is ever
-  sent to the adapter. The type is hidden from the Breakpoints dialog rather than shown as a
-  checkbox that changes nothing.
+- **Exception breakpoints have no "ignore library code" option.** pydevd spells it as a
+  `:ignoreLibraries` suffix on the filter id, and with it the breakpoint never fires: the
+  transpiled program lives in a temp directory pydevd does not count as project code, and setting
+  `IDE_PROJECT_ROOTS` to that directory does not change the verdict. Both filters are offered
+  without it. This does mean **On raise** stops on exceptions the program catches deliberately,
+  which is why it is off by default.
 - **Local only.** The bootstrap resolves paths on the machine that runs the interpreter.
 - **Paths have to agree.** A breakpoint's file comes from `VirtualFile.path`; the map's comes from
   `_by_sourcemap.py`. pydevd matches them after `normcase` and `absolute_path`, which is not
   `realpath` — so if the two ever disagreed (a symlinked project root, say), breakpoints would stay
   unverified rather than bind to the wrong place. `by` records absolute source paths, so this has
   not been observed; it is the first thing to check if breakpoints silently do not bind.
+
+## Exception breakpoints
+
+*Breakpoints → basedpython Exceptions*, with **On raise** and **On termination** checkboxes.
+`DapXDebugProcess` supplies a line-breakpoint handler only, so `ByExceptionBreakpointHandler`
+adds the other one and turns each checked box into a pydevd filter id.
+
+basedpython changes which of those is worth defaulting to. The language has **checked exceptions**:
+a program whose exception escapes `main` does not compile at all —
+
+    error[unhandled-exception]: `final ValueError` can escape `main`, the entry point
+
+— so the obvious reading is that `uncaught` can never fire. It can. The checker does not model
+everything, and a `KeyError` from a dict lookup compiles happily and dies at runtime, where the
+breakpoint stops on the right `.by` line. So the PyCharm default carries over: **On termination**
+on, **On raise** off.
 
 ## Coverage
 
