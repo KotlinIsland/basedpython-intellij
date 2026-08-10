@@ -1,9 +1,8 @@
 package dev.basedpython.pycharm.lang.dialect
 
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.util.Key
 import com.intellij.openapi.vfs.VirtualFileManager
-import com.intellij.psi.util.CachedValueProvider
-import com.intellij.psi.util.CachedValuesManager
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import java.nio.file.Files
 import java.nio.file.Path
@@ -87,14 +86,25 @@ object BasedPythonProjectDetector {
      */
     fun isPythonProject(project: Project): Boolean = kind(project) != ProjectKind.OTHER
 
-    /** The cached verdict for [project], recomputed when the VFS structure changes. */
-    fun kind(project: Project): ProjectKind =
-        CachedValuesManager.getManager(project).getCachedValue(project) {
-            CachedValueProvider.Result.create(
-                scan(project),
-                VirtualFileManager.VFS_STRUCTURE_MODIFICATIONS,
-            )
-        }
+    /** Project user data key holding the last scan and the VFS state it was taken at. */
+    private val CACHE = Key.create<Cached>("basedpython.projectKind")
+
+    private class Cached(val stamp: Long, val kind: ProjectKind)
+
+    /**
+     * The cached verdict for [project], rescanned when the VFS structure changes.
+     *
+     * A plain stamped cache rather than `CachedValuesManager`: this is called from a
+     * `FileTypeOverrider`, which runs early and often, and has no business pulling in the PSI
+     * caching machinery to answer a question about one directory listing.
+     */
+    fun kind(project: Project): ProjectKind {
+        val stamp = VirtualFileManager.VFS_STRUCTURE_MODIFICATIONS.modificationCount
+        project.getUserData(CACHE)?.let { if (it.stamp == stamp) return it.kind }
+        val kind = scan(project)
+        project.putUserData(CACHE, Cached(stamp, kind))
+        return kind
+    }
 
     private fun scan(project: Project): ProjectKind {
         val base = basePath(project) ?: return ProjectKind.OTHER
