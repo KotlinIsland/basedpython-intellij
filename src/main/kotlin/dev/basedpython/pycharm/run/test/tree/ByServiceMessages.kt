@@ -40,13 +40,26 @@ object ByServiceMessages {
     /** Translate one [ByTestEvent] into its service-message string. */
     fun toServiceMessage(event: ByTestEvent): String = when (event) {
         is ByTestEvent.TestSuiteStarted ->
-            message("testSuiteStarted", listOf("name" to event.name))
+            message(
+                "testSuiteStarted",
+                buildList {
+                    add("name" to event.name)
+                    event.locationHint?.let { add("locationHint" to it) }
+                },
+            )
 
         is ByTestEvent.SuiteFinished ->
             message("testSuiteFinished", listOf("name" to event.name))
 
         is ByTestEvent.TestStarted ->
-            message("testStarted", listOf("name" to event.name, "captureStandardOutput" to "true"))
+            message(
+                "testStarted",
+                buildList {
+                    add("name" to event.name)
+                    event.locationHint?.let { add("locationHint" to it) }
+                    add("captureStandardOutput" to "true")
+                },
+            )
 
         is ByTestEvent.TestPassed ->
             message("testFinished", listOf("name" to event.name))

@@ -20,8 +20,8 @@ class ByTestOutputParserTest {
         val events = parser().parseLine("tests/test_math.py::test_add PASSED")
         assertEquals(
             listOf(
-                ByTestEvent.TestSuiteStarted("tests/test_math.py"),
-                ByTestEvent.TestStarted("test_add"),
+                ByTestEvent.TestSuiteStarted("tests/test_math.py", "by_test://tests/test_math.py"),
+                ByTestEvent.TestStarted("test_add", "by_test://tests/test_math.py::test_add"),
                 ByTestEvent.TestPassed("test_add"),
                 ByTestEvent.TestFinished("test_add"),
             ),

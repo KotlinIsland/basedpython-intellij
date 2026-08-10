@@ -81,6 +81,23 @@ class ByServiceMessagesTest {
         )
     }
 
+    /**
+     * The attribute SMTRunner consults [ByTestLocator] with. Absent it, the node is inert — which
+     * is what the locator being registered but never reached used to mean.
+     */
+    @Test
+    fun `a location hint is carried on the messages that open a node`() {
+        assertEquals(
+            "##teamcity[testSuiteStarted name='a.py' locationHint='by_test://a.py']",
+            msg(ByTestEvent.TestSuiteStarted("a.py", "by_test://a.py")),
+        )
+        assertEquals(
+            "##teamcity[testStarted name='test_add' locationHint='by_test://a.py::test_add' " +
+                "captureStandardOutput='true']",
+            msg(ByTestEvent.TestStarted("test_add", "by_test://a.py::test_add")),
+        )
+    }
+
     @Test
     fun `test passed maps to testFinished`() {
         assertEquals(

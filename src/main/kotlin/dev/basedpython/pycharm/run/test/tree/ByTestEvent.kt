@@ -8,14 +8,20 @@ package dev.basedpython.pycharm.run.test.tree
  * SMTRunner test tree ([ByTestEventsConverter]) can be tested independently.
  */
 sealed interface ByTestEvent {
-    /** A test container (file / class / module) opened. */
-    data class TestSuiteStarted(val name: String) : ByTestEvent
+    /**
+     * A test container (file / class / module) opened.
+     *
+     * [locationHint] is the `by_test://…` URL [ByTestLocator] resolves back to a `.by` file, or
+     * null when the output gave nothing to navigate to. Without it a tree node is inert: SMTRunner
+     * only offers "jump to source" for nodes that carry one.
+     */
+    data class TestSuiteStarted(val name: String, val locationHint: String? = null) : ByTestEvent
 
     /** The matching close for a previously started suite. */
     data class SuiteFinished(val name: String) : ByTestEvent
 
-    /** A single test method/function started executing. */
-    data class TestStarted(val name: String) : ByTestEvent
+    /** A single test method/function started executing. See [TestSuiteStarted.locationHint]. */
+    data class TestStarted(val name: String, val locationHint: String? = null) : ByTestEvent
 
     /** A test completed successfully. */
     data class TestPassed(val name: String) : ByTestEvent

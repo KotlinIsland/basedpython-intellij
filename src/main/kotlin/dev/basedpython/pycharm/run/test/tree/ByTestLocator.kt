@@ -1,19 +1,26 @@
 package dev.basedpython.pycharm.run.test.tree
 
 import com.intellij.execution.Location
+import com.intellij.execution.PsiLocation
 import com.intellij.execution.testframework.sm.runner.SMTestLocator
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.vfs.LocalFileSystem
+import com.intellij.openapi.roots.ProjectRootManager
+import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiManager
 import com.intellij.psi.search.GlobalSearchScope
 
 /**
- * Best-effort [SMTestLocator] that maps a `path/to/test_x.py` (or `path::test`)
- * protocol URL emitted as a suite/test location into an openable file location.
+ * Makes test-tree nodes navigable: resolves the `by_test://` URLs the parser attaches to suites and
+ * tests back to the `.by` file and declaration they came from.
  *
- * Only the file is resolved (no line/element navigation), which is enough for the
- * "jump to source" action on tree nodes. Returns an empty list when the path
- * cannot be resolved, leaving the node non-navigable rather than throwing.
+ * pytest runs against the transpiled tree, so its node ids are paths relative to `by run`'s temp
+ * directory naming `.py` files. Relative paths survive transpilation, so the same path under a
+ * content root with a `.by` extension is the source — [ByTestLocations] does that rewrite, this
+ * resolves it against the project.
+ *
+ * Every failure degrades to "not navigable" rather than throwing: a node the IDE cannot open is a
+ * missing convenience, an exception during tree building is a broken run.
  */
 object ByTestLocator : SMTestLocator {
 
@@ -26,10 +33,36 @@ object ByTestLocator : SMTestLocator {
         scope: GlobalSearchScope,
     ): List<Location<*>> {
         if (protocol != PROTOCOL) return emptyList()
-        val filePath = path.substringBefore("::").trim()
-        if (filePath.isEmpty()) return emptyList()
-        val vFile = LocalFileSystem.getInstance().findFileByPath(filePath) ?: return emptyList()
-        val psiFile = PsiManager.getInstance(project).findFile(vFile) ?: return emptyList()
-        return listOf(com.intellij.execution.PsiLocation.fromPsiElement(psiFile))
+        val location = ByTestLocations.parse(path) ?: return emptyList()
+        val file = findSourceFile(project, location.file) ?: return emptyList()
+        val psiFile = PsiManager.getInstance(project).findFile(file) ?: return emptyList()
+
+        val element: PsiElement = location.symbols
+            .takeIf { it.isNotEmpty() }
+            ?.let { ByTestLocations.declarationOffset(psiFile.text, it) }
+            ?.let { psiFile.findElementAt(it) }
+            ?: psiFile
+
+        return listOf(PsiLocation.fromPsiElement(element))
     }
+
+    /**
+     * The `.by` file at [relativePath] under some content root, or the project base.
+     *
+     * Content roots first and in order, because a node id is relative to `by run`'s working
+     * directory and a multi-root project can hold the same relative path more than once; the base
+     * path is the fallback for a project whose roots are not registered.
+     */
+    private fun findSourceFile(project: Project, relativePath: String): VirtualFile? {
+        val roots = ProjectRootManager.getInstance(project).contentRoots
+        for (root in roots) {
+            root.findFileByRelativePath(relativePath)?.takeIf { !it.isDirectory }?.let { return it }
+        }
+        return project.baseDir(relativePath)
+    }
+
+    private fun Project.baseDir(relativePath: String): VirtualFile? =
+        com.intellij.openapi.vfs.LocalFileSystem.getInstance()
+            .findFileByPath((basePath ?: return null) + "/" + relativePath)
+            ?.takeIf { !it.isDirectory }
 }

@@ -53,12 +53,14 @@ class ByTestEventsConverter(
         val builder: ServiceMessageBuilder = when (event) {
             is ByTestEvent.TestSuiteStarted ->
                 ServiceMessageBuilder.testSuiteStarted(event.name)
+                    .also { b -> event.locationHint?.let { b.addAttribute("locationHint", it) } }
 
             is ByTestEvent.SuiteFinished ->
                 ServiceMessageBuilder.testSuiteFinished(event.name)
 
             is ByTestEvent.TestStarted ->
                 ServiceMessageBuilder.testStarted(event.name)
+                    .also { b -> event.locationHint?.let { b.addAttribute("locationHint", it) } }
                     .addAttribute("captureStandardOutput", "true")
 
             is ByTestEvent.TestPassed ->
