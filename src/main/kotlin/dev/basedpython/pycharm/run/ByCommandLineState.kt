@@ -18,6 +18,7 @@ import com.intellij.util.execution.ParametersListUtil
 import java.io.File
 
 private const val PYTHONPATH = "PYTHONPATH"
+private const val PYTHONUNBUFFERED = "PYTHONUNBUFFERED"
 
 /**
  * Shared `CommandLineState` for all `by` configurations. Subclasses name the [subcommand] and
@@ -80,6 +81,10 @@ abstract class ByCommandLineState(
         )
         // Activation first so a user-set variable of the same name still wins.
         cmd.withEnvironment(activationEnv(launch))
+        // `by run` spawns a Python child whose stdout is a pipe, and CPython block-buffers a pipe:
+        // a program's output appeared only when it exited, which is useless while stepping through
+        // it in the debugger. Set before the user's own environment so it stays overridable.
+        cmd.withEnvironment(PYTHONUNBUFFERED, "1")
         cmd.withEnvironment(options.envVars)
         cmd.withEnvironment(infrastructureEnv)
         if (pythonPathPrefix.isNotEmpty()) {
@@ -87,6 +92,13 @@ abstract class ByCommandLineState(
         }
 
         val handler = KillableColoredProcessHandler(cmd)
+        // Stop has to reach the program, not just the launcher. `by run` is a Rust parent that
+        // spawns `python _by_runner.py` and then blocks waiting for it, and a SIGINT to `by`
+        // demonstrably kills neither — both survive, and under a debugger the orphaned interpreter
+        // keeps holding its port. So: no soft kill (it achieves nothing here but a delay), and
+        // destroy the whole tree rather than the one process the IDE happens to hold.
+        handler.setShouldKillProcessSoftly(false)
+        handler.setShouldDestroyProcessRecursively(true)
         ProcessTerminatedListener.attach(handler)
         return handler
     }

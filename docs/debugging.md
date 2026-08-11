@@ -101,10 +101,26 @@ is what actually orders the two.
 
 **Inverting the map.** The forward table is a total function from generated lines to `.by` lines;
 the inverse is a relation, because one `.by` line routinely becomes several generated ones. Each
-`.by` line is pinned to the *first* generated line that claims it — where the statement starts, and
-so where a breakpoint belongs — and consecutive `.by` lines whose first generated lines are also
-consecutive coalesce into one run. A typical file collapses to a handful of runs, one per point
-where the emitted code grew. `ByLineMapping`, unit-tested.
+`.by` line is pinned to the **last** generated line that claims it, and consecutive `.by` lines
+whose pinned lines are also consecutive coalesce into one run.
+
+Last, not first, and that is not a detail. The extra lines are overwhelmingly *prologue* — setup
+emitted ahead of what the user wrote, attributed to the same source line. `def f(a = [])` becomes
+
+```
+def f(a = _MISSING):       # .by 1
+    if a is _MISSING:      # .by 2
+        a = []             # .by 2
+    a.append(1)            # .by 2
+```
+
+Pinning `.by` 2 to the first of its three lines stopped the debugger on the guard, where `a` is
+still the sentinel and the variables view reads `<object object at 0x…>` — the source says `[]`.
+Pinning to the last stops on `a.append(1)` with `a == []`. The trade is that a line expanding to
+real work *followed* by emitted code (a runtime soundness check after an assignment) now breaks
+after the assignment rather than before it: a moment later than ideal, which beats showing an
+internal sentinel where a variable should be. `ByLineMapping`, unit-tested against this exact
+transpiler output.
 
 **Reading the debuggee's state.** `sys.argv[0]` *is* available inside `sitecustomize` —
 `_PySys_UpdateConfig` runs before `init_import_site` — so the bootstrap can tell the transpiled

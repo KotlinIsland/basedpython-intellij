@@ -85,6 +85,16 @@
 - "Explain Rule" works for `by`'s own rules. It invoked `by explain <code>`, but `explain`
   is a command group, so every checker-owned rule (as opposed to a `buff` lint code) failed
   with `unrecognized subcommand` and reported "no explanation".
+- Breakpoints land on the statement rather than on the transpiler's prologue for it. A
+  `.by` line that becomes several generated lines now pins to the last, not the first, so
+  a breakpoint in a function with a mutable default argument stops with the argument bound
+  to its real value instead of an internal `<object object at 0x…>` sentinel.
+- Program output appears as it is produced. `by run` feeds its Python child through a pipe,
+  which CPython block-buffers, so output only arrived when the program exited — useless
+  while stepping.
+- Stop actually stops a run. `by run` is a launcher that spawns the interpreter and waits,
+  and a soft kill reached neither, leaving an orphaned debuggee holding its port; runs are
+  killed as a process tree now.
 - A debug session no longer hangs after the program finishes. `debugpy.listen()` spawns an
   adapter subprocess that outlives the debuggee and inherited its stdout pipe, so the IDE
   never saw EOF and the run stayed "running" until stopped by hand.
