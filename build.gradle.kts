@@ -51,9 +51,16 @@ intellijPlatform {
     // Fail on things that actually break at runtime. Deprecated/experimental/internal usages stay
     // informational: observing LSP server state needs `LspServerManagerListener`, which is marked
     // internal but has no public equivalent, and both the reloader and the status widget need it.
+    //
+    // MISSING_DEPENDENCIES is deliberately *not* here. The plugin depends optionally on
+    // `intellij.testRunner.plugin`, which exists in 2026.2 and not in 2026.1 — and being absent on
+    // one of two supported IDEs is the entire meaning of an optional dependency, not a defect. The
+    // verifier counts it all the same, and the level cannot distinguish optional from required.
+    // Little is lost: a missing *required* dependency takes its classes with it, so it still fails
+    // the build as COMPATIBILITY_PROBLEMS — that is exactly how the undeclared test runner showed
+    // up on 2026.2, as 19 unresolved classes rather than as a dependency note.
     failureLevel = listOf(
       VerifyPluginTask.FailureLevel.COMPATIBILITY_PROBLEMS,
-      VerifyPluginTask.FailureLevel.MISSING_DEPENDENCIES,
       VerifyPluginTask.FailureLevel.INVALID_PLUGIN,
     )
     ides {
