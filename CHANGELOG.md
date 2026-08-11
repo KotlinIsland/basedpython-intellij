@@ -73,6 +73,12 @@
 
 ### Fixed
 
+- Django templates get the `by` language server. `.html`/`.htm`/`.txt`/`.xml`/`.django`/`.dj`
+  under a `templates/` directory are now handed to it, so tag and filter completion,
+  `{{ book. }}` off a model's own fields, go-to-definition on `{% extends %}` / `{% url %}` /
+  `{% block %}` and template diagnostics work in the editor. Only in a project with a
+  basedpython marker — `.html` is far too common to claim outright.
+
 - A debug session that cannot start now reports itself as a notification with an
   **Install debugpy** action (`uv add --dev debugpy` in a uv project, otherwise
   `pip install` into the interpreter that reported the failure), instead of an

@@ -39,7 +39,7 @@ lexical colour only. Don't reintroduce guessed semantic colour; fix the LSP path
 - [x] Matched-brace + same-keyword (`if`/`elif`/`else`) highlighting (editor.highlight.BasedPythonKeywordHighlightUsagesHandlerFactory)
 
 ## 3. LSP — `by` server
-- [x] Server descriptor, start/stop, supported extensions
+- [x] Server descriptor, start/stop, supported extensions — `.by`/`.byi`/`.py`/`.pyi`, **plus django templates**: `.html`/`.htm`/`.txt`/`.xml`/`.django`/`.dj` under a `templates/` directory, matching django's own app-directories convention and the rule the server documents. Nothing else hands `.html` to a language server, so without this the template features (tag and filter completion, `{{ book.‸ }}` off the model's fields, go-to-definition on `{% extends %}`/`{% url %}`/`{% block %}`, template diagnostics) simply did not exist in the editor however much the server supported them. Gated on the project carrying a basedpython marker, because `.html` is the most common extension there is; `buff` is unchanged and stays python-only
 - [x] Completion, hover, goto def/decl/type, references, rename, signature help, diagnostics, inlay hints, semantic tokens, code actions, symbols, folding, type hierarchy
 - [x] Inlay hint toggle settings (param names, types, return types)
 - [x] Call hierarchy (LSP — enabled on `by`)
