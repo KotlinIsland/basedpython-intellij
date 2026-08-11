@@ -1,7 +1,7 @@
 package dev.basedpython.pycharm.lang
 
 import com.intellij.openapi.fileTypes.LanguageFileType
-import com.intellij.openapi.util.IconLoader
+import dev.basedpython.pycharm.BasedPythonIcons
 import javax.swing.Icon
 
 class BasedPythonFileType private constructor() : LanguageFileType(BasedPythonLanguage) {
@@ -15,6 +15,6 @@ class BasedPythonFileType private constructor() : LanguageFileType(BasedPythonLa
         @JvmField
         val INSTANCE: BasedPythonFileType = BasedPythonFileType()
 
-        private val ICON: Icon = IconLoader.getIcon("/icons/basedpython.svg", BasedPythonFileType::class.java)
+        private val ICON: Icon = BasedPythonIcons.Logo
     }
 }

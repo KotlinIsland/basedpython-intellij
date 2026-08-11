@@ -54,7 +54,7 @@ class RunConfigurationProducerTest {
         assertNotNull(fromContext, "by run producer should produce a configuration for a .by file")
         val config = fromContext!!.configuration as ByRunConfiguration
         assertEquals("pkg.main", config.options.module)
-        assertEquals("by run pkg.main", config.name)
+        assertEquals("pkg.main", config.name)
     }
 
     @Test

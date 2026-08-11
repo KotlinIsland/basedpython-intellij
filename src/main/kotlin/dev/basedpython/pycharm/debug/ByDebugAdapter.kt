@@ -31,6 +31,7 @@ import dev.basedpython.pycharm.actions.ByCli
 import dev.basedpython.pycharm.run.ByCommandLineState
 import dev.basedpython.pycharm.util.BasedPythonBundle
 import kotlinx.coroutines.CoroutineScope
+import org.eclipse.lsp4j.debug.OutputEventArguments
 import org.eclipse.lsp4j.debug.services.IDebugProtocolServer
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -282,6 +283,17 @@ private class ByDapXDebugProcess(
     override fun doGetProcessHandler(): ProcessHandler? = result?.processHandler ?: super.doGetProcessHandler()
 
     override fun createConsole(): ExecutionConsole = result?.executionConsole ?: super.createConsole()
+
+    /**
+     * Drops the adapter's `output` events on the floor.
+     *
+     * The base class forwards every one of them to the console, which is right when the adapter
+     * owns the debuggee and its output only ever arrives over DAP. Here the console is already
+     * attached to the real `by run` process, so anything printed this way is a *second* copy at
+     * best — and debugpy's adapter opens every session by emitting two bare events reading `ptvsd`
+     * and `debugpy`, which landed in front of the program's own first line.
+     */
+    override fun formatAndPrintOutput(outEvent: OutputEventArguments) = Unit
 
     /**
      * `DapXDebugProcess` supplies a line-breakpoint handler only, so exception breakpoints need

@@ -5,7 +5,7 @@ import com.intellij.facet.FacetType
 import com.intellij.facet.FacetTypeId
 import com.intellij.openapi.module.Module
 import com.intellij.openapi.module.ModuleType
-import com.intellij.openapi.util.IconLoader
+import dev.basedpython.pycharm.BasedPythonIcons
 import javax.swing.Icon
 
 class BasedPythonFacetType :
@@ -29,6 +29,6 @@ class BasedPythonFacetType :
         val ID: FacetTypeId<BasedPythonFacet> = FacetTypeId("basedpython")
 
         private val ICON: Icon =
-            IconLoader.getIcon("/icons/basedpython.svg", BasedPythonFacetType::class.java)
+            BasedPythonIcons.Logo
     }
 }

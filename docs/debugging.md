@@ -202,6 +202,23 @@ Nothing in the bootstrap may take the user's program down with it: every step ru
   unverified rather than bind to the wrong place. `by` records absolute source paths, so this has
   not been observed; it is the first thing to check if breakpoints silently do not bind.
 
+## Two things the console taught us
+
+**The adapter must not inherit the console.** `debugpy.listen()` spawns the debug adapter as a
+subprocess that deliberately outlives the debuggee, and a subprocess inherits descriptors 1 and 2.
+The IDE decides a run has finished when the process's stdout reaches EOF, and the adapter holds
+that pipe for the life of the session — so the program printed its output, exited, and the run sat
+there looking hung until somebody pressed Stop. It reproduces only with a pipe *and* a connected
+client, which is why redirecting to a file never showed it. The bootstrap points 1 and 2 at
+`os.devnull` across the spawn and restores them immediately; the adapter talks over sockets, so it
+loses nothing.
+
+**The adapter's `output` events are not our output.** `DapXDebugProcess` forwards every one to the
+console, which is right when the adapter owns the debuggee. Here the console is already attached to
+the real `by run` process, so those events are at best a second copy — and debugpy opens each
+session with two bare ones reading `ptvsd` and `debugpy`, which landed in front of the program's
+first line. `ByDapXDebugProcess` drops them.
+
 ## Exception breakpoints
 
 *Breakpoints → basedpython Exceptions*, with **On raise** and **On termination** checkboxes.

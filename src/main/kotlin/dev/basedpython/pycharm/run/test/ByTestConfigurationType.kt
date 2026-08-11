@@ -7,6 +7,7 @@ import com.intellij.execution.configurations.RunConfiguration
 import com.intellij.execution.configurations.RunConfigurationOptions
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.project.Project
+import dev.basedpython.pycharm.BasedPythonIcons
 import javax.swing.Icon
 
 /**
@@ -21,7 +22,7 @@ class ByTestConfigurationType : ConfigurationType {
     override fun getDisplayName(): String = "basedpython Test"
     override fun getConfigurationTypeDescription(): String =
         "Run basedpython tests with pytest, via by run"
-    override fun getIcon(): Icon = AllIcons.RunConfigurations.TestState.Run
+    override fun getIcon(): Icon = BasedPythonIcons.Logo
     override fun getId(): String = ID
 
     val testFactory: ConfigurationFactory = TestFactory(this)
