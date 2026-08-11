@@ -76,6 +76,16 @@ private val OWN_EXTENSIONS = setOf("by", "byi")
 private fun VirtualFile.isBasedPythonSource(): Boolean = extension in SUPPORTED_EXTENSIONS
 
 /**
+ * What the `by` server is given: python-ish sources, plus django templates.
+ *
+ * A template is not python and is never read as one — the server checks it as the template it is —
+ * but its completions, navigation and diagnostics all come from the same index as the project's
+ * models, views and urls, so it is the same server that answers for it.
+ */
+private fun VirtualFile.isByServerFile(): Boolean =
+  isBasedPythonSource() || ByTemplateFiles.isTemplate(this)
+
+/**
  * Whether opening [file] should start a language server for [project].
  *
  * A `.by` file is ours no matter where it lives, so it always does. A `.py` file only does in a
@@ -84,6 +94,8 @@ private fun VirtualFile.isBasedPythonSource(): Boolean = extension in SUPPORTED_
  */
 private fun shouldServe(project: Project, file: VirtualFile): Boolean =
   file.extension in OWN_EXTENSIONS || BasedPythonProjectDetector.isBasedPythonProject(project)
+// A django template takes the second branch: `.html` is the most common extension there is, so a
+// template is only ever ours in a project that already carries a basedpython marker.
 
 private fun splitArgs(raw: String): List<String> =
   raw.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
@@ -92,7 +104,7 @@ private fun splitArgs(raw: String): List<String> =
 
 internal class ByLspServerSupportProvider : LspServerSupportProvider {
   override fun fileOpened(project: Project, file: VirtualFile, serverStarter: LspServerStarter) {
-    if (!file.isBasedPythonSource()) return
+    if (!file.isByServerFile()) return
     if (!shouldServe(project, file)) return
     val settings = BasedPythonSettings.getInstance(project)
     if (!settings.byEnabled) return
@@ -114,7 +126,7 @@ internal class ByLspServerDescriptor(
   private val extraArgs: List<String>,
 ) : ProjectWideLspServerDescriptor(project, "basedpython") {
 
-  override fun isSupportedFile(file: VirtualFile): Boolean = file.isBasedPythonSource()
+  override fun isSupportedFile(file: VirtualFile): Boolean = file.isByServerFile()
 
   override fun createCommandLine(): GeneralCommandLine =
     GeneralCommandLine(buildList(2 + launch.prependArgs.size + extraArgs.size) {
