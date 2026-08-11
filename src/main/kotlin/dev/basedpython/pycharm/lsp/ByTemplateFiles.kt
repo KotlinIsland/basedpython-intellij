@@ -17,6 +17,26 @@ import com.intellij.openapi.vfs.VirtualFile
  * every one of them would put the type checker in front of files that have nothing to do with it.
  * Callers additionally require a basedpython project, so an unrelated Django or Jinja repo is
  * never touched.
+ *
+ * ### why this is duplicated here rather than asked of the server
+ *
+ * The obvious objection is that the server already knows, so the client should ask. It cannot:
+ *
+ * - LSP has no "do you serve this document?" request. The *client* owns the document set and
+ *   decides what to send; the only file scoping in the protocol is a `documentSelector` on a
+ *   **dynamic** registration.
+ * - `by` registers nothing dynamically for text documents. Probed against 0.0.1: the `initialize`
+ *   result carries `capabilities` and `serverInfo` and nothing else — no `experimental` block — and
+ *   the one `client/registerCapability` it sends is `workspace/didChangeWatchedFiles` with
+ *   `globPattern: "**"`, which watches everything and so says nothing about what it serves.
+ * - Even a perfect answer would come too late. This predicate is what decides whether to *start* a
+ *   server at all, so with only a template open there is nobody to ask.
+ *
+ * The cost of duplicating it is a rule that can drift from the server's, and one case it already
+ * gets wrong: a project whose `TEMPLATES[*]["DIRS"]` points somewhere not called `templates` is
+ * served by the server but not offered by this. Fixing that properly needs the server to advertise
+ * its document selector — worth asking upstream for, and the point at which this file should shrink
+ * to a bootstrap rule.
  */
 object ByTemplateFiles {
 
