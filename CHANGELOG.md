@@ -85,6 +85,11 @@
 - "Explain Rule" works for `by`'s own rules. It invoked `by explain <code>`, but `explain`
   is a command group, so every checker-owned rule (as opposed to a `buff` lint code) failed
   with `unrecognized subcommand` and reported "no explanation".
+- A debug session whose source map is unusable now says why. Two `.by` files with the
+  same module path (`main.by` beside `src/main.by`) are transpiled to one generated file
+  and the second wins, so the first never runs and no breakpoint in it binds; the warning
+  used to blame a missing `_by_sourcemap.py` and suggest updating `by`, which was wrong on
+  both counts.
 - The test runner no longer risks `NoSuchClassError` on 2026.2. The SM test runner
   (`SMTRunnerConsoleProperties`, `OutputToGeneralTestEventsConverter`, `SMTestLocator`)
   left the core platform there and ships as a bundled plugin the plugin did not declare;

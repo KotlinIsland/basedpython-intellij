@@ -10,6 +10,7 @@ import com.intellij.execution.ui.ExecutionConsole
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.UserDataHolder
+import com.intellij.util.PathUtil
 import com.intellij.platform.dap.DapBreakpointsDescription
 import com.intellij.platform.dap.DapClient
 import com.intellij.platform.dap.DapCommandProcessor
@@ -202,8 +203,16 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
      * in the debugger.
      */
     private fun reportMappingProblems(info: ByDebuggeeInfo) {
-        val detail = info.message
-            ?: if (mappings.isEmpty()) BasedPythonBundle.message("debug.warning.noMappingDetail") else return
+        // Ordered by how specific the explanation is. A collision is the *reason* a mapping is
+        // missing, so saying "no source map" instead would send the user looking in the wrong
+        // place entirely — which is exactly what it used to do.
+        val collisions = info.realCollisions
+        val detail = when {
+            collisions.isNotEmpty() -> describeCollisions(collisions)
+            info.message != null -> info.message
+            mappings.isEmpty() -> BasedPythonBundle.message("debug.warning.noMappedLines")
+            else -> return
+        }
         LOG.warn("basedpython debug session started with a mapping problem: $detail")
         ByCli.notifyWarning(
             project,
@@ -211,6 +220,22 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
             detail,
         )
     }
+
+    /**
+     * Names the sources that collided and which of them actually ran, because the survivor is the
+     * only one whose code exists at runtime.
+     */
+    private fun describeCollisions(collisions: List<ByGeneratedCollision>): String =
+        collisions.joinToString("\n") { collision ->
+            val sources = collision.sources.orEmpty().map { PathUtil.getFileName(it) to it }
+            val survivor = sources.last().second
+            BasedPythonBundle.message(
+                "debug.warning.collision",
+                sources.joinToString(", ") { it.second },
+                PathUtil.getFileName(collision.generated.orEmpty()),
+                survivor,
+            )
+        }
 
     private companion object {
         private val LOG = Logger.getInstance(ByDebugAdapterDescriptor::class.java)

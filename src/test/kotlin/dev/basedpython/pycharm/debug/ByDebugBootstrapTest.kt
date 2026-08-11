@@ -84,6 +84,44 @@ class ByDebugBootstrapTest {
         assertTrue(info.mappedFiles.isEmpty())
     }
 
+    /**
+     * The failure this guards, taken from a real project: `main.by` beside an empty `src/main.by`,
+     * both transpiled to one `main.py`. The empty one was written last, so it won — the program ran
+     * and printed nothing, and no breakpoint could bind. `SOURCEMAP` cannot show this once loaded,
+     * because it is a dict literal whose duplicate key has already collapsed.
+     */
+    @Test
+    fun `a report names the sources that collided on one generated file`() {
+        val info = ByDebuggeeInfo.parse(
+            """
+            {"status": "listening", "port": 1, "files": [],
+             "collisions": [{"generated": "/tmp/x/main.py",
+                             "sources": ["/p/main.by", "/p/src/main.by"]}]}
+            """.trimIndent()
+        )
+        assertNotNull(info)
+        val collision = info!!.realCollisions.single()
+        assertEquals(listOf("/p/main.by", "/p/src/main.by"), collision.sources)
+        // Write order, so the last is the one that survived and actually runs.
+        assertEquals("/p/src/main.by", collision.sources!!.last())
+    }
+
+    /** One claim on a generated file is the normal case, not a collision. */
+    @Test
+    fun `a single source is not a collision`() {
+        val info = ByDebuggeeInfo.parse(
+            """{"status": "listening", "collisions": [{"generated": "/tmp/a.py", "sources": ["/p/a.by"]}]}"""
+        )
+        assertTrue(info!!.realCollisions.isEmpty())
+    }
+
+    /** Older bootstraps sent no `collisions` key at all. */
+    @Test
+    fun `a report without collisions reports none`() {
+        val info = ByDebuggeeInfo.parse("""{"status": "listening", "files": []}""")
+        assertTrue(info!!.realCollisions.isEmpty())
+    }
+
     @Test
     fun `garbage is not a report`() {
         assertNull(ByDebuggeeInfo.parse("{ this is not json"))
