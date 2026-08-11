@@ -42,7 +42,7 @@ class ByCheckFromFileProducer : LazyRunConfigurationProducer<ByCheckConfiguratio
                 ?: file.path
         } else file.path
         configuration.options.paths = rel
-        configuration.name = "by check $rel"
+        configuration.name = "check $rel"
         if (!base.isNullOrBlank() && configuration.options.workingDir.isBlank()) {
             configuration.options.workingDir = base
         }

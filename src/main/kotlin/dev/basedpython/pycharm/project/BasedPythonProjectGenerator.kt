@@ -9,7 +9,7 @@ import com.intellij.ide.wizard.NewProjectWizardStep
 import com.intellij.ide.wizard.RootNewProjectWizardStep
 import com.intellij.openapi.application.WriteAction
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.util.IconLoader
+import dev.basedpython.pycharm.BasedPythonIcons
 import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.openapi.vfs.VirtualFile
 import javax.swing.Icon
@@ -32,7 +32,7 @@ class BasedPythonProjectGenerator : GeneratorNewProjectWizard {
     override val name: String = "basedpython"
 
     override val icon: Icon =
-        IconLoader.getIcon("/icons/basedpython.svg", BasedPythonProjectGenerator::class.java)
+        BasedPythonIcons.Logo
 
     override fun createStep(context: WizardContext): NewProjectWizardStep {
         val root = RootNewProjectWizardStep(context)

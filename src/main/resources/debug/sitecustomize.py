@@ -140,6 +140,36 @@ def _read_collisions(run_dir):
     ]
 
 
+def _listen_without_inheriting_console(debugpy, port):
+    """Start listening without handing the console to the debug adapter.
+
+    ``debugpy.listen()`` spawns the adapter as a subprocess that deliberately outlives this one —
+    it has to, since it brokers the session — and a subprocess inherits file descriptors 1 and 2.
+    The IDE decides a run has finished when the process's stdout reaches EOF, and the adapter holds
+    that pipe open for as long as the debug session lasts. The program prints its output, exits,
+    and the run sits there looking hung until somebody presses Stop.
+
+    Pointing 1 and 2 at ``os.devnull`` across the spawn is enough: what the adapter inherits is
+    fixed at that moment, and it talks over sockets, not stdio. The program's own descriptors are
+    restored immediately afterwards, so its output is untouched.
+    """
+    sys.stdout.flush()
+    sys.stderr.flush()
+    devnull = os.open(os.devnull, os.O_RDWR)
+    saved_out = os.dup(1)
+    saved_err = os.dup(2)
+    try:
+        os.dup2(devnull, 1)
+        os.dup2(devnull, 2)
+        debugpy.listen(("127.0.0.1", port))
+    finally:
+        os.dup2(saved_out, 1)
+        os.dup2(saved_err, 2)
+        os.close(saved_out)
+        os.close(saved_err)
+        os.close(devnull)
+
+
 def _activate(port):
     run_dir = os.path.dirname(_script_path())
 
@@ -171,7 +201,7 @@ def _activate(port):
         warning = "could not read _by_sourcemap.py: {0}".format(exc)
 
     try:
-        debugpy.listen(("127.0.0.1", port))
+        _listen_without_inheriting_console(debugpy, port)
     except Exception as exc:
         _write_info({
             "status": "error",

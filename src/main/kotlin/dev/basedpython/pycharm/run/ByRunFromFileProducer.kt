@@ -36,7 +36,9 @@ class ByRunFromFileProducer : LazyRunConfigurationProducer<ByRunConfiguration>()
         if (file.extension != "by") return false
         val module = moduleNameFor(context, file) ?: return false
         configuration.options.module = module
-        configuration.name = "by run $module"
+        // Named for what is being run, not for the command that runs it — the configuration
+        // type and its icon already say it is basedpython.
+        configuration.name = module
         val base = context.project.basePath
         if (!base.isNullOrBlank() && configuration.options.workingDir.isBlank()) {
             configuration.options.workingDir = base

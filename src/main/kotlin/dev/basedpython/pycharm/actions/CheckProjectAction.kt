@@ -16,7 +16,7 @@ import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.util.IconLoader
+import dev.basedpython.pycharm.BasedPythonIcons
 import java.nio.file.Paths
 import javax.swing.JComponent
 import javax.swing.JPanel
@@ -74,7 +74,7 @@ class CheckProjectAction : AnAction() {
             handler,
             panel as JComponent,
             "by check",
-            IconLoader.getIcon("/icons/basedpython.svg", CheckProjectAction::class.java),
+            BasedPythonIcons.Logo,
         )
 
         RunContentManager.getInstance(project)

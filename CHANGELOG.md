@@ -85,6 +85,12 @@
 - "Explain Rule" works for `by`'s own rules. It invoked `by explain <code>`, but `explain`
   is a command group, so every checker-owned rule (as opposed to a `buff` lint code) failed
   with `unrecognized subcommand` and reported "no explanation".
+- A debug session no longer hangs after the program finishes. `debugpy.listen()` spawns an
+  adapter subprocess that outlives the debuggee and inherited its stdout pipe, so the IDE
+  never saw EOF and the run stayed "running" until stopped by hand.
+- Stray `ptvsd` / `debugpy` text no longer appears in front of program output. Those are
+  the adapter's own DAP output events, echoed into a console that already shows the real
+  process output.
 - A debug session whose source map is unusable now says why. Two `.by` files with the
   same module path (`main.by` beside `src/main.by`) are transpiled to one generated file
   and the second wins, so the first never runs and no breakpoint in it binds; the warning
@@ -104,6 +110,10 @@
   up twice in the tree and Stop killed only one of the two processes.
 
 ### Changed
+
+- A `by run` configuration created from a `.by` file is named after the module (`pkg.main`)
+  rather than after the command (`by run pkg.main`), and basedpython run configurations use
+  the basedpython icon.
 
 - Extended IDE compatibility range to `262.*` (sinceBuild `261`). Verified Compatible
   against both IU-261.25134.67 and IU-262.6653.22.
