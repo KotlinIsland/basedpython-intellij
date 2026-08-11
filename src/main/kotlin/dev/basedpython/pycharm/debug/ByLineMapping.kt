@@ -20,11 +20,28 @@ data class ByFileMapping(val source: String, val generated: String, val runs: Li
  *
  * The inversion is not a reversal. The forward table is a total function from generated lines
  * (dense, 0-based, `null` for prelude) to `.by` lines; the inverse is a *relation*, because one
- * `.by` line routinely becomes several generated ones — `data class Point:` emits
- * `@dataclass(slots=True)` and `class Point:`. Each `.by` line is therefore pinned to the **first**
- * generated line that claims it, which is where the statement starts and so where a breakpoint
- * belongs. Consecutive `.by` lines whose first generated lines are also consecutive coalesce into
- * one run; every point where the emitted code gained a line starts a new one.
+ * `.by` line routinely becomes several generated ones. Each `.by` line is therefore pinned to the
+ * **last** generated line that claims it, and consecutive `.by` lines whose pinned generated lines
+ * are also consecutive coalesce into one run.
+ *
+ * Last, not first, because the extra lines are overwhelmingly *prologue* — setup the transpiler
+ * emits ahead of what the user wrote, attributed to the same source line. `def f(a = [])` becomes
+ *
+ * ```
+ * def f(a = _MISSING):       # .by 1
+ *     if a is _MISSING:      # .by 2
+ *         a = []             # .by 2
+ *     a.append(1)            # .by 2
+ * ```
+ *
+ * so pinning `.by` 2 to the first of its three generated lines stopped the debugger on the guard,
+ * where `a` is still the sentinel and shows as `<object object at 0x…>`. Pinning to the last stops
+ * on `a.append(1)` with `a == []`, which is what the source says.
+ *
+ * The trade is real but smaller: where a source line expands to real work *followed* by emitted
+ * code — a runtime soundness check after an assignment — the breakpoint now lands after the
+ * assignment rather than before it. Stopping a moment later than ideal is a far better failure than
+ * showing the user an internal sentinel where their variable should be.
  */
 object ByLineMapping {
 
@@ -46,15 +63,15 @@ object ByLineMapping {
      * [lines] is indexed by 0-based generated line and holds the 0-based `.by` line, or `null`.
      * The returned runs are 1-based and sorted by [ByLineRun.line].
      *
-     * A `.by` line named by more than one generated line keeps the lowest; a generated line naming
-     * a `.by` line already claimed by an earlier generated line is dropped. Prelude (`null`) is
-     * simply absent from the result — nothing in the `.by` source corresponds to it.
+     * A `.by` line named by more than one generated line keeps the **last** — see the class note
+     * for why. Prelude (`null`) is simply absent from the result: nothing in the `.by` source
+     * corresponds to it.
      */
     fun invertLines(lines: List<Int?>): List<ByLineRun> {
-        // .by line (0-based) -> first generated line (0-based) that produced it.
-        val firstGenerated = sortedMapOf<Int, Int>()
+        // .by line (0-based) -> last generated line (0-based) that produced it.
+        val lastGenerated = sortedMapOf<Int, Int>()
         lines.forEachIndexed { generated, source ->
-            if (source != null && source >= 0) firstGenerated.putIfAbsent(source, generated)
+            if (source != null && source >= 0) lastGenerated[source] = generated
         }
 
         val runs = mutableListOf<ByLineRun>()
@@ -69,7 +86,7 @@ object ByLineMapping {
             }
         }
 
-        for ((source, generated) in firstGenerated) {
+        for ((source, generated) in lastGenerated) {
             val continues = startSource >= 0 &&
                 source == previousSource + 1 &&
                 generated == previousGenerated + 1

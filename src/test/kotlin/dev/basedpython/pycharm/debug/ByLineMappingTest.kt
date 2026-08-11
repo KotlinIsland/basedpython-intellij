@@ -23,28 +23,52 @@ class ByLineMappingTest {
 
     @Test
     fun `an expanded statement splits the run in two`() {
-        // `data class Point:` on .by line 3 emits @dataclass(slots=True) and class Point:.
+        // .by line 3 claims two generated lines; it pins to the second, so the run breaks before it.
         val lines = listOf(0, 1, 2, 2, 3, 4)
         assertEquals(
             listOf(
-                ByLineRun(line = 1, endLine = 3, runtimeLine = 1),
-                ByLineRun(line = 4, endLine = 5, runtimeLine = 5),
+                ByLineRun(line = 1, endLine = 2, runtimeLine = 1),
+                ByLineRun(line = 3, endLine = 5, runtimeLine = 4),
             ),
             ByLineMapping.invertLines(lines),
         )
     }
 
-    /** A breakpoint belongs on the line the statement starts at, not on its continuation. */
+    /**
+     * The bug this rule exists for, from a real `def f(a = [])`:
+     *
+     * ```
+     * gen 2  def f(a = _MISSING):   .by 1
+     * gen 3      if a is _MISSING:  .by 2
+     * gen 4          a = []         .by 2
+     * gen 5      a.append(1)        .by 2
+     * ```
+     *
+     * Pinning `.by` 2 to generated line 3 stopped the debugger on the guard, where `a` is still the
+     * sentinel and reads `<object object at 0x…>`. Pinning to 5 stops on `a.append(1)` with `a == []`.
+     */
     @Test
-    fun `a by line claimed by several generated lines keeps the first`() {
+    fun `a default-argument guard does not steal the breakpoint from the statement`() {
+        val lines = listOf(null, 0, 1, 1, 1, 2, 3, 4, 5, 6)
+        val runs = ByLineMapping.invertLines(lines)
+        val forByLine2 = runs.single { it.line <= 2 && 2 <= it.endLine }
+        assertEquals(5, forByLine2.runtimeLine + (2 - forByLine2.line))
+    }
+
+    /**
+     * The extra generated lines are prologue the transpiler emits ahead of the user's statement, so
+     * the statement itself is the last of them.
+     */
+    @Test
+    fun `a by line claimed by several generated lines keeps the last`() {
         val runs = ByLineMapping.invertLines(listOf(null, 7, 7, 7))
-        assertEquals(listOf(ByLineRun(line = 8, endLine = 8, runtimeLine = 2)), runs)
+        assertEquals(listOf(ByLineRun(line = 8, endLine = 8, runtimeLine = 4)), runs)
     }
 
     @Test
     fun `a gap in the by lines starts a new run`() {
         // .by line 2 (index 1) produced nothing — a comment that was dropped, say.
-        val lines = listOf(0, 2, 3)
+        val lines: List<Int?> = listOf(0, 2, 3)
         assertEquals(
             listOf(
                 ByLineRun(line = 1, endLine = 1, runtimeLine = 1),
@@ -90,13 +114,12 @@ class ByLineMappingTest {
      * `demo.by`.
      */
     @Test
-    fun `the map by run actually emits collapses to two runs`() {
+    fun `the map by run actually emits collapses to a single run`() {
         val lines = List(83) { null } + listOf(0, 0) + (1..15).toList()
+        // `data class Point:` claims generated 84 and 85; pinning .by 1 to 85 makes the whole file
+        // one uninterrupted run, and puts a breakpoint on `class Point:` rather than its decorator.
         assertEquals(
-            listOf(
-                ByLineRun(line = 1, endLine = 1, runtimeLine = 84),
-                ByLineRun(line = 2, endLine = 16, runtimeLine = 86),
-            ),
+            listOf(ByLineRun(line = 1, endLine = 16, runtimeLine = 85)),
             ByLineMapping.invertLines(lines),
         )
     }
