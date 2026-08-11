@@ -23,6 +23,7 @@ data class ByDebuggeeInfo(
     /** Present when [status] is [STATUS_ERROR], and as a warning alongside [STATUS_LISTENING]. */
     val message: String? = null,
     val files: List<ByGeneratedFile>? = null,
+    val collisions: List<ByGeneratedCollision>? = null,
 ) {
     val isListening: Boolean get() = status == STATUS_LISTENING
 
@@ -33,6 +34,10 @@ data class ByDebuggeeInfo(
      * report, for one, carries no `files` at all.
      */
     val mappedFiles: List<ByGeneratedFile> get() = files.orEmpty()
+
+    /** Collisions with at least two real sources; anything malformed is ignored. */
+    val realCollisions: List<ByGeneratedCollision>
+        get() = collisions.orEmpty().filter { it.sources.orEmpty().size > 1 }
 
     companion object {
         const val STATUS_LISTENING: String = "listening"
@@ -55,6 +60,20 @@ data class ByDebuggeeInfo(
  * from, or `null` for emitted prelude with no source. It is deliberately carried across unchanged
  * and inverted on this side — see [ByLineMapping.invert].
  */
+/**
+ * One generated file that more than one `.by` source was transpiled to.
+ *
+ * `by run` writes them in turn, so the last one wins and every earlier source is silently absent
+ * from the run — its code never executes and no breakpoint in it can ever bind. Invisible in
+ * `SOURCEMAP` itself, which is a dict literal whose duplicate key has already collapsed; the
+ * bootstrap recovers it by re-reading the file as a syntax tree.
+ */
+data class ByGeneratedCollision(
+    val generated: String? = null,
+    /** In write order, so the last is the one that survived. */
+    val sources: List<String>? = null,
+)
+
 data class ByGeneratedFile(
     val source: String? = null,
     val generated: String? = null,

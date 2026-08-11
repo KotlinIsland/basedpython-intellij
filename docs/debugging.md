@@ -153,6 +153,15 @@ other case.
 A `by` too old to emit `_by_sourcemap.py` still debugs, with a warning notification that
 breakpoints in `.by` files will not bind.
 
+The most confusing failure this reporting has had to name so far was not a debugger fault at all.
+Two `.by` files whose module paths coincide — `main.by` beside `src/main.by` — are transpiled to
+the *same* generated file, and the second write wins. The first source's code never runs and no
+breakpoint in it can bind; when the survivor happens to be empty, the program starts, prints
+nothing and exits, which looks exactly like a broken debugger. `SOURCEMAP` cannot show it once
+loaded, because it is a dict literal whose duplicate key has already collapsed to the last entry —
+the bootstrap re-reads the file as a syntax tree, where both keys are still there, and the IDE
+names the colliding sources and which one actually runs.
+
 Nothing in the bootstrap may take the user's program down with it: every step runs under a broad
 `except`, and a bootstrap that fails means running without a debugger attached.
 

@@ -60,6 +60,10 @@ def _write_info(payload):
         raise
 
 
+def _sourcemap_path(run_dir):
+    return os.path.join(run_dir, "_by_sourcemap.py")
+
+
 def _read_source_map(run_dir):
     """`_by_sourcemap.py` as ``[{source, generated, lines}]``.
 
@@ -68,7 +72,7 @@ def _read_source_map(run_dir):
     """
     import importlib.util
 
-    path = os.path.join(run_dir, "_by_sourcemap.py")
+    path = _sourcemap_path(run_dir)
     if not os.path.isfile(path):
         return []
 
@@ -92,6 +96,50 @@ def _read_source_map(run_dir):
     return files
 
 
+def _read_collisions(run_dir):
+    """Generated files that more than one ``.by`` source claims.
+
+    Two ``.by`` files whose module paths coincide — ``main.by`` beside ``src/main.by``, say — are
+    transpiled to the *same* generated file, and the second write wins. Both the output and the
+    debuggability of the first are simply gone; if the winner happens to be an empty file, the
+    program runs and does nothing, which is a genuinely baffling thing to sit and watch.
+
+    ``SOURCEMAP`` cannot show this once loaded: it is a dict literal, so the duplicate key has
+    already collapsed to the last entry by the time Python hands it over. Reading the file back as
+    a syntax tree is what keeps both keys visible.
+    """
+    import ast
+
+    path = _sourcemap_path(run_dir)
+    if not os.path.isfile(path):
+        return []
+    with open(path, "r", encoding="utf-8") as stream:
+        tree = ast.parse(stream.read())
+
+    claims = {}
+    order = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Dict):
+            continue
+        for key, value in zip(node.keys, node.values):
+            if not isinstance(key, ast.Constant) or not isinstance(value, ast.Tuple):
+                continue
+            source = value.elts[0] if value.elts else None
+            if not isinstance(source, ast.Constant):
+                continue
+            generated = os.path.realpath(key.value)
+            if generated not in claims:
+                claims[generated] = []
+                order.append(generated)
+            claims[generated].append(source.value)
+
+    return [
+        {"generated": generated, "sources": claims[generated]}
+        for generated in order
+        if len(claims[generated]) > 1
+    ]
+
+
 def _activate(port):
     run_dir = os.path.dirname(_script_path())
 
@@ -111,11 +159,13 @@ def _activate(port):
         return
 
     warning = None
+    collisions = []
     try:
         files = _read_source_map(run_dir)
-        if not files:
-            warning = "no _by_sourcemap.py in {0} — breakpoints in .by files cannot be " \
-                      "mapped onto the transpiled output".format(run_dir)
+        collisions = _read_collisions(run_dir)
+        if not os.path.isfile(_sourcemap_path(run_dir)):
+            warning = "by run wrote no _by_sourcemap.py into {0}, so breakpoints in .by files " \
+                      "cannot be placed on the transpiled output".format(run_dir)
     except Exception as exc:
         files = []
         warning = "could not read _by_sourcemap.py: {0}".format(exc)
@@ -139,30 +189,51 @@ def _activate(port):
         "runDir": run_dir,
         "message": warning,
         "files": files,
+        "collisions": collisions,
     })
     debugpy.wait_for_client()
 
 
-def _chain_to_shadowed_sitecustomize():
-    """Run the ``sitecustomize`` this one displaced, if there was one.
+def _find_shadowed_sitecustomize():
+    """The ``sitecustomize.py`` this one displaced, if there was one.
 
     Prepending a directory to ``PYTHONPATH`` also prepends its ``sitecustomize``, and ``site``
     imports exactly one. Environments that ship their own would silently stop being customised.
-    """
-    import importlib.util
 
+    Resolved *before* anything else runs, because ``sys.path`` does not stay still: importing
+    debugpy puts pydevd's own ``pydev_sitecustomize`` on it, and that file is not a user
+    customisation at all — it is the shim pydevd injects into subprocesses it wants to debug, and
+    it ends by deleting ``sys.modules['sitecustomize']`` and re-importing, which from here would
+    find *this* module again. Skipped by name as well, belt and braces.
+    """
     for entry in sys.path:
-        directory = os.path.abspath(entry or os.getcwd())
-        if directory == _HERE:
+        try:
+            directory = os.path.abspath(entry or os.getcwd())
+        except Exception:
+            continue
+        if directory == _HERE or "pydev_sitecustomize" in directory:
             continue
         candidate = os.path.join(directory, "sitecustomize.py")
-        if not os.path.isfile(candidate):
-            continue
-        spec = importlib.util.spec_from_file_location("_by_shadowed_sitecustomize", candidate)
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        return
+        if os.path.isfile(candidate):
+            return candidate
+    return None
 
+
+def _run_shadowed_sitecustomize(candidate):
+    if not candidate:
+        return
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("_by_shadowed_sitecustomize", candidate)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+
+# Captured now, while sys.path is still the one `site` built.
+try:
+    _SHADOWED = _find_shadowed_sitecustomize()
+except BaseException:
+    _SHADOWED = None
 
 try:
     if _PORT and _INFO_OUT and _is_transpiled_program():
@@ -174,7 +245,7 @@ except BaseException:
     traceback.print_exc()
 
 try:
-    _chain_to_shadowed_sitecustomize()
+    _run_shadowed_sitecustomize(_SHADOWED)
 except BaseException:
     import traceback
 
