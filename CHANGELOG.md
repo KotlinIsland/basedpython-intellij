@@ -227,6 +227,17 @@
   toggles (parameters, types, return types) stay where they were, in *Settings |
   basedpython | Inlay hints*.
 
+- A hint takes exactly the room the same text takes as code, so a line that leaves an
+  annotation to the hints lands character for character on one that writes it out — `a =
+  A(1)` and `a: A[int] = A(1)` both render as `a: A[int] = A[int](t=1)`, ending in the
+  same place. Two things were spending pixels that are not a hint's to spend: two of
+  padding either side of the tint, and a width rounded up rather than to nearest. The
+  editor lays a line out by accumulating fractional advances and flooring each position,
+  so the same characters span 62px starting on one column and 63px on the next and there
+  is no single integer that is 'the width as source' — rounding up looks right at
+  whichever column it was measured at and pads every hint in the same direction
+  everywhere else, which is how three hints on one line drifted against two on the next.
+
 - A `by run` configuration created from a `.by` file is named after the module (`pkg.main`)
   rather than after the command (`by run pkg.main`), and basedpython run configurations use
   the basedpython icon.
