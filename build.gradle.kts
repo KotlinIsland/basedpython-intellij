@@ -42,6 +42,24 @@ dependencies {
     // The platform's Debug Adapter Protocol client (DebugAdapterSupportProvider, DapProcessStarter,
     // …), also a platform module rather than a bundled plugin. Powers `.by` debugging.
     bundledModule("intellij.platform.dap")
+
+    // `./gradlew runIde -PideAgent` — puts MCP Steroid in the sandbox, which exposes the running
+    // IDE over a local MCP server: execute Kotlin inside its JVM, screenshot windows, send real
+    // input. It is how the tool windows and other UI here get verified in a live IDE rather than
+    // argued about, and it screenshots from inside the JVM, so it needs no macOS screen-recording
+    // permission. On connecting: the IDE writes ~/.mcp-steroid/markers/<pid>.mcp-steroid with the
+    // MCP URL and a bearer token for that run.
+    //
+    // Opt-in because it is a ~180 MB download (it ships a Kotlin compiler) that also opens a local
+    // port on every launch, and an ordinary build or `runIde` should do neither. It never reaches
+    // the shipped plugin: nothing in plugin.xml depends on it, so it exists only in the sandbox.
+    //
+    // `hasProperty` rather than `providers.gradleProperty(…).isPresent`, which the rest of this
+    // file uses: a bare `-PideAgent` carries an empty value, and that provider reports an empty
+    // value as *absent*, so the way the flag is naturally typed would silently do nothing.
+    if (project.hasProperty("ideAgent")) {
+      plugin("com.jonnyzzz.mcp-steroid", "0.102.0-r-c68d8f15d")
+    }
   }
 }
 

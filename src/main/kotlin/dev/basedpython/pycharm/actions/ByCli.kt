@@ -32,6 +32,7 @@ internal object ByCli {
         vararg args: String,
         cwd: Path? = null,
         contextFile: VirtualFile? = null,
+        timeoutMs: Int? = null,
         @Suppress("UNUSED_PARAMETER") title: String = "by",
     ): ProcessOutput? {
         val launch = BasedPythonBinaries.launchBy(project, contextFile)
@@ -39,7 +40,7 @@ internal object ByCli {
             notifyBinaryMissing(project, "by")
             return null
         }
-        return exec(launch, args.toList(), cwd)
+        return exec(launch, args.toList(), cwd, timeoutMs)
     }
 
     /** Run `buff` with [args]. Returns `null` if the binary cannot be located. */
@@ -55,10 +56,16 @@ internal object ByCli {
             notifyBinaryMissing(project, "buff")
             return null
         }
-        return exec(launch, args.toList(), cwd)
+        return exec(launch, args.toList(), cwd, timeoutMs = null)
     }
 
-    private fun exec(launch: ByLaunch, args: List<String>, cwd: Path?): ProcessOutput {
+    /**
+     * Runs [launch] with [args]. A [timeoutMs] kills the process when it elapses and comes back
+     * with whatever was printed until then and [ProcessOutput.isTimeout] set; without one the call
+     * waits forever, which is right for a command that only reads (`transpile`, `explain`) and
+     * wrong for one that executes the user's code.
+     */
+    private fun exec(launch: ByLaunch, args: List<String>, cwd: Path?, timeoutMs: Int?): ProcessOutput {
         val cmd = GeneralCommandLine()
             .withExePath(launch.exe.toString())
             .withParameters(launch.prependArgs)
@@ -66,7 +73,8 @@ internal object ByCli {
             .withCharset(Charsets.UTF_8)
             .withEnvironment(launch.env)
         if (cwd != null) cmd.withWorkDirectory(cwd.toFile())
-        return ExecUtil.execAndGetOutput(cmd)
+        return if (timeoutMs == null) ExecUtil.execAndGetOutput(cmd)
+        else ExecUtil.execAndGetOutput(cmd, timeoutMs)
     }
 
     fun notifyBinaryMissing(project: Project, name: String) {
