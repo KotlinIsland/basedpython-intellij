@@ -117,6 +117,16 @@
   was simply dead. `by` has no dedicated "provide type" request — its LSP surface is the standard
   one, its only custom entries being the `ty.printDebugInformation` / `ty.runManageCommand` commands
   — so the answer comes from `textDocument/hover`, whose payload the server builds type-first.
+- Multiline strings show their trim margin. basedpython strips the indentation a triple-quoted
+  string's lines share, the way Java strips a text block's, and a vertical line now marks the
+  column it strips to — so the content of the literal is something you can read off the screen
+  instead of work out. The margin is the least-indented line, and the line carrying the closing
+  quotes counts even though it holds nothing else: move it and the whole literal's content
+  changes, which is exactly the edit that was invisible before. Blank lines never pull it left.
+  A docstring with text on its opening line (`"""Summary.`) keeps that line outside the margin —
+  it starts after the quotes and has no indentation to lose — and a literal whose lines share no
+  indentation is left unmarked, since nothing comes off it. Colour follows the scheme's string
+  colour, or *Settings | Editor | Color Scheme | basedpython | Multiline string trim margin*.
 - Block keywords pair up in `.by` files. With the caret on `if`, its `elif`s and `else` highlight
   with it; likewise `try`/`except`/`else`/`finally`, a loop and its `else`, and `match` with its
   `case`s. A `def` highlights with the `return`s and `raise`s that leave it, and a loop with its

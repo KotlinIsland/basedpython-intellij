@@ -17,6 +17,10 @@ support, run configurations, CLI actions, and editor tooling.
   operators (including `?.` and `??`). Strings, comments, numbers and operators are colored
   here in every mode — LSP semantic tokens classify identifiers, not punctuation.
 - Line commenting (`#`), brace matching for `()` / `[]` / `{}`, quote auto-pairing.
+- **Multiline string trim margin** — basedpython strips the indentation a triple-quoted
+  string's lines share, like a Java text block, and a vertical line marks the column it
+  strips to. The margin is the least-indented line, and the closing `"""` counts even on a
+  line of its own; blank lines never pull it left. Nothing is drawn when nothing is stripped.
 - Configurable color scheme under *Settings → Editor → Color Scheme → basedpython*.
 
 ### Language servers (LSP)

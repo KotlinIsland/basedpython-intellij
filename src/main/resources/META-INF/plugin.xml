@@ -284,6 +284,11 @@
         <annotator
             language="basedpython"
             implementationClass="dev.basedpython.pycharm.editor.highlight.BasedPythonNumericLiteralAnnotator"/>
+        <!-- The trim margin of a multiline string: basedpython strips the indentation its lines
+             share, the way Java strips a text block's, and the line marks where. A pass rather
+             than an annotator because it draws where there is no text to attribute. -->
+        <highlightingPassFactory
+            implementation="dev.basedpython.pycharm.editor.highlight.ByStringMarginPassFactory"/>
         <annotator
             language="basedpython"
             implementationClass="dev.basedpython.pycharm.highlight.fstring.FStringInterpolationAnnotator"/>
