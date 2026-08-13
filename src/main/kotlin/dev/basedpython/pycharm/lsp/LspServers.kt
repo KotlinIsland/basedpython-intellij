@@ -143,7 +143,7 @@ internal class ByLspServerDescriptor(
   // doc highlight, signature help, diagnostics, inlay hints, semantic tokens,
   // code actions, doc/workspace symbols, selection/folding range, type hierarchy.
   // Per-capability toggles (§142) let the user disable individual features;
-  // inlay hints are disabled when all three inlay toggles are off.
+  // inlay hints are rendered by the plugin itself (see `lsp.inlay.ByInlayHintsProvider`).
   override val lspCustomization: LspCustomization =
     ByCapabilityCustomization(BasedPythonSettings.getInstance(project))
 
@@ -171,12 +171,20 @@ internal class ByLspServerDescriptor(
       get() = if (s.byDocumentHighlight) super.documentHighlightsCustomizer else LspDocumentHighlightsDisabled
     override val signatureHelpCustomizer
       get() = if (s.bySignatureHelp) super.signatureHelpCustomizer else LspSignatureHelpDisabled
-    override val inlayHintCustomizer
-      get() = if (s.inlayParameterHints || s.inlayTypeHints || s.inlayReturnHints) {
-        super.inlayHintCustomizer
-      } else {
-        LspInlayHintDisabled
-      }
+    /**
+     * Always off — and that is not the feature being switched off, only the platform's rendering
+     * of it.
+     *
+     * The platform draws every LSP hint through `PresentationFactory.smallText`: the UI label font
+     * at four-fifths of the editor size, in a rounded grey pill. `LspInlayHintCustomizer` offers no
+     * way to change that, so the hints are fetched and drawn by `lsp.inlay.ByInlayHintsProvider`
+     * instead, in the editor's own font. The three settings toggles moved with them.
+     *
+     * Costs nothing on the wire: the `inlayHint` *client capability* is advertised whatever this
+     * returns (`LspClientCapabilities` sets it unconditionally), so `by` still answers the requests
+     * the provider sends.
+     */
+    override val inlayHintCustomizer = LspInlayHintDisabled
   }
 }
 

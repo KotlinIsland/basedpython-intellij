@@ -141,5 +141,12 @@
         <option name="FONT_TYPE" value="1" />
       </value>
     </option>
+    <!-- Inlay hints from `by` (lsp.inlay.ByInlayColors): editor font, no background —
+         a shadow of the code, not a label pasted onto it. -->
+    <option name="BASEDPYTHON_INLAY_HINT">
+      <value>
+        <option name="FOREGROUND" value="8d8d8d" />
+      </value>
+    </option>
   </attributes>
 </scheme>

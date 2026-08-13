@@ -154,31 +154,24 @@ class LspServerDescriptorTest {
   }
 
   // ---------------------------------------------------------------------------
-  // by capability customization: inlay hints gated on settings
+  // by capability customization: the platform never renders the inlay hints
   // ---------------------------------------------------------------------------
 
   @Test
-  fun `by keeps inlay hints enabled when any inlay setting is on`() {
+  fun `by leaves the platform's inlay hint rendering off whatever the toggles say`() {
+    // The hints themselves are on: they are fetched and drawn by ByInlayHintsProvider, in the
+    // editor font. What this switches off is only the platform's own small-text-in-a-pill
+    // rendering of the same hints, which would otherwise draw them a second time.
     val s = BasedPythonSettings.getInstance(project)
     s.inlayParameterHints = true
-    s.inlayTypeHints = false
-    s.inlayReturnHints = false
-    val c = byDescriptor().lspCustomization
-    assertNotSame(
-      LspInlayHintDisabled,
-      c.inlayHintCustomizer,
-      "inlay hints should remain enabled while at least one inlay toggle is on",
-    )
-  }
+    s.inlayTypeHints = true
+    s.inlayReturnHints = true
+    assertSame(LspInlayHintDisabled, byDescriptor().lspCustomization.inlayHintCustomizer)
 
-  @Test
-  fun `by disables inlay hints when all inlay settings are off`() {
-    val s = BasedPythonSettings.getInstance(project)
     s.inlayParameterHints = false
     s.inlayTypeHints = false
     s.inlayReturnHints = false
-    val c = byDescriptor().lspCustomization
-    assertSame(LspInlayHintDisabled, c.inlayHintCustomizer)
+    assertSame(LspInlayHintDisabled, byDescriptor().lspCustomization.inlayHintCustomizer)
   }
 
   @Test

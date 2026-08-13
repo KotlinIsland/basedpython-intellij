@@ -320,6 +320,14 @@
         <!-- ===== Wave 11: application-level defaults (§144) ===== -->
         <applicationService
             serviceImplementation="dev.basedpython.pycharm.settings.app.BasedPythonAppSettings"/>
+
+        <!-- Inlay hints from `by`, drawn in the editor font instead of the platform's small-text
+             pill. Replaces the platform's own LSP rendering, which ByLspServerDescriptor switches
+             off; the three toggles stay in Settings | basedpython | Inlay hints. -->
+        <codeInsight.inlayProvider
+            language="basedpython"
+            isEnabledByDefault="true"
+            implementationClass="dev.basedpython.pycharm.lsp.inlay.ByInlayHintsProvider"/>
         <applicationConfigurable
             groupId="language"
             id="dev.basedpython.pycharm.settings.app"
