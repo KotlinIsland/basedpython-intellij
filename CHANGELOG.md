@@ -32,12 +32,18 @@
   templates for main guard, async def, match/case, enum, and pytest fixture.
 - Inspections: mutable default argument, binary-not-configured (quick-fix to settings);
   spellchecking for comments/strings/identifiers; TODO/FIXME indexing.
+- Log points for `.by` files. Hover the gutter between two line numbers and click to add a
+  breakpoint that logs an expression instead of stopping; during a debug session its output
+  reaches the run console the same way a `print` would. Breakpoint expression fields
+  (*Condition*, *Evaluate and log*, Evaluate Expression) are basedpython editors now rather
+  than plain text boxes — which is also what lets the inline log point editor open. The
+  inline field itself is IntelliJ IDEA only; elsewhere the expression is typed in the
+  breakpoint popup.
 - "`print()` call can be replaced with a log point" inspection, the counterpart of
-  Kotlin's `println` one. The quick fix deletes the call and puts a non-suspending
-  breakpoint that logs the argument on the next statement in the same block; during a
-  debug session that reaches the run console the same way the `print` did. Offered only
-  where a log point says the same thing — not for `print()`, not for `file=` / `sep=` /
-  `end=` / `flush=`, and not where the following line belongs to an outer block.
+  Kotlin's `println` one. The quick fix deletes the call and leaves a log point in the gap
+  it occupied. Offered only where a log point says the same thing — not for `print()`, not
+  for `file=` / `sep=` / `end=` / `flush=`, and not where the following line belongs to an
+  outer block, since that is the line the log point binds to.
 - Intentions: add return type, convert to/from `data class`, wrap null-safe, explain
   anonymous named tuple.
 - `buff` format-on-save (settings toggle) and import optimizer; code style settings page

@@ -12,6 +12,8 @@ import com.intellij.psi.PsiFile
 import com.intellij.xdebugger.XDebuggerManager
 import com.intellij.xdebugger.XDebuggerUtil
 import com.intellij.xdebugger.breakpoints.SuspendPolicy
+import com.intellij.xdebugger.breakpoints.XLineBreakpointAdditionalInfo
+import com.intellij.xdebugger.breakpoints.XLineBreakpointVerticalPlacement
 import com.intellij.xdebugger.evaluation.EvaluationMode
 import dev.basedpython.pycharm.debug.ByLineBreakpointType
 import dev.basedpython.pycharm.lang.BasedPythonFile
@@ -59,7 +61,7 @@ class PrintToLogpointInspection : LocalInspectionTool() {
 }
 
 /**
- * Deletes the `print` statement and hangs its argument on a log point over the line that follows.
+ * Deletes the `print` statement and leaves a log point in the gap it occupied.
  */
 private class ReplaceWithLogpointFix : LocalQuickFix {
 
@@ -86,10 +88,25 @@ private class ReplaceWithLogpointFix : LocalQuickFix {
         document.deleteString(candidate.lineStart, candidate.lineEndWithSeparator)
         documentManager.commitDocument(document)
 
-        val breakpoint = breakpoints.addLineBreakpoint(type, virtualFile.url, candidate.logpointLine, null)
-        breakpoint.suspendPolicy = SuspendPolicy.NONE
-        breakpoint.logExpressionObject = XDebuggerUtil.getInstance()
-            .createExpression(candidate.expression, BasedPythonLanguage, null, EvaluationMode.EXPRESSION)
+        // INTER_LINE is what makes this read as a swap rather than a move. The platform anchors an
+        // inter-line breakpoint to the line *below* the gap and draws it in the gap, so a log point
+        // on the follower is painted exactly where the deleted call was — the same place Kotlin's
+        // leaves one. The line it binds to is the follower either way, which is why the follower has
+        // to be in the same block for this to be offered at all (see PrintToLogpoint).
+        val info = XLineBreakpointAdditionalInfo.Builder()
+            .setVerticalPlacement(XLineBreakpointVerticalPlacement.INTER_LINE)
+            .setSuspendPolicy(SuspendPolicy.NONE)
+            .setLogExpressionIfEnabled(candidate.expression)
+            .build()
+        val breakpoint = breakpoints.addLineBreakpoint(type, virtualFile.url, candidate.logpointLine, null, info)
+
+        // Re-stated with a language attached, so the expression edits as basedpython in the
+        // breakpoint dialog rather than as plain text. Only when the builder did enable logging —
+        // otherwise this would turn a log expression on behind the builder's back.
+        if (breakpoint.logExpressionObject != null) {
+            breakpoint.logExpressionObject = XDebuggerUtil.getInstance()
+                .createExpression(candidate.expression, BasedPythonLanguage, null, EvaluationMode.EXPRESSION)
+        }
     }
 
     /**

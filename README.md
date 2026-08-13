@@ -43,6 +43,10 @@ support, run configurations, CLI actions, and editor tooling.
   `PATH`, and since every `by` launch here goes out with the project venv activated, that
   is the project's own interpreter. If `debugpy` is missing, the debugger says so and
   names the exact interpreter that could not import it.
+- **Log points** — hover the gutter between two line numbers and click to add a breakpoint
+  that logs an expression instead of stopping. Breakpoint expression fields (*Condition*,
+  *Evaluate and log*) are basedpython editors, not plain text boxes. Outside IntelliJ IDEA
+  the expression is typed in the breakpoint popup rather than inline in the gap.
 - **Debug .by (pdb)** remains as a fallback that needs no extra package: builds, then runs
   the generated `.py` under `python -m pdb` with clickable frames.
 - See [docs/debugging.md](docs/debugging.md) for how it works and what it does not cover.
@@ -84,8 +88,8 @@ support, run configurations, CLI actions, and editor tooling.
 - Spellchecking in comments, strings, and identifiers (camelCase / snake_case aware).
 - TODO/FIXME scanning into the TODO tool window.
 - Inspections: mutable default argument; `by`/`buff` binary not configured (quick-fix to
-  settings); `print(…)` that could be a log point (quick-fix deletes the call and puts a
-  logging, non-suspending breakpoint on the next statement).
+  settings); `print(…)` that could be a log point (quick-fix deletes the call and leaves a
+  logging, non-suspending breakpoint in the gap it occupied).
 - Intentions: add return type, convert to/from `data class`, wrap in null-safe access,
   explain anonymous named tuple.
 

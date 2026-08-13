@@ -5,6 +5,7 @@ import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.xdebugger.breakpoints.XBreakpointProperties
 import com.intellij.xdebugger.breakpoints.XLineBreakpoint
 import com.intellij.xdebugger.breakpoints.XLineBreakpointType
+import com.intellij.xdebugger.evaluation.XDebuggerEditorsProvider
 import dev.basedpython.pycharm.util.BasedPythonBundle
 
 /**
@@ -28,6 +29,16 @@ class ByLineBreakpointType : XLineBreakpointType<XBreakpointProperties<*>>(
 
     override fun getDisplayText(breakpoint: XLineBreakpoint<XBreakpointProperties<*>>): String =
         "${breakpoint.shortFilePath}:${breakpoint.line + 1}"
+
+    /**
+     * Makes every expression field the IDE offers for one of these breakpoints a basedpython editor
+     * rather than a plain text box — and is what lets the inter-line log point editor open at all.
+     * See [ByDebuggerEditorsProvider].
+     */
+    override fun getEditorsProvider(
+        breakpoint: XLineBreakpoint<XBreakpointProperties<*>>,
+        project: Project,
+    ): XDebuggerEditorsProvider = ByDebuggerEditorsProvider
 
     companion object {
         const val ID: String = "basedpython-line"

@@ -75,6 +75,11 @@
             implementation="dev.basedpython.pycharm.debug.ByLineBreakpointType"/>
         <xdebugger.breakpointType
             implementation="dev.basedpython.pycharm.debug.ByExceptionBreakpointType"/>
+        <!-- The gutter-gap "Add Log" affordance. order="last" so IntelliJ IDEA's own provider,
+             which brings the inline editor, keeps winning where it exists. -->
+        <editor.interLineBreakpointConfigurationProvider
+            order="last"
+            implementation="dev.basedpython.pycharm.debug.logpoint.ByInterLineLogpointProvider"/>
 
         <!-- ===== Stream D: action notification group ===== -->
         <notificationGroup id="basedpython.Actions" displayType="BALLOON"/>
