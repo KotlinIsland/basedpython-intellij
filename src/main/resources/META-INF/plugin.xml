@@ -75,11 +75,15 @@
             implementation="dev.basedpython.pycharm.debug.ByLineBreakpointType"/>
         <xdebugger.breakpointType
             implementation="dev.basedpython.pycharm.debug.ByExceptionBreakpointType"/>
-        <!-- The gutter-gap "Add Log" affordance. order="last" so IntelliJ IDEA's own provider,
-             which brings the inline editor, keeps winning where it exists. -->
+        <!-- The gutter-gap "Add Log" affordance. Note that `order` decides nothing here: the
+             platform collects every provider's flow into a map keyed by id and takes the first
+             entry available for the line, so two live providers is a coin flip. Which is why the
+             plugin's own log point UI stands aside in IntelliJ IDEA rather than competing. -->
         <editor.interLineBreakpointConfigurationProvider
-            order="last"
             implementation="dev.basedpython.pycharm.debug.logpoint.ByInterLineLogpointProvider"/>
+        <registryKey key="basedpython.logpoints.provider"
+                     defaultValue="[auto*|plugin|ide]"
+                     description="Which implementation draws basedpython log points — the gutter gap, the inline Log: field, and Add Log Point. auto uses the IDE's own where it has one (IntelliJ IDEA) and this plugin's everywhere else; plugin forces this plugin's, which is the only way to see it in IntelliJ IDEA; ide always gives way."/>
 
         <!-- ===== Stream D: action notification group ===== -->
         <notificationGroup id="basedpython.Actions" displayType="BALLOON"/>

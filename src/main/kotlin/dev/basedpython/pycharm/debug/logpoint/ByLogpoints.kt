@@ -1,6 +1,7 @@
 package dev.basedpython.pycharm.debug.logpoint
 
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.util.registry.Registry
 import com.intellij.xdebugger.breakpoints.XBreakpoint
 import com.intellij.xdebugger.breakpoints.XLineBreakpoint
 import com.intellij.xdebugger.breakpoints.XLineBreakpointVerticalPlacement
@@ -19,11 +20,38 @@ object ByLogpoints {
     /**
      * Whether this plugin should provide the log point UI, rather than defer to the IDE's.
      *
+     * Deferring matters because two live providers is not a tie the plugin can win on purpose:
+     * `InterLineBreakpointConfigurationProvider.findFirstConfiguration` collects every provider's
+     * flow into a map keyed by its id and takes the first entry that says it is available for the
+     * line, so with both registered the winner is hash order and the `order=` attribute decides
+     * nothing. Standing aside in IntelliJ IDEA leaves its implementation — the better one, with
+     * caret bridging and a highlighting pass — in sole possession.
+     *
+     * That default is also why nothing here is reachable in IDEA, which is the IDE `runIde` starts,
+     * so `basedpython.logpoints.provider` overrides it: set it to `plugin` to see this
+     * implementation in IDEA, or `ide` to give way in an IDE that has one this cannot detect.
+     */
+    fun pluginOwnsLogpoints(): Boolean = when (preference()) {
+        "plugin" -> true
+        "ide" -> false
+        else -> !ideHasLogpoints()
+    }
+
+    /**
+     * Whether the IDE ships the logpoints feature itself.
+     *
      * Asked of the extension area rather than by loading a class: the logpoints modules are internal
      * to the Java plugin, and this extension point is the thing they register that matters here.
      */
-    fun pluginOwnsLogpoints(): Boolean =
-        !ApplicationManager.getApplication().extensionArea.hasExtensionPoint(LOGPOINTS_EP)
+    private fun ideHasLogpoints(): Boolean =
+        ApplicationManager.getApplication().extensionArea.hasExtensionPoint(LOGPOINTS_EP)
+
+    /**
+     * Read defensively: this is consulted while the gutter paints, and a registry key that failed to
+     * register would otherwise throw once per frame rather than fall back to the default.
+     */
+    private fun preference(): String =
+        runCatching { Registry.get(PROVIDER_KEY).selectedOption }.getOrNull() ?: "auto"
 
     /**
      * A `.by` breakpoint that logs in a gap rather than stopping on a line.
@@ -43,4 +71,5 @@ object ByLogpoints {
         breakpoint.logExpressionObject?.expression.isNullOrBlank()
 
     private const val LOGPOINTS_EP = "com.intellij.xdebugger.logpoints.editorsProviderFactory"
+    private const val PROVIDER_KEY = "basedpython.logpoints.provider"
 }
