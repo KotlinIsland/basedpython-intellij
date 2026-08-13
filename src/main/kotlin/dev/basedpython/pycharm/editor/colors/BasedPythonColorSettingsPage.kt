@@ -7,6 +7,7 @@ import com.intellij.openapi.options.colors.ColorSettingsPage
 import dev.basedpython.pycharm.lang.BasedPythonColors
 import dev.basedpython.pycharm.lang.BasedPythonSyntaxHighlighter
 import dev.basedpython.pycharm.lang.BasedPythonFileType
+import dev.basedpython.pycharm.editor.highlight.ByStringMarginColors
 import dev.basedpython.pycharm.highlight.BasedPythonHighlightKeys
 import dev.basedpython.pycharm.lsp.inlay.ByInlayColors
 import javax.swing.Icon
@@ -21,7 +22,7 @@ class BasedPythonColorSettingsPage : ColorSettingsPage {
 
     override fun getAttributeDescriptors(): Array<AttributesDescriptor> = DESCRIPTORS
 
-    override fun getColorDescriptors(): Array<ColorDescriptor> = ColorDescriptor.EMPTY_ARRAY
+    override fun getColorDescriptors(): Array<ColorDescriptor> = COLORS
 
     override fun getAdditionalHighlightingTagToDescriptorMap(): Map<String, com.intellij.openapi.editor.colors.TextAttributesKey>? = null
 
@@ -50,6 +51,20 @@ class BasedPythonColorSettingsPage : ColorSettingsPage {
             // Inlay hints from `by`. Undefined in a scheme, the colour is derived from that
             // scheme's own text and background instead — see ByInlayColors.
             AttributesDescriptor("Inlay hint", ByInlayColors.HINT),
+        )
+
+        /**
+         * The trim margin drawn down a multiline string. A colour rather than text attributes:
+         * it is a line beside the text, not a way of drawing text — and like the inlay colours,
+         * a scheme that says nothing about it gets one derived from its own string colour
+         * (ByStringMarginColors), not a grey chosen here.
+         */
+        private val COLORS: Array<ColorDescriptor> = arrayOf(
+            ColorDescriptor(
+                "Multiline string trim margin",
+                ByStringMarginColors.MARGIN,
+                ColorDescriptor.Kind.FOREGROUND,
+            ),
         )
 
         private val DEMO_TEXT: String = """
