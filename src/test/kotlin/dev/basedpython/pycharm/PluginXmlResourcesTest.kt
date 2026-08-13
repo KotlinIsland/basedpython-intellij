@@ -1,5 +1,8 @@
 package dev.basedpython.pycharm
 
+import java.nio.file.FileSystemAlreadyExistsException
+import java.nio.file.FileSystems
+import java.nio.file.Files
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -25,6 +28,31 @@ class PluginXmlResourcesTest {
             .toList()
 
     /**
+     * Names of the resources directly under [dir]. The test sandbox packages resources into a jar,
+     * where the directory is not a [java.io.File] — hence the zip filesystem, which is shared, so
+     * it is only closed if this call is the one that opened it.
+     */
+    private fun listResource(dir: String): List<String> {
+        val uri = checkNotNull(javaClass.getResource(dir)) {
+            "$dir missing from the test classpath"
+        }.toURI()
+        if (uri.scheme != "jar") return java.io.File(uri).list().orEmpty().toList()
+        val opened = try {
+            FileSystems.newFileSystem(uri, emptyMap<String, Any>())
+        } catch (_: FileSystemAlreadyExistsException) {
+            null
+        }
+        try {
+            val fs = opened ?: FileSystems.getFileSystem(uri)
+            return Files.list(fs.getPath(dir)).use { paths ->
+                paths.map { it.fileName.toString().trimEnd('/') }.toList()
+            }
+        } finally {
+            opened?.close()
+        }
+    }
+
+    /**
      * `defaultLiveTemplates` takes an extensionless path and appends `.xml`. Case matters inside a
      * jar, so a lowercase reference to `BasedPython.xml` resolves to nothing on every platform.
      */
@@ -39,6 +67,28 @@ class PluginXmlResourcesTest {
                     "\".xml\" and the lookup is case-sensitive",
             )
         }
+    }
+
+    /**
+     * `internalFileTemplate` names a file under `fileTemplates/internal` whose name is the
+     * declaration plus the produced extension plus `.ft`. Nothing resolves the name until the user
+     * picks the kind in New →, and the failure surfaces as "Template not found: <name>" in a
+     * balloon rather than at startup — which is how a branding pass that lowercased the
+     * declarations without renaming the files went unnoticed.
+     */
+    @Test
+    fun `every declared internal file template resolves`() {
+        val declared = attr("internalFileTemplate", "name")
+        assertTrue(declared.isNotEmpty(), "expected internal file templates to be declared")
+        val present = listResource("/fileTemplates/internal")
+        val missing = declared.filter { name ->
+            present.none { it.startsWith("$name.") && it.endsWith(".ft") }
+        }
+        assertTrue(
+            missing.isEmpty(),
+            "internalFileTemplate names with no fileTemplates/internal/<name>.<ext>.ft file: " +
+                "$missing; present: $present. The lookup is case-sensitive inside a jar",
+        )
     }
 
     /**
