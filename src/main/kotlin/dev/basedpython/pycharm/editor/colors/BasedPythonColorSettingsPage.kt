@@ -8,6 +8,7 @@ import dev.basedpython.pycharm.lang.BasedPythonColors
 import dev.basedpython.pycharm.lang.BasedPythonSyntaxHighlighter
 import dev.basedpython.pycharm.lang.BasedPythonFileType
 import dev.basedpython.pycharm.highlight.BasedPythonHighlightKeys
+import dev.basedpython.pycharm.lsp.inlay.ByInlayColors
 import javax.swing.Icon
 
 class BasedPythonColorSettingsPage : ColorSettingsPage {
@@ -46,6 +47,9 @@ class BasedPythonColorSettingsPage : ColorSettingsPage {
             AttributesDescriptor("Strings//Escape sequence", BasedPythonHighlightKeys.STRING_ESCAPE),
             AttributesDescriptor("Strings//F-string interpolation", BasedPythonHighlightKeys.FSTRING_INTERP),
             AttributesDescriptor("Decorator", BasedPythonHighlightKeys.DECORATOR),
+            // Inlay hints from `by`. Undefined in a scheme, the colour is derived from that
+            // scheme's own text and background instead — see ByInlayColors.
+            AttributesDescriptor("Inlay hint", ByInlayColors.HINT),
         )
 
         private val DEMO_TEXT: String = """
