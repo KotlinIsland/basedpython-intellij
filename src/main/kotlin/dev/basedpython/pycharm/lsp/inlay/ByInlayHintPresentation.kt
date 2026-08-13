@@ -6,6 +6,9 @@ import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.colors.EditorFontType
 import com.intellij.openapi.editor.ex.util.EditorUIUtil
 import com.intellij.openapi.editor.markup.TextAttributes
+import com.intellij.ui.scale.JBUIScale
+import com.intellij.util.ui.GraphicsUtil
+import java.awt.Color
 import java.awt.Dimension
 import java.awt.Font
 import java.awt.FontMetrics
@@ -24,9 +27,14 @@ import java.awt.Rectangle
  * hint looks nothing like the same type written out.
  *
  * VS Code makes the opposite choice, and it is the right one here: same family, same size, same
- * baseline as the code, just dimmed. A hint then reads as the code you did not have to write, which
- * is what it is. The only two things that separate it from real source are its colour (see
- * [ByInlayColors]) and the space around it.
+ * baseline as the code, dimmed and set on a faint tint of the editor background. A hint then reads
+ * as the code you did not have to write, which is what it is.
+ *
+ * The tint is not decoration and the fade is not enough on its own: dimmed text in the editor font
+ * is already how the IDE draws code that does not run, so a hint wearing nothing but a fade is
+ * indistinguishable from an unused import. [ByInlayColors] carries that argument and both colours;
+ * what is decided here is the shape — text box rather than line box, barely rounded, the glyphs
+ * still on the code's own column.
  *
  * Both the family and the size are taken from the editor's *own* scheme rather than the global one,
  * so zoom (`Ctrl+Wheel`), presentation mode and distraction-free mode carry the hints with them.
@@ -69,8 +77,17 @@ class ByInlayHintPresentation(
         get() {
             if (!shown) return HIDDEN_WIDTH
             val metrics = metrics(font())
-            return metrics.stringWidth(text) + leftPadding(metrics) + rightPadding(metrics)
+            return leftPadding(metrics) + tintWidth(metrics) + rightPadding(metrics)
         }
+
+    /**
+     * The tinted box: the text plus [INSET] either side.
+     *
+     * The inset is inside the tint and the LSP padding is outside it, which is what each one means:
+     * the inset stops the glyphs sitting flush against the tint's rounded corners, the padding is a
+     * gap between the hint and the code.
+     */
+    private fun tintWidth(metrics: FontMetrics): Int = metrics.stringWidth(text) + 2 * INSET
 
     /**
      * A whole line box, so the hint occupies the line the way a character does.
@@ -90,19 +107,35 @@ class ByInlayHintPresentation(
         val savedFont = g.font
         val savedColor = g.color
         try {
-            // A background only when a scheme asks for one — the default derives no background at
-            // all, which is what leaves the hint sitting flat in the line instead of in a pill.
-            hint.backgroundColor?.let {
-                g.color = it
-                g.fillRect(0, 0, width, height)
-            }
+            hint.backgroundColor?.let { paintTint(g, metrics, it) }
             EditorUIUtil.setupAntialiasing(g)
             g.font = font
-            g.color = hint.foregroundColor ?: ByInlayColors.derivedForeground(editor.colorsScheme)
-            g.drawString(text, leftPadding(metrics), baseline(metrics))
+            g.color = hint.foregroundColor
+            g.drawString(text, leftPadding(metrics) + INSET, baseline(metrics))
         } finally {
             g.font = savedFont
             g.color = savedColor
+        }
+    }
+
+    /**
+     * The tint behind the text — what keeps a hint from reading as dead code (see [ByInlayColors]).
+     *
+     * Sized to the *text* box rather than to the line box: a tint the full height of the line would
+     * be a solid band, and with line spacing above 1.0 it would close the gap the editor leaves
+     * between lines. Barely rounded, because a radius large enough to notice is a capsule, and a
+     * capsule is what this rendering exists to get away from.
+     */
+    private fun paintTint(g: Graphics2D, metrics: FontMetrics, color: Color) {
+        val baseline = baseline(metrics)
+        val top = (baseline - metrics.ascent - VERTICAL_INSET).coerceAtLeast(0)
+        val bottom = (baseline + metrics.descent + VERTICAL_INSET).coerceAtMost(height)
+        val config = GraphicsUtil.setupAAPainting(g)
+        try {
+            g.color = color
+            g.fillRoundRect(leftPadding(metrics), top, tintWidth(metrics), bottom - top, ARC, ARC)
+        } finally {
+            config.restore()
         }
     }
 
@@ -170,6 +203,15 @@ class ByInlayHintPresentation(
     override fun toString(): String = text
 
     private companion object {
+        /** Breathing room between the glyphs and the tint's edge, either side. */
+        val INSET: Int = JBUIScale.scale(2)
+
+        /** The same, above and below the text box. */
+        val VERTICAL_INSET: Int = JBUIScale.scale(1)
+
+        /** Just enough to take the corners off. Anything more reads as a capsule. */
+        val ARC: Int = JBUIScale.scale(4)
+
         /**
          * What a hidden hint measures.
          *

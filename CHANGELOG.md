@@ -183,21 +183,27 @@
 
 ### Changed
 
-- Inlay hints are drawn in the editor's own font, at the editor's own size, on the code's
-  own baseline — dimmed rather than boxed, the way VS Code draws them. The platform renders
-  every LSP hint as UI-font small text inside a rounded grey pill, which in a language whose
-  hints are almost all types (`: list[int]`, `: dict[str, int]`) reads as a foreign body
-  wedged into the line: the glyphs don't line up with the code, the pill breaks the column,
-  and a type in a hint looks nothing like the same type written out. There is no hook for
-  the presentation alone, so the plugin now fetches `textDocument/inlayHint` itself
-  (`lsp.inlay.ByInlayHintsProvider`) and the platform's own LSP rendering is switched off
-  for `by`. The colour is a new `BASEDPYTHON_INLAY_HINT` key, themeable and set in both
-  bundled schemes; a scheme that says nothing about it gets ordinary editor text faded
-  halfway into the editor background, so hints read the same under any theme. Zoom,
-  presentation mode and distraction-free mode carry the hints with them, which the
-  platform's rendering cannot do — its font is one global checkbox for every language.
-  The three toggles (parameters, types, return types) stay where they were, in
-  *Settings | basedpython | Inlay hints*.
+- Inlay hints are drawn in the editor's own font, at the editor's own size, on the
+  code's own baseline — faded onto a faint tint rather than boxed, the way VS Code draws
+  them. The platform renders every LSP hint as UI-font small text inside a rounded grey
+  pill, which in a language whose hints are almost all types (`: list[int]`, `:
+  dict[str, int]`) reads as a foreign body wedged into the line: the glyphs don't line
+  up with the code, the pill breaks the column, and a type in a hint looks nothing like
+  the same type written out. There is no hook for the presentation alone, so the plugin
+  now fetches `textDocument/inlayHint` itself (`lsp.inlay.ByInlayHintsProvider`) and the
+  platform's own LSP rendering is switched off for `by`. Both halves of the colour
+  matter: the fade alone is how the IDE already draws code that does not run, so an
+  untinted hint is indistinguishable from an unused symbol on the same line
+  (`unused_local: int` had the name and the hint in one grey). The tint is the smallest
+  mark that separates them, and is not the platform's capsule — it is sized to the text
+  box rather than the line box, barely rounded, and leaves the glyphs on the code's
+  column. Colours come from a new `BASEDPYTHON_INLAY_HINT` key, themeable and set in
+  both bundled schemes; a scheme that says nothing about it gets both derived from its
+  own text and background, so hints read the same under any theme. Zoom, presentation
+  mode and distraction-free mode carry the hints with them, which the platform's
+  rendering cannot do — its font is one global checkbox for every language. The three
+  toggles (parameters, types, return types) stay where they were, in *Settings |
+  basedpython | Inlay hints*.
 
 - A `by run` configuration created from a `.by` file is named after the module (`pkg.main`)
   rather than after the command (`by run pkg.main`), and basedpython run configurations use
