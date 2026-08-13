@@ -212,6 +212,11 @@ tasks {
     // test failure — the behaviour UsefulTestCase gave the JUnit 3 tests for free, and which
     // BasedPythonLogTest asserts against. JUnit 5 only picks them up with autodetection on.
     systemProperty("junit.jupiter.extensions.autodetection.enabled", "true")
+    // Without this the test JVM dies with a SIGABRT on the AppKit thread about a second in, before
+    // a single test runs — on macOS 26.5 with the bundled JBR 25, and on any test, including ones
+    // that touch no UI at all. Nothing here needs a window server: the Swing the tests do build
+    // (combo boxes, the test-node panel) is built, queried and thrown away, never shown.
+    systemProperty("java.awt.headless", "true")
   }
 
   publishPlugin {

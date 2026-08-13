@@ -84,7 +84,8 @@ support, run configurations, CLI actions, and editor tooling.
 - Spellchecking in comments, strings, and identifiers (camelCase / snake_case aware).
 - TODO/FIXME scanning into the TODO tool window.
 - Inspections: mutable default argument; `by`/`buff` binary not configured (quick-fix to
-  settings).
+  settings); `print(…)` that could be a log point (quick-fix deletes the call and puts a
+  logging, non-suspending breakpoint on the next statement).
 - Intentions: add return type, convert to/from `data class`, wrap in null-safe access,
   explain anonymous named tuple.
 

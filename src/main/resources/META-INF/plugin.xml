@@ -149,6 +149,14 @@
             enabledByDefault="true"
             level="WEAK WARNING"
             implementationClass="dev.basedpython.pycharm.inspections.BinaryNotConfiguredInspection"/>
+        <localInspection
+            language="basedpython"
+            groupName="basedpython"
+            displayName="print() call can be replaced with a log point"
+            shortName="BasedPythonPrintToLogpoint"
+            enabledByDefault="true"
+            level="WEAK WARNING"
+            implementationClass="dev.basedpython.pycharm.inspections.logpoint.PrintToLogpointInspection"/>
         <intentionAction>
             <language>basedpython</language>
             <className>dev.basedpython.pycharm.inspections.intentions.AddReturnTypeIntention</className>
