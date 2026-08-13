@@ -82,6 +82,16 @@
   without opening the tool window. The old `test_…` / `Test…` behaviour remains wherever
   the collection cannot answer: while that first collection runs, after one that errored,
   and in files written or edited since.
+- Bundled distributions: `-PbundledBinariesDir=<dir> -PbundledPlatform=<slug>` packs `by` and
+  `buff` into `<plugin>/bin`, and a *Bundled with plugin* environment source runs them — an install
+  that needs no venv, no `PATH` and no download for the toolchain to work. One artifact per
+  platform (the binaries are ~200 MB each), six in all including `windows-arm64`, built by the
+  *Bundled distributions* GitHub workflow from the basedpython release assets. Each is a separate
+  Marketplace version gated to its OS and CPU (`<depends>` on `com.intellij.modules.os.*` /
+  `com.intellij.modules.arch.*`, which Marketplace has routed on since 2026.1), so an IDE is
+  offered only the build it can run. Belt and braces for a direct download: `bin/platform.txt`
+  records the target, and binaries that cannot run here are skipped during resolution rather than
+  exec'd. The plain `buildPlugin` is unchanged and ships no binaries.
 - Type Info (`Ctrl+Shift+P`) works in `.by` files. The caret's name gets the type `by` infers for
   it, pressed again the full hover — the signature and docstring. The action is driven by whichever
   `ExpressionTypeProvider` is registered for the caret's language, and with none for basedpython it

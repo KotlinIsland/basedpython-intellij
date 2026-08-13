@@ -36,6 +36,7 @@ object ByBinaryDownloadPlan {
         LINUX_X64("linux-x64", "", false),
         LINUX_ARM64("linux-arm64", "", false),
         WINDOWS_X64("windows-x64", ".exe", true),
+        WINDOWS_ARM64("windows-arm64", ".exe", true),
     }
 
     /**
@@ -51,8 +52,10 @@ object ByBinaryDownloadPlan {
         return when {
             name.contains("mac") || name.contains("darwin") || name.contains("os x") ->
                 if (isArm) Platform.MAC_ARM64 else Platform.MAC_X64
+            // ARM before x64: an `aarch64` / `arm64` value satisfies [is64] as well, so testing the
+            // width first would call every Windows-on-ARM machine x64.
             name.contains("win") ->
-                if (is64) Platform.WINDOWS_X64 else null
+                if (isArm) Platform.WINDOWS_ARM64 else if (is64) Platform.WINDOWS_X64 else null
             name.contains("nux") || name.contains("nix") ->
                 if (isArm) Platform.LINUX_ARM64 else if (is64) Platform.LINUX_X64 else null
             else -> null

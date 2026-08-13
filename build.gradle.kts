@@ -63,8 +63,77 @@ dependencies {
   }
 }
 
+// --- Bundled `by` / `buff` binaries (FEATURES.md §58) ------------------------------------------
+//
+// `-PbundledBinariesDir=<dir>` copies that directory into `<plugin>/bin` in the sandbox and in the
+// distribution zip, so the plugin ships a working toolchain and needs neither a venv nor a download
+// to run. `-PbundledPlatform=<slug>` records which platform those binaries are for (a slug from
+// `ByBinaryDownloadPlan.Platform`, e.g. `mac-arm64`); it names the artifact and is written into
+// `bin/platform.txt`, which `BundledBinaries` reads to refuse binaries that cannot exec here.
+//
+// Opt-in, and the default build stays exactly as it was: the binaries are ~200 MB each, so this is
+// one zip per platform produced by CI (.github/workflows/bundled-distributions.yml), not something
+// a local `buildPlugin` should ever pull in. Both properties use `isPresent` rather than
+// `hasProperty` because both are meaningless without a value.
+val bundledBinariesDir = providers.gradleProperty("bundledBinariesDir")
+val bundledPlatform = providers.gradleProperty("bundledPlatform")
+
+// The platform modules each slug's artifact is gated on, which is what makes these Marketplace
+// *versions* of one plugin rather than six downloads: Marketplace reads these `<depends>` and
+// serves each IDE the artifact matching its OS and CPU. The names are built by the platform as
+// `com.intellij.modules.os.` + IdeaPluginOsRequirement.name.lowercase() and
+// `com.intellij.modules.arch.` + PluginCpuArchRequirement.name.lowercase() (verified against
+// intellij.platform.core.jar in IU-2026.2), so they are fixed spellings, not guesses.
+//
+// Needs an IDE of build 261+ to resolve the arch modules, which this plugin already requires. The
+// mechanism is undocumented and self-described as experimental (JetBrains' own
+// jreznot/native-versions-showcase; MP-1896 is still open), so expect it to need revisiting.
+val bundledPlatformModules = mapOf(
+  "mac-arm64" to listOf("com.intellij.modules.os.mac", "com.intellij.modules.arch.arm64"),
+  "mac-x64" to listOf("com.intellij.modules.os.mac", "com.intellij.modules.arch.x86_64"),
+  "linux-x64" to listOf("com.intellij.modules.os.linux", "com.intellij.modules.arch.x86_64"),
+  "linux-arm64" to listOf("com.intellij.modules.os.linux", "com.intellij.modules.arch.arm64"),
+  "windows-x64" to listOf("com.intellij.modules.os.windows", "com.intellij.modules.arch.x86_64"),
+  "windows-arm64" to listOf("com.intellij.modules.os.windows", "com.intellij.modules.arch.arm64"),
+)
+
+/** The two modules to gate on, failing on a slug that is not a real target rather than shipping it ungated. */
+fun gatingModules(slug: String): List<String> = bundledPlatformModules[slug]
+  ?: throw GradleException(
+    "Unknown -PbundledPlatform=$slug. Expected one of ${bundledPlatformModules.keys.sorted()} " +
+      "(the ByBinaryDownloadPlan.Platform slugs).",
+  )
+
+// A separate task rather than a `doLast` on prepareSandbox: the marker is an *input file* to the
+// sandbox copy, and generating it inside the copy task would write into a directory Sync has
+// already synchronised.
+val writeBundledPlatformMarker by tasks.registering {
+  description = "Records the platform slug the bundled by/buff binaries were built for."
+  val marker = layout.buildDirectory.file("bundled/platform.txt")
+  val slug = bundledPlatform
+  inputs.property("platform", slug)
+  outputs.file(marker)
+  onlyIf { slug.isPresent }
+  doLast {
+    marker.get().asFile.apply {
+      parentFile.mkdirs()
+      writeText(slug.get().trim() + "\n")
+    }
+  }
+}
+
 // Configure IntelliJ Platform Gradle Plugin - read more: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin-extension.html
 intellijPlatform {
+  publishing {
+    // Marketplace personal access token. From the environment only — never a Gradle property, which
+    // would end up in a properties file or a shell history.
+    //
+    // A bundled release is six `publishPlugin` runs, one per `-PbundledPlatform`, each uploading its
+    // own version. There is no batch upload: the task takes a single archive, and the Marketplace
+    // upload API takes a single file (no OS/arch parameter — the gating lives in the manifest).
+    token = providers.environmentVariable("PUBLISH_TOKEN")
+  }
+
   pluginVerification {
     // Fail on things that actually break at runtime. Deprecated/experimental/internal usages stay
     // informational: observing LSP server state needs `LspServerManagerListener`, which is marked
@@ -87,6 +156,14 @@ intellijPlatform {
   }
 
   pluginConfiguration {
+    // Marketplace keys updates by version, so the six per-platform artifacts of one release have to
+    // carry six distinct versions — the slug suffix is what makes them distinct. Routing itself is
+    // by the gating modules below, not by this string.
+    bundledPlatform.orNull?.let { slug ->
+      gatingModules(slug) // rejects a slug that is not a real target before anything is built
+      version = "${project.version}-$slug"
+    }
+
     ideaVersion {
       sinceBuild = "261"
       untilBuild = "263.*"
@@ -139,5 +216,57 @@ tasks {
 
   publishPlugin {
     dependsOn(patchChangelog)
+  }
+
+  // Gate a bundled artifact to the OS/arch it actually holds binaries for. Marketplace reads these
+  // to route; the IDE reads them too, so a `by` built for another machine cannot even be installed.
+  //
+  // Appended to patchPluginXml's *output* — the file the jar is built from — rather than to the
+  // source plugin.xml, so the six artifacts differ only in the manifest the build writes and the
+  // checked-in descriptor stays platform-neutral.
+  patchPluginXml {
+    val modules = bundledPlatform.orNull?.let(::gatingModules) ?: return@patchPluginXml
+    val output = outputFile
+    doLast {
+      val file = output.get().asFile
+      val text = file.readText()
+      // After the last existing <depends>, where a reader looking for dependencies will find them.
+      val anchor = text.lastIndexOf("</depends>")
+      if (anchor < 0) {
+        // Never silently: an ungated artifact is one Marketplace would hand to every machine.
+        throw GradleException("No <depends> element in ${file.absolutePath} to anchor the OS/arch gating to")
+      }
+      val at = anchor + "</depends>".length
+      val gating = modules.joinToString("") { "\n    <depends>$it</depends>" }
+      file.writeText(text.substring(0, at) + gating + text.substring(at))
+    }
+  }
+
+  // `buildPlugin` zips prepareSandbox's plugin directory, so everything added here reaches both the
+  // sandbox (`runIde`) and the distribution.
+  prepareSandbox {
+    if (bundledBinariesDir.isPresent) {
+      // Must stay in step with BundledBinaries.BIN_DIR, which is where the plugin looks at runtime.
+      val binDir = "${pluginName.get()}/bin"
+      from(bundledBinariesDir) {
+        into(binDir)
+        // Gradle's Zip does store unix modes, but the IDE's plugin installer does not restore
+        // them, so this is only the sandbox's benefit; BundledBinaries re-chmods on first use.
+        filePermissions { unix("0755") }
+      }
+      // Only when a platform was named. Without the guard an unmarked build would still pick up
+      // the marker file a *previous* bundled build left in the build directory, and stamp one
+      // platform's slug onto another platform's binaries.
+      if (bundledPlatform.isPresent) {
+        from(writeBundledPlatformMarker) {
+          into(binDir)
+        }
+      }
+    }
+  }
+
+  // One zip per platform, distinguishable in build/distributions and as a release asset.
+  buildPlugin {
+    archiveClassifier = bundledPlatform.orElse("")
   }
 }

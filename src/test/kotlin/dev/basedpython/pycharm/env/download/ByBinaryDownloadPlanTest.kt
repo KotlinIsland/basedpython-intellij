@@ -47,6 +47,13 @@ class ByBinaryDownloadPlanTest {
     }
 
     @Test
+    fun `windows arm64 from Windows 11 aarch64`() {
+        // Windows on ARM reports a 64-bit arch too, so the width test must not claim it first.
+        assertEquals(Platform.WINDOWS_ARM64, ByBinaryDownloadPlan.detectPlatform("Windows 11", "aarch64"))
+        assertEquals(Platform.WINDOWS_ARM64, ByBinaryDownloadPlan.detectPlatform("Windows 11", "arm64"))
+    }
+
+    @Test
     fun `windows 32-bit x86 is unsupported`() {
         assertNull(ByBinaryDownloadPlan.detectPlatform("Windows 7", "x86"))
     }
