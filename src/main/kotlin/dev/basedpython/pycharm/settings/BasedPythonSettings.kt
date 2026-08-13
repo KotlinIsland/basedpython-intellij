@@ -7,6 +7,8 @@ import com.intellij.openapi.components.Storage
 import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
 import com.intellij.util.xmlb.XmlSerializerUtil
+import dev.basedpython.pycharm.lsp.inlay.ByHintMode
+import dev.basedpython.pycharm.lsp.inlay.ByPushKey
 
 /**
  * Project-level persistent settings for the basedpython plugin.
@@ -30,6 +32,23 @@ class BasedPythonSettings : PersistentStateComponent<BasedPythonSettings.State> 
     var inlayParameterHints: Boolean = true,
     var inlayTypeHints: Boolean = true,
     var inlayReturnHints: Boolean = true,
+    /**
+     * When each kind of inlay hint is drawn, as a
+     * [dev.basedpython.pycharm.lsp.inlay.ByHintMode.id]: never, always, or only while the push key
+     * is held.
+     *
+     * Blank means the mode was never written, and the boolean above is read instead — a project
+     * configured before push-to-hint existed keeps exactly the hints it had. Writing a mode writes
+     * the boolean too, so a settings file that travels back to an older plugin still says whether
+     * the kind is on. Strings rather than the enum for the reason `pyFileHandling` gives: the
+     * serializer throws on a constant it cannot match, so a file from a newer plugin would fail to
+     * load instead of degrading.
+     */
+    var inlayParameterMode: String = "",
+    var inlayTypeMode: String = "",
+    var inlayReturnMode: String = "",
+    /** The key held to show "on push" hints, as a [dev.basedpython.pycharm.lsp.inlay.ByPushKey.id]. */
+    var inlayPushKey: String = "",
     var lspTraceLevel: String = "off",
     /**
      * When true, the generated `out/` directory is NOT excluded from indexing,
@@ -112,6 +131,33 @@ class BasedPythonSettings : PersistentStateComponent<BasedPythonSettings.State> 
   var inlayReturnHints: Boolean
     get() = state.inlayReturnHints
     set(value) { state.inlayReturnHints = value }
+
+  // ---- Inlay hint modes. Not serialised themselves; the strings above are the persisted form. ----
+
+  var inlayParameterMode: ByHintMode
+    get() = ByHintMode.resolve(state.inlayParameterMode, state.inlayParameterHints)
+    set(value) {
+      state.inlayParameterMode = value.id
+      state.inlayParameterHints = value != ByHintMode.NEVER
+    }
+
+  var inlayTypeMode: ByHintMode
+    get() = ByHintMode.resolve(state.inlayTypeMode, state.inlayTypeHints)
+    set(value) {
+      state.inlayTypeMode = value.id
+      state.inlayTypeHints = value != ByHintMode.NEVER
+    }
+
+  var inlayReturnMode: ByHintMode
+    get() = ByHintMode.resolve(state.inlayReturnMode, state.inlayReturnHints)
+    set(value) {
+      state.inlayReturnMode = value.id
+      state.inlayReturnHints = value != ByHintMode.NEVER
+    }
+
+  var inlayPushKey: ByPushKey
+    get() = ByPushKey.fromId(state.inlayPushKey)
+    set(value) { state.inlayPushKey = value.id }
 
   var lspTraceLevel: String
     get() = state.lspTraceLevel

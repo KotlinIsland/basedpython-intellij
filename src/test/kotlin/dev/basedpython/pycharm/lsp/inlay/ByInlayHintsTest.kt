@@ -137,16 +137,17 @@ class ByInlayHintsTest {
 
     // endregion
 
-    // region: toggles
+    // region: modes
+
+    /** One mode per kind, so the three settings can differ — which is the point of push-to-hint. */
+    private fun modeOf(kind: ByHintKind): ByHintMode =
+        ByInlayHints.modeOf(kind, ByHintMode.ALWAYS, ByHintMode.ON_PUSH, ByHintMode.NEVER)
 
     @Test
-    fun `each toggle switches only its own kind`() {
-        assertTrue(ByInlayHints.isEnabled(ByHintKind.PARAMETER, parameters = true, types = false, returns = false))
-        assertFalse(ByInlayHints.isEnabled(ByHintKind.TYPE, parameters = true, types = false, returns = false))
-        assertFalse(ByInlayHints.isEnabled(ByHintKind.RETURN_TYPE, parameters = true, types = false, returns = false))
-
-        assertTrue(ByInlayHints.isEnabled(ByHintKind.TYPE, parameters = false, types = true, returns = false))
-        assertTrue(ByInlayHints.isEnabled(ByHintKind.RETURN_TYPE, parameters = false, types = false, returns = true))
+    fun `each kind reads only its own mode`() {
+        assertEquals(ByHintMode.ALWAYS, modeOf(ByHintKind.PARAMETER))
+        assertEquals(ByHintMode.ON_PUSH, modeOf(ByHintKind.TYPE))
+        assertEquals(ByHintMode.NEVER, modeOf(ByHintKind.RETURN_TYPE))
     }
 
     // endregion

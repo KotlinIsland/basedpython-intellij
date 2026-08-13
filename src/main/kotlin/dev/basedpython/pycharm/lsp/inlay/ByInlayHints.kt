@@ -104,16 +104,20 @@ object ByInlayHints {
         if (text.length <= max) text else text.take(max - ELLIPSIS.length) + ELLIPSIS
 
     /**
-     * Whether a hint of this kind is switched on.
+     * When a hint of this kind is drawn: the mode its own setting is on.
      *
      * Kept here rather than read off the settings service so it can be tested as the table it is.
      */
-    fun isEnabled(kind: ByHintKind, parameters: Boolean, types: Boolean, returns: Boolean): Boolean =
-        when (kind) {
-            ByHintKind.PARAMETER -> parameters
-            ByHintKind.TYPE -> types
-            ByHintKind.RETURN_TYPE -> returns
-        }
+    fun modeOf(
+        kind: ByHintKind,
+        parameters: ByHintMode,
+        types: ByHintMode,
+        returns: ByHintMode,
+    ): ByHintMode = when (kind) {
+        ByHintKind.PARAMETER -> parameters
+        ByHintKind.TYPE -> types
+        ByHintKind.RETURN_TYPE -> returns
+    }
 
     /**
      * Whether the inlay sits after the text it belongs to.

@@ -63,7 +63,10 @@ support, run configurations, CLI actions, and editor tooling.
 ### Settings & status
 - Project settings page at *Settings → Languages & Frameworks → basedpython*: binary
   paths (with **Test** buttons + live detection), per-server toggles, extra args, target
-  Python version, format-on-save, inlay-hint toggles, and LSP trace level.
+  Python version, format-on-save, inlay-hint modes, and LSP trace level.
+- Inlay hints per kind (parameter names, variable types, return types), each *never*,
+  *always*, or **push-to-hint** — drawn only while you hold a key (`Ctrl+Alt` by default,
+  configurable). Hold it to read the inferred types, let go and the code is as you wrote it.
 - Optional status bar widget showing live `by` / `buff` LSP health (green = running,
   gray = stopped, red = binary missing).
 

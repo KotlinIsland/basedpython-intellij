@@ -1,5 +1,7 @@
 package dev.basedpython.pycharm.settings.ui
 
+import com.intellij.codeInsight.daemon.DaemonCodeAnalyzer
+import com.intellij.codeInsight.daemon.impl.InlayHintsPassFactoryInternal
 import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
 import com.intellij.openapi.options.Configurable
 import com.intellij.openapi.project.Project
@@ -13,6 +15,8 @@ import com.intellij.ui.components.JBTextField
 import com.intellij.ui.dsl.builder.AlignX
 import com.intellij.ui.dsl.builder.panel
 import dev.basedpython.pycharm.lsp.BasedPythonBinaries
+import dev.basedpython.pycharm.lsp.inlay.ByHintMode
+import dev.basedpython.pycharm.lsp.inlay.ByPushKey
 import dev.basedpython.pycharm.lsp.reload.BasedPythonLspReloader
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import java.awt.BorderLayout
@@ -66,9 +70,18 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
     private val pythonVersionCombo = ComboBox(arrayOf("3.10", "3.11", "3.12", "3.13"))
 
     private val formatOnSave = JCheckBox("Reformat with buff on save")
-    private val inlayParameterHints = JCheckBox("Parameter name hints")
-    private val inlayTypeHints = JCheckBox("Variable type hints")
-    private val inlayReturnHints = JCheckBox("Return type hints")
+
+    /**
+     * One mode per kind of hint, rather than one checkbox: a kind can be always on, off, or shown
+     * only while the push key is held (see [ByHintMode]).
+     */
+    private val inlayParameterMode = modeCombo()
+    private val inlayTypeMode = modeCombo()
+    private val inlayReturnMode = modeCombo()
+    private val inlayPushKeyCombo = ComboBox(ByPushKey.entries.toTypedArray()).apply {
+        renderer = SimpleListCellRenderer.create("") { it.display }
+    }
+
     private val lspTraceCombo = ComboBox(arrayOf("off", "messages", "verbose"))
 
     private val indexGeneratedPython = JCheckBox(
@@ -127,9 +140,15 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
                 row { cell(formatOnSave) }
             }
             group("Inlay hints") {
-                row { cell(inlayParameterHints) }
-                row { cell(inlayTypeHints) }
-                row { cell(inlayReturnHints) }
+                row("Parameter name hints:") { cell(inlayParameterMode) }
+                row("Variable type hints:") { cell(inlayTypeMode) }
+                row("Return type hints:") { cell(inlayReturnMode) }
+                row("Push key:") { cell(inlayPushKeyCombo) }
+                    .comment(
+                        "Hold this key to see the hints set to \"While the push key is held\". " +
+                            "They appear as it goes down and vanish as it comes up; the key keeps " +
+                            "doing whatever else it does.",
+                    )
             }
             group("Diagnostics") {
                 row("LSP trace level:") { cell(lspTraceCombo) }
@@ -165,6 +184,12 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
         rootPanel = panel
         return panel
     }
+
+    /** Renders a [ByHintMode] by its user-facing text while the model holds the enum. */
+    private fun modeCombo(): ComboBox<ByHintMode> =
+        ComboBox(ByHintMode.entries.toTypedArray()).apply {
+            renderer = SimpleListCellRenderer.create("") { it.display }
+        }
 
     private fun rowWithButton(field: JComponent, button: JButton): JComponent {
         val p = JPanel(GridBagLayout())
@@ -225,9 +250,7 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
             buffExtraArgs.text != s.buffExtraArgs ||
             (pythonVersionCombo.selectedItem as? String ?: "3.10") != s.pythonVersion ||
             formatOnSave.isSelected != s.formatOnSave ||
-            inlayParameterHints.isSelected != s.inlayParameterHints ||
-            inlayTypeHints.isSelected != s.inlayTypeHints ||
-            inlayReturnHints.isSelected != s.inlayReturnHints ||
+            inlayModified() ||
             (lspTraceCombo.selectedItem as? String ?: "off") != s.lspTraceLevel ||
             indexGeneratedPython.isSelected != s.indexGeneratedPython ||
             pyFileHandlingCombo.selectedItem != s.pyFileHandling ||
@@ -244,6 +267,15 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
             buffHover.isSelected != s.buffHover
     }
 
+    /** Split out of [isModified] because [apply] needs the same answer, to know whether to redraw. */
+    private fun inlayModified(): Boolean {
+        val s = settings
+        return inlayParameterMode.selectedItem != s.inlayParameterMode ||
+            inlayTypeMode.selectedItem != s.inlayTypeMode ||
+            inlayReturnMode.selectedItem != s.inlayReturnMode ||
+            inlayPushKeyCombo.selectedItem != s.inlayPushKey
+    }
+
     override fun apply() {
         val s = settings
         s.byPath = byPathField.text.trim().ifEmpty { null }
@@ -254,9 +286,11 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
         s.buffExtraArgs = buffExtraArgs.text
         s.pythonVersion = pythonVersionCombo.selectedItem as? String ?: "3.10"
         s.formatOnSave = formatOnSave.isSelected
-        s.inlayParameterHints = inlayParameterHints.isSelected
-        s.inlayTypeHints = inlayTypeHints.isSelected
-        s.inlayReturnHints = inlayReturnHints.isSelected
+        val inlayChanged = inlayModified()
+        s.inlayParameterMode = inlayParameterMode.selectedItem as? ByHintMode ?: ByHintMode.ALWAYS
+        s.inlayTypeMode = inlayTypeMode.selectedItem as? ByHintMode ?: ByHintMode.ALWAYS
+        s.inlayReturnMode = inlayReturnMode.selectedItem as? ByHintMode ?: ByHintMode.ALWAYS
+        s.inlayPushKey = inlayPushKeyCombo.selectedItem as? ByPushKey ?: ByPushKey.CTRL_ALT
         s.lspTraceLevel = lspTraceCombo.selectedItem as? String ?: "off"
 
         val indexChanged = indexGeneratedPython.isSelected != s.indexGeneratedPython
@@ -282,8 +316,23 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
         s.buffCodeActions = buffCodeActions.isSelected
         s.buffHover = buffHover.isSelected
 
+        if (inlayChanged) redrawInlayHints()
         BasedPythonLspReloader.getInstance(project).onSettingsChanged()
         updateDetectedLabel()
+    }
+
+    /**
+     * Re-collect the inlay hints of every open editor, so a changed mode is visible on Apply.
+     *
+     * A plain daemon restart is not enough: the platform's inlay pass keeps the PSI modification
+     * stamp it last ran against and declines to build a pass at all when the file has not changed
+     * since, which is precisely the case here — the file is the same, the settings are not.
+     * [InlayHintsPassFactoryInternal.forceHintsUpdateOnNextPass] clears that stamp; without it a
+     * changed mode would take effect on the next keystroke instead.
+     */
+    private fun redrawInlayHints() {
+        InlayHintsPassFactoryInternal.forceHintsUpdateOnNextPass()
+        DaemonCodeAnalyzer.getInstance(project).restart()
     }
 
     /**
@@ -313,9 +362,10 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
         buffExtraArgs.text = s.buffExtraArgs
         pythonVersionCombo.selectedItem = s.pythonVersion
         formatOnSave.isSelected = s.formatOnSave
-        inlayParameterHints.isSelected = s.inlayParameterHints
-        inlayTypeHints.isSelected = s.inlayTypeHints
-        inlayReturnHints.isSelected = s.inlayReturnHints
+        inlayParameterMode.selectedItem = s.inlayParameterMode
+        inlayTypeMode.selectedItem = s.inlayTypeMode
+        inlayReturnMode.selectedItem = s.inlayReturnMode
+        inlayPushKeyCombo.selectedItem = s.inlayPushKey
         lspTraceCombo.selectedItem = s.lspTraceLevel
         indexGeneratedPython.isSelected = s.indexGeneratedPython
         pyFileHandlingCombo.selectedItem = s.pyFileHandling

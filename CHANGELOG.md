@@ -44,6 +44,13 @@
   it occupied. Offered only where a log point says the same thing — not for `print()`, not
   for `file=` / `sep=` / `end=` / `flush=`, and not where the following line belongs to an
   outer block, since that is the line the log point binds to.
+- Push-to-hint. Each kind of inlay hint — parameter names, variable types, return types —
+  is now *never*, *always*, or *while the push key is held*, so the hints you want at a
+  glance and the ones you want only when asking are configured apart. Hold the key
+  (`Ctrl+Alt` by default, any modifier under *Settings → basedpython → Inlay hints*) and
+  the push hints appear; let go and they are gone. They appear the instant the key goes
+  down: the hints are already fetched and drawn as the key comes into it, not requested
+  from `by` on the press.
 - Intentions: add return type, convert to/from `data class`, wrap null-safe, explain
   anonymous named tuple.
 - `buff` format-on-save (settings toggle) and import optimizer; code style settings page

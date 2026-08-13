@@ -46,9 +46,10 @@ private val LOG = Logger.getInstance(ByInlayHintsProvider::class.java)
  * platform's own inlay pass, which owns the add/remove diffing and the inlay lifecycle.
  *
  * Not shown under `Settings | Editor | Inlay Hints` on purpose ([isVisibleInSettings]). basedpython
- * already has three toggles of its own — parameters, types, return types — under `Settings |
- * basedpython | Inlay hints`, and those are what this reads. A second checkbox in the platform's
- * page would be a fourth switch on the same feature, storing its state somewhere else.
+ * already has three settings of its own — parameters, types, return types, each never / always /
+ * on push — under `Settings | basedpython | Inlay hints`, and those are what this reads. A second
+ * checkbox in the platform's page would be a fourth switch on the same feature, storing its state
+ * somewhere else.
  */
 class ByInlayHintsProvider : InlayHintsProvider<NoSettings>, DumbAware {
 
@@ -75,12 +76,13 @@ class ByInlayHintsProvider : InlayHintsProvider<NoSettings>, DumbAware {
     ): InlayHintsCollector? {
         if (file !is BasedPythonFile) return null
         val basedPython = BasedPythonSettings.getInstance(file.project)
-        val parameters = basedPython.inlayParameterHints
-        val types = basedPython.inlayTypeHints
-        val returns = basedPython.inlayReturnHints
+        val parameters = basedPython.inlayParameterMode
+        val types = basedPython.inlayTypeMode
+        val returns = basedPython.inlayReturnMode
         // Nothing switched on: don't ask the server at all, rather than ask and drop every answer.
-        if (!parameters && !types && !returns) return null
-        return ByInlayHintsCollector(parameters, types, returns)
+        // A kind set to "on push" *is* switched on — its inlays are built now and drawn later.
+        if (!parameters.isCollected && !types.isCollected && !returns.isCollected) return null
+        return ByInlayHintsCollector(parameters, types, returns, basedPython.inlayPushKey)
     }
 }
 
@@ -98,9 +100,10 @@ class ByInlayHintsProvider : InlayHintsProvider<NoSettings>, DumbAware {
  * waits, so an edit cancels the pass rather than queueing behind it.
  */
 private class ByInlayHintsCollector(
-    private val parameters: Boolean,
-    private val types: Boolean,
-    private val returns: Boolean,
+    private val parameters: ByHintMode,
+    private val types: ByHintMode,
+    private val returns: ByHintMode,
+    private val pushKey: ByPushKey,
 ) : InlayHintsCollector {
 
     private var asked = false
@@ -134,7 +137,8 @@ private class ByInlayHintsCollector(
             val label = ByInlayHints.labelOf(hint)
             if (label.isEmpty()) continue
             val kind = ByInlayHints.kindOf(hint, label)
-            if (!ByInlayHints.isEnabled(kind, parameters, types, returns)) continue
+            val mode = ByInlayHints.modeOf(kind, parameters, types, returns)
+            if (!mode.isCollected) continue
 
             val text = ByInlayHints.truncate(label)
             val presentation = ByInlayHintPresentation(
@@ -142,6 +146,8 @@ private class ByInlayHintsCollector(
                 text = text,
                 padLeft = hint.paddingLeft == true,
                 padRight = hint.paddingRight == true,
+                mode = mode,
+                pushKey = pushKey,
             )
             // The server's own tooltip when it sent one; otherwise the untruncated text, so a hint
             // that had to be cut can still be read in full.

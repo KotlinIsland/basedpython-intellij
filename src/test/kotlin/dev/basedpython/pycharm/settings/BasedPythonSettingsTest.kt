@@ -2,6 +2,8 @@ package dev.basedpython.pycharm.settings
 
 import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
+import dev.basedpython.pycharm.lsp.inlay.ByHintMode
+import dev.basedpython.pycharm.lsp.inlay.ByPushKey
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -62,6 +64,10 @@ class BasedPythonSettingsTest {
             inlayParameterHints = false,
             inlayTypeHints = false,
             inlayReturnHints = false,
+            inlayParameterMode = "push",
+            inlayTypeMode = "never",
+            inlayReturnMode = "always",
+            inlayPushKey = "alt",
             lspTraceLevel = "verbose",
             indexGeneratedPython = true,
         )
@@ -77,8 +83,60 @@ class BasedPythonSettingsTest {
         assertFalse(settings.inlayParameterHints)
         assertFalse(settings.inlayTypeHints)
         assertFalse(settings.inlayReturnHints)
+        assertEquals(ByHintMode.ON_PUSH, settings.inlayParameterMode)
+        assertEquals(ByHintMode.NEVER, settings.inlayTypeMode)
+        assertEquals(ByHintMode.ALWAYS, settings.inlayReturnMode)
+        assertEquals(ByPushKey.ALT, settings.inlayPushKey)
         assertEquals("verbose", settings.lspTraceLevel)
         assertTrue(settings.indexGeneratedPython)
+    }
+
+    // ---- Inlay hint modes (push-to-hint) ----
+
+    @Test
+    fun `hint modes default to always, which is what the old booleans said`() {
+        assertEquals(ByHintMode.ALWAYS, settings.inlayParameterMode)
+        assertEquals(ByHintMode.ALWAYS, settings.inlayTypeMode)
+        assertEquals(ByHintMode.ALWAYS, settings.inlayReturnMode)
+        assertEquals(ByPushKey.CTRL_ALT, settings.inlayPushKey)
+    }
+
+    @Test
+    fun `a settings file with only the old booleans reads as never or always`() {
+        settings.loadState(
+            BasedPythonSettings.State(
+                inlayParameterHints = true,
+                inlayTypeHints = false,
+                inlayReturnHints = false,
+            ),
+        )
+        assertEquals(ByHintMode.ALWAYS, settings.inlayParameterMode)
+        assertEquals(ByHintMode.NEVER, settings.inlayTypeMode)
+        assertEquals(ByHintMode.NEVER, settings.inlayReturnMode)
+    }
+
+    @Test
+    fun `writing a mode writes the old boolean too, so an older plugin still reads it`() {
+        settings.inlayTypeMode = ByHintMode.ON_PUSH
+        assertEquals("push", settings.state.inlayTypeMode)
+        assertTrue(settings.inlayTypeHints)
+
+        settings.inlayTypeMode = ByHintMode.NEVER
+        assertEquals("never", settings.state.inlayTypeMode)
+        assertFalse(settings.inlayTypeHints)
+    }
+
+    @Test
+    fun `a written mode wins over the boolean beside it`() {
+        settings.loadState(
+            BasedPythonSettings.State(
+                inlayTypeHints = true,
+                inlayTypeMode = "push",
+                inlayPushKey = "ctrl",
+            ),
+        )
+        assertEquals(ByHintMode.ON_PUSH, settings.inlayTypeMode)
+        assertEquals(ByPushKey.CTRL, settings.inlayPushKey)
     }
 
     // ---- §142 per-server capability toggles ----
