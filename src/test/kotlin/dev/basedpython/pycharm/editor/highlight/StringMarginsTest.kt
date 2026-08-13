@@ -51,7 +51,7 @@ class StringMarginsTest {
             >    text = $q
             >        |hello
             >        |  world
-            >        |$q
+            >        $q
             """.trimMargin(">"),
             drawn(
                 """
@@ -73,7 +73,7 @@ class StringMarginsTest {
             """
             >text = $q
             >    |    hello
-            >    |$q
+            >    $q
             """.trimMargin(">"),
             drawn(
                 """
@@ -93,7 +93,7 @@ class StringMarginsTest {
             >    |hello
             >    |
             >    |world
-            >    |$q
+            >    $q
             """.trimMargin(">"),
             drawn(
                 """
@@ -124,7 +124,7 @@ class StringMarginsTest {
             >    ${q}Summary.
             >        |
             >        |More, indented under the def.
-            >        |$q
+            >        $q
             """.trimMargin(">"),
             drawn(
                 """
@@ -220,7 +220,24 @@ class StringMarginsTest {
         // The closing line, four characters in — whitespace the whole way, so asking the editor
         // for that offset's x gives the column the trim really cuts at, tabs and all.
         assertEquals(source.indexOf("    $q") + 4, margin.anchorOffset)
-        assertEquals("    $q\n", source.substring(margin.lastLineStart))
+        // Drawn beside the text, though, and not down past it: the anchor's line is where the
+        // rule points, not where it runs.
+        assertEquals(source.indexOf("        a"), margin.firstLineStart)
+        assertEquals(margin.firstLineStart, margin.lastLineStart)
+    }
+
+    @Test
+    fun `the rule stops where the closing quotes start`() {
+        val source = "x = $q\n    a\n    b\n    $q\n"
+        val margin = checkNotNull(margin(source))
+        assertEquals(source.indexOf("    a"), margin.firstLineStart)
+        assertEquals(source.indexOf("    b"), margin.lastLineStart)
+    }
+
+    @Test
+    fun `no margin when the quotes are all the literal has`() {
+        // `"""\n    """` holds one blank line. There is a margin and no text to draw it beside.
+        assertNull(margin("x = $q\n    $q\n"))
     }
 
     @Test

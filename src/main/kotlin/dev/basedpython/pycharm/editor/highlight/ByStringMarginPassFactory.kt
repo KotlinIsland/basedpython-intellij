@@ -5,12 +5,17 @@ import com.intellij.codeHighlighting.TextEditorHighlightingPassFactory
 import com.intellij.codeHighlighting.TextEditorHighlightingPassFactoryRegistrar
 import com.intellij.codeHighlighting.TextEditorHighlightingPassRegistrar
 import com.intellij.openapi.editor.Editor
+import com.intellij.openapi.editor.event.DocumentEvent
+import com.intellij.openapi.editor.event.DocumentListener
+import com.intellij.openapi.editor.ex.EditorEx
 import com.intellij.openapi.editor.ex.RangeHighlighterEx
+import com.intellij.openapi.editor.ex.util.EditorUtil
 import com.intellij.openapi.editor.markup.HighlighterLayer
 import com.intellij.openapi.editor.markup.HighlighterTargetArea
 import com.intellij.openapi.editor.markup.RangeHighlighter
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.util.Key
 import com.intellij.psi.PsiFile
 import dev.basedpython.pycharm.lang.BasedPythonLanguage
@@ -47,6 +52,43 @@ class ByStringMarginPassFactory : TextEditorHighlightingPassFactory, TextEditorH
 /** The margins currently drawn in an editor, so a pass can tell what it has to change. */
 private val DRAWN: Key<List<RangeHighlighter>> = Key.create("basedpython.string.margins")
 
+/** Set once an editor has the listener below. */
+private val REPAINTS: Key<Boolean> = Key.create("basedpython.string.margins.repaints")
+
+/**
+ * Makes an edit inside a marked literal repaint the whole literal.
+ *
+ * Editing one line repaints that line, which is all the editor can know to do — but a trim margin
+ * is a rule down several lines, and moving the least-indented line moves all of it. Without this,
+ * the edited line redraws at the new column and the lines above it keep the pixels of the old one
+ * until something else happens to repaint them.
+ *
+ * The narrowest fix that works: only the literal being edited, and only when it is one that is
+ * marked. An edit anywhere else changes nothing the rule is measured from, or moves whole lines,
+ * which the editor already repaints for itself.
+ */
+private fun installRepainter(editor: Editor) {
+    if (editor !is EditorEx || editor.getUserData(REPAINTS) == true) return
+    editor.putUserData(REPAINTS, true)
+    val listener = object : DocumentListener {
+        override fun documentChanged(event: DocumentEvent) {
+            for (highlighter in editor.getUserData(DRAWN).orEmpty()) {
+                if (highlighter.isValid &&
+                    event.offset >= highlighter.startOffset &&
+                    event.offset <= highlighter.endOffset
+                ) {
+                    editor.repaint(highlighter.startOffset, highlighter.endOffset)
+                }
+            }
+        }
+    }
+    // The document outlives the editor and this listener holds one, so it goes when the editor
+    // does — otherwise every editor ever opened on the file stays reachable from its document.
+    val lifetime = Disposer.newDisposable("basedpython string margins")
+    EditorUtil.disposeWithEditor(editor, lifetime)
+    editor.document.addDocumentListener(listener, lifetime)
+}
+
 private class ByStringMarginPass(project: Project, private val editor: Editor) :
     TextEditorHighlightingPass(project, editor.document, false) {
 
@@ -57,16 +99,21 @@ private class ByStringMarginPass(project: Project, private val editor: Editor) :
         margins = StringMargins.marginsIn(document.immutableCharSequence)
     }
 
+    /**
+     * What the pass leaves behind is a highlighter over each literal that has a margin — where
+     * the rule goes *within* that literal is measured at paint time, from the highlighter's own
+     * range, by [ByStringMarginRenderer]. So the only thing to reconcile here is which literals
+     * are marked, and an edit inside one that the document has already moved needs no work at all.
+     */
     override fun doApplyInformationToEditor() {
         val markup = editor.markupModel
         val drawn = editor.getUserData(DRAWN).orEmpty()
+        installRepainter(editor)
 
-        // Nothing moved: leave the existing highlighters be. Replacing them unconditionally would
-        // repaint every literal in the file on each pass — which the daemon runs after every
-        // keystroke, including keystrokes nowhere near a string.
-        if (drawn.size == margins.size && drawn.zip(margins).all { (h, m) -> h.isValid && h.matches(m) }) {
-            return
-        }
+        // The same literals, still where they were: leave the highlighters be. Replacing them
+        // unconditionally would repaint every string in the file on each pass — which the daemon
+        // runs after every keystroke, including keystrokes nowhere near a string.
+        if (drawn.size == margins.size && drawn.zip(margins).all { (h, m) -> h.covers(m) }) return
 
         drawn.forEach(markup::removeHighlighter)
         editor.putUserData(
@@ -80,14 +127,12 @@ private class ByStringMarginPass(project: Project, private val editor: Editor) :
                     // should never be what covers a caret row or a search hit.
                     HighlighterLayer.LAST,
                     HighlighterTargetArea.EXACT_RANGE,
-                ).also { (it as RangeHighlighterEx).setCustomRenderer(ByStringMarginRenderer(margin)) }
+                ).also { (it as RangeHighlighterEx).setCustomRenderer(ByStringMarginRenderer) }
             },
         )
     }
 
-    /** Whether this highlighter already draws [margin], renderer and range both. */
-    private fun RangeHighlighter.matches(margin: StringMargin): Boolean =
-        startOffset == margin.literalStart &&
-            endOffset == margin.literalEnd &&
-            (this as? RangeHighlighterEx)?.customRenderer == ByStringMarginRenderer(margin)
+    /** Whether this highlighter is already the one marking [margin]'s literal. */
+    private fun RangeHighlighter.covers(margin: StringMargin): Boolean =
+        isValid && startOffset == margin.literalStart && endOffset == margin.literalEnd
 }

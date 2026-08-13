@@ -8,26 +8,39 @@ import java.awt.Graphics
 import java.awt.Graphics2D
 
 /**
- * Draws one [StringMargin]: a vertical line down the column a multiline string is trimmed to.
+ * Draws a multiline string's trim margin: a vertical line down the column it is trimmed to.
  *
  * A [CustomHighlighterRenderer] because there is nothing to attribute. Text attributes colour
  * characters, and the margin is a rule between two of them — on lines that may have no character
  * at that column at all, which is precisely the case worth showing (a blank line inside the
- * literal, or the closing quotes sitting further right than the text above them).
+ * literal, or closing quotes sitting further right than the text above them).
  *
- * The line runs from the first line of content to the line carrying the closing quotes, and no
- * further: the opening line's text starts after the quotes and nothing is taken off it, so a
- * margin drawn across it would be claiming a trim that does not happen.
+ * **The margin is measured here, at paint time, from the highlighter's own range** — not carried
+ * in from the pass that added the highlighter. Offsets computed by a daemon pass are a snapshot,
+ * and the editor keeps painting between one pass and the next: every keystroke would draw the
+ * rule where the text used to be, and it would jump back a few hundred milliseconds later when
+ * the daemon caught up. The highlighter's range, by contrast, is moved by the document itself as
+ * the edit happens, so measuring from it is measuring from what is on screen. It also costs
+ * nothing worth counting — one scan of one literal, only for the ones in view.
+ *
+ * The line runs from the first line of content to the last line of text. Not across the opening
+ * line, whose text starts after the quotes with nothing taken off it; not down beside closing
+ * quotes on a line of their own, which are the margin rather than something to mark against it.
  *
  * Placed by asking the editor where [StringMargin.anchorOffset] is rather than by multiplying a
  * column by a character width. Only the editor knows what the columns before it are worth — tabs,
  * a proportional font, an inlay from `by` sitting in the line — and the anchor is chosen on a line
  * whose leading characters are exactly the whitespace being stripped.
  */
-class ByStringMarginRenderer(val margin: StringMargin) : CustomHighlighterRenderer {
+object ByStringMarginRenderer : CustomHighlighterRenderer {
 
     override fun paint(editor: Editor, highlighter: RangeHighlighter, g: Graphics) {
         if (!highlighter.isValid) return
+        val margin = StringMargins.marginOf(
+            editor.document.immutableCharSequence,
+            highlighter.startOffset,
+            highlighter.endOffset,
+        ) ?: return
 
         // Folded away — by `by`'s folding ranges or by a collapsed region around the statement.
         // The offsets would all map to the placeholder's single line and the margin would be a
@@ -58,13 +71,4 @@ class ByStringMarginRenderer(val margin: StringMargin) : CustomHighlighterRender
             g2d.color = saved
         }
     }
-
-    /**
-     * Equality by the margin drawn, so a daemon pass that recomputes the same margins can leave
-     * the editor's highlighters alone instead of replacing them — see [ByStringMarginPassFactory].
-     */
-    override fun equals(other: Any?): Boolean =
-        other is ByStringMarginRenderer && other.margin == margin
-
-    override fun hashCode(): Int = margin.hashCode()
 }
