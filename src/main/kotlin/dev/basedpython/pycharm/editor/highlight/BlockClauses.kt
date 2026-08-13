@@ -29,6 +29,21 @@ import com.intellij.openapi.util.TextRange
  * else c`, wrapped over lines) and a bare `match = 1` out of it. Chains are grammar-checked rather
  * than collected by keyword set, so two adjacent `if`s, or a `try` following an `if`/`else`, stay
  * separate statements.
+ *
+ * [familyAt] adds the other half of what an editor lights up together — the statements that leave
+ * the block from *inside* its body, however deeply nested:
+ *
+ * ```
+ * def     … return* … raise*
+ * for     … else? … break* … continue*
+ * while   … else? … break* … continue*
+ * ```
+ *
+ * These bind to the nearest enclosing block of their kind, so a nested `def` keeps its own
+ * `return`s and a nested loop its own `break`s. Two consequences of that rule are worth naming: a
+ * `break` in a loop's `else` belongs to the loop *outside* it (the `else` clause is not the loop's
+ * body), and a `break` inside a nested `def` reaches no loop at all. Both fall out of walking
+ * outward one enclosing suite at a time.
  */
 internal object BlockClauses {
 
@@ -48,21 +63,54 @@ internal object BlockClauses {
      * not a chain — there is nothing to pair it with).
      */
     fun chainAt(text: CharSequence, offset: Int): Chain? {
-        if (offset < 0 || offset > text.length) return null
         val lines = scan(text)
-        val index = lines.indexOfFirst { offset >= it.leadStart && offset <= it.leadEnd }
-        if (index < 0) return null
+        val index = anchorAt(lines, text, offset) ?: return null
+        return chainAt(lines, index)
+    }
+
+    /**
+     * Every keyword that lights up with the one covering [offset], in source order: the clause
+     * keywords of its compound statement, plus — for a `def` or a loop — the `return`/`raise` or
+     * `break`/`continue` statements that leave it. Empty when the offset is not on such a keyword,
+     * or when the keyword has nothing to pair with.
+     */
+    fun familyAt(text: CharSequence, offset: Int): List<TextRange> {
+        val lines = scan(text)
+        val index = anchorAt(lines, text, offset) ?: return emptyList()
         val anchor = lines[index]
 
+        val loop = loopIndex(lines, index)
+        val clauses = when {
+            anchor.word == "def" || anchor.word in EXITS -> functionFamily(lines, index)
+            loop != null -> loopFamily(lines, loop)
+            else -> chainAt(lines, index)?.clauses
+        } ?: return emptyList()
+
+        // A family the anchor is not part of belongs to some enclosing statement, not this keyword.
+        if (clauses.size < 2 || clauses.none { it.range.startOffset == anchor.leadStart }) {
+            return emptyList()
+        }
+        return clauses.map { it.range }.sortedBy { it.startOffset }
+    }
+
+    private fun chainAt(lines: List<Line>, index: Int): Chain? {
+        val anchor = lines[index]
         val chain = when (anchor.word) {
             "match", "case" -> matchChain(lines, index)
-            in HEADS -> chainFrom(lines, index)
+            in HEADS -> chainFrom(lines, index)?.takeIf { it.clauses.size >= 2 }
             in CONTINUATIONS -> headOf(lines, index)?.let { chainFrom(lines, it) }
             else -> null
         } ?: return null
 
         // A chain the anchor is not part of belongs to some enclosing statement, not this keyword.
         return chain.takeIf { c -> c.clauses.any { it.range.startOffset == anchor.leadStart } }
+    }
+
+    /** The logical line whose leading keyword covers [offset]. */
+    private fun anchorAt(lines: List<Line>, text: CharSequence, offset: Int): Int? {
+        if (offset < 0 || offset > text.length) return null
+        val index = lines.indexOfFirst { offset >= it.leadStart && offset <= it.leadEnd }
+        return index.takeIf { it >= 0 }
     }
 
     // -------------------------------------------------------------------------
@@ -108,7 +156,6 @@ internal object BlockClauses {
             if (line.word == "finally" || (line.word == "else" && head.word != "try")) break
             j++
         }
-        if (clauses.size < 2) return null
         return Chain(clauses, TextRange(head.leadStart, bodyEnd(lines, last, head.indent)))
     }
 
@@ -180,13 +227,88 @@ internal object BlockClauses {
     }
 
     // -------------------------------------------------------------------------
+    // Jumps out of a block
+    // -------------------------------------------------------------------------
+
+    /** A `def` and the `return`s and `raise`s that leave it, anchored on any of the three. */
+    private fun functionFamily(lines: List<Line>, index: Int): List<Clause>? {
+        val def = when (lines[index].word) {
+            "def" -> index
+            // A `return` binds to the function it sits in, however deeply nested.
+            else -> enclosing(lines, index).firstOrNull { lines[it].word == "def" }
+        } ?: return null
+        return listOf(lines[def].clause()) + jumpsIn(lines, def, EXITS, OPAQUE_TO_EXITS)
+    }
+
+    /** The loop a `for`/`while`, its `else`, or a `break`/`continue` under it belongs to. */
+    private fun loopIndex(lines: List<Line>, index: Int): Int? = when (lines[index].word) {
+        in LOOPS -> index
+        // A jump binds to the nearest enclosing loop, and never past the function it sits in.
+        in JUMPS -> enclosing(lines, index)
+            .takeWhile { lines[it].word != "def" }
+            .firstOrNull { lines[it].word in LOOPS }
+        "else" -> headOf(lines, index)?.takeIf { lines[it].word in LOOPS }
+        else -> null
+    }
+
+    /** A loop, its `else`, and the `break`s and `continue`s that leave or restart it. */
+    private fun loopFamily(lines: List<Line>, loop: Int): List<Clause> {
+        val chain = chainFrom(lines, loop)?.clauses ?: listOf(lines[loop].clause())
+        return chain + jumpsIn(lines, loop, JUMPS, OPAQUE_TO_JUMPS)
+    }
+
+    /**
+     * The [words] statements in the suite headed at [headIndex] — its `return`s, or its `break`s
+     * and `continue`s. A suite opened by an [opaque] keyword owns whatever is inside it and is
+     * skipped whole; its own continuation clauses are not, since a `break` in a nested loop's
+     * `else` still belongs out here.
+     *
+     * The suite is the head's body alone: it ends at the first line back at the head's own
+     * indentation, which is where an `else` clause of the head would start.
+     */
+    private fun jumpsIn(
+        lines: List<Line>,
+        headIndex: Int,
+        words: Set<String>,
+        opaque: Set<String>,
+    ): List<Clause> {
+        val indent = lines[headIndex].indent
+        val jumps = mutableListOf<Clause>()
+        var j = headIndex + 1
+        while (j < lines.size && lines[j].indent > indent) {
+            val line = lines[j]
+            j++
+            when {
+                line.word in words -> jumps += line.clause()
+                line.word in opaque && line.hasColon ->
+                    while (j < lines.size && lines[j].indent > line.indent) j++
+            }
+        }
+        return jumps
+    }
+
+    /** The suite headers enclosing the line at [index], innermost first. */
+    private fun enclosing(lines: List<Line>, index: Int): Sequence<Int> = sequence {
+        var indent = lines[index].indent
+        for (j in index - 1 downTo 0) {
+            val line = lines[j]
+            if (line.indent >= indent) continue
+            // A dedent onto something that opens no suite means the text is not what it claims.
+            if (!line.hasColon) return@sequence
+            yield(j)
+            indent = line.indent
+        }
+    }
+
+    // -------------------------------------------------------------------------
     // Logical lines
     // -------------------------------------------------------------------------
 
     /**
      * One logical line: a statement line plus any lines it continues onto inside brackets or after
      * a backslash. Blank and comment-only lines are not recorded — they belong to whatever block
-     * surrounds them and must never end a chain.
+     * surrounds them and must never end a chain. A suite written on its head's own line
+     * ([inlineSuite]) is recorded as one of these too, indented one past that head.
      */
     private class Line(
         val indent: Int,
@@ -239,6 +361,7 @@ internal object BlockClauses {
 
             var depth = 0
             var hasColon = false
+            var colonEnd = -1
             var contentEnd = leadEnd
             var backslash = false
             var k = leadStart
@@ -258,7 +381,10 @@ internal object BlockClauses {
                         when (c) {
                             '(', '[', '{' -> depth++
                             ')', ']', '}' -> if (depth > 0) depth--
-                            ':' -> if (depth == 0) hasColon = true
+                            ':' -> if (depth == 0) {
+                                hasColon = true
+                                if (colonEnd < 0) colonEnd = k + 1
+                            }
                         }
                         backslash = false
                         k++
@@ -268,9 +394,37 @@ internal object BlockClauses {
             }
 
             lines += Line(indent, wordStart, leadEnd, word, hasColon, contentEnd)
+            if (hasColon && word in SUITE_HEADS) {
+                inlineSuite(text, colonEnd, k, indent, contentEnd)?.let { lines += it }
+            }
             i = skipLineBreak(text, k)
         }
         return lines
+    }
+
+    /**
+     * The statement written on the head's own line, after its `:` — the `return` in `if x: return
+     * 1`. It is recorded as a line of its own, indented one past its head, which is what it is: the
+     * whole of that head's body. Everything that walks indentation then sees it without knowing the
+     * suite was never broken onto a line of its own.
+     *
+     * `null` when the `:` ends the line, or only a comment follows it.
+     */
+    private fun inlineSuite(
+        text: CharSequence,
+        from: Int,
+        lineEnd: Int,
+        headIndent: Int,
+        contentEnd: Int,
+    ): Line? {
+        if (from < 0) return null
+        var start = from
+        while (start < lineEnd && (text[start] == ' ' || text[start] == '\t')) start++
+        var end = start
+        while (end < lineEnd && isWordChar(text[end])) end++
+        if (end == start) return null
+        val word = text.subSequence(start, end).toString()
+        return Line(headIndent + 1, start, end, word, hasColon = false, contentEnd = contentEnd)
     }
 
     /** Skips a string literal starting at the quote [start], returning the offset just past it. */
@@ -315,6 +469,22 @@ internal object BlockClauses {
 
     private val HEADS = setOf("if", "for", "while", "try")
     private val CONTINUATIONS = setOf("elif", "else", "except", "finally")
+
+    private val LOOPS = setOf("for", "while")
+
+    /** Every keyword that opens a suite, and so can carry that suite inline after its `:`. */
+    private val SUITE_HEADS =
+        HEADS + CONTINUATIONS + setOf("with", "def", "class", "match", "case")
+
+    /** Statements that leave the function they sit in. */
+    private val EXITS = setOf("return", "raise")
+
+    /** Statements that leave or restart the loop they sit in. */
+    private val JUMPS = setOf("break", "continue")
+
+    /** A nested function owns its own exits; a nested loop, and a function, own their own jumps. */
+    private val OPAQUE_TO_EXITS = setOf("def")
+    private val OPAQUE_TO_JUMPS = setOf("for", "while", "def")
 
     private val FOLLOWERS: Map<String, Set<String>> = mapOf(
         "if" to setOf("elif", "else"),

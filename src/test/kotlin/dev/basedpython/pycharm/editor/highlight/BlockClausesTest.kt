@@ -1,26 +1,41 @@
 package dev.basedpython.pycharm.editor.highlight
 
+import com.intellij.openapi.util.TextRange
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
 
 /**
- * Which clause keywords [BlockClauses] pairs, expressed as marked-up source: `|` is the caret and
- * every keyword the scanner pairs with it comes back wrapped in `[]`.
+ * Which keywords [BlockClauses] pairs, expressed as marked-up source: `|` is the caret and every
+ * keyword the scanner pairs with it comes back wrapped in `[]`. `chain` asks for the clause
+ * keywords alone — the structure the code block handler navigates — and `family` for everything
+ * that highlights together, which adds the statements leaving a `def` or a loop.
  *
  * The cases that matter are the negative ones. A keyword-set scan (what this replaced) happily
  * joins two adjacent `if`s, or an `if`/`else` to the `try` that follows it, because every word
- * involved is a clause keyword at the same indent; only a grammar rules those out.
+ * involved is a clause keyword at the same indent; only a grammar rules those out. The same goes
+ * for the jumps: `break` and `return` are keyword hits anywhere in a body, and only the nesting
+ * rules say which block they leave.
  */
 class BlockClausesTest {
 
     /** Runs the scanner with the caret at `|`, bracketing each clause keyword of the chain. */
-    private fun chain(marked: String): String? {
-        val caret = marked.indexOf('|')
+    private fun chain(marked: String): String? = marked.markUp { text, caret ->
+        BlockClauses.chainAt(text, caret)?.clauses?.map { it.range }
+    }
+
+    /** The same, for the whole family: the chain plus the statements that leave the block. */
+    private fun family(marked: String): String? = marked.markUp { text, caret ->
+        BlockClauses.familyAt(text, caret).takeIf { it.isNotEmpty() }
+    }
+
+    /** Strips the caret, runs [ranges], and brackets each range it returns. */
+    private fun String.markUp(ranges: (String, Int) -> List<TextRange>?): String? {
+        val caret = indexOf('|')
         require(caret >= 0) { "no caret in source" }
-        val text = marked.removeRange(caret, caret + 1)
-        val chain = BlockClauses.chainAt(text, caret) ?: return null
-        return chain.clauses.map { it.range }.sortedByDescending { it.startOffset }
+        val text = removeRange(caret, caret + 1)
+        val found = ranges(text, caret) ?: return null
+        return found.sortedByDescending { it.startOffset }
             .fold(text) { acc, r ->
                 acc.substring(0, r.startOffset) +
                     "[" + acc.substring(r.startOffset, r.endOffset) + "]" +
@@ -226,6 +241,24 @@ class BlockClausesTest {
     }
 
     @Test
+    fun `a one-line branch does not end the chain`() {
+        assertEquals(
+            """
+            [if] a:
+                pass
+            [else]: pass
+            """.trimIndent(),
+            chain(
+                """
+                i|f a:
+                    pass
+                else: pass
+                """.trimIndent()
+            )
+        )
+    }
+
+    @Test
     fun `a backslash-continued header still pairs`() {
         assertEquals(
             """
@@ -387,6 +420,217 @@ class BlockClausesTest {
                     pass
                 else:
                     pass
+                """.trimIndent()
+            )
+        )
+    }
+
+    // ----------------------------------------------------- exits and jumps
+
+    @Test
+    fun `a def pairs with the returns and raises that leave it`() {
+        assertEquals(
+            """
+            [def] f(x):
+                if x:
+                    [return] 1
+                [raise] ValueError
+            """.trimIndent(),
+            family(
+                """
+                d|ef f(x):
+                    if x:
+                        return 1
+                    raise ValueError
+                """.trimIndent()
+            )
+        )
+    }
+
+    @Test
+    fun `a return pairs with its def and the other exits`() {
+        assertEquals(
+            """
+            async [def] f(x):
+                if x:
+                    [return] 1
+                [return] 2
+            """.trimIndent(),
+            family(
+                """
+                async def f(x):
+                    if x:
+                        return 1
+                    re|turn 2
+                """.trimIndent()
+            )
+        )
+    }
+
+    @Test
+    fun `a nested def keeps its own returns`() {
+        assertEquals(
+            """
+            [def] outer():
+                def inner():
+                    return 1
+                [return] inner
+            """.trimIndent(),
+            family(
+                """
+                d|ef outer():
+                    def inner():
+                        return 1
+                    return inner
+                """.trimIndent()
+            )
+        )
+    }
+
+    @Test
+    fun `a loop pairs with its breaks, continues and else`() {
+        assertEquals(
+            """
+            [while] go:
+                if a:
+                    [continue]
+                [break]
+            [else]:
+                pass
+            """.trimIndent(),
+            family(
+                """
+                wh|ile go:
+                    if a:
+                        continue
+                    break
+                else:
+                    pass
+                """.trimIndent()
+            )
+        )
+    }
+
+    @Test
+    fun `a break pairs with the loop it is nested in, not the one outside`() {
+        assertEquals(
+            """
+            for x in xs:
+                [for] y in ys:
+                    [break]
+                continue
+            """.trimIndent(),
+            family(
+                """
+                for x in xs:
+                    for y in ys:
+                        br|eak
+                    continue
+                """.trimIndent()
+            )
+        )
+    }
+
+    @Test
+    fun `a break in a loop's else belongs to the loop outside it`() {
+        assertEquals(
+            """
+            [for] x in xs:
+                for y in ys:
+                    pass
+                else:
+                    [break]
+            """.trimIndent(),
+            family(
+                """
+                for x in xs:
+                    for y in ys:
+                        pass
+                    else:
+                        br|eak
+                """.trimIndent()
+            )
+        )
+    }
+
+    @Test
+    fun `a jump does not reach a loop outside its function`() {
+        assertNull(
+            family(
+                """
+                for x in xs:
+                    def f():
+                        brea|k
+                """.trimIndent()
+            )
+        )
+    }
+
+    @Test
+    fun `a def with no exits has nothing to pair with`() {
+        assertNull(
+            family(
+                """
+                d|ef f():
+                    pass
+                """.trimIndent()
+            )
+        )
+    }
+
+    @Test
+    fun `a return outside any function pairs with nothing`() {
+        assertNull(
+            family(
+                """
+                x = 1
+                re|turn x
+                """.trimIndent()
+            )
+        )
+    }
+
+    @Test
+    fun `a suite written on its head's own line still carries its exits`() {
+        assertEquals(
+            """
+            [def] f(x):
+                if x: [return] 1
+                [return] 2
+            """.trimIndent(),
+            family(
+                """
+                d|ef f(x):
+                    if x: return 1
+                    return 2
+                """.trimIndent()
+            )
+        )
+    }
+
+    @Test
+    fun `an inline break belongs to the loop that heads its line`() {
+        assertEquals(
+            """
+            for x in xs:
+                [for] y in ys: [break]
+            """.trimIndent(),
+            family(
+                """
+                for x in xs:
+                    for y in ys: bre|ak
+                """.trimIndent()
+            )
+        )
+    }
+
+    @Test
+    fun `exits are not clauses of the block they leave`() {
+        assertNull(
+            chain(
+                """
+                d|ef f():
+                    return 1
                 """.trimIndent()
             )
         )
