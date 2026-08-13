@@ -32,13 +32,13 @@
   templates for main guard, async def, match/case, enum, and pytest fixture.
 - Inspections: mutable default argument, binary-not-configured (quick-fix to settings);
   spellchecking for comments/strings/identifiers; TODO/FIXME indexing.
-- Log points for `.by` files. Hover the gutter between two line numbers and click to add a
-  breakpoint that logs an expression instead of stopping; during a debug session its output
-  reaches the run console the same way a `print` would. Breakpoint expression fields
-  (*Condition*, *Evaluate and log*, Evaluate Expression) are basedpython editors now rather
-  than plain text boxes — which is also what lets the inline log point editor open. The
-  inline field itself is IntelliJ IDEA only; elsewhere the expression is typed in the
-  breakpoint popup.
+- Log points for `.by` files. Hover the gutter between two line numbers and click — or press
+  `Ctrl+Alt+F8` — to add a breakpoint that logs an expression instead of stopping, and type
+  the expression in the field that opens in the gap. Enter commits, Escape abandons, and one
+  that is never filled in removes itself rather than leaving an icon that does nothing.
+  During a debug session the output reaches the run console the same way a `print` would.
+- Breakpoint expression fields (*Condition*, *Evaluate and log*, Evaluate Expression) are
+  basedpython editors rather than plain text boxes, with highlighting and `by` behind them.
 - "`print()` call can be replaced with a log point" inspection, the counterpart of
   Kotlin's `println` one. The quick fix deletes the call and leaves a log point in the gap
   it occupied. Offered only where a log point says the same thing — not for `print()`, not
