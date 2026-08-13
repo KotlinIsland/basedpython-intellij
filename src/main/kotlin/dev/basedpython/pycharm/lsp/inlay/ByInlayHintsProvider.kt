@@ -76,13 +76,11 @@ class ByInlayHintsProvider : InlayHintsProvider<NoSettings>, DumbAware {
     ): InlayHintsCollector? {
         if (file !is BasedPythonFile) return null
         val basedPython = BasedPythonSettings.getInstance(file.project)
-        val parameters = basedPython.inlayParameterMode
-        val types = basedPython.inlayTypeMode
-        val returns = basedPython.inlayReturnMode
+        val modes = basedPython.inlayModes
         // Nothing switched on: don't ask the server at all, rather than ask and drop every answer.
         // A kind set to "on push" *is* switched on — its inlays are built now and drawn later.
-        if (!parameters.isCollected && !types.isCollected && !returns.isCollected) return null
-        return ByInlayHintsCollector(parameters, types, returns, basedPython.inlayPushKey)
+        if (!modes.anyCollected) return null
+        return ByInlayHintsCollector(modes, basedPython.inlayPushKey)
     }
 }
 
@@ -100,9 +98,7 @@ class ByInlayHintsProvider : InlayHintsProvider<NoSettings>, DumbAware {
  * waits, so an edit cancels the pass rather than queueing behind it.
  */
 private class ByInlayHintsCollector(
-    private val parameters: ByHintMode,
-    private val types: ByHintMode,
-    private val returns: ByHintMode,
+    private val modes: ByHintModes,
     private val pushKey: ByPushKey,
 ) : InlayHintsCollector {
 
@@ -137,7 +133,7 @@ private class ByInlayHintsCollector(
             val label = ByInlayHints.labelOf(hint)
             if (label.isEmpty()) continue
             val kind = ByInlayHints.kindOf(hint, label)
-            val mode = ByInlayHints.modeOf(kind, parameters, types, returns)
+            val mode = modes[kind]
             if (!mode.isCollected) continue
 
             val text = ByInlayHints.truncate(label)

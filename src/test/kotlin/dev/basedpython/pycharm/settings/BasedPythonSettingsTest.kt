@@ -2,6 +2,7 @@ package dev.basedpython.pycharm.settings
 
 import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
+import dev.basedpython.pycharm.lsp.inlay.ByHintKind
 import dev.basedpython.pycharm.lsp.inlay.ByHintMode
 import dev.basedpython.pycharm.lsp.inlay.ByPushKey
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
@@ -67,6 +68,9 @@ class BasedPythonSettingsTest {
             inlayParameterMode = "push",
             inlayTypeMode = "never",
             inlayReturnMode = "always",
+            inlayTypeArgumentMode = "push",
+            inlayModifierMode = "always",
+            inlayOtherMode = "never",
             inlayPushKey = "alt",
             lspTraceLevel = "verbose",
             indexGeneratedPython = true,
@@ -86,6 +90,9 @@ class BasedPythonSettingsTest {
         assertEquals(ByHintMode.ON_PUSH, settings.inlayParameterMode)
         assertEquals(ByHintMode.NEVER, settings.inlayTypeMode)
         assertEquals(ByHintMode.ALWAYS, settings.inlayReturnMode)
+        assertEquals(ByHintMode.ON_PUSH, settings.inlayTypeArgumentMode)
+        assertEquals(ByHintMode.ALWAYS, settings.inlayModifierMode)
+        assertEquals(ByHintMode.NEVER, settings.inlayOtherMode)
         assertEquals(ByPushKey.ALT, settings.inlayPushKey)
         assertEquals("verbose", settings.lspTraceLevel)
         assertTrue(settings.indexGeneratedPython)
@@ -98,6 +105,9 @@ class BasedPythonSettingsTest {
         assertEquals(ByHintMode.ALWAYS, settings.inlayParameterMode)
         assertEquals(ByHintMode.ALWAYS, settings.inlayTypeMode)
         assertEquals(ByHintMode.ALWAYS, settings.inlayReturnMode)
+        assertEquals(ByHintMode.ALWAYS, settings.inlayTypeArgumentMode)
+        assertEquals(ByHintMode.ALWAYS, settings.inlayModifierMode)
+        assertEquals(ByHintMode.ALWAYS, settings.inlayOtherMode)
         assertEquals(ByPushKey.CTRL_ALT, settings.inlayPushKey)
     }
 
@@ -124,6 +134,39 @@ class BasedPythonSettingsTest {
         settings.inlayTypeMode = ByHintMode.NEVER
         assertEquals("never", settings.state.inlayTypeMode)
         assertFalse(settings.inlayTypeHints)
+    }
+
+    @Test
+    fun `the kinds that used to travel with variable types follow it until they are set`() {
+        // `A[int](1)`, `override ` and anything else `by` sends were all drawn under the variable
+        // type toggle before they had settings of their own, so that is what they inherit.
+        settings.inlayTypeMode = ByHintMode.ON_PUSH
+        assertEquals(ByHintMode.ON_PUSH, settings.inlayTypeArgumentMode)
+        assertEquals(ByHintMode.ON_PUSH, settings.inlayModifierMode)
+        assertEquals(ByHintMode.ON_PUSH, settings.inlayOtherMode)
+
+        settings.inlayModifierMode = ByHintMode.NEVER
+        assertEquals(ByHintMode.NEVER, settings.inlayModifierMode)
+        assertEquals(ByHintMode.ON_PUSH, settings.inlayTypeArgumentMode, "the others still follow")
+    }
+
+    @Test
+    fun `a project that had type hints off has every kind that came out of them off`() {
+        settings.loadState(BasedPythonSettings.State(inlayTypeHints = false))
+        assertEquals(ByHintMode.NEVER, settings.inlayTypeMode)
+        assertEquals(ByHintMode.NEVER, settings.inlayTypeArgumentMode)
+        assertEquals(ByHintMode.NEVER, settings.inlayModifierMode)
+        assertEquals(ByHintMode.NEVER, settings.inlayOtherMode)
+    }
+
+    @Test
+    fun `every kind has a mode to read`() {
+        settings.inlayParameterMode = ByHintMode.NEVER
+        settings.inlayOtherMode = ByHintMode.ON_PUSH
+        val modes = settings.inlayModes
+        assertEquals(ByHintMode.NEVER, modes[ByHintKind.PARAMETER])
+        assertEquals(ByHintMode.ON_PUSH, modes[ByHintKind.OTHER])
+        assertTrue(modes.anyCollected)
     }
 
     @Test
