@@ -220,6 +220,11 @@
         <lang.documentationProvider
             language="basedpython"
             implementationClass="dev.basedpython.pycharm.docs.BasedPythonDocumentationProvider"/>
+        <!-- Type Info (Ctrl+Shift+P): answered by the `by` server's hover, since it has no
+             dedicated "provide type" request. -->
+        <codeInsight.typeInfo
+            language="basedpython"
+            implementationClass="dev.basedpython.pycharm.lsp.typeinfo.ByTypeInfoProvider"/>
 
         <!-- ===== Stream V: smart editing ===== -->
         <enterHandlerDelegate

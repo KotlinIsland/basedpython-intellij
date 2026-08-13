@@ -129,6 +129,7 @@ lexical colour only. Don't reintroduce guessed semantic colour; fix the LSP path
 - [x] Quick documentation popup (LSP hover + local doc provider)
 - [x] Auto-import on completion (LSP completion code actions)
 - [x] Postfix completion templates (`.if`, `.for`, `.not`, `.return`)
+- [x] Type info (Ctrl+Shift+P) — lsp.typeinfo.ByTypeInfoProvider (`codeInsight.typeInfo` for the basedpython language) + pure ByHoverMarkup parsing. There is no "provide type" request in the `by` LSP: its request set is the standard one (`ty_server/.../requests/`), and the running binary advertises no experimental capability and only the `ty.printDebugInformation` / `ty.runManageCommand` commands. The type therefore comes from `textDocument/hover`, which the server builds type-first (inferred type or call signature, then `---`, then the docstring) — so the first block is the hint and the whole payload is the second press ("advanced information"). Offered on identifiers, keywords and strings only: `by` deliberately reports nothing for a literal expression, and a string can still be a `TypedDict` key. The flat PSI means one leaf rather than an innermost-outward chain, which hover largely closes — asked about `baz` in `foo.bar.baz` the server types the whole attribute expression
 
 ## 9. Formatting & style
 - [x] Code style settings page (delegate to buff config)
