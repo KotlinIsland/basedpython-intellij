@@ -252,8 +252,17 @@
             implementation="dev.basedpython.pycharm.editor.indent.BasedPythonFileIndentOptionsProvider"/>
 
         <!-- ===== Wave 7: highlight, watch, onboarding, template macros ===== -->
+        <!-- `order="first"` because the platform's own LspHighlightUsagesHandlerFactory claims every
+             caret position in a file whose server advertises documentHighlightProvider — `by` does —
+             and createCustomHandler keeps the first non-null handler. Ours already sorted ahead of it
+             unregistered, but that is incidental to load order; KeywordHighlightRegistrationTest
+             asserts the relation this pins. -->
         <highlightUsagesHandlerFactory
+            order="first"
             implementation="dev.basedpython.pycharm.editor.highlight.BasedPythonKeywordHighlightUsagesHandlerFactory"/>
+        <codeBlockSupportHandler
+            language="basedpython"
+            implementationClass="dev.basedpython.pycharm.editor.highlight.BasedPythonCodeBlockSupportHandler"/>
         <annotator
             language="basedpython"
             implementationClass="dev.basedpython.pycharm.editor.highlight.BasedPythonNumericLiteralAnnotator"/>
