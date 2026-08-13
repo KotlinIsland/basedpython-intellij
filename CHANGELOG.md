@@ -82,6 +82,12 @@
   without opening the tool window. The old `test_…` / `Test…` behaviour remains wherever
   the collection cannot answer: while that first collection runs, after one that errored,
   and in files written or edited since.
+- Type Info (`Ctrl+Shift+P`) works in `.by` files. The caret's name gets the type `by` infers for
+  it, pressed again the full hover — the signature and docstring. The action is driven by whichever
+  `ExpressionTypeProvider` is registered for the caret's language, and with none for basedpython it
+  was simply dead. `by` has no dedicated "provide type" request — its LSP surface is the standard
+  one, its only custom entries being the `ty.printDebugInformation` / `ty.runManageCommand` commands
+  — so the answer comes from `textDocument/hover`, whose payload the server builds type-first.
 - Clause keywords pair up in `.by` files. With the caret on `if`, its `elif`s and `else` highlight
   with it; likewise `try`/`except`/`else`/`finally`, a loop and its `else`, and `match` with its
   `case`s. `Ctrl+Shift+M` (*Move Caret to Matching Brace*) now jumps between the head keyword and
