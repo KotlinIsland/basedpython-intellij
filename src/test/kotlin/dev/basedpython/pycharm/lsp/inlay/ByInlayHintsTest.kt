@@ -90,6 +90,65 @@ class ByInlayHintsTest {
     }
 
     @Test
+    fun `a name and an equals is an argument's name even with no LSP kind on it`() {
+        // The kind is what `by` sends; the shape is what keeps the setting meaningful if it stops.
+        val hint = textHint("t=")
+        assertEquals(ByHintKind.PARAMETER, ByInlayHints.kindOf(hint, ByInlayHints.labelOf(hint)))
+    }
+
+    @Test
+    fun `an equals that is not a name being bound is not a parameter`() {
+        for (label in listOf("=", "a + b=", "!=")) {
+            val hint = textHint(label)
+            assertEquals(
+                ByHintKind.OTHER,
+                ByInlayHints.kindOf(hint, ByInlayHints.labelOf(hint)),
+                "\"$label\" is not an argument's name",
+            )
+        }
+    }
+
+    @Test
+    fun `a subscript is what a call specialised a generic to`() {
+        // `a = A(1)` drawn as `a: A[int] = A[int](t=1)`: the second `[int]` is this hint.
+        val hint = textHint("[int]", InlayHintKind.Type)
+        assertEquals(ByHintKind.TYPE_ARGUMENT, ByInlayHints.kindOf(hint, ByInlayHints.labelOf(hint)))
+    }
+
+    @Test
+    fun `a word making room after itself adorns what follows`() {
+        for (label in listOf("override ", "final ", "async override ")) {
+            val hint = textHint(label)
+            assertEquals(
+                ByHintKind.MODIFIER,
+                ByInlayHints.kindOf(hint, ByInlayHints.labelOf(hint)),
+                "\"$label\" should read as a modifier",
+            )
+        }
+    }
+
+    @Test
+    fun `a word that makes no room after itself is not a modifier`() {
+        // The trailing space is how an adornment says it prefixes a declaration. Without it this is
+        // some other thing `by` sends, and it belongs in the kind that has a setting for exactly
+        // that rather than in the nearest-looking one.
+        val hint = textHint("int")
+        assertEquals(ByHintKind.OTHER, ByInlayHints.kindOf(hint, ByInlayHints.labelOf(hint)))
+    }
+
+    @Test
+    fun `a shape the plugin cannot place is its own kind, not the nearest one`() {
+        for (label in listOf("=> 3", "(mut)", "«borrowed»")) {
+            val hint = textHint(label, InlayHintKind.Type)
+            assertEquals(
+                ByHintKind.OTHER,
+                ByInlayHints.kindOf(hint, ByInlayHints.labelOf(hint)),
+                "\"$label\" should fall to the kind that has a setting for anything else",
+            )
+        }
+    }
+
+    @Test
     fun `a parameter named after an arrow-like operator is still a parameter`() {
         // Kind wins over the arrow heuristic, so a parameter hint can never be read as a return.
         val hint = textHint("->", InlayHintKind.Parameter)
@@ -139,15 +198,32 @@ class ByInlayHintsTest {
 
     // region: modes
 
-    /** One mode per kind, so the three settings can differ — which is the point of push-to-hint. */
-    private fun modeOf(kind: ByHintKind): ByHintMode =
-        ByInlayHints.modeOf(kind, ByHintMode.ALWAYS, ByHintMode.ON_PUSH, ByHintMode.NEVER)
-
     @Test
     fun `each kind reads only its own mode`() {
-        assertEquals(ByHintMode.ALWAYS, modeOf(ByHintKind.PARAMETER))
-        assertEquals(ByHintMode.ON_PUSH, modeOf(ByHintKind.TYPE))
-        assertEquals(ByHintMode.NEVER, modeOf(ByHintKind.RETURN_TYPE))
+        val modes = ByHintModes(
+            parameter = ByHintMode.ALWAYS,
+            type = ByHintMode.ON_PUSH,
+            returnType = ByHintMode.NEVER,
+            typeArgument = ByHintMode.ON_PUSH,
+            modifier = ByHintMode.ALWAYS,
+            other = ByHintMode.NEVER,
+        )
+        assertEquals(ByHintMode.ALWAYS, modes[ByHintKind.PARAMETER])
+        assertEquals(ByHintMode.ON_PUSH, modes[ByHintKind.TYPE])
+        assertEquals(ByHintMode.NEVER, modes[ByHintKind.RETURN_TYPE])
+        assertEquals(ByHintMode.ON_PUSH, modes[ByHintKind.TYPE_ARGUMENT])
+        assertEquals(ByHintMode.ALWAYS, modes[ByHintKind.MODIFIER])
+        assertEquals(ByHintMode.NEVER, modes[ByHintKind.OTHER])
+    }
+
+    @Test
+    fun `nothing is collected only when every kind is off`() {
+        assertFalse(ByHintModes.all(ByHintMode.NEVER).anyCollected)
+        assertTrue(ByHintModes.all(ByHintMode.ON_PUSH).anyCollected)
+        assertTrue(
+            ByHintModes.all(ByHintMode.NEVER).copy(other = ByHintMode.ALWAYS).anyCollected,
+            "one kind left on is a reason to ask the server",
+        )
     }
 
     // endregion
@@ -155,10 +231,15 @@ class ByInlayHintsTest {
     // region: anchoring
 
     @Test
-    fun `a parameter hint introduces the text after it, every other hint completes the text before`() {
+    fun `the hints that introduce what follows them anchor forwards, the rest backwards`() {
+        // `name=` introduces its argument and `override ` its declaration; the others finish the
+        // code they sit after.
         assertFalse(ByInlayHints.relatesToPrecedingText(ByHintKind.PARAMETER))
+        assertFalse(ByInlayHints.relatesToPrecedingText(ByHintKind.MODIFIER))
         assertTrue(ByInlayHints.relatesToPrecedingText(ByHintKind.TYPE))
         assertTrue(ByInlayHints.relatesToPrecedingText(ByHintKind.RETURN_TYPE))
+        assertTrue(ByInlayHints.relatesToPrecedingText(ByHintKind.TYPE_ARGUMENT))
+        assertTrue(ByInlayHints.relatesToPrecedingText(ByHintKind.OTHER))
     }
 
     // endregion

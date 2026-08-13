@@ -44,24 +44,32 @@ class ByHintModeTest {
 
     @Test
     fun `a written mode is what it says`() {
-        assertEquals(ByHintMode.NEVER, ByHintMode.resolve("never", legacyEnabled = true))
-        assertEquals(ByHintMode.ALWAYS, ByHintMode.resolve("always", legacyEnabled = false))
-        assertEquals(ByHintMode.ON_PUSH, ByHintMode.resolve("push", legacyEnabled = false))
+        assertEquals(ByHintMode.NEVER, ByHintMode.resolve("never", ByHintMode.ALWAYS))
+        assertEquals(ByHintMode.ALWAYS, ByHintMode.resolve("always", ByHintMode.NEVER))
+        assertEquals(ByHintMode.ON_PUSH, ByHintMode.resolve("push", ByHintMode.NEVER))
     }
 
     @Test
-    fun `no mode falls back to the boolean that came before it`() {
-        // A project configured before push-to-hint existed keeps exactly the hints it had.
-        assertEquals(ByHintMode.ALWAYS, ByHintMode.resolve("", legacyEnabled = true))
-        assertEquals(ByHintMode.NEVER, ByHintMode.resolve("", legacyEnabled = false))
-        assertEquals(ByHintMode.ALWAYS, ByHintMode.resolve(null, legacyEnabled = true))
+    fun `no mode is whatever it falls back to`() {
+        // For the three original kinds that is the boolean toggle they were configured with, and
+        // for the three that used to travel with variable types it is the mode variable types are
+        // on — either way, a project configured before this keeps exactly the hints it had.
+        assertEquals(ByHintMode.ALWAYS, ByHintMode.resolve("", ByHintMode.of(true)))
+        assertEquals(ByHintMode.NEVER, ByHintMode.resolve("", ByHintMode.of(false)))
+        assertEquals(ByHintMode.ON_PUSH, ByHintMode.resolve(null, ByHintMode.ON_PUSH))
     }
 
     @Test
-    fun `an unknown mode degrades to the boolean rather than throwing`() {
+    fun `an unknown mode degrades to the fallback rather than throwing`() {
         // A settings file written by a newer plugin has to load, not fail.
-        assertEquals(ByHintMode.ALWAYS, ByHintMode.resolve("on-hover", legacyEnabled = true))
-        assertEquals(ByHintMode.NEVER, ByHintMode.resolve("on-hover", legacyEnabled = false))
+        assertEquals(ByHintMode.ALWAYS, ByHintMode.resolve("on-hover", ByHintMode.ALWAYS))
+        assertEquals(ByHintMode.NEVER, ByHintMode.resolve("on-hover", ByHintMode.NEVER))
+    }
+
+    @Test
+    fun `the boolean that came before means always or never`() {
+        assertEquals(ByHintMode.ALWAYS, ByHintMode.of(true))
+        assertEquals(ByHintMode.NEVER, ByHintMode.of(false))
     }
 
     @Test

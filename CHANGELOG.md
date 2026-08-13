@@ -44,7 +44,8 @@
   it occupied. Offered only where a log point says the same thing — not for `print()`, not
   for `file=` / `sep=` / `end=` / `flush=`, and not where the following line belongs to an
   outer block, since that is the line the log point binds to.
-- Push-to-hint. Each kind of inlay hint — parameter names, variable types, return types —
+- Push-to-hint. Each kind of inlay hint — parameter names, variable types, return types,
+  a call's type arguments, modifiers like `override `, and anything else `by` sends —
   is now *never*, *always*, or *while the push key is held*, so the hints you want at a
   glance and the ones you want only when asking are configured apart. Hold the key
   (`Ctrl+Alt` by default, any modifier under *Settings → basedpython → Inlay hints*) and

@@ -8,6 +8,7 @@ import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
 import com.intellij.util.xmlb.XmlSerializerUtil
 import dev.basedpython.pycharm.lsp.inlay.ByHintMode
+import dev.basedpython.pycharm.lsp.inlay.ByHintModes
 import dev.basedpython.pycharm.lsp.inlay.ByPushKey
 
 /**
@@ -47,6 +48,18 @@ class BasedPythonSettings : PersistentStateComponent<BasedPythonSettings.State> 
     var inlayParameterMode: String = "",
     var inlayTypeMode: String = "",
     var inlayReturnMode: String = "",
+    /**
+     * The kinds that used to be drawn under [inlayTypeHints] because nothing told them apart — a
+     * call's type arguments (`A[int](1)`), an adornment like `override `, and whatever `by` sends
+     * that the plugin cannot place.
+     *
+     * Blank falls back to [inlayTypeMode] rather than to a boolean, which is where these hints
+     * were before they had settings of their own: a project that had variable types on push kept
+     * its `[int]` hints on push too, and still does.
+     */
+    var inlayTypeArgumentMode: String = "",
+    var inlayModifierMode: String = "",
+    var inlayOtherMode: String = "",
     /** The key held to show "on push" hints, as a [dev.basedpython.pycharm.lsp.inlay.ByPushKey.id]. */
     var inlayPushKey: String = "",
     var lspTraceLevel: String = "off",
@@ -135,25 +148,50 @@ class BasedPythonSettings : PersistentStateComponent<BasedPythonSettings.State> 
   // ---- Inlay hint modes. Not serialised themselves; the strings above are the persisted form. ----
 
   var inlayParameterMode: ByHintMode
-    get() = ByHintMode.resolve(state.inlayParameterMode, state.inlayParameterHints)
+    get() = ByHintMode.resolve(state.inlayParameterMode, ByHintMode.of(state.inlayParameterHints))
     set(value) {
       state.inlayParameterMode = value.id
       state.inlayParameterHints = value != ByHintMode.NEVER
     }
 
   var inlayTypeMode: ByHintMode
-    get() = ByHintMode.resolve(state.inlayTypeMode, state.inlayTypeHints)
+    get() = ByHintMode.resolve(state.inlayTypeMode, ByHintMode.of(state.inlayTypeHints))
     set(value) {
       state.inlayTypeMode = value.id
       state.inlayTypeHints = value != ByHintMode.NEVER
     }
 
   var inlayReturnMode: ByHintMode
-    get() = ByHintMode.resolve(state.inlayReturnMode, state.inlayReturnHints)
+    get() = ByHintMode.resolve(state.inlayReturnMode, ByHintMode.of(state.inlayReturnHints))
     set(value) {
       state.inlayReturnMode = value.id
       state.inlayReturnHints = value != ByHintMode.NEVER
     }
+
+  // The three that used to travel with variable types, and inherit from it when unset.
+
+  var inlayTypeArgumentMode: ByHintMode
+    get() = ByHintMode.resolve(state.inlayTypeArgumentMode, inlayTypeMode)
+    set(value) { state.inlayTypeArgumentMode = value.id }
+
+  var inlayModifierMode: ByHintMode
+    get() = ByHintMode.resolve(state.inlayModifierMode, inlayTypeMode)
+    set(value) { state.inlayModifierMode = value.id }
+
+  var inlayOtherMode: ByHintMode
+    get() = ByHintMode.resolve(state.inlayOtherMode, inlayTypeMode)
+    set(value) { state.inlayOtherMode = value.id }
+
+  /** Every kind's mode at once, which is how the hints collector reads them. */
+  val inlayModes: ByHintModes
+    get() = ByHintModes(
+      parameter = inlayParameterMode,
+      type = inlayTypeMode,
+      returnType = inlayReturnMode,
+      typeArgument = inlayTypeArgumentMode,
+      modifier = inlayModifierMode,
+      other = inlayOtherMode,
+    )
 
   var inlayPushKey: ByPushKey
     get() = ByPushKey.fromId(state.inlayPushKey)

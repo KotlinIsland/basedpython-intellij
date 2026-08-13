@@ -45,15 +45,55 @@ enum class ByHintMode(val id: String, val display: String) {
 
     companion object {
         /**
-         * The mode a settings file means.
+         * The mode a settings file means: the written one, or [fallback] where it says nothing.
          *
-         * [id] is what this plugin writes; [legacyEnabled] is the boolean toggle that came before
-         * the modes and is still written alongside them, so a settings file from either version
-         * reads correctly in the other. An unwritten (or unrecognised) mode therefore falls back to
-         * the boolean, which is what a project configured before push-to-hint existed carries: on
-         * means [ALWAYS], off means [NEVER], and nothing about that project's hints changes.
+         * An unrecognised id falls back too, rather than throwing — a settings file written by a
+         * newer plugin has to load and degrade, not fail.
          */
-        fun resolve(id: String?, legacyEnabled: Boolean): ByHintMode =
-            entries.firstOrNull { it.id == id } ?: if (legacyEnabled) ALWAYS else NEVER
+        fun resolve(id: String?, fallback: ByHintMode): ByHintMode =
+            entries.firstOrNull { it.id == id } ?: fallback
+
+        /**
+         * The mode a boolean toggle meant.
+         *
+         * The three original settings were checkboxes, and are still written as booleans beside
+         * their modes so a settings file reads in either version of the plugin. A project
+         * configured before push-to-hint existed therefore falls back to this: on means [ALWAYS],
+         * off means [NEVER], and nothing about that project's hints changes.
+         */
+        fun of(legacyEnabled: Boolean): ByHintMode = if (legacyEnabled) ALWAYS else NEVER
+    }
+}
+
+/**
+ * The mode every kind of hint is on — the settings as the collector reads them, in one value.
+ *
+ * One place to ask rather than a parameter per kind: the kinds are a list that grows with what `by`
+ * emits (see [ByHintKind]), and each new one would otherwise be a new argument threaded through the
+ * provider, the collector and everything that builds one in a test.
+ */
+data class ByHintModes(
+    val parameter: ByHintMode,
+    val type: ByHintMode,
+    val returnType: ByHintMode,
+    val typeArgument: ByHintMode,
+    val modifier: ByHintMode,
+    val other: ByHintMode,
+) {
+    operator fun get(kind: ByHintKind): ByHintMode = when (kind) {
+        ByHintKind.PARAMETER -> parameter
+        ByHintKind.TYPE -> type
+        ByHintKind.RETURN_TYPE -> returnType
+        ByHintKind.TYPE_ARGUMENT -> typeArgument
+        ByHintKind.MODIFIER -> modifier
+        ByHintKind.OTHER -> other
+    }
+
+    /** Whether anything at all is worth asking `by` for. */
+    val anyCollected: Boolean get() = ByHintKind.entries.any { this[it].isCollected }
+
+    companion object {
+        /** Every kind on the same mode — the shape a test usually wants. */
+        fun all(mode: ByHintMode): ByHintModes = ByHintModes(mode, mode, mode, mode, mode, mode)
     }
 }
