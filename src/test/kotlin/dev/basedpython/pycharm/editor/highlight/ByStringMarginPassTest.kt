@@ -25,11 +25,16 @@ class ByStringMarginPassTest {
 
     private val q = "\"\"\""
 
-    /** The margins currently drawn in the fixture's editor. */
-    private fun drawn(): List<StringMargin> =
-        fixture.editor.markupModel.allHighlighters
-            .mapNotNull { (it as? RangeHighlighterEx)?.customRenderer as? ByStringMarginRenderer }
-            .map { it.margin }
+    /**
+     * The margins currently drawn in the fixture's editor, measured the way the renderer measures
+     * them: from each marked literal's *live* range, not from anything the pass stored.
+     */
+    private fun drawn(): List<StringMargin> {
+        val text = fixture.editor.document.immutableCharSequence
+        return fixture.editor.markupModel.allHighlighters
+            .filter { (it as? RangeHighlighterEx)?.customRenderer === ByStringMarginRenderer }
+            .mapNotNull { StringMargins.marginOf(text, it.startOffset, it.endOffset) }
+    }
 
     @Test
     fun `the pass draws a margin for each multiline literal`() {

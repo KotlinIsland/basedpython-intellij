@@ -123,6 +123,10 @@
   instead of work out. The margin is the least-indented line, and the line carrying the closing
   quotes counts even though it holds nothing else: move it and the whole literal's content
   changes, which is exactly the edit that was invisible before. Blank lines never pull it left.
+  The rule runs beside the text and stops where closing quotes on a line of their own begin —
+  they stand at the column it marks, so it points at them rather than down past them — and it
+  is measured as the document changes, not when the daemon next gets round to the file, so it
+  never lags a keystroke or leaves the previous column behind on the lines above.
   A docstring with text on its opening line (`"""Summary.`) keeps that line outside the margin —
   it starts after the quotes and has no indentation to lose — and a literal whose lines share no
   indentation is left unmarked, since nothing comes off it. Colour follows the scheme's string

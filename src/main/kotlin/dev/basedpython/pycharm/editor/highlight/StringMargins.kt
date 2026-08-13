@@ -16,7 +16,14 @@ data class StringMargin(
     val indent: Int,
     /** Start of the first line the margin is drawn on — the line after the opening quotes. */
     val firstLineStart: Int,
-    /** Start of the last line it is drawn on — the one carrying the closing quotes. */
+    /**
+     * Start of the last line it is drawn on: the last line of *text*.
+     *
+     * Closing quotes on a line of their own are the margin already — they stand at the column
+     * being marked, which is the whole reason that line counts towards it. The rule stops where
+     * they start rather than running down beside them, so the line points at the quotes instead
+     * of overshooting the literal and looking like it belongs to whatever follows.
+     */
     val lastLineStart: Int,
     /**
      * Where the margin is drawn: [indent] characters into the line that *defines* it.
@@ -100,29 +107,38 @@ object StringMargins {
         var indent = Int.MAX_VALUE
         var anchorOffset = -1
         var lineStart = firstLineStart
-        var lastLineStart = firstLineStart
+        var previousLineStart = -1
+        var lastLineStart: Int
         while (true) {
             val lineEnd = text.indexOfNewline(lineStart, content.end) ?: content.end
             val closing = lineEnd == content.end
             val lineIndent = indentOf(text, lineStart, lineEnd)
+            val blank = lineIndent == lineEnd - lineStart
             // A blank line is erased by the trim, so it says nothing about the margin — unless it
             // is the closing line, whose indentation is the whole point of putting the quotes on
             // a line of their own. An unterminated literal has no such line: its last line is the
             // one being typed, and letting a half-typed blank line count would drag the margin to
             // zero on every press of Enter.
-            val counts = (closing && content.closed) || lineIndent < lineEnd - lineStart
+            val counts = (closing && content.closed) || !blank
             if (counts && lineIndent <= indent) {
                 indent = lineIndent
                 anchorOffset = lineStart + lineIndent
             }
             if (closing) {
-                lastLineStart = lineStart
+                // Quotes on a line of their own end the rule rather than carrying it: they stand
+                // at the column it marks. Quotes trailing text (`world"""`) are on a line of
+                // content like any other, and that line is drawn.
+                lastLineStart = if (content.closed && blank) previousLineStart else lineStart
                 break
             }
+            previousLineStart = lineStart
             lineStart = lineEnd + 1
         }
 
         if (indent == Int.MAX_VALUE || indent == 0) return null
+        // A literal with nothing between its quotes but the line they sit on. There is a margin,
+        // and no line of text to draw it beside.
+        if (lastLineStart < firstLineStart) return null
         return StringMargin(
             literalStart = start,
             literalEnd = end,
