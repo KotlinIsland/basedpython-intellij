@@ -4,6 +4,7 @@ import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.markup.CustomHighlighterRenderer
 import com.intellij.openapi.editor.markup.RangeHighlighter
 import com.intellij.ui.paint.LinePainter2D
+import com.intellij.ui.scale.JBUIScale
 import java.awt.Graphics
 import java.awt.Graphics2D
 
@@ -52,7 +53,7 @@ object ByStringMarginRenderer : CustomHighlighterRenderer {
             return
         }
 
-        val x = editor.offsetToXY(margin.anchorOffset).x
+        val x = editor.offsetToXY(margin.anchorOffset).x - GAP
         val top = editor.offsetToXY(margin.firstLineStart).y
         val bottom = editor.offsetToXY(margin.lastLineStart).y + editor.lineHeight
         if (bottom <= top) return
@@ -71,4 +72,16 @@ object ByStringMarginRenderer : CustomHighlighterRenderer {
             g2d.color = saved
         }
     }
+
+    /**
+     * How far left of the first kept character the rule sits.
+     *
+     * The anchor is the offset of that character, and the editor answers with the left edge of
+     * its cell — which is where the glyph begins. Drawn there the rule touches the text it is
+     * measuring, and reads as part of it rather than as the boundary it marks. IDEA's Java text
+     * blocks leave the same sliver of air; two points is the least that reads as a gap at an
+     * ordinary editor font size, and it never crosses into the column before, which is
+     * whitespace by definition.
+     */
+    private val GAP: Int = JBUIScale.scale(2)
 }
