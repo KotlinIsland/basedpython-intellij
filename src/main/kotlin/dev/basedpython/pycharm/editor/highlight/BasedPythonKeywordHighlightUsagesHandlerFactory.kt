@@ -12,7 +12,9 @@ import dev.basedpython.pycharm.lang.BasedPythonFile
 /**
  * "Matched same-keyword" highlighting for basedpython (`.by`) files: with the caret on `if`, its
  * `elif`s and `else` light up too, the way the platform pairs `if`/`else` in a braced language.
- * [BlockClauses] decides what pairs with what.
+ * With the caret on `def` its `return`s and `raise`s light up, and on a loop its `break`s and
+ * `continue`s — what a braced language gets from *Highlight exit points*. [BlockClauses] decides
+ * what pairs with what.
  *
  * Registered `order="first"`. `by` advertises `documentHighlightProvider`, so the platform's own
  * `LspHighlightUsagesHandlerFactory` returns a handler for *every* caret position in a `.by` file,
@@ -33,9 +35,9 @@ class BasedPythonKeywordHighlightUsagesHandlerFactory : HighlightUsagesHandlerFa
         file: PsiFile,
     ): HighlightUsagesHandlerBase<PsiElement>? {
         if (file !is BasedPythonFile) return null
-        val chain = BlockClauses.chainAt(editor.document.charsSequence, editor.caretModel.offset)
-            ?: return null
-        return Handler(editor, file, chain.clauses.map { it.range })
+        val ranges = BlockClauses.familyAt(editor.document.charsSequence, editor.caretModel.offset)
+        if (ranges.isEmpty()) return null
+        return Handler(editor, file, ranges)
     }
 
     private class Handler(

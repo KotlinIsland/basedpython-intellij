@@ -117,9 +117,13 @@
   was simply dead. `by` has no dedicated "provide type" request — its LSP surface is the standard
   one, its only custom entries being the `ty.printDebugInformation` / `ty.runManageCommand` commands
   — so the answer comes from `textDocument/hover`, whose payload the server builds type-first.
-- Clause keywords pair up in `.by` files. With the caret on `if`, its `elif`s and `else` highlight
+- Block keywords pair up in `.by` files. With the caret on `if`, its `elif`s and `else` highlight
   with it; likewise `try`/`except`/`else`/`finally`, a loop and its `else`, and `match` with its
-  `case`s. `Ctrl+Shift+M` (*Move Caret to Matching Brace*) now jumps between the head keyword and
+  `case`s. A `def` highlights with the `return`s and `raise`s that leave it, and a loop with its
+  `break`s and `continue`s — what a braced language shows as its exit points, including when the
+  branch is written on one line (`if x: return 1`). Each binds to the block that owns it, so a
+  nested `def` keeps its own `return`s and a `break` in a loop's `else` goes with the loop outside
+  it. `Ctrl+Shift+M` (*Move Caret to Matching Brace*) now jumps between the head keyword and
   the end of the statement's last branch, which is new for an indentation-delimited language —
   PyCharm registers no code block support for Python at all. Chains follow the grammar, so two
   adjacent `if`s stay two statements, a `try` after an `else` is its own, and an `else` in a

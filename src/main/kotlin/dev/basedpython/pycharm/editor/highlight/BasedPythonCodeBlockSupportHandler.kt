@@ -20,6 +20,10 @@ import dev.basedpython.pycharm.lang.BasedPythonFile
  *  - The marker ranges the identifier highlighting pass draws when no custom highlight-usages
  *    handler claimed the caret — i.e. whenever the `by` server's document highlights are off.
  *
+ * Only the clause keywords are markers. The `return`s of a `def` and the `break`s of a loop
+ * highlight with their block ([BlockClauses.familyAt]) but do not delimit it, and a marker range is
+ * what the platform navigates between and draws as the block's edges.
+ *
  * `getCodeBlockMarkerRanges` is called with the leaf under the caret, so the keyword's own start
  * offset is the offset to ask about; a caret sitting just past the keyword has already been
  * adjusted onto it by `TargetElementUtil.adjustOffset`.
