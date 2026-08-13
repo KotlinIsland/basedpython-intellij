@@ -14,6 +14,7 @@ import java.awt.Font
 import java.awt.FontMetrics
 import java.awt.Graphics2D
 import java.awt.Rectangle
+import kotlin.math.roundToInt
 
 /**
  * A hint drawn in the editor's own font, at the editor's own size, shadowed rather than boxed.
@@ -73,21 +74,54 @@ class ByInlayHintPresentation(
         if (mode == ByHintMode.ON_PUSH) ByHintPush.getInstance().watch(this)
     }
 
+    /**
+     * Exactly what the same characters would measure as source, and **not a pixel more**.
+     *
+     * This is the property the whole rendering rests on, and it is checkable: writing an annotation
+     * out by hand and letting the hint stand for it have to leave the rest of the line in the same
+     * place.
+     *
+     * ```
+     * a = A(1)          ->  a: A[int] = A[int](t=1)
+     * a: A[int] = A(1)  ->  a: A[int] = A[int](t=1)
+     * ```
+     *
+     * Those two must land character for character, and they only do if a hint costs its text and
+     * nothing else. Any padding of its own — even the two pixels that would keep the glyphs off the
+     * tint's corners — is per hint, so a line with three of them drifts against a line with two and
+     * nothing in the file lines up any more. So the tint takes its room from the text rather than
+     * the other way round: it is drawn to this width, and gets its breathing space vertically, where
+     * there is room going spare.
+     */
     override val width: Int
         get() {
             if (!shown) return HIDDEN_WIDTH
             val metrics = metrics(font())
-            return leftPadding(metrics) + tintWidth(metrics) + rightPadding(metrics)
+            return leftPadding(metrics) + textWidth(metrics) + rightPadding(metrics)
         }
 
     /**
-     * The tinted box: the text plus [INSET] either side.
+     * The text's true advance, rounded to the nearest pixel — **not** `stringWidth`, and not the
+     * width the same characters happen to occupy somewhere in a line.
      *
-     * The inset is inside the tint and the LSP padding is outside it, which is what each one means:
-     * the inset stops the glyphs sitting flush against the tint's rounded corners, the padding is a
-     * gap between the hint and the code.
+     * There is no such thing as "the width of this text as source" to match. The editor lays a line
+     * out by accumulating *fractional* advances and flooring each position, so on a font whose
+     * advance is 7.8px the columns fall at 0, 7, 15, 23, 31, 39, 46, 54, 62 — and the same eight
+     * characters span 62px starting on one column and 63px starting on the next. An inlay, meanwhile,
+     * gets one integer for all positions.
+     *
+     * So the question is not which integer is *right* but which is least wrong, and that is the
+     * nearest one. Rounding up (which reproduces a measurement taken at one particular column, and
+     * so looks correct until it is checked anywhere else) pads every hint by up to a pixel in the
+     * same direction, and those add up: three hints on a line against two on the next is how it
+     * showed. Rounding to nearest keeps each hint within half a pixel and lets the errors cancel
+     * rather than accumulate.
+     *
+     * `FontMetrics.stringWidth` is not an option either — it rounds each character before adding,
+     * which loses the fraction this depends on.
      */
-    private fun tintWidth(metrics: FontMetrics): Int = metrics.stringWidth(text) + 2 * INSET
+    private fun textWidth(metrics: FontMetrics): Int =
+        metrics.font.getStringBounds(text, metrics.fontRenderContext).width.roundToInt()
 
     /**
      * A whole line box, so the hint occupies the line the way a character does.
@@ -111,7 +145,7 @@ class ByInlayHintPresentation(
             EditorUIUtil.setupAntialiasing(g)
             g.font = font
             g.color = hint.foregroundColor
-            g.drawString(text, leftPadding(metrics) + INSET, baseline(metrics))
+            g.drawString(text, leftPadding(metrics), baseline(metrics))
         } finally {
             g.font = savedFont
             g.color = savedColor
@@ -121,10 +155,16 @@ class ByInlayHintPresentation(
     /**
      * The tint behind the text — what keeps a hint from reading as dead code (see [ByInlayColors]).
      *
-     * Sized to the *text* box rather than to the line box: a tint the full height of the line would
-     * be a solid band, and with line spacing above 1.0 it would close the gap the editor leaves
-     * between lines. Barely rounded, because a radius large enough to notice is a capsule, and a
-     * capsule is what this rendering exists to get away from.
+     * Exactly the text's own advance wide, because [width] is not the tint's to spend (see there),
+     * and taller than the text by [VERTICAL_INSET] — vertical room is free, since the line box is
+     * already taller than the glyphs. Not as tall as the *line*, though: a full-height tint is a
+     * solid band, and with line spacing above 1.0 it would close the gap the editor leaves between
+     * lines.
+     *
+     * Barely rounded. At this size the arc is really only taking the hard corners off; a radius
+     * large enough to read as a shape is a capsule, and a capsule is what this rendering exists to
+     * get away from. With no horizontal inset the corners now sit within the glyphs' own side
+     * bearings, which is why the radius is smaller than it would otherwise want to be.
      */
     private fun paintTint(g: Graphics2D, metrics: FontMetrics, color: Color) {
         val baseline = baseline(metrics)
@@ -133,7 +173,14 @@ class ByInlayHintPresentation(
         val config = GraphicsUtil.setupAAPainting(g)
         try {
             g.color = color
-            g.fillRoundRect(leftPadding(metrics), top, tintWidth(metrics), bottom - top, ARC, ARC)
+            g.fillRoundRect(
+                leftPadding(metrics),
+                top,
+                textWidth(metrics),
+                bottom - top,
+                ARC,
+                ARC,
+            )
         } finally {
             config.restore()
         }
@@ -203,14 +250,16 @@ class ByInlayHintPresentation(
     override fun toString(): String = text
 
     private companion object {
-        /** Breathing room between the glyphs and the tint's edge, either side. */
-        val INSET: Int = JBUIScale.scale(2)
-
-        /** The same, above and below the text box. */
+        /**
+         * How far the tint reaches above and below the text box.
+         *
+         * Vertical only. There is no horizontal counterpart on purpose: horizontal room is the
+         * code's column, and a hint may not spend any of it — see [width].
+         */
         val VERTICAL_INSET: Int = JBUIScale.scale(1)
 
         /** Just enough to take the corners off. Anything more reads as a capsule. */
-        val ARC: Int = JBUIScale.scale(4)
+        val ARC: Int = JBUIScale.scale(2)
 
         /**
          * What a hidden hint measures.
