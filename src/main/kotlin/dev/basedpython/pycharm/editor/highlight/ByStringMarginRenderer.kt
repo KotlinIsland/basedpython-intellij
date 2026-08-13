@@ -76,12 +76,12 @@ object ByStringMarginRenderer : CustomHighlighterRenderer {
     /**
      * How far left of the first kept character the rule sits.
      *
-     * The anchor is the offset of that character, and the editor answers with the left edge of
-     * its cell — which is where the glyph begins. Drawn there the rule touches the text it is
-     * measuring, and reads as part of it rather than as the boundary it marks. IDEA's Java text
-     * blocks leave the same sliver of air; two points is the least that reads as a gap at an
-     * ordinary editor font size, and it never crosses into the column before, which is
-     * whitespace by definition.
+     * The anchor is the offset of that character and the editor answers with the left edge of its
+     * cell, which is where the glyph begins — a rule drawn there touches the text it measures.
+     * Two points is not a taste: it is where the editor draws its **own** indent guide for the
+     * same column, measured off a rendered editor, and landing anywhere else would put a second
+     * vertical line a couple of pixels from the first. See [ByStringMarginColors], which settles
+     * the other half of sharing that column.
      */
     private val GAP: Int = JBUIScale.scale(2)
 }

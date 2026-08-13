@@ -1,5 +1,6 @@
 package dev.basedpython.pycharm.editor.highlight
 
+import com.intellij.openapi.editor.colors.EditorColors
 import com.intellij.openapi.editor.ex.RangeHighlighterEx
 import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
@@ -68,6 +69,25 @@ class ByStringMarginPassTest {
         val x = editor.offsetToXY(drawn().single().anchorOffset).x
         assertEquals(editor.offsetToXY(text.lastIndexOf(q)).x, x)
         assertTrue(x < editor.offsetToXY(text.indexOf("one")).x)
+    }
+
+    /**
+     * The rule shares its column with the editor's own indent guide, and must share its colour.
+     *
+     * A multiline string's lines are an indented run like any other, so the platform draws a
+     * guide down it at the indentation they share — the trim column, by the same arithmetic. It
+     * draws that guide only on the run's *interior* lines, and over the top of ours. Two colours
+     * at one column is therefore not two lines a reader can tell apart: it is one line that
+     * changes colour partway down, which is what a string-coloured margin actually looked like.
+     */
+    @Test
+    fun `the rule is drawn in the colour of the editor's own indent guide`() {
+        fixture.configureByText("e.by", "a = $q\n    one\n    $q\n")
+        val scheme = fixture.editor.colorsScheme
+        assertEquals(
+            scheme.getColor(EditorColors.INDENT_GUIDE_COLOR),
+            ByStringMarginColors.color(scheme),
+        )
     }
 
     /**

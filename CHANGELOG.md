@@ -129,8 +129,12 @@
   never lags a keystroke or leaves the previous column behind on the lines above.
   A docstring with text on its opening line (`"""Summary.`) keeps that line outside the margin —
   it starts after the quotes and has no indentation to lose — and a literal whose lines share no
-  indentation is left unmarked, since nothing comes off it. Colour follows the scheme's string
-  colour, or *Settings | Editor | Color Scheme | basedpython | Multiline string trim margin*.
+  indentation is left unmarked, since nothing comes off it. It is drawn where the editor draws
+  its own indent guide for that column and in that guide's colour: a string's lines are an
+  indented run like any other, so the platform already rules a guide down them — on the interior
+  lines only — and the margin continues it across the first and last rather than standing a
+  couple of pixels off it or changing colour halfway down. Restyle it under *Settings | Editor |
+  Color Scheme | basedpython | Multiline string trim margin*.
 - Block keywords pair up in `.by` files. With the caret on `if`, its `elif`s and `else` highlight
   with it; likewise `try`/`except`/`else`/`finally`, a loop and its `else`, and `match` with its
   `case`s. A `def` highlights with the `return`s and `raise`s that leave it, and a loop with its

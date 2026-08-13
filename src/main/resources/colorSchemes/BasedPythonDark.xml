@@ -6,10 +6,6 @@
   </metaInfo>
   <colors>
     <option name="CARET_COLOR" value="ffd43b" />
-    <!-- The trim margin of a multiline string (editor.highlight.ByStringMarginColors): the
-         string colour above, most of the way back into the background. Set here so the two
-         bundled schemes can be looked at and tuned; any other scheme derives the same. -->
-    <option name="BASEDPYTHON_STRING_MARGIN" value="4b5842" />
   </colors>
   <attributes>
     <!-- Lexer-based keys (dev.basedpython.pycharm.lang.BasedPythonColors) -->

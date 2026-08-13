@@ -55,9 +55,9 @@ class BasedPythonColorSettingsPage : ColorSettingsPage {
 
         /**
          * The trim margin drawn down a multiline string. A colour rather than text attributes:
-         * it is a line beside the text, not a way of drawing text — and like the inlay colours,
-         * a scheme that says nothing about it gets one derived from its own string colour
-         * (ByStringMarginColors), not a grey chosen here.
+         * it is a line beside the text, not a way of drawing text. Undefined, it is the scheme's
+         * own indent-guide colour — the margin shares that column with a real indent guide, and
+         * ByStringMarginColors argues why it should not fight it for it.
          */
         private val COLORS: Array<ColorDescriptor> = arrayOf(
             ColorDescriptor(
