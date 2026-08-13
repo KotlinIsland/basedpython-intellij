@@ -70,6 +70,18 @@
 - Test configurations can be debugged, with breakpoints in `.by` test files.
 - Exception breakpoints for `.by` programs (*Breakpoints | basedpython Exceptions*), with
   On raise / On termination.
+- *basedpython Tests* tool window: the project's tests as `by run pytest --collect-only`
+  finds them, grouped by directory, file, class, function and parametrized case, with
+  Run / Debug on any node, Jump to Source on double-click, and collection errors shown
+  in place. Offered only to basedpython projects; collects on first open and on Refresh.
+- Test gutter icons follow that collection: a function pytest does not collect no longer
+  offers to run — including a `def test_…` in a file pytest never collects, such as
+  `main.by` — one it collects under a different naming convention now does, and the
+  tooltip counts what the icon would run ("Run 2 collected cases"). Opening a `.by` file
+  collects once in the background if nothing has yet, so the icons correct themselves
+  without opening the tool window. The old `test_…` / `Test…` behaviour remains wherever
+  the collection cannot answer: while that first collection runs, after one that errored,
+  and in files written or edited since.
 
 ### Fixed
 

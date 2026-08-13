@@ -209,6 +209,12 @@
             implementationClass="dev.basedpython.pycharm.run.marker.ByRunLineMarkerContributor"/>
         <configurationType
             implementation="dev.basedpython.pycharm.run.test.ByTestConfigurationType"/>
+        <!-- The collected test tree (by run pytest, collect-only), the counterpart of the run
+             window's results tree: which tests exist, before anything has run. -->
+        <toolWindow id="basedpython Tests"
+                    anchor="right"
+                    icon="AllIcons.Nodes.JunitTestMark"
+                    factoryClass="dev.basedpython.pycharm.run.test.node.ByTestNodeToolWindowFactory"/>
 
         <!-- ===== Stream U: docs & help ===== -->
         <lang.documentationProvider

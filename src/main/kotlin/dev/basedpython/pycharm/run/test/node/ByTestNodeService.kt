@@ -1,0 +1,197 @@
+package dev.basedpython.pycharm.run.test.node
+
+import com.intellij.codeInsight.daemon.DaemonCodeAnalyzer
+import com.intellij.openapi.Disposable
+import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.application.ModalityState
+import com.intellij.openapi.components.Service
+import com.intellij.openapi.components.service
+import com.intellij.openapi.progress.ProgressIndicator
+import com.intellij.openapi.progress.ProgressManager
+import com.intellij.openapi.progress.Task
+import com.intellij.openapi.project.Project
+import com.intellij.openapi.util.Disposer
+import dev.basedpython.pycharm.actions.ByCli
+import dev.basedpython.pycharm.ui.log.BasedPythonLog
+import dev.basedpython.pycharm.util.BasedPythonBundle
+import java.nio.file.Paths
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicBoolean
+
+/**
+ * Holds the collected test tree for one project and refreshes it by running
+ * `by run pytest --collect-only -q`.
+ *
+ * The collection is a real `by run`, so it transpiles the project before pytest sees it — it costs
+ * what a test run costs minus the tests, and is never started on its own. It happens when the tool
+ * window is first opened and whenever the user asks for it, and not, deliberately, on every edit
+ * or save: a file watcher would transpile the world each time a character lands in a `.by` file.
+ */
+@Service(Service.Level.PROJECT)
+internal class ByTestNodeService(private val project: Project) {
+
+    /** What the view has to show right now. */
+    sealed interface State {
+        /** Nothing collected yet. */
+        data object Idle : State
+
+        /** A collection is running; the previous [tree] (if any) stays on screen meanwhile. */
+        data class Collecting(val tree: ByTestNode?) : State
+
+        /** The result of the last collection, errors included as nodes. */
+        data class Collected(val tree: ByTestNode, val index: ByTestIndex) : State
+    }
+
+    /**
+     * The last collection, as the gutter markers ask about it. [ByTestIndex.EMPTY] until something
+     * has been collected — which reads as "nothing is known", not as "there are no tests".
+     */
+    val index: ByTestIndex
+        get() = (state as? State.Collected)?.index ?: ByTestIndex.EMPTY
+
+    @Volatile
+    var state: State = State.Idle
+        private set
+
+    /** Guards against a second collection while one is in flight. */
+    private val running = AtomicBoolean(false)
+
+    private val listeners = CopyOnWriteArrayList<() -> Unit>()
+
+    /** Registers [listener], called on the EDT after every [state] change, until [parent] is disposed. */
+    fun addListener(parent: Disposable, listener: () -> Unit) {
+        listeners += listener
+        Disposer.register(parent) { listeners -= listener }
+    }
+
+    /**
+     * Collects unless something already has.
+     *
+     * The trigger behind opening the tool window and behind the first gutter icon that needs an
+     * answer ([ByTestLookup]). Only ever fires once: a collection that failed leaves a
+     * [State.Collected] holding the error, which is a result and not a reason to try again on the
+     * next keystroke.
+     */
+    fun refreshIfNeeded() {
+        if (state == State.Idle) refresh()
+    }
+
+    /** Re-runs collection, unless one is already in flight. */
+    fun refresh() {
+        if (!running.compareAndSet(false, true)) return
+        setState(State.Collecting(state.shownTree))
+        // Scheduled rather than started here: this is called from the daemon's threads as well as
+        // from the tool window's, and starting a Backgroundable task is the EDT's job.
+        ApplicationManager.getApplication().invokeLater({ start() }, ModalityState.any(), project.disposed)
+    }
+
+    private fun start() {
+        ProgressManager.getInstance().run(
+            object : Task.Backgroundable(project, BasedPythonBundle.message("testNodes.progress"), true) {
+                override fun run(indicator: ProgressIndicator) {
+                    indicator.isIndeterminate = true
+                    val startedAt = System.currentTimeMillis()
+                    setState(collected(collect(), startedAt))
+                }
+
+                override fun onThrowable(error: Throwable) {
+                    BasedPythonLog.getInstance(project).warn("test collection failed: $error")
+                    setState(collected(failure(error.message), System.currentTimeMillis()))
+                }
+
+                override fun onFinished() {
+                    running.set(false)
+                }
+            },
+        )
+    }
+
+    /** One `by run pytest --collect-only -q`, as a [ByCollection]. */
+    private fun collect(): ByCollection {
+        val cwd = project.basePath?.let { Paths.get(it) }
+        val output = ByCli.run(
+            project,
+            SUBCOMMAND,
+            *ByPytestCollect.arguments().toTypedArray(),
+            cwd = cwd,
+            timeoutMs = TIMEOUT_MS,
+            title = "by run pytest --collect-only",
+        ) ?: return failure(BasedPythonBundle.message("testNodes.error.binaryMissing"))
+
+        if (output.isTimeout) {
+            return failure(BasedPythonBundle.message("testNodes.error.timeout", TIMEOUT_MS / 1000))
+        }
+
+        val collection = ByPytestCollect.parse(output.stdout, output.stderr, output.exitCode)
+        if (collection.errors.isNotEmpty()) {
+            // The tree only has room for one line per error; the whole report is worth keeping.
+            BasedPythonLog.getInstance(project).warn(
+                "test collection reported ${collection.errors.size} error(s):\n" +
+                    (output.stderr.ifBlank { output.stdout }).trim(),
+            )
+        }
+        return collection
+    }
+
+    /**
+     * @param startedAtMillis when the collection was launched, not when it finished: a file written
+     *   while `by` was running may not be in the result, and has to count as newer than it.
+     */
+    private fun collected(collection: ByCollection, startedAtMillis: Long): State.Collected =
+        State.Collected(
+            tree = ByTestNodes.build(collection, rootName()),
+            index = ByTestIndex.of(collection, startedAtMillis),
+        )
+
+    private fun failure(message: String?): ByCollection = ByCollection(
+        errors = listOf(
+            ByCollectionError(null, message?.takeIf { it.isNotBlank() } ?: UNKNOWN_FAILURE),
+        ),
+    )
+
+    private fun rootName(): String = BasedPythonBundle.message("testNodes.root")
+
+    private fun setState(next: State) {
+        state = next
+        ApplicationManager.getApplication().invokeLater(
+            {
+                listeners.forEach { it() }
+                // The gutter icons in open editors are built from [index]
+                // ([dev.basedpython.pycharm.run.testmarker.ByTestRunLineMarkerContributor]), and
+                // nothing else tells the daemon that the answer just changed — without this they
+                // would keep the previous collection's verdict until the file is edited.
+                if (!project.isDisposed) {
+                    DaemonCodeAnalyzer.getInstance(project).restart(RESTART_REASON)
+                }
+            },
+            ModalityState.any(),
+            project.disposed,
+        )
+    }
+
+    /** The tree a state is showing, if it has one. */
+    private val State.shownTree: ByTestNode?
+        get() = when (this) {
+            is State.Collected -> tree
+            is State.Collecting -> tree
+            State.Idle -> null
+        }
+
+    companion object {
+        fun getInstance(project: Project): ByTestNodeService = project.service()
+
+        private const val SUBCOMMAND = "run"
+
+        /**
+         * Collection is not supposed to run any test, but importing a module runs whatever sits at
+         * its top level, so a project can hang this on `input()` or a socket that never connects.
+         * Two minutes is far past a real transpile-and-collect and still ends.
+         */
+        private const val TIMEOUT_MS = 120_000
+
+        private const val UNKNOWN_FAILURE = "collection failed"
+
+        /** Why the daemon was restarted, for the platform's own logging of who asked. */
+        private const val RESTART_REASON = "basedpython test collection finished"
+    }
+}

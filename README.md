@@ -139,3 +139,14 @@ support, run configurations, CLI actions, and editor tooling.
 ```bash
 ./gradlew buildPlugin   # -> build/distributions/basedpython-pycharm-*.zip
 ```
+
+To check UI work in a live IDE rather than by eye, add `-PideAgent` to `runIde`. It puts
+[MCP Steroid](https://github.com/JetBrains/mcp-steroid) in the sandbox, which exposes the running
+IDE over a local MCP server — run Kotlin inside its JVM, screenshot windows, send real keyboard and
+mouse input. The IDE writes the server's URL and a per-run token to
+`~/.mcp-steroid/markers/<pid>.mcp-steroid`. Off by default: it is a large download and opens a local
+port, and it never reaches the built plugin either way.
+
+```bash
+./gradlew runIde -PideAgent
+```

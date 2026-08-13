@@ -2,6 +2,9 @@ package dev.basedpython.pycharm.run
 
 import dev.basedpython.pycharm.run.test.ByTestConfiguration
 import dev.basedpython.pycharm.run.test.ByTestConfigurationType
+import dev.basedpython.pycharm.run.test.ByTestDeclarations
+import dev.basedpython.pycharm.run.test.node.ByTestLookup
+import dev.basedpython.pycharm.run.test.tree.ByTestSources
 import com.intellij.execution.actions.ConfigurationContext
 import com.intellij.execution.actions.ConfigurationFromContext
 import com.intellij.execution.actions.LazyRunConfigurationProducer
@@ -9,9 +12,6 @@ import com.intellij.execution.configurations.ConfigurationFactory
 import com.intellij.openapi.editor.Document
 import com.intellij.openapi.util.Ref
 import com.intellij.openapi.util.TextRange
-import com.intellij.openapi.vfs.LocalFileSystem
-import com.intellij.openapi.vfs.VfsUtilCore
-import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiDocumentManager
 import com.intellij.psi.PsiElement
 
@@ -72,6 +72,9 @@ class ByTestFromFileProducer : LazyRunConfigurationProducer<ByTestConfiguration>
  * Builds the pytest target for [context], or null when the context is not a `.by` test
  * declaration. Returns `<relpath>`, `<relpath>::test_name`, or `<relpath>::Class::test_name`,
  * with the path still naming the `.by` source.
+ *
+ * Which declarations count as tests is [ByTestLookup]'s verdict, the same one the gutter icons are
+ * drawn from — see there for why the two cannot be allowed to disagree.
  */
 private fun testTargetFor(context: ConfigurationContext): String? {
     val element = context.psiLocation ?: return null
@@ -80,7 +83,9 @@ private fun testTargetFor(context: ConfigurationContext): String? {
         ?: return null
     if (file.extension != "by") return null
 
-    val relPath = relativePathFor(context, file)
+    // The whole file is the target when the context is not inside a declaration — right-clicking
+    // the file in the project view, or a context with no document behind it.
+    val relPath = ByTestSources.relativePath(context.project, file) ?: file.path
 
     val document = PsiDocumentManager.getInstance(context.project)
         .getDocument(element.containingFile ?: return relPath)
@@ -88,39 +93,15 @@ private fun testTargetFor(context: ConfigurationContext): String? {
     val offset = element.textRange.startOffset
     if (offset >= document.textLength) return relPath
 
-    val nodeId = testNodeId(document, document.getLineNumber(offset)) ?: return null
-    return "$relPath::$nodeId"
-}
-
-/** Project-relative path of [file] (system-independent `/`), falling back to the absolute path. */
-private fun relativePathFor(context: ConfigurationContext, file: VirtualFile): String {
-    val base = context.project.basePath
-    if (base.isNullOrBlank()) return file.path
-    val baseDir = LocalFileSystem.getInstance().findFileByPath(base) ?: return file.path
-    return VfsUtilCore.getRelativePath(file, baseDir, '/') ?: file.path
-}
-
-private val TEST_DEF = Regex("""^(\s*)(?:async\s+)?def\s+(test_\w*)\s*\(.*$""")
-private val TEST_CLASS = Regex("""^\s*class\s+(Test\w*)\s*[(:].*$""")
-private val ANY_CLASS = Regex("""^(\s*)class\s+(\w+)\s*[(:].*$""")
-
-/**
- * The pytest-style node id for the declaration on [line], or null when [line] is not a test
- * declaration. A `def test_…` method nested in a `class …` becomes `Class::test_name`.
- */
-private fun testNodeId(document: Document, line: Int): String? {
-    val text = lineText(document, line)
-    TEST_CLASS.matchEntire(text)?.let { return it.groupValues[1] }
-    val defMatch = TEST_DEF.matchEntire(text) ?: return null
-    val indent = defMatch.groupValues[1].length
-    val method = defMatch.groupValues[2]
-    if (indent == 0) return method
-    // Walk upward for the nearest less-indented enclosing class.
-    for (l in line - 1 downTo 0) {
-        val m = ANY_CLASS.matchEntire(lineText(document, l)) ?: continue
-        if (m.groupValues[1].length < indent) return "${m.groupValues[2]}::$method"
+    val declaration = ByTestDeclarations.declarationAt(
+        lineText = { line -> lineText(document, line) },
+        lineCount = document.lineCount,
+        line = document.getLineNumber(offset),
+    ) ?: return null
+    if (ByTestLookup.verdict(context.project, file, declaration) is ByTestLookup.Verdict.NotATest) {
+        return null
     }
-    return method
+    return relPath + "::" + declaration.symbols.joinToString("::")
 }
 
 private fun lineText(document: Document, line: Int): String {

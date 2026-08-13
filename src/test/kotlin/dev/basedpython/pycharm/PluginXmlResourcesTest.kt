@@ -60,4 +60,29 @@ class PluginXmlResourcesTest {
             "intentions with no intentionDescriptions/<ClassName>/description.html: $missing",
         )
     }
+
+    /**
+     * A tool window is two names in a string: the factory class the platform instantiates, and the
+     * icon it looks up reflectively (`AllIcons.Nodes.JunitTestMark` is read as a field of a class,
+     * not resolved by the compiler). Both fail at runtime, when the user clicks the stripe button.
+     */
+    @Test
+    fun `every tool window factory and icon resolves`() {
+        val factories = attr("toolWindow", "factoryClass")
+        assertTrue(factories.isNotEmpty(), "expected tool windows to be declared")
+        for (className in factories) {
+            assertNotNull(
+                runCatching { Class.forName(className) }.getOrNull(),
+                "toolWindow factoryClass=\"$className\" names no class",
+            )
+        }
+        for (reference in attr("toolWindow", "icon")) {
+            val field = reference.substringAfterLast('.')
+            val owner = "com.intellij.icons." + reference.dropLast(field.length + 1).replace('.', '$')
+            assertNotNull(
+                runCatching { Class.forName(owner).getField(field).get(null) }.getOrNull(),
+                "toolWindow icon=\"$reference\" resolves to no icon field",
+            )
+        }
+    }
 }
