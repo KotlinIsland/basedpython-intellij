@@ -1,12 +1,12 @@
 package dev.basedpython.pycharm.debug.logpoint
 
 import com.intellij.icons.AllIcons
-import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.impl.InterLineBreakpointConfiguration
 import com.intellij.openapi.editor.impl.InterLineBreakpointConfigurationProvider
 import com.intellij.openapi.editor.impl.InterLineBreakpointProperties
 import com.intellij.openapi.editor.ex.EditorGutterComponentEx
+import com.intellij.openapi.editor.ex.util.EditorUtil
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
@@ -37,10 +37,10 @@ import kotlinx.coroutines.flow.flowOf
  * `InterLine(line)` for the gap above `line`), and that is the line it binds to at runtime: the log
  * runs just before that line does.
  *
- * The one piece still missing outside IDEA is the inline "Enter expression to log" editor, which is
- * some forty classes of inlay, caret bridging and focus handling in that same Java-plugin module.
- * Without it a click here creates the log point and leaves its expression empty; it is typed in the
- * breakpoint popup (click the gutter icon) instead of in the gap.
+ * Two things have to be true before any of this is visible, and both are easy to be caught by. The
+ * gap is only a place you can click when breakpoints live *over* the line numbers, which is a UI
+ * setting; and by default this stands aside in IntelliJ IDEA, which is the IDE `runIde` starts. See
+ * [ByLogpoints.pluginOwnsLogpoints].
  */
 class ByInterLineLogpointProvider : InterLineBreakpointConfigurationProvider {
 
@@ -50,7 +50,14 @@ class ByInterLineLogpointProvider : InterLineBreakpointConfigurationProvider {
         // In IntelliJ IDEA the Java plugin's own provider is registered and is the better one — it
         // brings the inline editor with it. Only the first configuration found is used, so standing
         // aside is the difference between adding the gap editor and replacing it with a worse one.
-        if (ideHasLogpoints()) return emptyFlow()
+        if (!ByLogpoints.pluginOwnsLogpoints()) return emptyFlow()
+
+        // The gap only exists when breakpoints live over the line numbers — *Settings | Editor |
+        // General | Appearance | Show breakpoints over line numbers*, and off in presentation and
+        // distraction-free mode. With them beside the numbers there is no gutter row between two
+        // lines to click, so the platform reserves no hit area and this would describe an
+        // affordance that never appears. The IDE's own provider asks the same question.
+        if (!EditorUtil.isBreakPointsOnLineNumbers()) return emptyFlow()
 
         val project = editor.project ?: return emptyFlow()
         val file = FileDocumentManager.getInstance().getFile(editor.document) ?: return emptyFlow()
@@ -80,17 +87,9 @@ class ByInterLineLogpointProvider : InterLineBreakpointConfigurationProvider {
             .isEmpty()
     }
 
-    /**
-     * Asked of the extension area rather than by loading a class: the logpoints modules are internal
-     * to the Java plugin, and this extension point is the thing they register that matters here.
-     */
-    private fun ideHasLogpoints(): Boolean =
-        ApplicationManager.getApplication().extensionArea.hasExtensionPoint(LOGPOINTS_EP)
-
     private companion object {
         const val ID = "basedpython-logpoint"
         const val TOOLTIP = "Add Log"
         const val ICON_SCALE = 0.7f
-        const val LOGPOINTS_EP = "com.intellij.xdebugger.logpoints.editorsProviderFactory"
     }
 }

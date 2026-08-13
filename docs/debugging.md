@@ -279,6 +279,61 @@ everything, and a `KeyError` from a dict lookup compiles happily and dies at run
 breakpoint stops on the right `.by` line. So the PyCharm default carries over: **On termination**
 on, **On raise** off.
 
+## Log points
+
+A log point is a breakpoint that logs an expression and does not stop. Nothing on the runtime side
+needed building: the platform's DAP client sends `XLineBreakpoint.logExpressionObject` on as
+`logMessage`, wrapped `{expr}`, and debugpy turns that back into a `print` inside the debuggee — so
+the output arrives on the run console this plugin already attaches, exactly where a `print` would
+have put it.
+
+### Using one
+
+1. **Turn on breakpoints over line numbers** — *Settings | Editor | General | Appearance | Show
+   breakpoints over line numbers*. Without it the gutter has no row *between* two lines, so there is
+   nothing to hover; this is the single most likely reason the feature appears not to exist. It is
+   also off in Presentation and Distraction-free mode.
+2. Hover the gutter **between two line numbers** in a `.by` file. A dimmed dot and an *Add Log*
+   tooltip appear in the gap.
+3. Click it. A **Log:** field opens in the gap. Type an expression — `x`, `f"n={n}"`, anything the
+   debugger can evaluate.
+4. **Enter** commits, **Escape** abandons. A log point you never fill in removes itself, so an
+   abandoned click leaves nothing behind.
+
+`Ctrl+Alt+F8` does the same from the keyboard: it adds a log point above the caret's line, or opens
+the field on the one already there.
+
+The other way in is the `print` inspection — Alt+Enter on a `print(…)` statement offers *Replace
+print with a log point*, which deletes the call and leaves a log point in the gap it occupied.
+
+### Which implementation you are looking at
+
+This is the part that catches people out, and it caught the author out too.
+
+The whole logpoints feature — gutter gap, inline editor, `Ctrl+Alt+F8` — ships in
+`intellij.debugger.logpoints.*`, modules bundled with **IntelliJ IDEA's Java plugin**. PyCharm has
+none of them, which is why this plugin implements the lot. But `runIde` starts IDEA, and there the
+plugin's version **switches itself off by default** and lets IDEA's run instead: the platform picks
+between competing providers by hash order (`findFirstConfiguration` collects them into a map keyed
+by id), so two live implementations is a coin flip rather than a preference, and IDEA's is the
+better one — it has caret bridging between the file and the field, and its own highlighting pass.
+
+So in IDEA you are exercising JetBrains' implementation, on this plugin's breakpoints. To see this
+plugin's instead, set the registry key (*Help | Find Action | Registry…*):
+
+    basedpython.logpoints.provider = plugin
+
+`ide` forces the opposite. `auto`, the default, uses IDEA's where it exists and this plugin's
+everywhere else.
+
+One thing this plugin's version needed that IDEA's silently relies on: `ByDebuggerEditorsProvider`.
+A breakpoint type without an `XDebuggerEditorsProvider` gets plain text boxes for every expression
+the IDE asks for — *Condition*, *Evaluate and log*, Evaluate Expression — and IDEA's inline log point
+editor cannot open at all, because it builds an `XDebuggerExpressionEditor` and that will not take a
+null provider. It extends `XDebuggerEditorsProviderBase`, not `XDebuggerEditorsProvider`: the
+latter's `createDocument` is a compatibility stub that throws `AbstractMethodError`, so a provider
+answering only `getFileType()` compiles and then dies the first time a field opens.
+
 ## Coverage
 
 FEATURES.md §66 records line coverage as blocked by the same supposed upstream gap. It is blocked by

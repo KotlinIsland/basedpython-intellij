@@ -1,6 +1,9 @@
 package dev.basedpython.pycharm.debug.logpoint
 
+import com.intellij.ide.ui.UISettings
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.util.registry.Registry
+import com.intellij.openapi.util.registry.RegistryValueSource
 import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
@@ -50,9 +53,52 @@ class ByInterLineLogpointProviderTest {
         assertEquals("Add Log", configuration.hoverTooltip)
     }
 
+    /**
+     * The path a developer on IntelliJ IDEA has to take to see this implementation at all, since by
+     * default it gives way there — and, for anyone else, the path an IDE the detection misreads
+     * would need.
+     */
+    @Test
+    fun `forcing the plugin's implementation offers the affordance even where the IDE has its own`() {
+        withProvider("plugin") {
+            UISettings.getInstance().showBreakpointsOverLineNumbers = true
+            val configuration = configurationFor("main.by", "x = 1\ny = 2\n")
+            assertNotNull(configuration, "expected the gap affordance once the plugin is forced to draw it")
+            assertTrue(configuration!!.breakpointProperties.isLogging)
+        }
+    }
+
+    @Test
+    fun `the gap needs breakpoints over the line numbers to be a place you can click`() {
+        withProvider("plugin") {
+            UISettings.getInstance().showBreakpointsOverLineNumbers = false
+            assertNull(
+                configurationFor("main.by", "x = 1\ny = 2\n"),
+                "with breakpoints beside the numbers there is no gutter row between two lines",
+            )
+        }
+    }
+
     @Test
     fun `other languages are left alone`() {
-        assertNull(configurationFor("notes.txt", "x = 1\n"))
+        withProvider("plugin") {
+            UISettings.getInstance().showBreakpointsOverLineNumbers = true
+            assertNull(configurationFor("notes.txt", "x = 1\n"))
+        }
+    }
+
+    /** Runs [body] with the provider preference forced, restoring both it and the UI setting after. */
+    private fun withProvider(preference: String, body: () -> Unit) {
+        val key = Registry.get("basedpython.logpoints.provider")
+        val settings = UISettings.getInstance()
+        val previousBreakpoints = settings.showBreakpointsOverLineNumbers
+        key.setSelectedOption(preference, RegistryValueSource.USER)
+        try {
+            body()
+        } finally {
+            key.resetToDefault()
+            settings.showBreakpointsOverLineNumbers = previousBreakpoints
+        }
     }
 
     @Test
