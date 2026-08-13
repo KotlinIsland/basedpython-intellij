@@ -32,6 +32,12 @@
   templates for main guard, async def, match/case, enum, and pytest fixture.
 - Inspections: mutable default argument, binary-not-configured (quick-fix to settings);
   spellchecking for comments/strings/identifiers; TODO/FIXME indexing.
+- "`print()` call can be replaced with a log point" inspection, the counterpart of
+  Kotlin's `println` one. The quick fix deletes the call and puts a non-suspending
+  breakpoint that logs the argument on the next statement in the same block; during a
+  debug session that reaches the run console the same way the `print` did. Offered only
+  where a log point says the same thing — not for `print()`, not for `file=` / `sep=` /
+  `end=` / `flush=`, and not where the following line belongs to an outer block.
 - Intentions: add return type, convert to/from `data class`, wrap null-safe, explain
   anonymous named tuple.
 - `buff` format-on-save (settings toggle) and import optimizer; code style settings page
