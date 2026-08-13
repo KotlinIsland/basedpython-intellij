@@ -12,6 +12,7 @@ import com.intellij.openapi.roots.ProjectRootManager
 import com.intellij.openapi.util.SystemInfo
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.util.EnvironmentUtil
+import dev.basedpython.pycharm.env.bundled.BundledBinaries
 import dev.basedpython.pycharm.env.download.ByBinaryDownloadPlan
 import java.io.File
 import java.nio.file.Files
@@ -46,6 +47,9 @@ enum class ByEnvironmentKind(val id: String, val display: String) {
 
     /** The plugin's own `~/.basedpython/bin`, populated by the binary download action. */
     DOWNLOADED("downloaded", "Downloaded binary"),
+
+    /** The binaries shipped inside the plugin itself, when this is a bundled distribution. */
+    BUNDLED("bundled", "Bundled with plugin"),
 
     /** Whatever is on `PATH`, with no venv activation. */
     PATH("path", "PATH"),
@@ -257,6 +261,9 @@ object ByEnvironments {
     private fun isPythonSdk(sdk: Sdk): Boolean =
         guarded { sdk.sdkType.name }?.contains("Python", ignoreCase = true) == true
 
+    /** The binary shipped inside the plugin (`<plugin>/bin`), when this distribution carries one. */
+    private fun bundledBinary(binary: String): Path? = BundledBinaries.find(binary)
+
     /** The plugin-managed download directory (`~/.basedpython/bin`), when it holds [binary]. */
     private fun downloadedBinary(binary: String): Path? {
         val home = System.getProperty("user.home") ?: return null
@@ -298,7 +305,13 @@ object ByEnvironments {
      *     kept first so existing projects resolve exactly as they did before.
      *  2. The venv behind a configured Python SDK, when it contains [binary].
      *  3. The plugin's own download directory.
-     *  4. `PATH`.
+     *  4. The binaries bundled in the plugin, if this distribution carries any.
+     *  5. `PATH`.
+     *
+     * Bundled sits *after* the download directory — a binary the user went and fetched is a newer,
+     * deliberate choice and should not be shadowed by whatever the plugin shipped with — and
+     * *before* `PATH`, because the bundled pair is known to match this plugin build while anything
+     * on `PATH` is whatever the machine happens to have.
      *
      * [ByEnvironmentKind.UV] is deliberately absent from that chain — it can create environments and
      * download interpreters, so it only ever runs when explicitly selected. See [ByEnvironmentKind.UV].
@@ -367,6 +380,11 @@ object ByEnvironments {
                 ByLaunch(it, emptyList(), emptyMap(), null, ByEnvironmentKind.DOWNLOADED)
             }
 
+        fun fromBundled(): ByLaunch? =
+            bundledBinary(binary)?.let {
+                ByLaunch(it, emptyList(), emptyMap(), null, ByEnvironmentKind.BUNDLED)
+            }
+
         fun fromPath(): ByLaunch? =
             PathEnvironmentVariableUtil.findInPath(exeName(binary))
                 ?.let { ByLaunch(it.toPath(), emptyList(), emptyMap(), null, ByEnvironmentKind.PATH) }
@@ -376,9 +394,10 @@ object ByEnvironments {
             ByEnvironmentKind.SDK -> fromSdk()
             ByEnvironmentKind.UV -> fromUv()
             ByEnvironmentKind.DOWNLOADED -> fromDownload()
+            ByEnvironmentKind.BUNDLED -> fromBundled()
             ByEnvironmentKind.PATH -> fromPath()
             // uv is absent by design — it can create environments; see ByEnvironmentKind.UV.
-            ByEnvironmentKind.AUTO -> fromVenv() ?: fromSdk() ?: fromDownload() ?: fromPath()
+            ByEnvironmentKind.AUTO -> fromVenv() ?: fromSdk() ?: fromDownload() ?: fromBundled() ?: fromPath()
         }
     }
 

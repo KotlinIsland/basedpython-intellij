@@ -1,0 +1,181 @@
+# Builds one plugin distribution per platform with the `by` / `buff` binaries inside it
+# (FEATURES.md §58, `BundledBinaries`).
+#
+# Everything here is packaging, not compiling: the binaries are downloaded as prebuilt release
+# assets from the basedpython repository, so a single Linux runner can produce the mac and Windows
+# zips too. The matrix exists for parallelism and for one artifact per platform, not because the
+# jobs need different operating systems.
+#
+# Why one zip per platform: `by` is ~200 MB, so a single distribution carrying all six targets
+# would be several gigabytes. Marketplace routes per-OS/arch artifacts as of 2026.1 — each build
+# carries a `-{os}-{arch}` version suffix and `<depends>` on the matching
+# `com.intellij.modules.os.*` / `com.intellij.modules.arch.*` (see build.gradle.kts), and
+# Marketplace serves each IDE the one it can run. So these are one plugin with six versions, not
+# six downloads, and `publish: true` uploads all of them.
+#
+# That mechanism is undocumented and self-described as experimental (MP-1896 is still open) and the
+# IntelliJ Platform Gradle Plugin has no support for it, which is why the gating is patched in by
+# hand and why the artifacts are checked for it below before anything is uploaded.
+
+name: Bundled distributions
+
+on:
+  workflow_dispatch:
+    inputs:
+      basedpython-version:
+        description: 'basedpython release to bundle (bare x.y.z, no leading v)'
+        required: true
+        type: string
+      basedpython-repo:
+        description: 'GitHub repo holding the by/buff release assets'
+        required: false
+        default: 'basedpython/basedpython'
+        type: string
+      publish:
+        description: 'Upload every built artifact to JetBrains Marketplace'
+        required: false
+        default: false
+        type: boolean
+  push:
+    tags:
+      - 'v*'
+
+concurrency:
+  group: bundled-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bundle:
+    name: ${{ matrix.platform }}
+    runs-on: ubuntu-latest
+    permissions:
+      # Write only for the final "attach to the release" step, which a manual run never reaches.
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        # Slugs from ByBinaryDownloadPlan.Platform — the asset names, the marker file and the
+        # runtime platform check all agree on these.
+        platform: [mac-arm64, mac-x64, linux-x64, linux-arm64, windows-x64, windows-arm64]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # JDK 25: the build sets no toolchain, so it compiles against whatever JVM Gradle runs on,
+      # and the plugin currently ships Java 25 bytecode to match the 2026.2 platform's runtime.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Resolve the basedpython version
+        id: version
+        env:
+          INPUT_VERSION: ${{ inputs.basedpython-version }}
+        run: |
+          set -euo pipefail
+          version="$INPUT_VERSION"
+          # A tag push bundles the toolchain release of the same name: v1.2.3 -> 1.2.3.
+          if [ -z "$version" ]; then
+            version="${GITHUB_REF_NAME#v}"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Download by/buff for ${{ matrix.platform }}
+        env:
+          REPO: ${{ inputs.basedpython-repo || 'basedpython/basedpython' }}
+          VERSION: ${{ steps.version.outputs.version }}
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          set -euo pipefail
+          # Mirrors ByBinaryDownloadPlan.downloadUrl: <base>/v<version>/<binary>-<slug>[.exe]
+          case "$PLATFORM" in
+            windows-*) exe=".exe" ;;
+            *)         exe="" ;;
+          esac
+          mkdir -p build/bundled-binaries
+          for binary in by buff; do
+            curl --fail --location --retry 3 --retry-delay 5 \
+              --output "build/bundled-binaries/${binary}${exe}" \
+              "https://github.com/${REPO}/releases/download/v${VERSION}/${binary}-${PLATFORM}${exe}"
+          done
+          chmod +x build/bundled-binaries/*
+          ls -l build/bundled-binaries
+
+      - name: Build the bundled distribution
+        run: >
+          ./gradlew buildPlugin
+          -PbundledBinariesDir=build/bundled-binaries
+          -PbundledPlatform=${{ matrix.platform }}
+
+      # Two ways this build can look perfectly good and be wrong on a user's machine: the binaries
+      # silently missing ("no by found"), and the OS/arch gating silently missing — an ungated
+      # artifact is one Marketplace would hand to *every* machine, including the ones whose CPU
+      # cannot run the binaries inside it. Both are cheap to assert and invisible otherwise.
+      - name: Verify the zip is complete and gated
+        env:
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          set -euo pipefail
+          zip=$(ls build/distributions/*-"$PLATFORM".zip)
+          echo "checking $zip"
+          case "$PLATFORM" in
+            windows-*) exe=".exe" ;;
+            *)         exe="" ;;
+          esac
+          for entry in "bin/by${exe}" "bin/buff${exe}" bin/platform.txt; do
+            unzip -l "$zip" | grep -q "/${entry}$" || {
+              echo "missing $entry in $zip" >&2
+              unzip -l "$zip" >&2
+              exit 1
+            }
+          done
+
+          # plugin.xml lives in the plugin jar inside the zip, so this is a nested extraction.
+          os=${PLATFORM%%-*}
+          arch=${PLATFORM##*-}
+          if [ "$arch" = "x64" ]; then arch=x86_64; fi
+          # Match on the platform suffix: the lib directory also holds a searchableOptions jar, and
+          # a looser glob would have unzip concatenate both into one unreadable file.
+          unzip -p "$zip" "*/lib/*-${PLATFORM}.jar" > /tmp/plugin.jar
+          unzip -p /tmp/plugin.jar META-INF/plugin.xml > /tmp/plugin.xml
+          for module in "com.intellij.modules.os.${os}" "com.intellij.modules.arch.${arch}"; do
+            grep -q "<depends>${module}</depends>" /tmp/plugin.xml || {
+              echo "missing gating <depends>${module}</depends> in $zip" >&2
+              grep '<depends' /tmp/plugin.xml >&2
+              exit 1
+            }
+          done
+          grep -o "<version>[^<]*</version>" /tmp/plugin.xml | head -1
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: basedpython-plugin-${{ matrix.platform }}
+          path: build/distributions/*-${{ matrix.platform }}.zip
+          if-no-files-found: error
+
+      # Tag pushes publish; a manual run only produces artifacts, so a bundle can be built and
+      # checked without touching a release. Expects the release for the tag to exist already —
+      # this attaches assets to it, it does not create it.
+      - name: Attach to the release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PLATFORM: ${{ matrix.platform }}
+        run: gh release upload "$GITHUB_REF_NAME" build/distributions/*-"$PLATFORM".zip --clobber
+
+      # Opt-in per run. Each matrix job uploads its own version, so one dispatch with publish: true
+      # puts all six on Marketplace; a job that failed its checks above never gets here, which is
+      # the point of ordering it last. Every upload is a separate review-able version, and
+      # Marketplace rejects a version string it has already seen — so re-running a published version
+      # needs the plugin version bumped, not a retry.
+      - name: Publish to JetBrains Marketplace
+        if: inputs.publish
+        env:
+          PUBLISH_TOKEN: ${{ secrets.PUBLISH_TOKEN }}
+        run: >
+          ./gradlew publishPlugin
+          -PbundledBinariesDir=build/bundled-binaries
+          -PbundledPlatform=${{ matrix.platform }}

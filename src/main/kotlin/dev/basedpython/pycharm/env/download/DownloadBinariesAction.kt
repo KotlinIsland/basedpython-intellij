@@ -11,13 +11,13 @@ import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
 import com.intellij.util.io.HttpRequests
+import dev.basedpython.pycharm.env.Executables
 import dev.basedpython.pycharm.lsp.BasedPythonBinaries
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import dev.basedpython.pycharm.ui.log.BasedPythonLogNotifications
 import dev.basedpython.pycharm.util.BasedPythonBundle
 import java.nio.file.Files
 import java.nio.file.Path
-import java.nio.file.attribute.PosixFilePermission
 
 /**
  * FEATURES.md §58 — when the `by` / `buff` binaries cannot be resolved, offer to download a
@@ -111,20 +111,10 @@ class DownloadBinariesAction : AnAction() {
         Files.move(tmp, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING)
     }
 
-    /** Adds owner/group/others execute bits on POSIX filesystems; no-op elsewhere. */
+    /** Adds the execute bits on POSIX filesystems; no-op elsewhere. Best effort — see [Executables]. */
     private fun markExecutable(target: Path, platform: ByBinaryDownloadPlan.Platform) {
         if (platform.windows) return
-        try {
-            val perms = Files.getPosixFilePermissions(target).toMutableSet()
-            perms.add(PosixFilePermission.OWNER_EXECUTE)
-            perms.add(PosixFilePermission.GROUP_EXECUTE)
-            perms.add(PosixFilePermission.OTHERS_EXECUTE)
-            Files.setPosixFilePermissions(target, perms)
-        } catch (_: UnsupportedOperationException) {
-            // Filesystem without POSIX permission support — best effort only.
-        } catch (ex: Exception) {
-            LOG.warn("Could not mark $target executable", ex)
-        }
+        Executables.makeExecutable(target)
     }
 
     private fun applyToSettings(project: Project, name: String, target: Path) {
