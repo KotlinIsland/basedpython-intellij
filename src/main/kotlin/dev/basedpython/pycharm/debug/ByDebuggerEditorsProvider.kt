@@ -1,7 +1,12 @@
 package dev.basedpython.pycharm.debug
 
 import com.intellij.openapi.fileTypes.FileType
-import com.intellij.xdebugger.evaluation.XDebuggerEditorsProvider
+import com.intellij.openapi.project.Project
+import com.intellij.psi.PsiElement
+import com.intellij.psi.PsiFile
+import com.intellij.psi.PsiFileFactory
+import com.intellij.util.LocalTimeCounter
+import com.intellij.xdebugger.evaluation.XDebuggerEditorsProviderBase
 import dev.basedpython.pycharm.lang.BasedPythonFileType
 
 /**
@@ -19,9 +24,33 @@ import dev.basedpython.pycharm.lang.BasedPythonFileType
  * does not accept null — so before this existed, clicking the gutter gap in a `.by` file in IntelliJ
  * IDEA had nothing to open the inline field with.
  *
- * The base class does the rest: [createDocument] puts the text in a light file of this type, which
- * makes it a basedpython PSI file, which is all the highlighter and the LSP need.
+ * [XDebuggerEditorsProviderBase] does the rest of the work — documents, PSI, the supported-language
+ * list — given a way to turn expression text into a file. `XDebuggerEditorsProvider` itself is not
+ * that base: its `createDocument` is a compatibility stub that throws `AbstractMethodError`, so a
+ * provider that only answers [getFileType] compiles and then fails the moment any expression field
+ * opens.
+ *
+ * The fragment is an ordinary light `.by` file rather than a code fragment of its own kind.
+ * basedpython has no composite PSI here — the parser produces the file node and one leaf per token
+ * (`BasedPythonParserDefinition`) — so there is no expression-shaped tree to build, and a file is
+ * exactly as much structure as the highlighter and the lexer-driven features want.
  */
-object ByDebuggerEditorsProvider : XDebuggerEditorsProvider() {
+object ByDebuggerEditorsProvider : XDebuggerEditorsProviderBase() {
+
     override fun getFileType(): FileType = BasedPythonFileType.INSTANCE
+
+    override fun createExpressionCodeFragment(
+        project: Project,
+        text: String,
+        context: PsiElement?,
+        isPhysical: Boolean,
+    ): PsiFile = PsiFileFactory.getInstance(project).createFileFromText(
+        FRAGMENT_NAME,
+        BasedPythonFileType.INSTANCE,
+        text,
+        LocalTimeCounter.currentTime(),
+        isPhysical,
+    )
+
+    private const val FRAGMENT_NAME = "basedpython-expression.by"
 }
