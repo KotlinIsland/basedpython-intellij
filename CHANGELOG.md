@@ -82,6 +82,15 @@
   without opening the tool window. The old `test_…` / `Test…` behaviour remains wherever
   the collection cannot answer: while that first collection runs, after one that errored,
   and in files written or edited since.
+- Clause keywords pair up in `.by` files. With the caret on `if`, its `elif`s and `else` highlight
+  with it; likewise `try`/`except`/`else`/`finally`, a loop and its `else`, and `match` with its
+  `case`s. `Ctrl+Shift+M` (*Move Caret to Matching Brace*) now jumps between the head keyword and
+  the end of the statement's last branch, which is new for an indentation-delimited language —
+  PyCharm registers no code block support for Python at all. Chains follow the grammar, so two
+  adjacent `if`s stay two statements, a `try` after an `else` is its own, and an `else` in a
+  conditional expression or a keyword inside a string or comment is not a clause. Nothing here can
+  come from the server: LSP has no paired-keyword request, and `textDocument/documentHighlight` —
+  which is about occurrences of a symbol — answers `null` at every keyword position in `by`.
 
 ### Fixed
 
