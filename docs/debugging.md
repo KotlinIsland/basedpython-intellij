@@ -218,6 +218,34 @@ Nothing in the bootstrap may take the user's program down with it: every step ru
   unverified rather than bind to the wrong place. `by` records absolute source paths, so this has
   not been observed; it is the first thing to check if breakpoints silently do not bind.
 
+## The other debugger in this ecosystem
+
+`bpd` ([basedpythondebugger](https://github.com/KotlinIsland/basedpythondebugger)) is a Python
+debugger built on PEP 669, and it now has an IntelliJ plugin of its own — `editors/intellij/` —
+registering the **same two extension points this one does**,
+`platform.dap.debugAdapterSupportProvider` and `platform.dap.launchArgumentsProvider`. That is not
+a conflict, since the platform routes on adapter id and run configuration type, but it is
+duplicated plumbing.
+
+**The agreement between the two plugins, and the plan for converging them, lives here:**
+[bpd and the basedpython pycharm plugin](https://github.com/KotlinIsland/basedpythondebugger/blob/main/docs/development/basedpython-pycharm.md)
+
+The short version: they are not merged, because this plugin debugs `.by` and `bpd` cannot yet.
+The end state is this plugin **switching its adapter from debugpy to `bpd`** once `bpd` can, at
+which point there is one adapter between them and packaging is the only question left.
+
+Two things from this page are ahead of `bpd`'s plugin and are recorded there as such: the console
+(`DapXDebugProcess` builds one over the adapter's own process handler, and `bpd` spawns the
+interpreter itself) and adapter `output` events. A third — a failure surfacing as an IDE internal
+error naming `CoroutineScheduler` — `bpd`'s plugin already handles.
+
+**What `bpd` needs from `by`, and it is one thing.** `bpd` will not report a line that came from a
+map it could not verify against the thing the map describes. `_by_sourcemap.py` has the mapping and
+has the provenance — `None` for prelude lines — and carries **no digest of the two artefacts**. That
+digest is the whole of what stands between `bpd` and `.by` support. `bpd`'s roadmap recorded this as
+"blocked upstream, the transpiler must emit a source map", which this page had already disproved;
+that entry has been corrected to ask for the digest and nothing else.
+
 ## Two things the console taught us
 
 **The adapter must not inherit the console.** `debugpy.listen()` spawns the debug adapter as a
