@@ -15,6 +15,7 @@ import com.intellij.ui.components.JBTextField
 import com.intellij.ui.dsl.builder.AlignX
 import com.intellij.ui.dsl.builder.panel
 import dev.basedpython.pycharm.lsp.BasedPythonBinaries
+import dev.basedpython.pycharm.lsp.inlay.ByHintKind
 import dev.basedpython.pycharm.lsp.inlay.ByHintMode
 import dev.basedpython.pycharm.lsp.inlay.ByPushKey
 import dev.basedpython.pycharm.lsp.reload.BasedPythonLspReloader
@@ -72,15 +73,12 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
     private val formatOnSave = JCheckBox("Reformat with buff on save")
 
     /**
-     * One mode per kind of hint `by` sends, rather than one checkbox: a kind can be always on, off,
-     * or shown only while the push key is held (see [ByHintMode]).
+     * One mode per kind of hint `by` sends, in `by`'s own list order (see [ByHintKind]): each kind
+     * can be off, always on, or shown only while the push key is held.
      */
-    private val inlayParameterMode = modeCombo()
-    private val inlayTypeMode = modeCombo()
-    private val inlayReturnMode = modeCombo()
-    private val inlayTypeArgumentMode = modeCombo()
-    private val inlayModifierMode = modeCombo()
-    private val inlayOtherMode = modeCombo()
+    private val inlayModeCombos: Map<ByHintKind, ComboBox<ByHintMode>> =
+        ByHintKind.entries.associateWith { modeCombo() }
+
     private val inlayPushKeyCombo = ComboBox(ByPushKey.entries.toTypedArray()).apply {
         renderer = SimpleListCellRenderer.create("") { it.display }
     }
@@ -143,12 +141,9 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
                 row { cell(formatOnSave) }
             }
             group("Inlay hints") {
-                row("Parameter names:") { cell(inlayParameterMode) }
-                row("Variable types:") { cell(inlayTypeMode) }
-                row("Return types:") { cell(inlayReturnMode) }
-                row("Type arguments:") { cell(inlayTypeArgumentMode) }
-                row("Modifiers:") { cell(inlayModifierMode) }
-                row("Other hints:") { cell(inlayOtherMode) }
+                for ((kind, combo) in inlayModeCombos) {
+                    row("${kind.display}:") { cell(combo) }
+                }
                 row("Push key:") { cell(inlayPushKeyCombo) }
                     .comment("Hold this key to see the hints set to show while it is held.")
             }
@@ -192,9 +187,6 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
         ComboBox(ByHintMode.entries.toTypedArray()).apply {
             renderer = SimpleListCellRenderer.create("") { it.display }
         }
-
-    private fun selectedMode(combo: ComboBox<ByHintMode>): ByHintMode =
-        combo.selectedItem as? ByHintMode ?: ByHintMode.ALWAYS
 
     private fun rowWithButton(field: JComponent, button: JButton): JComponent {
         val p = JPanel(GridBagLayout())
@@ -275,12 +267,7 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
     /** Split out of [isModified] because [apply] needs the same answer, to know whether to redraw. */
     private fun inlayModified(): Boolean {
         val s = settings
-        return inlayParameterMode.selectedItem != s.inlayParameterMode ||
-            inlayTypeMode.selectedItem != s.inlayTypeMode ||
-            inlayReturnMode.selectedItem != s.inlayReturnMode ||
-            inlayTypeArgumentMode.selectedItem != s.inlayTypeArgumentMode ||
-            inlayModifierMode.selectedItem != s.inlayModifierMode ||
-            inlayOtherMode.selectedItem != s.inlayOtherMode ||
+        return inlayModeCombos.any { (kind, combo) -> combo.selectedItem != s.inlayMode(kind) } ||
             inlayPushKeyCombo.selectedItem != s.inlayPushKey
     }
 
@@ -295,12 +282,9 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
         s.pythonVersion = pythonVersionCombo.selectedItem as? String ?: "3.10"
         s.formatOnSave = formatOnSave.isSelected
         val inlayChanged = inlayModified()
-        s.inlayParameterMode = selectedMode(inlayParameterMode)
-        s.inlayTypeMode = selectedMode(inlayTypeMode)
-        s.inlayReturnMode = selectedMode(inlayReturnMode)
-        s.inlayTypeArgumentMode = selectedMode(inlayTypeArgumentMode)
-        s.inlayModifierMode = selectedMode(inlayModifierMode)
-        s.inlayOtherMode = selectedMode(inlayOtherMode)
+        for ((kind, combo) in inlayModeCombos) {
+            s.setInlayMode(kind, combo.selectedItem as? ByHintMode ?: ByHintMode.ALWAYS)
+        }
         s.inlayPushKey = inlayPushKeyCombo.selectedItem as? ByPushKey ?: ByPushKey.CTRL_ALT
         s.lspTraceLevel = lspTraceCombo.selectedItem as? String ?: "off"
 
@@ -373,12 +357,7 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
         buffExtraArgs.text = s.buffExtraArgs
         pythonVersionCombo.selectedItem = s.pythonVersion
         formatOnSave.isSelected = s.formatOnSave
-        inlayParameterMode.selectedItem = s.inlayParameterMode
-        inlayTypeMode.selectedItem = s.inlayTypeMode
-        inlayReturnMode.selectedItem = s.inlayReturnMode
-        inlayTypeArgumentMode.selectedItem = s.inlayTypeArgumentMode
-        inlayModifierMode.selectedItem = s.inlayModifierMode
-        inlayOtherMode.selectedItem = s.inlayOtherMode
+        for ((kind, combo) in inlayModeCombos) combo.selectedItem = s.inlayMode(kind)
         inlayPushKeyCombo.selectedItem = s.inlayPushKey
         lspTraceCombo.selectedItem = s.lspTraceLevel
         indexGeneratedPython.isSelected = s.indexGeneratedPython

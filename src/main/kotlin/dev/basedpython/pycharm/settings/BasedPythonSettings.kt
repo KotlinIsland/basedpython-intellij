@@ -7,8 +7,10 @@ import com.intellij.openapi.components.Storage
 import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
 import com.intellij.util.xmlb.XmlSerializerUtil
+import dev.basedpython.pycharm.lsp.inlay.ByHintKind
 import dev.basedpython.pycharm.lsp.inlay.ByHintMode
 import dev.basedpython.pycharm.lsp.inlay.ByHintModes
+import dev.basedpython.pycharm.lsp.inlay.ByHintShape
 import dev.basedpython.pycharm.lsp.inlay.ByPushKey
 
 /**
@@ -30,36 +32,24 @@ class BasedPythonSettings : PersistentStateComponent<BasedPythonSettings.State> 
     var buffExtraArgs: String = "",
     var pythonVersion: String = "3.10",
     var formatOnSave: Boolean = false,
+    /**
+     * The two toggles that came before the per-kind modes, kept as what an unset kind falls back
+     * to: a project configured before this reads exactly as it did, its parameter-ish hints
+     * following the first and everything else the second.
+     */
     var inlayParameterHints: Boolean = true,
     var inlayTypeHints: Boolean = true,
-    var inlayReturnHints: Boolean = true,
     /**
-     * When each kind of inlay hint is drawn, as a
-     * [dev.basedpython.pycharm.lsp.inlay.ByHintMode.id]: never, always, or only while the push key
-     * is held.
+     * When each kind of inlay hint is drawn, keyed by the name `by` gives that kind and valued by a
+     * [dev.basedpython.pycharm.lsp.inlay.ByHintMode.id].
      *
-     * Blank means the mode was never written, and the boolean above is read instead — a project
-     * configured before push-to-hint existed keeps exactly the hints it had. Writing a mode writes
-     * the boolean too, so a settings file that travels back to an older plugin still says whether
-     * the kind is on. Strings rather than the enum for the reason `pyFileHandling` gives: the
-     * serializer throws on a constant it cannot match, so a file from a newer plugin would fail to
-     * load instead of degrading.
+     * A map rather than a field per kind because the kinds are the server's list, not this
+     * plugin's: `by` grows one and the plugin should follow without a settings migration. A kind
+     * that is not in the map has never been set and falls back as described above; a key this
+     * plugin does not know is left alone rather than dropped, so a settings file written by a newer
+     * plugin survives a round trip through an older one.
      */
-    var inlayParameterMode: String = "",
-    var inlayTypeMode: String = "",
-    var inlayReturnMode: String = "",
-    /**
-     * The kinds that used to be drawn under [inlayTypeHints] because nothing told them apart — a
-     * call's type arguments (`A[int](1)`), an adornment like `override `, and whatever `by` sends
-     * that the plugin cannot place.
-     *
-     * Blank falls back to [inlayTypeMode] rather than to a boolean, which is where these hints
-     * were before they had settings of their own: a project that had variable types on push kept
-     * its `[int]` hints on push too, and still does.
-     */
-    var inlayTypeArgumentMode: String = "",
-    var inlayModifierMode: String = "",
-    var inlayOtherMode: String = "",
+    var inlayHintModes: MutableMap<String, String> = mutableMapOf(),
     /** The key held to show "on push" hints, as a [dev.basedpython.pycharm.lsp.inlay.ByPushKey.id]. */
     var inlayPushKey: String = "",
     var lspTraceLevel: String = "off",
@@ -141,57 +131,33 @@ class BasedPythonSettings : PersistentStateComponent<BasedPythonSettings.State> 
     get() = state.inlayTypeHints
     set(value) { state.inlayTypeHints = value }
 
-  var inlayReturnHints: Boolean
-    get() = state.inlayReturnHints
-    set(value) { state.inlayReturnHints = value }
+  /**
+   * The mode [kind] is on: what the settings file says, or what the toggle that covered it before
+   * the modes existed said.
+   */
+  fun inlayMode(kind: ByHintKind): ByHintMode =
+    ByHintMode.resolve(state.inlayHintModes[kind.settingsKey], legacyInlayMode(kind))
 
-  // ---- Inlay hint modes. Not serialised themselves; the strings above are the persisted form. ----
+  fun setInlayMode(kind: ByHintKind, mode: ByHintMode) {
+    state.inlayHintModes[kind.settingsKey] = mode.id
+  }
 
-  var inlayParameterMode: ByHintMode
-    get() = ByHintMode.resolve(state.inlayParameterMode, ByHintMode.of(state.inlayParameterHints))
-    set(value) {
-      state.inlayParameterMode = value.id
-      state.inlayParameterHints = value != ByHintMode.NEVER
-    }
+  /**
+   * Which of the two old toggles covered [kind].
+   *
+   * They were "parameter name hints" and "variable type hints", and between them they switched
+   * everything `by` sent: the parameter-shaped hints went with the first and the rest with the
+   * second, whatever they actually were.
+   */
+  private fun legacyInlayMode(kind: ByHintKind): ByHintMode = when (kind.shape) {
+    ByHintShape.ARGUMENT_NAME, ByHintShape.IMPLICIT_PARAMETER, ByHintShape.IMPLICIT_ARGUMENT ->
+      ByHintMode.of(state.inlayParameterHints)
+    else -> ByHintMode.of(state.inlayTypeHints)
+  }
 
-  var inlayTypeMode: ByHintMode
-    get() = ByHintMode.resolve(state.inlayTypeMode, ByHintMode.of(state.inlayTypeHints))
-    set(value) {
-      state.inlayTypeMode = value.id
-      state.inlayTypeHints = value != ByHintMode.NEVER
-    }
-
-  var inlayReturnMode: ByHintMode
-    get() = ByHintMode.resolve(state.inlayReturnMode, ByHintMode.of(state.inlayReturnHints))
-    set(value) {
-      state.inlayReturnMode = value.id
-      state.inlayReturnHints = value != ByHintMode.NEVER
-    }
-
-  // The three that used to travel with variable types, and inherit from it when unset.
-
-  var inlayTypeArgumentMode: ByHintMode
-    get() = ByHintMode.resolve(state.inlayTypeArgumentMode, inlayTypeMode)
-    set(value) { state.inlayTypeArgumentMode = value.id }
-
-  var inlayModifierMode: ByHintMode
-    get() = ByHintMode.resolve(state.inlayModifierMode, inlayTypeMode)
-    set(value) { state.inlayModifierMode = value.id }
-
-  var inlayOtherMode: ByHintMode
-    get() = ByHintMode.resolve(state.inlayOtherMode, inlayTypeMode)
-    set(value) { state.inlayOtherMode = value.id }
-
-  /** Every kind's mode at once, which is how the hints collector reads them. */
+  /** Every kind's mode at once, which is how the hints collector and the server config read them. */
   val inlayModes: ByHintModes
-    get() = ByHintModes(
-      parameter = inlayParameterMode,
-      type = inlayTypeMode,
-      returnType = inlayReturnMode,
-      typeArgument = inlayTypeArgumentMode,
-      modifier = inlayModifierMode,
-      other = inlayOtherMode,
-    )
+    get() = ByHintModes(ByHintKind.entries.associateWith { inlayMode(it) })
 
   var inlayPushKey: ByPushKey
     get() = ByPushKey.fromId(state.inlayPushKey)

@@ -57,102 +57,65 @@ class ByInlayHintsTest {
 
     // endregion
 
-    // region: kind
+    // region: shape
 
-    @Test
-    fun `a Parameter-kind hint is a parameter hint`() {
-        val hint = textHint("value:", InlayHintKind.Parameter)
-        assertEquals(ByHintKind.PARAMETER, ByInlayHints.kindOf(hint, ByInlayHints.labelOf(hint)))
+    private fun shapeOf(text: String, kind: InlayHintKind? = null): ByHintShape {
+        val hint = textHint(text, kind)
+        return ByInlayHints.shapeOf(hint, ByInlayHints.labelOf(hint))
     }
 
+    /**
+     * Every label `by` writes, copied from the constructors in `ty_ide::InlayHint` that write them,
+     * with the LSP kind each one is sent under.
+     *
+     * This is the table the whole classification rests on: the protocol carries two kinds for the
+     * fourteen things the server distinguishes, and the rest is recovered from these shapes.
+     */
     @Test
-    fun `a Type-kind hint starting with an arrow is a return-type hint`() {
-        val hint = textHint("-> bool", InlayHintKind.Type)
-        assertEquals(ByHintKind.RETURN_TYPE, ByInlayHints.kindOf(hint, ByInlayHints.labelOf(hint)))
-    }
-
-    @Test
-    fun `an arrow hint with no kind at all is still a return-type hint`() {
-        val hint = textHint("-> bool")
-        assertEquals(ByHintKind.RETURN_TYPE, ByInlayHints.kindOf(hint, ByInlayHints.labelOf(hint)))
-    }
-
-    @Test
-    fun `an arrow behind the label's own leading space is still an arrow`() {
-        val hint = textHint(" -> bool", InlayHintKind.Type)
-        assertEquals(ByHintKind.RETURN_TYPE, ByInlayHints.kindOf(hint, ByInlayHints.labelOf(hint)))
-    }
-
-    @Test
-    fun `a Type-kind hint without an arrow is an ordinary type hint`() {
-        val hint = textHint(": list[int]", InlayHintKind.Type)
-        assertEquals(ByHintKind.TYPE, ByInlayHints.kindOf(hint, ByInlayHints.labelOf(hint)))
-    }
-
-    @Test
-    fun `a name and an equals is an argument's name even with no LSP kind on it`() {
-        // The kind is what `by` sends; the shape is what keeps the setting meaningful if it stops.
-        val hint = textHint("t=")
-        assertEquals(ByHintKind.PARAMETER, ByInlayHints.kindOf(hint, ByInlayHints.labelOf(hint)))
-    }
-
-    @Test
-    fun `an equals that is not a name being bound is not a parameter`() {
-        for (label in listOf("=", "a + b=", "!=")) {
-            val hint = textHint(label)
-            assertEquals(
-                ByHintKind.OTHER,
-                ByInlayHints.kindOf(hint, ByInlayHints.labelOf(hint)),
-                "\"$label\" is not an argument's name",
-            )
+    fun `every label by writes is recognised as the kind that wrote it`() {
+        val cases = listOf(
+            Triple(": int", InlayHintKind.Type, ByHintShape.TYPE),
+            Triple(": list[int]", InlayHintKind.Type, ByHintShape.TYPE),
+            Triple("[int]", InlayHintKind.Type, ByHintShape.TYPE_ARGUMENTS),
+            Triple("[T=int, U=str]", InlayHintKind.Type, ByHintShape.TYPE_ARGUMENTS),
+            Triple("T=", InlayHintKind.Type, ByHintShape.TYPE_ARGUMENT_NAME),
+            Triple(" | int", InlayHintKind.Type, ByHintShape.NUMERIC_PROMOTION),
+            Triple(" | float | int", InlayHintKind.Type, ByHintShape.NUMERIC_PROMOTION),
+            Triple("  revealed: int", InlayHintKind.Type, ByHintShape.REVEALED_TYPE),
+            Triple(" raises ValueError", InlayHintKind.Type, ByHintShape.RAISES),
+            Triple("override ", InlayHintKind.Type, ByHintShape.OVERRIDE),
+            Triple("reified ", InlayHintKind.Type, ByHintShape.REIFICATION),
+            Triple("out ", InlayHintKind.Type, ByHintShape.VARIANCE),
+            Triple("in ", InlayHintKind.Type, ByHintShape.VARIANCE),
+            Triple("in out ", InlayHintKind.Type, ByHintShape.VARIANCE),
+            Triple("x=", InlayHintKind.Parameter, ByHintShape.ARGUMENT_NAME),
+            Triple("self", InlayHintKind.Parameter, ByHintShape.IMPLICIT_PARAMETER),
+            Triple("it: int", InlayHintKind.Parameter, ByHintShape.IMPLICIT_PARAMETER),
+            Triple("self, it: int", InlayHintKind.Parameter, ByHintShape.IMPLICIT_PARAMETER),
+            Triple(", ctx=my_context", InlayHintKind.Parameter, ByHintShape.IMPLICIT_ARGUMENT),
+        )
+        for ((label, kind, expected) in cases) {
+            assertEquals(expected, shapeOf(label, kind), "\"$label\" as $kind")
         }
     }
 
     @Test
-    fun `a subscript is what a call specialised a generic to`() {
-        // `a = A(1)` drawn as `a: A[int] = A[int](t=1)`: the second `[int]` is this hint.
-        val hint = textHint("[int]", InlayHintKind.Type)
-        assertEquals(ByHintKind.TYPE_ARGUMENT, ByInlayHints.kindOf(hint, ByInlayHints.labelOf(hint)))
+    fun `the LSP kind is what splits an argument's name from a type argument's`() {
+        // `t=` and `T=` are the same characters standing for different things, and the kind `by`
+        // sends them under is the only thing that says which.
+        assertEquals(ByHintShape.ARGUMENT_NAME, shapeOf("t=", InlayHintKind.Parameter))
+        assertEquals(ByHintShape.TYPE_ARGUMENT_NAME, shapeOf("T=", InlayHintKind.Type))
     }
 
     @Test
-    fun `a word making room after itself adorns what follows`() {
-        for (label in listOf("override ", "final ", "async override ")) {
-            val hint = textHint(label)
+    fun `a shape from a newer by is its own kind, not the nearest one`() {
+        for (label in listOf("=> 3", "«borrowed»", "-> bool")) {
             assertEquals(
-                ByHintKind.MODIFIER,
-                ByInlayHints.kindOf(hint, ByInlayHints.labelOf(hint)),
-                "\"$label\" should read as a modifier",
-            )
-        }
-    }
-
-    @Test
-    fun `a word that makes no room after itself is not a modifier`() {
-        // The trailing space is how an adornment says it prefixes a declaration. Without it this is
-        // some other thing `by` sends, and it belongs in the kind that has a setting for exactly
-        // that rather than in the nearest-looking one.
-        val hint = textHint("int")
-        assertEquals(ByHintKind.OTHER, ByInlayHints.kindOf(hint, ByInlayHints.labelOf(hint)))
-    }
-
-    @Test
-    fun `a shape the plugin cannot place is its own kind, not the nearest one`() {
-        for (label in listOf("=> 3", "(mut)", "«borrowed»")) {
-            val hint = textHint(label, InlayHintKind.Type)
-            assertEquals(
-                ByHintKind.OTHER,
-                ByInlayHints.kindOf(hint, ByInlayHints.labelOf(hint)),
+                ByHintShape.UNKNOWN,
+                shapeOf(label, InlayHintKind.Type),
                 "\"$label\" should fall to the kind that has a setting for anything else",
             )
         }
-    }
-
-    @Test
-    fun `a parameter named after an arrow-like operator is still a parameter`() {
-        // Kind wins over the arrow heuristic, so a parameter hint can never be read as a return.
-        val hint = textHint("->", InlayHintKind.Parameter)
-        assertEquals(ByHintKind.PARAMETER, ByInlayHints.kindOf(hint, ByInlayHints.labelOf(hint)))
     }
 
     // endregion
@@ -201,29 +164,60 @@ class ByInlayHintsTest {
     @Test
     fun `each kind reads only its own mode`() {
         val modes = ByHintModes(
-            parameter = ByHintMode.ALWAYS,
-            type = ByHintMode.ON_PUSH,
-            returnType = ByHintMode.NEVER,
-            typeArgument = ByHintMode.ON_PUSH,
-            modifier = ByHintMode.ALWAYS,
-            other = ByHintMode.NEVER,
+            mapOf(
+                ByHintKind.VARIABLE_TYPES to ByHintMode.ON_PUSH,
+                ByHintKind.CALL_ARGUMENT_NAMES to ByHintMode.ALWAYS,
+                ByHintKind.INFERRED_RAISES to ByHintMode.NEVER,
+            ),
         )
-        assertEquals(ByHintMode.ALWAYS, modes[ByHintKind.PARAMETER])
-        assertEquals(ByHintMode.ON_PUSH, modes[ByHintKind.TYPE])
-        assertEquals(ByHintMode.NEVER, modes[ByHintKind.RETURN_TYPE])
-        assertEquals(ByHintMode.ON_PUSH, modes[ByHintKind.TYPE_ARGUMENT])
-        assertEquals(ByHintMode.ALWAYS, modes[ByHintKind.MODIFIER])
-        assertEquals(ByHintMode.NEVER, modes[ByHintKind.OTHER])
+        assertEquals(ByHintMode.ON_PUSH, modes[ByHintKind.VARIABLE_TYPES])
+        assertEquals(ByHintMode.ALWAYS, modes[ByHintKind.CALL_ARGUMENT_NAMES])
+        assertEquals(ByHintMode.NEVER, modes[ByHintKind.INFERRED_RAISES])
+        assertEquals(ByHintMode.ALWAYS, modes[ByHintKind.OTHER], "an unset kind is on")
+    }
+
+    @Test
+    fun `a shape takes the mode of the kind that wrote it`() {
+        val modes = ByHintModes.all(ByHintMode.NEVER).let {
+            ByHintModes(ByHintKind.entries.associateWith { kind ->
+                if (kind == ByHintKind.INFERRED_OVERRIDE) ByHintMode.ON_PUSH else it[kind]
+            })
+        }
+        assertEquals(ByHintMode.ON_PUSH, modes.forShape(ByHintShape.OVERRIDE))
+        assertEquals(ByHintMode.NEVER, modes.forShape(ByHintShape.TYPE))
+    }
+
+    @Test
+    fun `where two kinds are written alike, the more visible setting wins`() {
+        // `by` writes a variable's type and a lambda parameter's identically, so a hint of that
+        // shape cannot be attributed to one of them. Showing it always is the answer that never
+        // hides a hint someone asked to see.
+        val modes = ByHintModes(
+            mapOf(
+                ByHintKind.VARIABLE_TYPES to ByHintMode.ALWAYS,
+                ByHintKind.LAMBDA_PARAMETER_TYPES to ByHintMode.ON_PUSH,
+            ),
+        )
+        assertEquals(ByHintMode.ALWAYS, modes.forShape(ByHintShape.TYPE))
     }
 
     @Test
     fun `nothing is collected only when every kind is off`() {
         assertFalse(ByHintModes.all(ByHintMode.NEVER).anyCollected)
         assertTrue(ByHintModes.all(ByHintMode.ON_PUSH).anyCollected)
-        assertTrue(
-            ByHintModes.all(ByHintMode.NEVER).copy(other = ByHintMode.ALWAYS).anyCollected,
-            "one kind left on is a reason to ask the server",
+    }
+
+    @Test
+    fun `the server is asked to skip exactly the kinds set to never`() {
+        val modes = ByHintModes(
+            ByHintKind.entries.associateWith {
+                if (it == ByHintKind.REVEALED_TYPES) ByHintMode.NEVER else ByHintMode.ON_PUSH
+            },
         )
+        val options = modes.serverOptions()
+        assertEquals(false, options["revealedTypes"])
+        assertEquals(true, options["variableTypes"], "on push is still computed")
+        assertFalse(options.containsKey("other"), "the catch-all is the plugin's, not the server's")
     }
 
     // endregion
@@ -232,14 +226,15 @@ class ByInlayHintsTest {
 
     @Test
     fun `the hints that introduce what follows them anchor forwards, the rest backwards`() {
-        // `name=` introduces its argument and `override ` its declaration; the others finish the
-        // code they sit after.
-        assertFalse(ByInlayHints.relatesToPrecedingText(ByHintKind.PARAMETER))
-        assertFalse(ByInlayHints.relatesToPrecedingText(ByHintKind.MODIFIER))
-        assertTrue(ByInlayHints.relatesToPrecedingText(ByHintKind.TYPE))
-        assertTrue(ByInlayHints.relatesToPrecedingText(ByHintKind.RETURN_TYPE))
-        assertTrue(ByInlayHints.relatesToPrecedingText(ByHintKind.TYPE_ARGUMENT))
-        assertTrue(ByInlayHints.relatesToPrecedingText(ByHintKind.OTHER))
+        assertFalse(ByHintShape.ARGUMENT_NAME.relatesToPrecedingText)
+        assertFalse(ByHintShape.IMPLICIT_PARAMETER.relatesToPrecedingText)
+        assertFalse(ByHintShape.OVERRIDE.relatesToPrecedingText)
+        assertFalse(ByHintShape.VARIANCE.relatesToPrecedingText)
+        assertFalse(ByHintShape.REIFICATION.relatesToPrecedingText)
+        assertTrue(ByHintShape.TYPE.relatesToPrecedingText)
+        assertTrue(ByHintShape.TYPE_ARGUMENTS.relatesToPrecedingText)
+        assertTrue(ByHintShape.RAISES.relatesToPrecedingText)
+        assertTrue(ByHintShape.UNKNOWN.relatesToPrecedingText)
     }
 
     // endregion

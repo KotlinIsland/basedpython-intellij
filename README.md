@@ -71,11 +71,13 @@ support, run configurations, CLI actions, and editor tooling.
 - Project settings page at *Settings → Languages & Frameworks → basedpython*: binary
   paths (with **Test** buttons + live detection), per-server toggles, extra args, target
   Python version, format-on-save, inlay-hint modes, and LSP trace level.
-- Inlay hints per kind — parameter names (`f(x=1)`), variable types (`a: int`), return
-  types (`-> int`), type arguments (`A[int](1)`), modifiers (`override `), and anything
-  else `by` sends — each *never*, *always*, or **push-to-hint**: drawn only while you hold
-  a key (`Ctrl+Alt` by default, configurable). Hold it to read the inferred types, let go
-  and the code is as you wrote it.
+- Inlay hints configured per kind, one row for each kind `by` computes: variable types,
+  lambda parameter types, call type arguments, type argument names, numeric promotions,
+  revealed types, inferred raises, call argument names, implicit parameters, implicit
+  self, implicit arguments, inferred override, variance and reification. Each is *never*,
+  *always*, or **push-to-hint**: drawn only while you hold a key (`Ctrl+Alt` by default,
+  configurable). Hold it to read the inferred types, let go and the code is as you wrote
+  it. A kind set to never is switched off in `by` itself, so it is never even inferred.
 - Optional status bar widget showing live `by` / `buff` LSP health (green = running,
   gray = stopped, red = binary missing).
 
