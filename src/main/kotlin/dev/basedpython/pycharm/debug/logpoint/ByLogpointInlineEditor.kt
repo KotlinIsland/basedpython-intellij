@@ -1,6 +1,7 @@
 package dev.basedpython.pycharm.debug.logpoint
 
 import com.intellij.openapi.Disposable
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.actionSystem.CommonShortcuts
 import com.intellij.openapi.editor.Inlay
 import com.intellij.openapi.editor.ex.EditorEx
@@ -24,6 +25,7 @@ import java.awt.BorderLayout
 import java.awt.event.FocusAdapter
 import java.awt.event.FocusEvent
 import javax.swing.JPanel
+import javax.swing.SwingUtilities
 
 /**
  * The field you type a log point's expression into, sitting in the gap where the log point is.
@@ -48,7 +50,19 @@ class ByLogpointInlineEditor private constructor(
 ) : Disposable {
 
     private var inlay: Inlay<*>? = null
+    private var panel: JPanel? = null
     private var closed = false
+
+    /**
+     * Whether the field has ever held focus.
+     *
+     * Opening one is a race it usually loses: the click that creates the log point is a gutter click,
+     * and the editor takes focus back as that click finishes. The resulting focus-lost arrives before
+     * anyone has typed anything, and committing nothing removes the log point — so the field appeared
+     * for a frame and then took itself away. A focus-lost before the first focus-gained is that
+     * churn, not the user leaving.
+     */
+    private var everFocused = false
 
     /** True while the log point had no expression when this opened — the state that makes Escape delete it. */
     private val startedEmpty = ByLogpoints.isUnfilled(breakpoint)
@@ -56,6 +70,21 @@ class ByLogpointInlineEditor private constructor(
     override fun dispose() {
         inlay?.let { Disposer.dispose(it) }
         inlay = null
+    }
+
+    /** The field has focus, so the next time it loses focus the user really is leaving. */
+    internal fun focusGained() {
+        everFocused = true
+    }
+
+    /**
+     * Leaving the field commits what is in it — but only once it has actually been in use. Split out
+     * from the listener because `EditorTextField` forwards focus listeners to the editor it wraps,
+     * which puts them out of reach of a test that has no window to focus things in.
+     */
+    internal fun focusLost(movedWithinTheField: Boolean) {
+        if (!everFocused || movedWithinTheField) return
+        commit()
     }
 
     /** Writes what was typed onto the breakpoint, or removes it if nothing was. */
@@ -124,6 +153,7 @@ class ByLogpointInlineEditor private constructor(
 
             val prompt = ByLogpointInlineEditor(project, breakpoint, expressionEditor)
             val panel = prompt.buildPanel()
+            prompt.panel = panel
 
             // showAbove: the gap the log point lives in is the one above the line it is anchored to.
             val properties = EditorEmbeddedComponentManager.Properties(
@@ -142,7 +172,11 @@ class ByLogpointInlineEditor private constructor(
             prompt.inlay = inlay
             breakpoint.putUserData(OPEN, prompt)
             Disposer.register(inlay) { prompt.close() }
-            expressionEditor.preferredFocusedComponent?.requestFocusInWindow()
+            // After the click that opened this has finished being delivered, so the field is asking
+            // for focus once the editor has stopped taking it back.
+            ApplicationManager.getApplication().invokeLater {
+                if (!prompt.closed) expressionEditor.preferredFocusedComponent?.requestFocusInWindow()
+            }
             return prompt
         }
 
@@ -173,7 +207,14 @@ class ByLogpointInlineEditor private constructor(
         DumbAwareAction.create { commit() }.registerCustomShortcutSet(CommonShortcuts.ENTER, field, this)
         DumbAwareAction.create { cancel() }.registerCustomShortcutSet(CommonShortcuts.ESCAPE, field, this)
         field.addFocusListener(object : FocusAdapter() {
-            override fun focusLost(e: FocusEvent) = commit()
+            override fun focusGained(e: FocusEvent) = focusGained()
+
+            override fun focusLost(e: FocusEvent) {
+                // Focus moving within the field's own panel is not leaving it.
+                val opposite = e.oppositeComponent
+                val within = opposite != null && panel?.let { SwingUtilities.isDescendingFrom(opposite, it) } == true
+                focusLost(within)
+            }
         })
         return panel
     }
