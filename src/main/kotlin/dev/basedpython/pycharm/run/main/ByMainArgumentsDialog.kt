@@ -34,6 +34,12 @@ internal class ByMainArgumentsDialog(
     private val module: String,
     private val main: ByMainFunction,
     initial: String,
+    /**
+     * What the button that starts the run says, for a caller that already knows how it is starting
+     * — a run the platform has begun and is waiting on. Null instead offers both Run and Debug, for
+     * a caller that has not chosen yet.
+     */
+    private val start: String? = null,
 ) : DialogWrapper(project) {
 
     /** What the dialog was closed with: the arguments, and which executor was asked for. */
@@ -66,8 +72,8 @@ internal class ByMainArgumentsDialog(
     }
 
     init {
-        title = "Run '$module'"
-        setOKButtonText(RUN)
+        title = "${start ?: RUN} '$module'"
+        setOKButtonText(start ?: RUN)
         val parsed = ByMainArguments.parse(main, initial)
         if (parsed == null && initial.isNotBlank()) {
             // A command line the form cannot express opens as what it is.
@@ -129,7 +135,8 @@ internal class ByMainArgumentsDialog(
         row("Command line:") { cell(commandLine).align(AlignX.FILL) }
     }
 
-    override fun createActions(): Array<Action> = arrayOf(okAction, debugAction, cancelAction)
+    override fun createActions(): Array<Action> =
+        if (start != null) arrayOf(okAction, cancelAction) else arrayOf(okAction, debugAction, cancelAction)
 
     override fun doValidateAll(): List<ValidationInfo> = problems()
 

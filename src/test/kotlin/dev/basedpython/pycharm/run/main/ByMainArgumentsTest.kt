@@ -1,7 +1,9 @@
 package dev.basedpython.pycharm.run.main
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 /**
@@ -97,6 +99,17 @@ class ByMainArgumentsTest {
         val main = main("name: str, count: int = 1")
         assertEquals(listOf("name"), ByMainArguments.missing(main, "--count 3").map { it.name })
         assertEquals(emptyList<String>(), ByMainArguments.missing(main, "bob").map { it.name })
+    }
+
+    @Test
+    fun `a run is only interrupted for arguments it cannot start without`() {
+        val required = main("a: int")
+        assertTrue(ByMainArguments.needed(required, ""), "this run would die on `required: a`")
+        assertFalse(ByMainArguments.needed(required, "--a 1"), "already answered")
+        assertFalse(ByMainArguments.needed(required, "1"), "answered positionally")
+        assertFalse(ByMainArguments.needed(main("a: int = 1"), ""), "optional, so it just runs")
+        assertFalse(ByMainArguments.needed(main("db: Db"), ""), "no entry point to give arguments to")
+        assertFalse(ByMainArguments.needed(null, ""), "no readable main; the module speaks for itself")
     }
 
     @Test

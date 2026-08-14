@@ -27,8 +27,13 @@ class ByMainArgumentsDialogTest {
         return ByMainSignature.find({ lines[it] }, lines.size)!!
     }
 
-    private fun dialog(signature: String, initial: String, check: (ByMainArgumentsDialog) -> Unit) {
-        val dialog = ByMainArgumentsDialog(fixture.project, "pkg.main", main(signature), initial)
+    private fun dialog(
+        signature: String,
+        initial: String,
+        start: String? = null,
+        check: (ByMainArgumentsDialog) -> Unit,
+    ) {
+        val dialog = ByMainArgumentsDialog(fixture.project, "pkg.main", main(signature), initial, start)
         try {
             check(dialog)
         } finally {
@@ -62,6 +67,18 @@ class ByMainArgumentsDialogTest {
     fun `a command line the form cannot express is handed back untouched`() {
         dialog("name: str", "--not-a-parameter 1") {
             assertEquals("--not-a-parameter 1", it.result().arguments)
+        }
+    }
+
+    @Test
+    fun `a run already under way is asked in its own name`() {
+        // Opened from `getState`, the platform has already chosen the executor; offering "Debug"
+        // as a second button would be offering something this caller cannot honour.
+        dialog("a: int", "", start = "Debug") {
+            assertEquals("Debug 'pkg.main'", it.title)
+        }
+        dialog("a: int", "") {
+            assertEquals("Run 'pkg.main'", it.title)
         }
     }
 

@@ -30,11 +30,12 @@ internal fun promptForArguments(
     project: Project,
     configuration: ByRunConfiguration,
     main: ByMainFunction,
+    start: String? = null,
 ): ByMainArgumentsDialog.Result? {
     val module = configuration.options.module
     val initial = configuration.options.programArgs
         .ifBlank { ByMainArgumentHistory.last(project, module).orEmpty() }
-    val dialog = ByMainArgumentsDialog(project, module, main, initial)
+    val dialog = ByMainArgumentsDialog(project, module, main, initial, start)
     if (!dialog.showAndGet()) return null
     val result = dialog.result()
     configuration.options.programArgs = result.arguments

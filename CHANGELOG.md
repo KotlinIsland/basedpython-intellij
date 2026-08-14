@@ -15,13 +15,14 @@
 - Run configuration type with `by run`, `by build`, and `by check` factories, plus
   context-aware producers on `.by` files; configurable working dir, extra args,
   `--min-version`, and env vars.
-- **Run with Arguments…** on a `def main` that takes parameters — a form generated from the
-  signature (file chooser for a `Path`, checkbox for a `bool`, docstring as the description,
-  values validated against the annotation), offered first in the gutter while a plain run would
-  fail for want of a required argument. Answers are remembered per module and seeded into the
-  next context configuration, stored as the run configuration's *Program arguments*; a run that
-  fails on argparse's `the following arguments are required` gets a console link to the same
-  form.
+- Running a `def main` with required parameters **asks for them** instead of failing on
+  argparse's `the following arguments are required` — a form generated from the signature (file
+  chooser for a `Path`, checkbox for a `bool`, docstring as the description, values validated
+  against the annotation), opened as the run starts however it was started, and cancelling it
+  just doesn't run. Only asked when the run could not otherwise start; answers are remembered per
+  module and seeded into the next context configuration, and stored as the run configuration's
+  *Program arguments*. **Run with Arguments…** in the gutter opens the same form to change them,
+  and a run that fails on the argparse error anyway gets a console link to it.
 - Tools menu group with seven `by`/`buff` actions: Transpile, Reverse Transpile,
   Generate api.lock, Format with buff (`Ctrl+Alt+Shift+L`), Check Project, Clean Caches,
   Explain Rule. Transpile actions also in editor and project-view popups.

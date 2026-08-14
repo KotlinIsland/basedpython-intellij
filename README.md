@@ -122,11 +122,13 @@ support, run configurations, CLI actions, and editor tooling.
   `.by` source and its generated `.py` in `out/`.
 - Gutter run icons on `if __name__ == "__main__":` and top-level `main()` — one click
   runs the file's `by run` configuration.
-- **Run with Arguments…** — `main`'s parameters are the program's command line, so the gutter
-  offers them as a form: a file chooser for a `Path`, a checkbox for a `bool`, the docstring as
-  its description, and values checked against the annotation before the run starts. Asked once
-  and remembered against the module, so plain Run keeps working; editable as a plain command
-  line, and available on the configuration as *Program arguments*.
+- **Arguments for `main`** — `main`'s parameters are the program's command line, so running a
+  `def main(a: int)` asks for them instead of failing: a form generated from the signature, with
+  a file chooser for a `Path`, a checkbox for a `bool`, the docstring as its description, and
+  values checked against the annotation before the run starts. Only asked when the run could not
+  otherwise start, and remembered against the module, so Run keeps being one click. **Run with
+  Arguments…** in the gutter changes them; they are editable as a plain command line, and live on
+  the configuration as *Program arguments*.
 - Test run configuration — runs pytest against the transpiled output via `by run pytest`,
   with results in the standard test tree. Gutter icons on `def test_...` and `class Test...`
   run a single test. Needs `pytest` importable by the interpreter `by run` uses.
