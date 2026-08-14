@@ -45,7 +45,7 @@ internal class ByShowCollectionOutputAction(private val project: Project) : Dumb
          * left open across a Refresh nobody told it about.
          */
         fun show(project: Project) {
-            val text = ByCollectionOutput.render(ByTestNodeService.getInstance(project).lastRun)
+            val text = ByCollectionOutput.render(ByTestNodeService.getInstance(project).lastRuns)
             val file = project.getUserData(OUTPUT_FILE)
                 ?: LightVirtualFile(ByCollectionOutput.FILE_NAME, PlainTextFileType.INSTANCE, "")
                     .also { project.putUserData(OUTPUT_FILE, it) }

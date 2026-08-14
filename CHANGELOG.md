@@ -97,6 +97,13 @@
   finds them, grouped by directory, file, class, function and parametrized case, with
   Run / Debug on any node, Jump to Source on double-click, and collection errors shown
   in place. Offered only to basedpython projects; collects on first open and on Refresh.
+- The test view collects tests written in `.py` as well as `.by`: `by run pytest` only ever
+  sees the transpiled `.by` tree, so a second plain `pytest --collect-only` runs in the
+  project and the two are combined. A `.py` test runs as `python -m pytest` in the project,
+  where its `pyproject.toml` and `conftest.py` apply.
+- *View Collection Output* in the test tool window's ⋮ menu: the exact commands, exit codes
+  and output of the last collection, for when the view disagrees with pytest run by hand.
+  A collection stopped by `by run`'s type check now says so, with the diagnostic count.
 - Test gutter icons follow that collection: a function pytest does not collect no longer
   offers to run — including a `def test_…` in a file pytest never collects, such as
   `main.by` — one it collects under a different naming convention now does, and the

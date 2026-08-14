@@ -11,11 +11,35 @@ import dev.basedpython.pycharm.run.test.ByPytest
  */
 internal data class ByCollectionError(val target: String?, val message: String)
 
-/** Everything one `--collect-only` run had to say: the node ids it found, and what went wrong. */
+/**
+ * Which pytest run a node id came from, which is the difference between a path that stands for a
+ * `.by` source and one that *is* the file on disk.
+ *
+ * Two runs are needed because `by run` transpiles only `.by` files into the tree pytest walks
+ * (`by build`: "Transpile all .by files"), so a project whose tests live in `.py` files hands it an
+ * empty tree — while plain `pytest` in the project collects them all. Until `by run` can be told to
+ * include them, the view collects from both and combines.
+ */
+internal enum class ByTestSource {
+    /** From `by run pytest`: the path names a transpiled `.py` standing for a `.by` source. */
+    TRANSPILED,
+
+    /** From plain `pytest` in the project: the path names a real `.py` file. */
+    PYTHON,
+}
+
+/** One collected test, and where it was collected from. */
+internal data class ByCollectedNode(val nodeId: String, val source: ByTestSource)
+
+/** Everything a `--collect-only` run had to say: the nodes it found, and what went wrong. */
 internal data class ByCollection(
-    val nodeIds: List<String> = emptyList(),
+    val nodes: List<ByCollectedNode> = emptyList(),
     val errors: List<ByCollectionError> = emptyList(),
-)
+) {
+    /** The two runs' results, side by side; neither can shadow the other's tests. */
+    operator fun plus(other: ByCollection): ByCollection =
+        ByCollection(nodes + other.nodes, errors + other.errors)
+}
 
 /**
  * Reads the test tree out of `by run pytest --collect-only -q`.
@@ -59,6 +83,16 @@ internal object ByPytestCollect {
     fun arguments(): List<String> = listOf(ByPytest.MODULE, COLLECT_ONLY, QUIET)
 
     /**
+     * The arguments for the plain-pytest half, run as `python -m pytest` in the project itself.
+     *
+     * `out/` is ignored because it holds what `by build` transpiled: collecting there would report
+     * every `.by` test a second time, as the generated `.py` it was written to. pytest skips
+     * dot-directories (so `.venv`) on its own.
+     */
+    fun pythonArguments(): List<String> =
+        listOf("-m", ByPytest.MODULE, COLLECT_ONLY, QUIET, "--ignore=$OUT_DIR")
+
+    /**
      * A node id line: a path ending in `.py`, optionally followed by `::`-separated names.
      *
      * The path may not contain whitespace, but everything after `::` may — a parametrized case is
@@ -87,7 +121,12 @@ internal object ByPytestCollect {
      * diagnostics, and is only consulted when the run failed without collecting anything, since a
      * successful collection can still print warnings there.
      */
-    fun parse(stdout: String, stderr: String, exitCode: Int): ByCollection {
+    fun parse(
+        stdout: String,
+        stderr: String,
+        exitCode: Int,
+        source: ByTestSource = ByTestSource.TRANSPILED,
+    ): ByCollection {
         val nodeIds = ArrayList<String>()
         val errors = ArrayList<ByCollectionError>()
         for (raw in stdout.lineSequence()) {
@@ -106,7 +145,7 @@ internal object ByPytestCollect {
         if (nodeIds.isEmpty() && errors.isEmpty() && exitCode != 0 && exitCode != NO_TESTS_COLLECTED) {
             errors += ByCollectionError(null, summarize(stderr, stdout, exitCode))
         }
-        return ByCollection(nodeIds.distinct(), errors)
+        return ByCollection(nodeIds.distinct().map { ByCollectedNode(it, source) }, errors)
     }
 
     /**
@@ -144,7 +183,21 @@ internal object ByPytestCollect {
         return lines.firstOrNull() ?: "by run pytest --collect-only exited with code $exitCode"
     }
 
+    /**
+     * True when [output] is an interpreter saying it has no pytest.
+     *
+     * The plain-pytest half is best-effort: a project whose tests are all `.by` need not have pytest
+     * importable by the interpreter *this* half picks, and reporting that as a collection error
+     * would put a red node under every such project for a run that had nothing to contribute.
+     */
+    fun isPytestMissing(output: String): Boolean = NO_PYTEST.containsMatchIn(output)
+
+    private val NO_PYTEST = Regex("No module named pytest", RegexOption.IGNORE_CASE)
+
     private const val COLLECTION_FAILED = "collection failed"
+
+    /** Where `by build` writes transpiled output; the plain half must not collect it twice. */
+    private const val OUT_DIR = "out"
 
     /**
      * pytest's exit code for "collection ran fine and found nothing", which `by run` passes

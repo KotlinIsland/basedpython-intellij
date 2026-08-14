@@ -14,14 +14,12 @@ import org.junit.jupiter.api.Test
 class ByTestLookupTest {
 
     private val collected = ByTestIndex.of(
-        ByCollection(
-            nodeIds = listOf(
+        collectionOf(
                 "tests/test_math.py::test_add",
                 "tests/test_math.py::test_param[1-2]",
                 "tests/test_math.py::test_param[3-4]",
                 "tests/test_math.py::TestGroup::test_in_class",
             ),
-        ),
         takenAtMillis = COLLECTED_AT,
     )
 
@@ -80,8 +78,8 @@ class ByTestLookupTest {
     @Test
     fun `an interrupted collection proves nothing about the files it never reached`() {
         val interrupted = ByTestIndex.of(
-            ByCollection(
-                nodeIds = listOf("tests/test_math.py::test_add"),
+            collectionOf(
+                "tests/test_math.py::test_add",
                 errors = listOf(ByCollectionError("tests/test_broken.py", "RuntimeError: boom")),
             ),
             takenAtMillis = COLLECTED_AT,

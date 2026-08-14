@@ -30,6 +30,19 @@ class ByTestOptions : ByCommonOptions() {
     var paths: String
         get() = pathsProp.getValue(this) ?: ""
         set(v) { pathsProp.setValue(this, v) }
+
+    private val plainPytestProp = property(false).provideDelegate(this, "plainPytest")
+
+    /**
+     * Run `python -m pytest` in the project instead of `by run pytest`.
+     *
+     * For tests that are already `.py`: `by run` transpiles `.by` files into a temp directory and
+     * runs pytest there, so it never sees them (`by build`: "Transpile all .by files"). The node
+     * view collects both kinds and sets this when what it is running came from the plain half.
+     */
+    var plainPytest: Boolean
+        get() = plainPytestProp.getValue(this)
+        set(v) { plainPytestProp.setValue(this, v) }
 }
 
 class ByTestConfiguration(project: Project, factory: ConfigurationFactory, name: String) :
@@ -49,6 +62,13 @@ class ByTestConfiguration(project: Project, factory: ConfigurationFactory, name:
     override fun getState(executor: Executor, environment: ExecutionEnvironment): RunProfileState {
         val opts = options
         val config = this
+        if (opts.plainPytest) {
+            return PlainPytestCommandLineState(project, opts, environment) { handler, exec ->
+                SMTestRunnerConnectionUtil.createAndAttachConsole(
+                    FRAMEWORK_NAME, handler, testConsoleProperties(config, exec),
+                )
+            }.also { it.paths = opts.paths }
+        }
         return object : ByCommandLineState(project, opts, environment) {
             // `by run pytest`, not `by test` — see [ByPytest].
             override val subcommand = "run"

@@ -11,7 +11,11 @@ import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
+import com.intellij.execution.ExecutionException
+import com.intellij.execution.configurations.GeneralCommandLine
+import com.intellij.execution.util.ExecUtil
 import dev.basedpython.pycharm.actions.ByCli
+import dev.basedpython.pycharm.env.ByEnvironments
 import dev.basedpython.pycharm.ui.log.BasedPythonLog
 import dev.basedpython.pycharm.util.BasedPythonBundle
 import java.nio.file.Paths
@@ -56,14 +60,15 @@ internal class ByTestNodeService(private val project: Project) {
         private set
 
     /**
-     * What the last collection ran and printed, verbatim, for *View Collection Output*.
+     * What the last collection ran and printed, verbatim, for *View Collection Output* — one entry
+     * per half, since collection is a `by run pytest` and a plain `pytest` combined.
      *
      * The tree is a summary and cannot answer "why does this disagree with the pytest I ran
      * myself"; this can. Kept even when the collection succeeded, since that question is asked
      * about successful-looking runs most of all.
      */
     @Volatile
-    var lastRun: ByCollectionRun? = null
+    var lastRuns: List<ByCollectionRun> = emptyList()
         private set
 
     /** Guards against a second collection while one is in flight. */
@@ -128,7 +133,8 @@ internal class ByTestNodeService(private val project: Project) {
         val execution = ByCli.runDetailed(project, SUBCOMMAND, *command, cwd = cwd, timeoutMs = TIMEOUT_MS)
         if (execution == null) {
             val message = BasedPythonBundle.message("testNodes.error.binaryMissing")
-            lastRun = ByCollectionRun(
+            lastRuns = listOf(ByCollectionRun(
+                label = BY_RUN_LABEL,
                 commandLine = "by $SUBCOMMAND ${command.joinToString(" ")}",
                 workingDirectory = cwd?.toString(),
                 exitCode = -1,
@@ -137,12 +143,13 @@ internal class ByTestNodeService(private val project: Project) {
                 durationMillis = System.currentTimeMillis() - startedAt,
                 startedAt = startedAtDisplay,
                 failure = message,
-            )
+            ))
             return failure(message)
         }
 
         val output = execution.output
-        lastRun = ByCollectionRun(
+        lastRuns = listOf(ByCollectionRun(
+            label = BY_RUN_LABEL,
             commandLine = execution.commandLine,
             workingDirectory = execution.workingDirectory,
             exitCode = output.exitCode,
@@ -150,13 +157,14 @@ internal class ByTestNodeService(private val project: Project) {
             stderr = output.stderr,
             durationMillis = System.currentTimeMillis() - startedAt,
             startedAt = startedAtDisplay,
-        )
+        ))
 
         if (output.isTimeout) {
             return failure(BasedPythonBundle.message("testNodes.error.timeout", TIMEOUT_MS / 1000))
         }
 
-        val collection = ByPytestCollect.parse(output.stdout, output.stderr, output.exitCode)
+        val collection = ByPytestCollect.parse(output.stdout, output.stderr, output.exitCode) +
+            collectPythonTests(cwd)
         if (collection.errors.isNotEmpty()) {
             // The tree only has room for one line per error; the whole report is worth keeping.
             BasedPythonLog.getInstance(project).warn(
@@ -165,6 +173,52 @@ internal class ByTestNodeService(private val project: Project) {
             )
         }
         return collection
+    }
+
+    /**
+     * The other half of the collection: `python -m pytest --collect-only` in the project itself.
+     *
+     * `by run` transpiles only `.by` files into the tree it hands pytest, so a project whose tests
+     * live in `.py` files hands it an empty one — the exact case where the view says "no tests" and
+     * the same `pytest --collect-only` typed in a terminal lists them. Until `by run` can be told
+     * to include them, they are collected here and combined.
+     *
+     * Best-effort by design. A `.by`-only project need not have pytest importable by the
+     * interpreter *this* half resolves, and that is not a failure of anything: it is reported as
+     * nothing to add rather than as a red node under every such project. Skipped entirely when no
+     * `.py` test file exists, which keeps a second `by`-less process off the common path.
+     */
+    private fun collectPythonTests(cwd: java.nio.file.Path?): ByCollection {
+        if (cwd == null || ByPythonTests.find(cwd, limit = 1).isEmpty()) return ByCollection()
+        val python = ByEnvironments.resolvePython(project) ?: return ByCollection()
+        val startedAt = System.currentTimeMillis()
+        val command = GeneralCommandLine()
+            .withExePath(python.exe.toString())
+            .withParameters(python.prependArgs)
+            .withParameters(ByPytestCollect.pythonArguments())
+            .withCharset(Charsets.UTF_8)
+            .withEnvironment(python.env)
+            .withWorkDirectory(cwd.toFile())
+        val output = try {
+            ExecUtil.execAndGetOutput(command, TIMEOUT_MS)
+        } catch (e: ExecutionException) {
+            BasedPythonLog.getInstance(project).warn("plain pytest collection could not start: $e")
+            return ByCollection()
+        }
+        lastRuns += ByCollectionRun(
+            label = PLAIN_PYTEST_LABEL,
+            commandLine = command.commandLineString,
+            workingDirectory = cwd.toString(),
+            exitCode = output.exitCode,
+            stdout = output.stdout,
+            stderr = output.stderr,
+            durationMillis = System.currentTimeMillis() - startedAt,
+            startedAt = LocalTime.now().format(STARTED_AT_FORMAT),
+        )
+        if (output.isTimeout || ByPytestCollect.isPytestMissing(output.stderr + output.stdout)) {
+            return ByCollection()
+        }
+        return ByPytestCollect.parse(output.stdout, output.stderr, output.exitCode, ByTestSource.PYTHON)
     }
 
     /**
@@ -224,6 +278,10 @@ internal class ByTestNodeService(private val project: Project) {
         private const val TIMEOUT_MS = 120_000
 
         private const val UNKNOWN_FAILURE = "collection failed"
+
+        /** How the two halves of a collection are named in *View Collection Output*. */
+        private const val BY_RUN_LABEL = "by run pytest (tests transpiled from .by)"
+        private const val PLAIN_PYTEST_LABEL = "plain pytest (tests already in .py)"
 
         /** Clock time in the output header; seconds are as precise as this needs to be. */
         private val STARTED_AT_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss")

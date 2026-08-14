@@ -29,8 +29,11 @@ internal enum class ByTestNodeKind {
  *
  * @param name what the user reads — a file is named as its `.by` source, a case as just its
  *   bracketed parameters
- * @param target the pytest target that runs exactly this node, naming the transpiled `.py` as
- *   pytest reported it; null for the root (which is "everything") and for an error with no file
+ * @param target the pytest target that runs exactly this node, as pytest reported it; null for the
+ *   root (which is "everything") and for an error with no file
+ * @param source which pytest run found it, which decides how [target] is read and how it is run:
+ *   a [ByTestSource.TRANSPILED] path stands for a `.by` source, a [ByTestSource.PYTHON] one is the
+ *   file itself
  * @param detail a grey (or red, for [ByTestNodeKind.ERROR]) suffix
  */
 internal data class ByTestNode(
@@ -39,6 +42,7 @@ internal data class ByTestNode(
     val target: String?,
     val children: List<ByTestNode> = emptyList(),
     val detail: String? = null,
+    val source: ByTestSource = ByTestSource.TRANSPILED,
 ) {
     /**
      * How many runnable tests are at or under this node.
@@ -66,8 +70,8 @@ internal object ByTestNodes {
 
     /** The tree for one collection, errors included as [ByTestNodeKind.ERROR] nodes at the end. */
     fun build(collection: ByCollection, rootName: String = "Tests"): ByTestNode {
-        val root = Node(rootName, ByTestNodeKind.ROOT, target = null)
-        for (nodeId in collection.nodeIds) insert(root, nodeId)
+        val root = Node(rootName, ByTestNodeKind.ROOT, target = null, source = ByTestSource.TRANSPILED)
+        for (node in collection.nodes) insert(root, node)
         val tests = root.freeze().children.map(::compress)
         val errors = collection.errors.map {
             ByTestNode(
@@ -96,8 +100,19 @@ internal object ByTestNodes {
         return path.dropLast(PY_EXTENSION.length) + BY_EXTENSION + suffix
     }
 
-    /** Adds one node id to the tree, creating whatever levels it needs. */
-    private fun insert(root: Node, nodeId: String) {
+    /**
+     * The path a node id names in the project: the `.by` it was transpiled from, or the `.py`
+     * itself when plain pytest collected it.
+     */
+    fun sourcePath(node: ByCollectedNode): String {
+        val path = node.nodeId.substringBefore("::")
+        return if (node.source == ByTestSource.TRANSPILED) sourceTarget(path) else path
+    }
+
+    /** Adds one collected node to the tree, creating whatever levels it needs. */
+    private fun insert(root: Node, collected: ByCollectedNode) {
+        val nodeId = collected.nodeId
+        val source = collected.source
         val separator = nodeId.indexOf("::")
         val path = if (separator < 0) nodeId else nodeId.substring(0, separator)
         val names = if (separator < 0) emptyList() else nodeId.substring(separator + 2).split("::")
@@ -111,15 +126,18 @@ internal object ByTestNodes {
             val isFile = index == segments.lastIndex
             current = current.child(
                 key = segment,
-                name = if (isFile) sourceTarget(segment) else segment,
+                // A transpiled file is named as the `.by` the user edits; a `.py` collected in the
+                // project already is the file they edit.
+                name = if (isFile && source == ByTestSource.TRANSPILED) sourceTarget(segment) else segment,
                 kind = if (isFile) ByTestNodeKind.FILE else ByTestNodeKind.DIRECTORY,
                 target = target,
+                source = source,
             )
         }
 
         for ((index, name) in names.withIndex()) {
             if (index < names.lastIndex) {
-                current = current.child(name, name, ByTestNodeKind.CLASS, "${current.target}::$name")
+                current = current.child(name, name, ByTestNodeKind.CLASS, "${current.target}::$name", source)
                 continue
             }
             // The last name is the function, and carries the parameters of a generated case:
@@ -127,8 +145,8 @@ internal object ByTestNodes {
             // parametrized test is one line in the tree until it is expanded.
             val function = name.substringBefore('[')
             val case = name.removePrefix(function)
-            val test = current.child(function, function, ByTestNodeKind.TEST, "${current.target}::$function")
-            if (case.isNotEmpty()) test.child(case, case, ByTestNodeKind.CASE, "${test.target}$case")
+            val test = current.child(function, function, ByTestNodeKind.TEST, "${current.target}::$function", source)
+            if (case.isNotEmpty()) test.child(case, case, ByTestNodeKind.CASE, "${test.target}$case", source)
         }
     }
 
@@ -150,13 +168,19 @@ internal object ByTestNodes {
     }
 
     /** Mutable node used while building; [freeze] turns it into the immutable [ByTestNode]. */
-    private class Node(val name: String, val kind: ByTestNodeKind, val target: String?) {
+    private class Node(
+        val name: String,
+        val kind: ByTestNodeKind,
+        val target: String?,
+        val source: ByTestSource,
+    ) {
         private val children = LinkedHashMap<String, Node>()
 
-        fun child(key: String, name: String, kind: ByTestNodeKind, target: String): Node =
-            children.getOrPut(key) { Node(name, kind, target) }
+        fun child(key: String, name: String, kind: ByTestNodeKind, target: String, source: ByTestSource): Node =
+            children.getOrPut(key) { Node(name, kind, target, source) }
 
-        fun freeze(): ByTestNode = ByTestNode(name, kind, target, children.values.map { it.freeze() })
+        fun freeze(): ByTestNode =
+            ByTestNode(name, kind, target, children.values.map { it.freeze() }, source = source)
     }
 
     private const val PY_EXTENSION = ".py"

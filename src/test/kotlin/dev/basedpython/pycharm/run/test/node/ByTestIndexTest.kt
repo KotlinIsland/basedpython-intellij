@@ -10,15 +10,13 @@ import org.junit.jupiter.api.Test
 class ByTestIndexTest {
 
     private val index = ByTestIndex.of(
-        ByCollection(
-            nodeIds = listOf(
+        collectionOf(
                 "tests/test_math.py::test_add",
                 "tests/test_math.py::test_param[1-2]",
                 "tests/test_math.py::test_param[3-4]",
                 "tests/test_math.py::TestGroup::test_in_class",
                 "tests/test_math.py::TestGroup::test_other",
             ),
-        ),
         takenAtMillis = 1_700_000_000_000L,
     )
 
@@ -74,7 +72,7 @@ class ByTestIndexTest {
         // no name in it says nothing about any line, so claiming the file would strip every icon
         // in it and offer nothing back.
         val fileOnly = ByTestIndex.of(
-            ByCollection(nodeIds = listOf("tests/test_math.py")),
+            collectionOf("tests/test_math.py"),
             takenAtMillis = 1_700_000_000_000L,
         )
         assertFalse(fileOnly.knows("tests/test_math.by"))
