@@ -33,8 +33,25 @@ class ByLogpointPromptListener(private val project: Project) : XBreakpointListen
      */
     override fun breakpointRemoved(breakpoint: XBreakpoint<*>) {
         val logpoint = ByLogpoints.asLogpoint(breakpoint) ?: return
-        LOG.info("log point at line ${logpoint.line} removed", Throwable("removed here"))
+        LOG.info("log point at line ${logpoint.line} removed by ${author()}")
     }
+
+    /**
+     * The frames that name who removed it, with the plumbing between taken out.
+     *
+     * A raw stack answers this too, but only if it survives being copied out of a log — and the
+     * frames that matter sit below a dozen lines of message-bus dispatch, which is exactly the part
+     * that gets truncated.
+     */
+    private fun author(): String =
+        Throwable().stackTrace
+            .asSequence()
+            .dropWhile { it.className == javaClass.name }
+            .filterNot { it.className.startsWith("com.intellij.util.messages") }
+            .filterNot { it.className.startsWith("kotlinx.coroutines") }
+            .filterNot { it.className.startsWith("java.") }
+            .take(12)
+            .joinToString(" <- ") { "${it.className.substringAfterLast('.')}.${it.methodName}:${it.lineNumber}" }
 
     override fun breakpointAdded(breakpoint: XBreakpoint<*>) {
         LOG.info("log point candidate added: ${ByLogpoints.asLogpoint(breakpoint)?.let { "inter-line at line " + it.line } ?: "not a .by inter-line breakpoint"}")
