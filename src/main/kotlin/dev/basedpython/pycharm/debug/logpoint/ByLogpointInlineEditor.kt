@@ -104,6 +104,9 @@ class ByLogpointInlineEditor private constructor(
     fun cancel() {
         if (closed) return
         if (startedEmpty) {
+            // With a stack, because "the log point appeared for a frame and vanished" has more than
+            // one possible author and the difference between them is the whole diagnosis.
+            LOG.info("log point abandoned empty, removing it", Throwable("removed here"))
             XDebuggerManager.getInstance(project).breakpointManager.removeBreakpoint(breakpoint)
         }
         close()
@@ -180,6 +183,7 @@ class ByLogpointInlineEditor private constructor(
             return prompt
         }
 
+        private val LOG = com.intellij.openapi.diagnostic.Logger.getInstance(ByLogpointInlineEditor::class.java)
         private val OPEN = Key.create<ByLogpointInlineEditor>("basedpython.logpoint.openEditor")
         private const val HISTORY_ID = "basedpython-logpoint"
         private const val LABEL = "Log:"
