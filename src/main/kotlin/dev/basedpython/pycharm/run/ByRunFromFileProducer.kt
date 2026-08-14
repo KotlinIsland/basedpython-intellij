@@ -7,11 +7,13 @@ import com.intellij.execution.actions.ConfigurationFromContext
 import com.intellij.execution.actions.LazyRunConfigurationProducer
 import com.intellij.execution.configurations.ConfigurationFactory
 import com.intellij.openapi.module.ModuleUtilCore
+import com.intellij.openapi.project.Project
 import com.intellij.openapi.roots.ProjectFileIndex
 import com.intellij.openapi.util.Ref
 import com.intellij.openapi.vfs.VfsUtilCore
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiElement
+import dev.basedpython.pycharm.run.main.ByMainArgumentHistory
 
 /** Right-click a `.by` file → produce a `by run <module>` configuration. */
 class ByRunFromFileProducer : LazyRunConfigurationProducer<ByRunConfiguration>() {
@@ -39,6 +41,13 @@ class ByRunFromFileProducer : LazyRunConfigurationProducer<ByRunConfiguration>()
         // Named for what is being run, not for the command that runs it — the configuration
         // type and its icon already say it is basedpython.
         configuration.name = module
+        // A `main` with parameters has to be asked about once; after that the answer belongs to
+        // every later run of the same program, including the plain green one in the gutter.
+        if (configuration.options.programArgs.isBlank()) {
+            ByMainArgumentHistory.last(context.project, module)?.let {
+                configuration.options.programArgs = it
+            }
+        }
         val base = context.project.basePath
         if (!base.isNullOrBlank() && configuration.options.workingDir.isBlank()) {
             configuration.options.workingDir = base
@@ -75,8 +84,11 @@ class ByRunFromFileProducer : LazyRunConfigurationProducer<ByRunConfiguration>()
         context.psiLocation?.containingFile?.virtualFile
 }
 
-internal fun moduleNameFor(context: ConfigurationContext, file: VirtualFile): String? {
-    val project = context.project
+internal fun moduleNameFor(context: ConfigurationContext, file: VirtualFile): String? =
+    moduleNameFor(context.project, file)
+
+/** The module name `by run` would be given for [file], or null when it sits under no root. */
+internal fun moduleNameFor(project: Project, file: VirtualFile): String? {
     val index = ProjectFileIndex.getInstance(project)
     val root = index.getSourceRootForFile(file)
         ?: index.getContentRootForFile(file)

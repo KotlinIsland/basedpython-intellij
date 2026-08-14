@@ -63,4 +63,19 @@ class ByArgumentsTest {
         val args = byArguments("check", null, "", emptyList(), """--exclude "a b/**"""")
         assertEquals(listOf("check", "--exclude", "a b/**"), args)
     }
+
+    @Test
+    fun `a run passes the module first and the program's arguments after it`() {
+        // `by run` takes one positional; everything past it is the program's `sys.argv[1:]`.
+        val options = ByRunOptions().apply {
+            module = " pkg.main "
+            programArgs = """--name "two words" --count 3"""
+        }
+        assertEquals(listOf("pkg.main", "--name", "two words", "--count", "3"), runSubcommandArgs(options))
+    }
+
+    @Test
+    fun `a run with no program arguments is just the module`() {
+        assertEquals(listOf("pkg.main"), runSubcommandArgs(ByRunOptions().apply { module = "pkg.main" }))
+    }
 }
