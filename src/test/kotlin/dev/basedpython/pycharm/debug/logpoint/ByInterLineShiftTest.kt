@@ -57,3 +57,19 @@ class ByInterLineShiftTest {
         assertEquals(6, shift.getShiftForVisualLine(10))
     }
 }
+
+/**
+ * The one bit of the gutter gap that lives on the breakpoint type rather than in this package.
+ *
+ * `XDebuggerLineChangeHandler` asks every line breakpoint type whether it supports inter-line
+ * placement before it will treat a hover between two line numbers as one. It defaults to false, and
+ * while it is false nothing else matters: no icon, no tooltip, no cursor change, and a configuration
+ * provider left offering something nothing asks for.
+ */
+class ByLineBreakpointInterLineTest {
+
+    @Test
+    fun `the by line breakpoint type may sit between lines`() {
+        assertEquals(true, dev.basedpython.pycharm.debug.ByLineBreakpointType().supportsInterLinePlacement())
+    }
+}
