@@ -98,4 +98,14 @@ internal object ByMainArguments {
         val values = parse(main, text) ?: return emptyList()
         return main.required.filter { it.name !in values }
     }
+
+    /**
+     * Whether a run starting now would have to ask for arguments first.
+     *
+     * True only for a program that would otherwise fail immediately: an entry point with required
+     * parameters that [text] does not fill. A module with no readable `main` ([main] null), one
+     * whose `main` takes nothing, and one already given everything all start without a word.
+     */
+    fun needed(main: ByMainFunction?, text: String): Boolean =
+        main != null && main.takesArguments && missing(main, text).isNotEmpty()
 }

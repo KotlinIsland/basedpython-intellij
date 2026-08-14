@@ -34,10 +34,9 @@ class ByRunSettingsEditor(private val project: Project) : SettingsEditor<ByRunCo
      * read, so the button offers it as fields; the text field stays the thing that is stored, and
      * stays editable, because not every module's arguments come from a `main`.
      */
-    private val programArgsField = TextFieldWithBrowseButton { editProgramArgs() }.apply {
-        setButtonIcon(AllIcons.Actions.Edit)
-        button.toolTipText = "Fill in main's parameters"
-    }
+    private val programArgsField = object : TextFieldWithBrowseButton({ editProgramArgs() }) {
+        override fun getIconTooltip(): String = "Fill in main's parameters"
+    }.apply { setButtonIcon(AllIcons.Actions.Edit) }
     private val extraArgsField = JBTextField()
     private val pythonVersionField = JBTextField()
     private val envVarsComponent = EnvironmentVariablesComponent()

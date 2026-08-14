@@ -47,18 +47,21 @@ class ByRunLineMarkerContributorTest {
         get() = info?.actions?.firstOrNull() is ByRunWithArgumentsAction
 
     @Test
-    fun `a main that requires an argument is offered the form first`() {
+    fun `a main that requires an argument says so, and still leads with Run`() {
+        // Run is never the wrong choice: the configuration asks for what it is missing as it
+        // starts, so the form is here to *change* arguments, not to rescue a run that cannot go.
         val marker = markerFor("def main(a: int):\n    print(a)\n")
         assertNotNull(marker.info)
-        assertTrue(marker.offersArgumentsFirst, "the form belongs first when a plain run cannot work")
+        assertTrue(marker.offersArguments)
+        assertFalse(marker.offersArgumentsFirst)
         assertTrue(marker.tooltip.contains("requires a"), marker.tooltip)
     }
 
     @Test
-    fun `a main whose arguments are all optional is offered the form last`() {
+    fun `a main whose arguments are all optional is offered the form too`() {
         val marker = markerFor("def main(name: str = \"world\"):\n    print(name)\n")
         assertTrue(marker.offersArguments)
-        assertFalse(marker.offersArgumentsFirst, "plain Run works here, so it stays the first choice")
+        assertFalse(marker.offersArgumentsFirst)
         assertEquals("Run with by", marker.tooltip)
     }
 

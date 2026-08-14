@@ -21,10 +21,12 @@ import dev.basedpython.pycharm.run.moduleNameFor
  * `by run <module>` configuration via [dev.basedpython.pycharm.run.ByRunFromFileProducer].
  *
  * A `main` with parameters is a program with a command-line interface — basedpython turns the
- * signature into one — so the popup also offers [ByRunWithArgumentsAction], and offers it *first*
- * while a run started now would die for want of a required argument. The tooltip says which of the
- * three situations the line is in, because the difference is otherwise only visible after the run:
- * arguments to fill, arguments already remembered, or a `main` that is no entry point at all.
+ * signature into one — so the popup also offers [ByRunWithArgumentsAction], for changing arguments
+ * a run would otherwise reuse without asking. Arguments that are *missing* need no gutter affordance
+ * at all: [dev.basedpython.pycharm.run.ByRunConfiguration] asks for those as the run starts, however
+ * it was started. The tooltip says which of the three situations the line is in, because the
+ * difference is otherwise only visible after the run: arguments to fill, arguments already
+ * remembered, or a `main` that is no entry point at all.
  *
  * The PSI is flat (token leaves only), so detection is done against the raw document line
  * text. To avoid duplicate icons, a non-null [Info] is returned only for the FIRST leaf of
@@ -64,10 +66,7 @@ class ByRunLineMarkerContributor : RunLineMarkerContributor() {
         }
         val remembered = main?.let { remembered(element, it) }
 
-        return Info(
-            AllIcons.RunConfigurations.TestState.Run,
-            actions(main, missing = main != null && remembered == null && main.required.isNotEmpty()),
-        ) { tooltip(main, remembered) }
+        return Info(AllIcons.RunConfigurations.TestState.Run, actions(main)) { tooltip(main, remembered) }
     }
 
     /**
@@ -82,11 +81,17 @@ class ByRunLineMarkerContributor : RunLineMarkerContributor() {
         return last.takeIf { ByMainArguments.missing(main, it).isEmpty() }
     }
 
-    private fun actions(main: ByMainFunction?, missing: Boolean): Array<AnAction> {
+    /**
+     * Run and Debug first, then the form.
+     *
+     * The form is not the way out of a run that cannot start — [ByRunConfiguration] asks for
+     * missing arguments itself, so plain Run is never the wrong choice. What this adds is the way
+     * to *change* arguments a run would otherwise reuse without asking.
+     */
+    private fun actions(main: ByMainFunction?): Array<AnAction> {
         val standard = ExecutorAction.getActions(0)
         if (main == null || !main.takesArguments) return standard
-        // First when the plain one cannot work yet, so the popup's own order is the advice.
-        return if (missing) arrayOf<AnAction>(WITH_ARGUMENTS) + standard else standard + WITH_ARGUMENTS
+        return standard + WITH_ARGUMENTS
     }
 
     private fun tooltip(main: ByMainFunction?, remembered: String?): String {
