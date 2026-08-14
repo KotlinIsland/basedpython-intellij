@@ -25,6 +25,7 @@ internal class ByTestNodeToolWindowFactory : ToolWindowFactory, DumbAware {
         content.isCloseable = false
         content.setDisposer(panel)
         toolWindow.contentManager.addContent(content)
+        toolWindow.setAdditionalGearActions(panel.gearActions())
         // Opening the window is the request to collect; nothing runs `by` before that.
         ByTestNodeService.getInstance(project).refreshIfNeeded()
     }

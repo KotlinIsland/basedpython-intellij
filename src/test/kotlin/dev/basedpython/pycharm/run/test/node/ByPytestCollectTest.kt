@@ -118,6 +118,40 @@ class ByPytestCollectTest {
     }
 
     @Test
+    fun `a project that does not type-check at all is reported as that, not as one of its errors`() {
+        // `by run` checks before it runs, so a project with diagnostics never reaches pytest and
+        // every test vanishes at once. Quoting the first of 398 would suggest that one is special.
+        val stderr = """
+            error[invalid-return-type]: Return type does not match returned value
+             --> src/a.by:14:22
+            error[unresolved-import]: Cannot resolve imported module `x`
+             --> src/b.by:1:8
+
+            Found 398 diagnostics
+        """.trimIndent()
+
+        val collection = ByPytestCollect.parse(stdout = "", stderr = stderr, exitCode = 1)
+
+        val message = collection.errors.single().message
+        assertTrue(message.startsWith("by run stopped on 398 diagnostics"), message)
+        assertTrue(message.contains("type-check"), message)
+    }
+
+    @Test
+    fun `a single diagnostic is quoted instead of counted`() {
+        val stderr = """
+            error[unresolved-import]: Cannot resolve imported module `pytest`
+             --> tests/test_math.by:1:8
+
+            Found 1 diagnostic
+        """.trimIndent()
+
+        val message = ByPytestCollect.parse("", stderr, 11).errors.single().message
+        assertTrue(message.startsWith("error[unresolved-import]"), message)
+        assertTrue(message.endsWith("(tests/test_math.by:1:8)"), message)
+    }
+
+    @Test
     fun `a failure with nothing to say still says something`() {
         val collection = ByPytestCollect.parse(stdout = "", stderr = "", exitCode = 137)
         assertEquals(1, collection.errors.size)

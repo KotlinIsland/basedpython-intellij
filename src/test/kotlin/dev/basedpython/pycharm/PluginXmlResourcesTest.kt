@@ -113,8 +113,9 @@ class PluginXmlResourcesTest {
 
     /**
      * A tool window is two names in a string: the factory class the platform instantiates, and the
-     * icon it looks up reflectively (`AllIcons.Nodes.JunitTestMark` is read as a field of a class,
-     * not resolved by the compiler). Both fail at runtime, when the user clicks the stripe button.
+     * icon, which is either a plugin resource path (`/icons/x.svg`) or a field read reflectively
+     * off a class (`AllIcons.Nodes.Class`). Neither is resolved by the compiler, and both fail at
+     * runtime — when the user clicks the stripe button.
      */
     @Test
     fun `every tool window factory and icon resolves`() {
@@ -127,6 +128,13 @@ class PluginXmlResourcesTest {
             )
         }
         for (reference in attr("toolWindow", "icon")) {
+            if (reference.startsWith("/")) {
+                assertNotNull(
+                    javaClass.getResource(reference),
+                    "toolWindow icon=\"$reference\" resolves to no resource",
+                )
+                continue
+            }
             val field = reference.substringAfterLast('.')
             val owner = "com.intellij.icons." + reference.dropLast(field.length + 1).replace('.', '$')
             assertNotNull(

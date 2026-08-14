@@ -77,6 +77,9 @@ internal object ByPytestCollect {
     /** The location line under a `by` diagnostic: ` --> tests/test_x.by:1:8`. */
     private val BY_LOCATION = Regex("""^-->\s*(\S+)""")
 
+    /** `by`'s footer when it refuses to run: `Found 398 diagnostics` / `Found 1 diagnostic`. */
+    private val DIAGNOSTIC_COUNT = Regex("""Found (\d+) diagnostics?""")
+
     /**
      * What [stdout] and [stderr] of one collection run amount to.
      *
@@ -109,16 +112,29 @@ internal object ByPytestCollect {
     /**
      * One line describing a run that produced no tests and no pytest error of its own.
      *
-     * `by`'s own diagnostics are the common case and are worth reading closely: the first `error:`
-     * line says what is wrong and the ` --> ` line under it says where, so both are kept and the
-     * pages of `info:` context that follow are dropped. Anything else falls back to the first line
-     * of output there is, and to the exit code when there is none.
+     * `by run` type-checks the project and refuses to run anything while it has diagnostics —
+     * pytest is never reached, so *every* test disappears from the view because of code that may
+     * have nothing to do with the tests. That is by far the most confusing way for this to fail,
+     * and the one users hit when the IDE disagrees with the `pytest --collect-only` they just ran
+     * by hand, so it is reported as what it is. Its own count is the summary: quoting the first of
+     * 398 diagnostics would suggest that one is special.
+     *
+     * A single diagnostic is worth quoting, though: the first `error:` line says what is wrong and
+     * the ` --> ` line under it says where, while the pages of `info:` context that follow are
+     * dropped. Anything else falls back to the first line of output there is, and to the exit code
+     * when there is none. The whole report is in *View Collection Output* either way.
      */
     private fun summarize(stderr: String, stdout: String, exitCode: Int): String {
         val lines = (stderr.lineSequence() + stdout.lineSequence())
             .map { it.trim() }
             .filter { it.isNotEmpty() }
             .toList()
+        val diagnostics = lines.firstNotNullOfOrNull { DIAGNOSTIC_COUNT.matchEntire(it) }
+            ?.groupValues?.get(1)?.toIntOrNull()
+        if (diagnostics != null && diagnostics > 1) {
+            return "by run stopped on $diagnostics diagnostics, so no tests were collected — " +
+                "the project has to type-check before its tests can run"
+        }
         val diagnostic = lines.indexOfFirst { BY_DIAGNOSTIC.matches(it) }
         if (diagnostic >= 0) {
             val message = lines[diagnostic]
