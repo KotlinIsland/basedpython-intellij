@@ -43,19 +43,9 @@ enum class ByHintKind {
     OTHER,
 }
 
-/** One hint, flattened out of lsp4j into what the renderer needs. */
-data class ByHint(
-    val offset: Int,
-    val text: String,
-    val kind: ByHintKind,
-    val padLeft: Boolean,
-    val padRight: Boolean,
-    val tooltip: String?,
-)
-
 /**
- * Turning `by`'s `textDocument/inlayHint` replies into [ByHint]s — the parts that are pure, and so
- * testable without a server, an editor or a project.
+ * Reading `by`'s `textDocument/inlayHint` replies — the parts that are pure, and so testable
+ * without a server, an editor or a project.
  */
 object ByInlayHints {
 

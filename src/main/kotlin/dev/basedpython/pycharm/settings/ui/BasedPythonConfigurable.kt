@@ -142,21 +142,15 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
             group("Formatting") {
                 row { cell(formatOnSave) }
             }
-            // Each row names the kind and shows the shape by writing one, since what a hint looks
-            // like in the line is how anyone will recognise which setting is theirs.
             group("Inlay hints") {
-                row("Parameter names — f(x=1):") { cell(inlayParameterMode) }
-                row("Variable types — a: int = 1:") { cell(inlayTypeMode) }
-                row("Return types — def f() -> int:") { cell(inlayReturnMode) }
-                row("Type arguments — A[int](1):") { cell(inlayTypeArgumentMode) }
-                row("Modifiers — override def f():") { cell(inlayModifierMode) }
-                row("Anything else by sends:") { cell(inlayOtherMode) }
+                row("Parameter names:") { cell(inlayParameterMode) }
+                row("Variable types:") { cell(inlayTypeMode) }
+                row("Return types:") { cell(inlayReturnMode) }
+                row("Type arguments:") { cell(inlayTypeArgumentMode) }
+                row("Modifiers:") { cell(inlayModifierMode) }
+                row("Other hints:") { cell(inlayOtherMode) }
                 row("Push key:") { cell(inlayPushKeyCombo) }
-                    .comment(
-                        "Hold this key to see the hints set to \"While the push key is held\". " +
-                            "They appear as it goes down and vanish as it comes up; the key keeps " +
-                            "doing whatever else it does.",
-                    )
+                    .comment("Hold this key to see the hints set to show while it is held.")
             }
             group("Diagnostics") {
                 row("LSP trace level:") { cell(lspTraceCombo) }
