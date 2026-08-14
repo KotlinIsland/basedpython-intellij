@@ -86,6 +86,50 @@ class ByLogpointInlineEditorTest {
     }
 
     @Test
+    fun `focus churn on opening does not take the log point away`() {
+        // The click that creates a log point is a gutter click, and the editor takes focus back as
+        // it finishes — so the field is told it lost focus before it ever had it. Committing nothing
+        // removes the log point, which is why it used to appear for one frame and vanish.
+        val logpoint = logpointAt(1)
+        val prompt = ByLogpointInlineEditor.show(fixture.project, editor(), logpoint)!!
+
+        prompt.focusLost(movedWithinTheField = false)
+
+        assertTrue(
+            breakpoints.getBreakpoints(type).contains(logpoint),
+            "a focus-lost before the field was ever focused is churn, not the user leaving",
+        )
+        assertTrue(
+            editor().inlayModel.getBlockElementsInRange(0, editor().document.textLength).isNotEmpty(),
+            "the field should still be open",
+        )
+    }
+
+    @Test
+    fun `leaving the field after using it commits, and an empty one still goes`() {
+        val logpoint = logpointAt(1)
+        val prompt = ByLogpointInlineEditor.show(fixture.project, editor(), logpoint)!!
+
+        prompt.focusGained()
+        prompt.focusLost(movedWithinTheField = false)
+
+        assertTrue(breakpoints.getBreakpoints(type).isEmpty(), "an abandoned empty log point goes")
+    }
+
+    @Test
+    fun `leaving the field after typing keeps what was typed`() {
+        val logpoint = logpointAt(1)
+        val prompt = ByLogpointInlineEditor.show(fixture.project, editor(), logpoint)!!
+
+        prompt.focusGained()
+        type(prompt, "x")
+        prompt.focusLost(movedWithinTheField = false)
+
+        assertEquals("x", logpoint.logExpressionObject?.expression)
+        assertTrue(breakpoints.getBreakpoints(type).contains(logpoint))
+    }
+
+    @Test
     fun `escaping an untouched log point takes it away`() {
         val logpoint = logpointAt(1)
         val prompt = ByLogpointInlineEditor.show(fixture.project, editor(), logpoint)!!
