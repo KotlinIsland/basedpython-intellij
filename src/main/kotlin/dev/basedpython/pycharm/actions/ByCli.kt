@@ -17,6 +17,13 @@ import java.nio.file.Path
  *
  * Callers are responsible for off-EDT execution (e.g. wrap in [com.intellij.openapi.progress.Task.Backgroundable]).
  */
+/** One `by` invocation: what was run, and what came back. */
+internal data class ByExecution(
+    val commandLine: String,
+    val workingDirectory: String?,
+    val output: ProcessOutput,
+)
+
 internal object ByCli {
 
     const val NOTIFICATION_GROUP_ID: String = "basedpython.Actions"
@@ -34,13 +41,40 @@ internal object ByCli {
         contextFile: VirtualFile? = null,
         timeoutMs: Int? = null,
         @Suppress("UNUSED_PARAMETER") title: String = "by",
-    ): ProcessOutput? {
+    ): ProcessOutput? = runDetailed(
+        project,
+        args = args,
+        cwd = cwd,
+        contextFile = contextFile,
+        timeoutMs = timeoutMs,
+    )?.output
+
+    /**
+     * [run], plus the command line it resolved to.
+     *
+     * For callers that have to *show* what ran rather than only act on the result: `by` is found by
+     * a search order (venv, uv, interpreter, `PATH`) and may be launched through `uv run`, so the
+     * command is not something a caller can reconstruct — and it is the first thing worth seeing
+     * when a run behaves differently from the same command typed into a terminal.
+     */
+    fun runDetailed(
+        project: Project,
+        vararg args: String,
+        cwd: Path? = null,
+        contextFile: VirtualFile? = null,
+        timeoutMs: Int? = null,
+    ): ByExecution? {
         val launch = BasedPythonBinaries.launchBy(project, contextFile)
         if (launch == null) {
             notifyBinaryMissing(project, "by")
             return null
         }
-        return exec(launch, args.toList(), cwd, timeoutMs)
+        val command = commandLine(launch, args.toList(), cwd)
+        return ByExecution(
+            commandLine = command.commandLineString,
+            workingDirectory = command.workDirectory?.path,
+            output = execute(command, timeoutMs),
+        )
     }
 
     /** Run `buff` with [args]. Returns `null` if the binary cannot be located. */
@@ -59,13 +93,11 @@ internal object ByCli {
         return exec(launch, args.toList(), cwd, timeoutMs = null)
     }
 
-    /**
-     * Runs [launch] with [args]. A [timeoutMs] kills the process when it elapses and comes back
-     * with whatever was printed until then and [ProcessOutput.isTimeout] set; without one the call
-     * waits forever, which is right for a command that only reads (`transpile`, `explain`) and
-     * wrong for one that executes the user's code.
-     */
-    private fun exec(launch: ByLaunch, args: List<String>, cwd: Path?, timeoutMs: Int?): ProcessOutput {
+    private fun exec(launch: ByLaunch, args: List<String>, cwd: Path?, timeoutMs: Int?): ProcessOutput =
+        execute(commandLine(launch, args, cwd), timeoutMs)
+
+    /** The command [launch] and [args] amount to, in [cwd]. */
+    private fun commandLine(launch: ByLaunch, args: List<String>, cwd: Path?): GeneralCommandLine {
         val cmd = GeneralCommandLine()
             .withExePath(launch.exe.toString())
             .withParameters(launch.prependArgs)
@@ -73,9 +105,18 @@ internal object ByCli {
             .withCharset(Charsets.UTF_8)
             .withEnvironment(launch.env)
         if (cwd != null) cmd.withWorkDirectory(cwd.toFile())
-        return if (timeoutMs == null) ExecUtil.execAndGetOutput(cmd)
-        else ExecUtil.execAndGetOutput(cmd, timeoutMs)
+        return cmd
     }
+
+    /**
+     * Runs [cmd]. A [timeoutMs] kills the process when it elapses and comes back with whatever was
+     * printed until then and [ProcessOutput.isTimeout] set; without one the call waits forever,
+     * which is right for a command that only reads (`transpile`, `explain`) and wrong for one that
+     * executes the user's code.
+     */
+    private fun execute(cmd: GeneralCommandLine, timeoutMs: Int?): ProcessOutput =
+        if (timeoutMs == null) ExecUtil.execAndGetOutput(cmd)
+        else ExecUtil.execAndGetOutput(cmd, timeoutMs)
 
     fun notifyBinaryMissing(project: Project, name: String) {
         NotificationGroupManager.getInstance()

@@ -221,7 +221,7 @@
              window's results tree: which tests exist, before anything has run. -->
         <toolWindow id="basedpython Tests"
                     anchor="right"
-                    icon="AllIcons.Nodes.JunitTestMark"
+                    icon="/icons/basedpythonTests.svg"
                     factoryClass="dev.basedpython.pycharm.run.test.node.ByTestNodeToolWindowFactory"/>
 
         <!-- ===== Stream U: docs & help ===== -->

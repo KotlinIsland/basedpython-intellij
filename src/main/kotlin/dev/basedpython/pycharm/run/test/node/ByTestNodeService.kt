@@ -15,6 +15,8 @@ import dev.basedpython.pycharm.actions.ByCli
 import dev.basedpython.pycharm.ui.log.BasedPythonLog
 import dev.basedpython.pycharm.util.BasedPythonBundle
 import java.nio.file.Paths
+import java.time.LocalTime
+import java.time.format.DateTimeFormatter
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -51,6 +53,17 @@ internal class ByTestNodeService(private val project: Project) {
 
     @Volatile
     var state: State = State.Idle
+        private set
+
+    /**
+     * What the last collection ran and printed, verbatim, for *View Collection Output*.
+     *
+     * The tree is a summary and cannot answer "why does this disagree with the pytest I ran
+     * myself"; this can. Kept even when the collection succeeded, since that question is asked
+     * about successful-looking runs most of all.
+     */
+    @Volatile
+    var lastRun: ByCollectionRun? = null
         private set
 
     /** Guards against a second collection while one is in flight. */
@@ -109,14 +122,35 @@ internal class ByTestNodeService(private val project: Project) {
     /** One `by run pytest --collect-only -q`, as a [ByCollection]. */
     private fun collect(): ByCollection {
         val cwd = project.basePath?.let { Paths.get(it) }
-        val output = ByCli.run(
-            project,
-            SUBCOMMAND,
-            *ByPytestCollect.arguments().toTypedArray(),
-            cwd = cwd,
-            timeoutMs = TIMEOUT_MS,
-            title = "by run pytest --collect-only",
-        ) ?: return failure(BasedPythonBundle.message("testNodes.error.binaryMissing"))
+        val command = ByPytestCollect.arguments().toTypedArray()
+        val startedAt = System.currentTimeMillis()
+        val startedAtDisplay = LocalTime.now().format(STARTED_AT_FORMAT)
+        val execution = ByCli.runDetailed(project, SUBCOMMAND, *command, cwd = cwd, timeoutMs = TIMEOUT_MS)
+        if (execution == null) {
+            val message = BasedPythonBundle.message("testNodes.error.binaryMissing")
+            lastRun = ByCollectionRun(
+                commandLine = "by $SUBCOMMAND ${command.joinToString(" ")}",
+                workingDirectory = cwd?.toString(),
+                exitCode = -1,
+                stdout = "",
+                stderr = "",
+                durationMillis = System.currentTimeMillis() - startedAt,
+                startedAt = startedAtDisplay,
+                failure = message,
+            )
+            return failure(message)
+        }
+
+        val output = execution.output
+        lastRun = ByCollectionRun(
+            commandLine = execution.commandLine,
+            workingDirectory = execution.workingDirectory,
+            exitCode = output.exitCode,
+            stdout = output.stdout,
+            stderr = output.stderr,
+            durationMillis = System.currentTimeMillis() - startedAt,
+            startedAt = startedAtDisplay,
+        )
 
         if (output.isTimeout) {
             return failure(BasedPythonBundle.message("testNodes.error.timeout", TIMEOUT_MS / 1000))
@@ -190,6 +224,9 @@ internal class ByTestNodeService(private val project: Project) {
         private const val TIMEOUT_MS = 120_000
 
         private const val UNKNOWN_FAILURE = "collection failed"
+
+        /** Clock time in the output header; seconds are as precise as this needs to be. */
+        private val STARTED_AT_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss")
 
         /** Why the daemon was restarted, for the platform's own logging of who asked. */
         private const val RESTART_REASON = "basedpython test collection finished"

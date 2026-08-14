@@ -52,11 +52,6 @@ internal class ByTestNodePanel(private val project: Project) :
         tree.showsRootHandles = true
         tree.selectionModel.selectionMode = TreeSelectionModel.SINGLE_TREE_SELECTION
         tree.cellRenderer = NodeRenderer()
-        tree.emptyText.setText(BasedPythonBundle.message("testNodes.empty"))
-        tree.emptyText.appendLine(
-            BasedPythonBundle.message("testNodes.empty.collect"),
-            SimpleTextAttributes.LINK_PLAIN_ATTRIBUTES,
-        ) { service.refresh() }
         TreeSpeedSearch.installOn(tree)
 
         object : DoubleClickListener() {
@@ -88,13 +83,7 @@ internal class ByTestNodePanel(private val project: Project) :
             is ByTestNodeService.State.Collecting -> state.tree
             ByTestNodeService.State.Idle -> null
         }
-        tree.emptyText.setText(
-            if (state is ByTestNodeService.State.Collecting) {
-                BasedPythonBundle.message("testNodes.collecting")
-            } else {
-                BasedPythonBundle.message("testNodes.empty")
-            },
-        )
+        renderEmptyText(state)
 
         val expanded = expandedPaths()
         val selected = selectedNode()?.target
@@ -115,6 +104,37 @@ internal class ByTestNodePanel(private val project: Project) :
             restoreExpanded(expanded)
         }
         selected?.let(::selectTarget)
+    }
+
+    /**
+     * The text shown when the tree has no rows.
+     *
+     * A collection that ran and found nothing is the case worth spelling out: "no tests" is a
+     * conclusion the user has every right to disbelieve, since they can run `pytest --collect-only`
+     * themselves and see some. So that state offers the output that produced it, which carries the
+     * command, its working directory and pytest's own rootdir line.
+     */
+    private fun renderEmptyText(state: ByTestNodeService.State) {
+        val text = tree.emptyText
+        text.clear()
+        if (state is ByTestNodeService.State.Collecting) {
+            text.setText(BasedPythonBundle.message("testNodes.collecting"))
+            return
+        }
+        val collected = state is ByTestNodeService.State.Collected
+        text.setText(
+            BasedPythonBundle.message(if (collected) "testNodes.empty.collected" else "testNodes.empty"),
+        )
+        if (collected) {
+            text.appendLine(
+                BasedPythonBundle.message("testNodes.action.viewOutput"),
+                SimpleTextAttributes.LINK_PLAIN_ATTRIBUTES,
+            ) { ByShowCollectionOutputAction.show(project) }
+        }
+        text.appendLine(
+            BasedPythonBundle.message("testNodes.empty.collect"),
+            SimpleTextAttributes.LINK_PLAIN_ATTRIBUTES,
+        ) { service.refresh() }
     }
 
     private fun build(node: ByTestNode): DefaultMutableTreeNode {
@@ -233,6 +253,18 @@ internal class ByTestNodePanel(private val project: Project) :
         add(NavigateAction())
         addSeparator()
         add(RefreshAction())
+        add(ByShowCollectionOutputAction(project))
+    }
+
+    /**
+     * The tool window's ⋮ menu, set by [ByTestNodeToolWindowFactory].
+     *
+     * *View Collection Output* lives here rather than on the toolbar because it is a diagnostic:
+     * wanted the once, when the tree disagrees with the user's own `pytest --collect-only`, and
+     * clutter every other time.
+     */
+    fun gearActions(): DefaultActionGroup = DefaultActionGroup().apply {
+        add(ByShowCollectionOutputAction(project))
     }
 
     private inner class RefreshAction : DumbAwareAction(

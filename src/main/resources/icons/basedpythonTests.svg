@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Tool window stripe icon: a flask, the same "tests" metaphor VS Code's Testing panel uses.
+  Monochrome line art in the platform's stripe style (#6C707E light / #CED0D6 dark), because a
+  stripe button sits among the platform's own icons and a coloured badge does not belong there.
+
+  The liquid is a filled region rather than a line: at 16px a hairline inside a hairline outline
+  greys into a smudge, while a solid mass still reads as a flask with something in it. It is drawn
+  first, so the outline stroke covers where the two meet.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
+  <path d="M4.29 10.4h7.42l1 1.8a1.25 1.25 0 0 1-1.09 1.85H4.38a1.25 1.25 0 0 1-1.09-1.85z"
+        fill="#6C707E"/>
+  <path d="M6.4 2.6v4L3.29 12.2a1.25 1.25 0 0 0 1.09 1.85h7.24a1.25 1.25 0 0 0 1.09-1.85L9.6 6.6v-4"
+        stroke="#6C707E" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M5.3 2.6h5.4" stroke="#6C707E" stroke-width="1.2" stroke-linecap="round"/>
+</svg>
