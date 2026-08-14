@@ -72,25 +72,37 @@ class ByLogpointInlineEditor private constructor(
         inlay = null
     }
 
+    private fun typedExpression(): String = expressionEditor.expression?.expression?.trim().orEmpty()
+
     /** The field has focus, so the next time it loses focus the user really is leaving. */
     internal fun focusGained() {
         everFocused = true
     }
 
     /**
-     * Leaving the field commits what is in it — but only once it has actually been in use. Split out
-     * from the listener because `EditorTextField` forwards focus listeners to the editor it wraps,
-     * which puts them out of reach of a test that has no window to focus things in.
+     * Leaving the field saves what is in it. It can never take the log point away.
+     *
+     * That restriction is the whole point. Opening one is a focus fight — the field asks for focus,
+     * gets it, and the editor takes it straight back as the gutter click finishes — so a focus-lost
+     * arrives with nothing typed, moments after opening. Treating that as "the user abandoned it"
+     * and removing the log point is what made the thing appear for a frame and vanish; gating on
+     * whether the field had ever been focused did not help, because it *had* been, a frame earlier.
+     *
+     * So an empty field losing focus means nothing happened yet, and nothing should. Removing an
+     * unfilled log point stays where it belongs: on Escape, and on Enter, both of which are someone
+     * saying so. Split out from the listener because `EditorTextField` forwards focus listeners to
+     * the editor it wraps, which puts them out of reach of a test with no window to focus things in.
      */
     internal fun focusLost(movedWithinTheField: Boolean) {
         if (!everFocused || movedWithinTheField) return
+        if (typedExpression().isEmpty()) return
         commit()
     }
 
     /** Writes what was typed onto the breakpoint, or removes it if nothing was. */
     fun commit() {
         if (closed) return
-        val typed = expressionEditor.expression?.expression?.trim().orEmpty()
+        val typed = typedExpression()
         if (typed.isEmpty()) {
             cancel()
             return

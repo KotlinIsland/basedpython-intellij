@@ -106,14 +106,23 @@ class ByLogpointInlineEditorTest {
     }
 
     @Test
-    fun `leaving the field after using it commits, and an empty one still goes`() {
+    fun `losing focus with nothing typed never takes the log point away`() {
+        // The real sequence, and the one that made it flicker: the field asks for focus, gets it,
+        // and the editor takes it back as the gutter click finishes — all before anyone can type.
         val logpoint = logpointAt(1)
         val prompt = ByLogpointInlineEditor.show(fixture.project, editor(), logpoint)!!
 
         prompt.focusGained()
         prompt.focusLost(movedWithinTheField = false)
 
-        assertTrue(breakpoints.getBreakpoints(type).isEmpty(), "an abandoned empty log point goes")
+        assertTrue(
+            breakpoints.getBreakpoints(type).contains(logpoint),
+            "a focus fight is not the user abandoning the log point",
+        )
+        assertTrue(
+            editor().inlayModel.getBlockElementsInRange(0, editor().document.textLength).isNotEmpty(),
+            "and the field should still be waiting to be typed into",
+        )
     }
 
     @Test
