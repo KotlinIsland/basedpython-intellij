@@ -47,15 +47,14 @@ support, run configurations, CLI actions, and editor tooling.
   `PATH`, and since every `by` launch here goes out with the project venv activated, that
   is the project's own interpreter. If `debugpy` is missing, the debugger says so and
   names the exact interpreter that could not import it.
-- **Log points** — hover the gutter between two line numbers and click (or press
-  `Ctrl+Alt+F8`) to add a breakpoint that logs an expression instead of stopping, and type
-  the expression in the field that opens in the gap. Enter commits, Escape abandons; one
-  that is never filled in removes itself. Needs *Breakpoints Over Line Numbers* — a toggle in
-  the editor gutter's right-click menu, under *Appearance*, not in the Settings dialog —
-  since without it the gutter has no row between two lines to click. See
-  [docs/debugging.md](docs/debugging.md#log-points).
-- Breakpoint expression fields (*Condition*, *Evaluate and log*) are basedpython editors,
-  not plain text boxes.
+- **Log points** — a breakpoint that logs an expression instead of stopping. In IntelliJ
+  IDEA, hover the gutter between two line numbers and click, then type the expression in the
+  field that opens in the gap; needs *Breakpoints Over Line Numbers*, a toggle in the editor
+  gutter's right-click menu under *Appearance*. Elsewhere, set one through *Evaluate and log*
+  in the breakpoint popup. Either way the output reaches the run console the same way a
+  `print` would. See [docs/debugging.md](docs/debugging.md#log-points).
+- Breakpoint expression fields (*Condition*, *Evaluate and log*, Evaluate Expression) are
+  basedpython editors, not plain text boxes.
 - **Debug .by (pdb)** remains as a fallback that needs no extra package: builds, then runs
   the generated `.py` under `python -m pdb` with clickable frames.
 - See [docs/debugging.md](docs/debugging.md) for how it works and what it does not cover.

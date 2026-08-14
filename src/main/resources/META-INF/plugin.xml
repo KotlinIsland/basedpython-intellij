@@ -75,15 +75,6 @@
             implementation="dev.basedpython.pycharm.debug.ByLineBreakpointType"/>
         <xdebugger.breakpointType
             implementation="dev.basedpython.pycharm.debug.ByExceptionBreakpointType"/>
-        <!-- The gutter-gap "Add Log" affordance. Note that `order` decides nothing here: the
-             platform collects every provider's flow into a map keyed by id and takes the first
-             entry available for the line, so two live providers is a coin flip. Which is why the
-             plugin's own log point UI stands aside in IntelliJ IDEA rather than competing. -->
-        <editor.interLineBreakpointConfigurationProvider
-            implementation="dev.basedpython.pycharm.debug.logpoint.ByInterLineLogpointProvider"/>
-        <registryKey key="basedpython.logpoints.provider"
-                     defaultValue="[auto*|plugin|ide]"
-                     description="Which implementation draws basedpython log points — the gutter gap, the inline Log: field, and Add Log Point. auto uses the IDE's own where it has one (IntelliJ IDEA) and this plugin's everywhere else; plugin forces this plugin's, which is the only way to see it in IntelliJ IDEA; ide always gives way."/>
 
         <!-- ===== Stream D: action notification group ===== -->
         <notificationGroup id="basedpython.Actions" displayType="BALLOON"/>
@@ -349,23 +340,10 @@
                   topic="com.intellij.openapi.fileEditor.FileDocumentManagerListener"/>
     </applicationListeners>
 
-    <projectListeners>
-        <!-- Opens the inline "Log:" field when a log point is added from the gutter gap. -->
-        <listener class="dev.basedpython.pycharm.debug.logpoint.ByLogpointPromptListener"
-                  topic="com.intellij.xdebugger.breakpoints.XBreakpointListener"/>
-    </projectListeners>
-
     <actions>
         <!-- ===== Stream B ===== -->
         <action id="basedpython.RestartLsp"
                 class="dev.basedpython.pycharm.lsp.RestartLspAction"/>
-
-        <!-- Shares Ctrl+Alt+F8 with IntelliJ IDEA's own Add Logpoint and disables itself where that
-             exists, so the action system hands the keystroke to whichever one is enabled. -->
-        <action id="basedpython.AddLogpoint"
-                class="dev.basedpython.pycharm.debug.logpoint.ByAddLogpointAction">
-            <keyboard-shortcut keymap="$default" first-keystroke="control alt F8"/>
-        </action>
 
         <!-- ===== Stream D: Tools menu group + popup entries ===== -->
         <group id="basedpython.ActionGroup"
