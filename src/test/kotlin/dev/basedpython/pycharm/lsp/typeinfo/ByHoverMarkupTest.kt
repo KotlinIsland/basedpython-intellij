@@ -72,6 +72,20 @@ class ByHoverMarkupTest {
         assertEquals("int", ByHoverMarkup.typeHtml(markup))
     }
 
+    /**
+     * A docstring is prose, so its `backticks` are markdown; the type block above it is python,
+     * where a backtick is a character in a string and pairing it would be wrong.
+     */
+    @Test
+    fun `a docstring's code spans are code, and the type block's backticks are not`() {
+        val markup = "```python\ndef f() -> Literal[\"`\"]\n```\n---\nReturns a `backtick`."
+        assertEquals("def f() -&gt; Literal[&quot;`&quot;]", ByHoverMarkup.typeHtml(markup))
+        assertEquals(
+            "def f() -&gt; Literal[&quot;`&quot;]<hr/>Returns a <code>backtick</code>.",
+            ByHoverMarkup.fullHtml(markup),
+        )
+    }
+
     @Test
     fun `empty payload has no type`() {
         assertNull(ByHoverMarkup.typeHtml(""))

@@ -1,6 +1,6 @@
 package dev.basedpython.pycharm.lsp.typeinfo
 
-import com.intellij.openapi.util.text.StringUtil
+import dev.basedpython.pycharm.markup.ByCodeSpans
 
 /**
  * Pure parsing of a `textDocument/hover` payload from the `by` server into the pieces the Type Info
@@ -75,25 +75,24 @@ object ByHoverMarkup {
      * flashing a blank hint.
      */
     fun typeHtml(markup: String): String? =
-        parse(markup).firstOrNull()?.let { toHtml(it.text) }
+        parse(markup).firstOrNull()?.let { toHtml(it) }
 
     /** The whole payload — type and docstring — as HTML for the second Ctrl+Shift+P press. */
     fun fullHtml(markup: String): String? {
         val blocks = parse(markup)
         if (blocks.isEmpty()) return null
-        return blocks.joinToString("<hr/>") { toHtml(it.text) }
+        return blocks.joinToString("<hr/>") { toHtml(it) }
     }
 
     /**
-     * Escapes [text] for a hint label and keeps its shape: `by` renders types multi-line (its
-     * display settings ask for it), and a long union collapsed onto one line is unreadable.
+     * A block as HTML for a hint label, escaped and keeping its shape — `by` renders types
+     * multi-line (its display settings ask for it), and a long union collapsed onto one line is
+     * unreadable.
+     *
+     * A docstring's `backticks` become `<code>`; a code block's do not. Inside the fence the text
+     * is python, where a backtick is a character in a string and nothing else, and the type is
+     * already being shown as code.
      */
-    private fun toHtml(text: String): String =
-        StringUtil.escapeXmlEntities(text)
-            .lines()
-            .joinToString("<br/>") { line ->
-                // Leading indentation is significant in a multi-line type; plain spaces collapse.
-                val indent = line.takeWhile { it == ' ' }.length
-                "&nbsp;".repeat(indent) + line.substring(indent)
-            }
+    private fun toHtml(block: Block): String =
+        if (block.isCode) ByCodeSpans.escapedHtml(block.text) else ByCodeSpans.toHtml(block.text)
 }

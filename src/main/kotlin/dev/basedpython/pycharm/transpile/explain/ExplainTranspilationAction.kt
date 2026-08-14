@@ -18,6 +18,7 @@ import com.intellij.ui.JBColor
 import com.intellij.ui.awt.RelativePoint
 import dev.basedpython.pycharm.actions.ByCli
 import dev.basedpython.pycharm.lang.BasedPythonFileType
+import dev.basedpython.pycharm.markup.ByCodeSpans
 
 /**
  * Action: "Explain Transpilation" (FEATURES.md §185).
@@ -116,7 +117,7 @@ class ExplainTranspilationAction : AnAction() {
                     append("<b>").append(escape(note.constructName)).append("</b>")
                     append(" (line ").append(note.lineNumber).append(")<br/>")
                     append("<code>").append(escape(note.bySnippet)).append("</code><br/>")
-                    append(codeSpans(escape(note.explanation)))
+                    append(ByCodeSpans.toHtml(note.explanation))
                     append("</li>")
                 }
                 append("</ul>")
@@ -128,13 +129,5 @@ class ExplainTranspilationAction : AnAction() {
             .replace("&", "&amp;")
             .replace("<", "&lt;")
             .replace(">", "&gt;")
-
-        /**
-         * Render markdown-style `code` spans in explanation text as real `<code>` elements, so the
-         * backticks don't reach the user verbatim. Must run *after* [escape], otherwise the tags it
-         * emits would themselves be escaped. An unpaired backtick is left alone.
-         */
-        private fun codeSpans(escaped: String): String =
-            escaped.replace(Regex("`([^`]+)`"), "<code>$1</code>")
     }
 }

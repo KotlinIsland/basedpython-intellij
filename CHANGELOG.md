@@ -170,6 +170,22 @@
 
 ### Fixed
 
+- A diagnostic's tooltip reads as the message it is. `by` writes every type and symbol it names in
+  markdown code spans, and the platform hands the message to the tooltip unchanged — where it is
+  read as HTML. So ``Object of type `<class 'int'>` is not callable`` arrived as *Object of type
+  `` `` is not callable*: the backticks shown verbatim, the type itself swallowed by the HTML parser
+  as an unknown tag. The tooltip is now escaped and its code spans marked up as code. The message
+  itself is untouched — that is the plain-text side (Problems view, error stripe, *Copy problem
+  description*), where a backtick is just how a type is quoted. Pairing the backticks cannot be
+  exact, because nothing escapes the ones that come out of the code being checked and
+  ``Type `Literal["`"]` is not assignable to `str` `` really is ambiguous. Three rules bound what
+  that can cost: a run of backticks matches a run of the same length, a span never crosses a line,
+  and a closer that would leave a `"` open is passed over for the next one — which recovers that
+  exact case. Nothing is ever dropped or rewritten, so the worst outcome is a fragment styled as
+  prose that should have been code. The same rendering reaches the docstring in Type Info
+  (`Ctrl+Shift+P`), the `by explain rule` balloons, and `buff`'s diagnostics, which quote names the
+  same way.
+
 - Django templates get the `by` language server. `.html`/`.htm`/`.txt`/`.xml`/`.django`/`.dj`
   under a `templates/` directory are now handed to it, so tag and filter completion,
   `{{ book. }}` off a model's own fields, go-to-definition on `{% extends %}` / `{% url %}` /
