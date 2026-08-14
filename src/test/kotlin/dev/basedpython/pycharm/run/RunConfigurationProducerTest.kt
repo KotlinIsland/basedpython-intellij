@@ -7,6 +7,7 @@ import com.intellij.execution.actions.RunConfigurationProducer
 import com.intellij.psi.PsiFile
 import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
+import dev.basedpython.pycharm.run.main.ByMainArgumentHistory
 import dev.basedpython.pycharm.run.test.ByTestConfiguration
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -55,6 +56,19 @@ class RunConfigurationProducerTest {
         val config = fromContext!!.configuration as ByRunConfiguration
         assertEquals("pkg.main", config.options.module)
         assertEquals("pkg.main", config.name)
+    }
+
+    @Test
+    fun `a context configuration is seeded with what the module was last run with`() {
+        // This is what keeps the argument prompt to once per program: the gutter's plain Run picks
+        // up the arguments the form was last given, instead of starting bare and failing again.
+        ByMainArgumentHistory.remember(project, "seeded.main", "--name bob")
+        val file = fixture.addFileToProject("seeded/main.by", "def main(name: str):\n    print(name)\n")
+        val fromContext = producer<ByRunFromFileProducer>()
+            .createConfigurationFromContext(contextFor(file))
+        assertNotNull(fromContext, "by run producer should produce a configuration for a .by file")
+        val config = fromContext!!.configuration as ByRunConfiguration
+        assertEquals("--name bob", config.options.programArgs)
     }
 
     @Test

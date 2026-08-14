@@ -57,9 +57,23 @@ open class ByCommonOptions : RunConfigurationOptions() {
 
 class ByRunOptions : ByCommonOptions() {
     private val moduleProp = string("").provideDelegate(this, "module")
+    private val programArgsProp = string("").provideDelegate(this, "programArgs")
+
     var module: String
         get() = moduleProp.getValue(this) ?: ""
         set(v) { moduleProp.setValue(this, v) }
+
+    /**
+     * Arguments for the program, which `by run` forwards as `sys.argv[1:]`.
+     *
+     * Separate from [ByCommonOptions.extraArgs] because they are a different thing said in the same
+     * place: `extraArgs` is for `by run` itself, while these belong to whatever the module does with
+     * them — and for a module with a `main` function that is its parameters, which is what
+     * [dev.basedpython.pycharm.run.main.ByMainArgumentsDialog] fills in.
+     */
+    var programArgs: String
+        get() = programArgsProp.getValue(this) ?: ""
+        set(v) { programArgsProp.setValue(this, v) }
 }
 
 class ByBuildOptions : ByCommonOptions()
