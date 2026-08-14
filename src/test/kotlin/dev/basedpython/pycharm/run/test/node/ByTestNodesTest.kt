@@ -10,7 +10,7 @@ import org.junit.jupiter.api.Test
 class ByTestNodesTest {
 
     private fun tree(vararg nodeIds: String): ByTestNode =
-        ByTestNodes.build(ByCollection(nodeIds.toList()))
+        ByTestNodes.build(collectionOf(*nodeIds))
 
     private fun ByTestNode.child(name: String): ByTestNode =
         children.firstOrNull { it.name == name }
@@ -106,8 +106,8 @@ class ByTestNodesTest {
     @Test
     fun `errors come last, named after the file they happened in`() {
         val root = ByTestNodes.build(
-            ByCollection(
-                nodeIds = listOf("tests/test_math.py::test_add"),
+            collectionOf(
+                "tests/test_math.py::test_add",
                 errors = listOf(ByCollectionError("tests/test_pyerr.py", "RuntimeError: boom")),
             ),
         )

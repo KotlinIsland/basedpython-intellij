@@ -63,13 +63,14 @@ internal class ByTestIndex private constructor(
          */
         fun of(collection: ByCollection, takenAtMillis: Long): ByTestIndex {
             val files = HashMap<String, MutableMap<List<String>, Int>>()
-            for (nodeId in collection.nodeIds) {
-                // Reuse the node-id parser the test tree navigates with: it maps the transpiled
-                // `.py` back to its `.by` source and drops the `[params]` of a generated case, so a
-                // case counts towards the function that produced it.
-                val location = ByTestLocations.parse(nodeId) ?: continue
+            for (node in collection.nodes) {
+                // Reuse the node-id parser the test tree navigates with: it drops the `[params]` of
+                // a generated case, so a case counts towards the function that produced it. Which
+                // file that is depends on where the node came from — a transpiled `.py` stands for
+                // its `.by` source, while plain pytest already named a file in the project.
+                val location = ByTestLocations.parse(node.nodeId) ?: continue
                 if (location.symbols.isEmpty()) continue
-                val counts = files.getOrPut(location.file) { HashMap() }
+                val counts = files.getOrPut(ByTestNodes.sourcePath(node)) { HashMap() }
                 for (depth in 1..location.symbols.size) {
                     val prefix = location.symbols.subList(0, depth)
                     counts[prefix] = (counts[prefix] ?: 0) + 1

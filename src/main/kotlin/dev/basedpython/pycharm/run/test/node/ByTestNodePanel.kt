@@ -55,8 +55,10 @@ internal class ByTestNodePanel(private val project: Project) :
         TreeSpeedSearch.installOn(tree)
 
         object : DoubleClickListener() {
-            override fun onDoubleClick(event: MouseEvent): Boolean =
-                ByTestNodeActions.navigate(project, selectedNode()?.target)
+            override fun onDoubleClick(event: MouseEvent): Boolean {
+                val node = selectedNode() ?: return false
+                return ByTestNodeActions.navigate(project, node.target, node.source)
+            }
         }.installOn(tree)
 
         PopupHandler.installPopupMenu(tree, popupActions(), POPUP_PLACE)
@@ -294,7 +296,11 @@ internal class ByTestNodePanel(private val project: Project) :
         }
 
         override fun actionPerformed(e: AnActionEvent) {
-            ByTestNodeActions.run(project, selectedNode()?.target, DefaultRunExecutor.getRunExecutorInstance())
+            val node = selectedNode()
+            ByTestNodeActions.run(
+                project, node?.target, DefaultRunExecutor.getRunExecutorInstance(),
+                node?.source ?: ByTestSource.TRANSPILED,
+            )
         }
     }
 
@@ -310,7 +316,11 @@ internal class ByTestNodePanel(private val project: Project) :
         }
 
         override fun actionPerformed(e: AnActionEvent) {
-            ByTestNodeActions.run(project, selectedNode()?.target, DefaultDebugExecutor.getDebugExecutorInstance())
+            val node = selectedNode()
+            ByTestNodeActions.run(
+                project, node?.target, DefaultDebugExecutor.getDebugExecutorInstance(),
+                node?.source ?: ByTestSource.TRANSPILED,
+            )
         }
     }
 
@@ -326,7 +336,8 @@ internal class ByTestNodePanel(private val project: Project) :
         }
 
         override fun actionPerformed(e: AnActionEvent) {
-            ByTestNodeActions.navigate(project, selectedNode()?.target)
+            val node = selectedNode() ?: return
+            ByTestNodeActions.navigate(project, node.target, node.source)
         }
     }
 

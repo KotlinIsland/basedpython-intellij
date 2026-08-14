@@ -51,7 +51,7 @@ class ByPytestCollectTest {
                 "tests/test_math.py::TestGroup::test_other",
                 "tests/test_more.py::test_top",
             ),
-            collection.nodeIds,
+            collection.nodes.map { it.nodeId },
         )
         assertTrue(collection.errors.isEmpty())
     }
@@ -59,7 +59,7 @@ class ByPytestCollectTest {
     @Test
     fun `a case whose parameters contain spaces is still one node id`() {
         val collection = ByPytestCollect.parse("tests/test_x.py::test_add[1 - 2]", "", 0)
-        assertEquals(listOf("tests/test_x.py::test_add[1 - 2]"), collection.nodeIds)
+        assertEquals(listOf("tests/test_x.py::test_add[1 - 2]"), collection.nodes.map { it.nodeId })
     }
 
     @Test
@@ -84,7 +84,7 @@ class ByPytestCollectTest {
         // The report is full of lines carrying a `.py`; none of them is a node id.
         assertEquals(
             listOf("tests/test_math.py::test_add", "tests/test_more.py::test_top"),
-            collection.nodeIds,
+            collection.nodes.map { it.nodeId },
         )
         assertEquals(
             listOf(ByCollectionError("tests/test_pyerr.py", "RuntimeError: boom at import")),
@@ -109,7 +109,7 @@ class ByPytestCollectTest {
 
         val collection = ByPytestCollect.parse(stdout = "", stderr = stderr, exitCode = 11)
 
-        assertTrue(collection.nodeIds.isEmpty())
+        assertTrue(collection.nodes.map { it.nodeId }.isEmpty())
         assertEquals(1, collection.errors.size)
         val error = collection.errors.single()
         assertEquals(null, error.target)
@@ -162,7 +162,7 @@ class ByPytestCollectTest {
     fun `a run that collects nothing is not a failure`() {
         val collection = ByPytestCollect.parse("no tests collected in 0.01s", "", exitCode = 5)
         // Exit code 5 is pytest's "nothing to run", not something to show as an error node.
-        assertTrue(collection.nodeIds.isEmpty())
+        assertTrue(collection.nodes.map { it.nodeId }.isEmpty())
         assertTrue(collection.errors.isEmpty())
     }
 
@@ -173,6 +173,6 @@ class ByPytestCollectTest {
             "",
             0,
         )
-        assertEquals(listOf("tests/test_x.py::test_a"), collection.nodeIds)
+        assertEquals(listOf("tests/test_x.py::test_a"), collection.nodes.map { it.nodeId })
     }
 }

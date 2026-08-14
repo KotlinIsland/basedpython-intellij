@@ -11,6 +11,8 @@ package dev.basedpython.pycharm.run.test.node
  * not picked up, and only `.by` files are in the tree pytest walks.
  */
 internal data class ByCollectionRun(
+    /** Which half of the collection this was, e.g. `by run pytest` or plain `pytest`. */
+    val label: String,
     val commandLine: String,
     val workingDirectory: String?,
     val exitCode: Int,
@@ -35,26 +37,31 @@ internal object ByCollectionOutput {
     /** Name of the read-only tab; also what the user sees in the editor tab strip. */
     const val FILE_NAME: String = "basedpython-collect-only.log"
 
-    fun render(run: ByCollectionRun?): String {
-        if (run == null) return NOTHING_YET
+    fun render(runs: List<ByCollectionRun>): String {
+        if (runs.isEmpty()) return NOTHING_YET
         return buildString {
-            appendLine("$ ${run.commandLine}")
-            run.workingDirectory?.let { appendLine("  working directory: $it") }
-            appendLine("  started at ${run.startedAt}")
-            if (run.failure != null) {
-                appendLine("  did not run: ${run.failure}")
-            } else {
-                appendLine("  exit code ${run.exitCode}, ${run.durationMillis} ms")
-            }
-            appendLine()
-            appendSection("stdout", run.stdout)
-            appendLine()
-            appendSection("stderr", run.stderr)
-            if (run.failure == null) {
+            for (run in runs) {
+                appendRun(run)
                 appendLine()
-                appendLine(WHY_IT_DIFFERS)
             }
+            appendLine(WHY_IT_DIFFERS)
         }
+    }
+
+    private fun StringBuilder.appendRun(run: ByCollectionRun) {
+        appendLine("=== ${run.label} ===")
+        appendLine("$ ${run.commandLine}")
+        run.workingDirectory?.let { appendLine("  working directory: $it") }
+        if (run.startedAt.isNotEmpty()) appendLine("  started at ${run.startedAt}")
+        if (run.failure != null) {
+            appendLine("  did not run: ${run.failure}")
+        } else {
+            appendLine("  exit code ${run.exitCode}, ${run.durationMillis} ms")
+        }
+        appendLine()
+        appendSection("stdout", run.stdout)
+        appendLine()
+        appendSection("stderr", run.stderr)
     }
 
     private fun StringBuilder.appendSection(name: String, text: String) {
@@ -71,14 +78,17 @@ internal object ByCollectionOutput {
      * without saying so, the output above looks like a bug rather than an explanation.
      */
     private val WHY_IT_DIFFERS = """
-        --- why this can differ from running pytest yourself ---
-        Tests run through `by run pytest`, which transpiles the project into a temporary
-        directory and runs pytest there. So:
-          - pytest's rootdir is that temp directory, not the project, and
+        --- why two runs ---
+        `by run pytest` transpiles the project into a temporary directory and runs pytest
+        there, and `by build` transpiles ".by files" only — so tests written in .py are not
+        in the tree it walks. They are collected by a second, plain `pytest` run in the
+        project itself, and the two results are combined. Consequences worth knowing:
+          - for the transpiled half, pytest's rootdir is that temp directory, so
             [tool.pytest.ini_options] in pyproject.toml, pytest.ini, tox.ini and setup.cfg
-            are not read;
-          - only .by files are transpiled into it, so tests in .py files are not collected,
-            and a conftest.py is not either (a conftest.by is);
-          - the interpreter is the one `by run` picks, which needs pytest importable.
+            are not read, and a hand-written conftest.py is not either (a conftest.by is);
+          - the plain half ignores out/, which holds what `by build` wrote, so a .by test is
+            not reported twice;
+          - each half needs pytest importable by the interpreter it uses; the plain half is
+            silent when it is not, since a .by-only project has no reason to have it.
     """.trimIndent()
 }
