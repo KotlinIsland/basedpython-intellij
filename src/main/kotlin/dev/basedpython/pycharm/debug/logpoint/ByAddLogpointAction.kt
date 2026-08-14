@@ -31,7 +31,7 @@ class ByAddLogpointAction : DumbAwareAction() {
     override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
 
     override fun update(e: AnActionEvent) {
-        e.presentation.isEnabledAndVisible = ByLogpoints.pluginOwnsLogpoints() && target(e) != null
+        e.presentation.isEnabledAndVisible = ByLogpoints.pluginOwnsLogpointPrompt() && target(e) != null
     }
 
     override fun actionPerformed(e: AnActionEvent) {

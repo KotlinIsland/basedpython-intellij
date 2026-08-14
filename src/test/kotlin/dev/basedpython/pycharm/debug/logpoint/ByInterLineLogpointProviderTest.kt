@@ -42,15 +42,26 @@ class ByInterLineLogpointProviderTest {
             .hasExtensionPoint("com.intellij.xdebugger.logpoints.editorsProviderFactory")
 
     @Test
-    fun `a by file gets the affordance unless the IDE already provides one`() {
+    fun `a by file gets the affordance in every IDE, including one with logpoints of its own`() {
+        UISettings.getInstance().showBreakpointsOverLineNumbers = true
         val configuration = configurationFor("main.by", "x = 1\ny = 2\n")
-        if (ideHasLogpoints) {
-            assertNull(configuration, "IDEA's own logpoints provider should keep the gap")
-            return
-        }
         assertNotNull(configuration, "expected an inter-line configuration for a .by file")
         assertTrue(configuration!!.breakpointProperties.isLogging, "the gap should add a log point")
         assertEquals("Add Log", configuration.hoverTooltip)
+    }
+
+    /** The gap does not defer, but the field that opens after it does — two prompts would be two fields. */
+    @Test
+    fun `the inline prompt defers to the IDE's own where there is one`() {
+        assertEquals(!ideHasLogpoints, ByLogpoints.pluginOwnsLogpointPrompt())
+    }
+
+    @Test
+    fun `setting the preference to ide gives the gap up entirely`() {
+        withProvider("ide") {
+            UISettings.getInstance().showBreakpointsOverLineNumbers = true
+            assertNull(configurationFor("main.by", "x = 1\ny = 2\n"))
+        }
     }
 
     /**

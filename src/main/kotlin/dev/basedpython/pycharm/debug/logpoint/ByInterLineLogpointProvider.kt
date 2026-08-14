@@ -1,6 +1,7 @@
 package dev.basedpython.pycharm.debug.logpoint
 
 import com.intellij.icons.AllIcons
+import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.impl.InterLineBreakpointConfiguration
 import com.intellij.openapi.editor.impl.InterLineBreakpointConfigurationProvider
@@ -47,22 +48,37 @@ class ByInterLineLogpointProvider : InterLineBreakpointConfigurationProvider {
     override val uniqueId: String = ID
 
     override fun getConfiguration(editor: Editor): Flow<InterLineBreakpointConfiguration> {
-        // In IntelliJ IDEA the Java plugin's own provider is registered and is the better one — it
-        // brings the inline editor with it. Only the first configuration found is used, so standing
-        // aside is the difference between adding the gap editor and replacing it with a worse one.
-        if (!ByLogpoints.pluginOwnsLogpoints()) return emptyFlow()
+        val outcome = decline(editor)
+        // Logged rather than silent, because every way this declines is invisible: the gutter simply
+        // has nothing between the lines, which looks exactly like a feature that was never built.
+        // One line per editor, at INFO, so `idea.log` answers "why is there no gap" on its own.
+        LOG.info("inter-line log point gap for ${editor.virtualFile?.name ?: "<no file>"}: ${outcome ?: "offered"}")
+        if (outcome != null) return emptyFlow()
+        return offer(editor)
+    }
 
-        // The gap only exists when breakpoints live over the line numbers — *Settings | Editor |
-        // General | Appearance | Show breakpoints over line numbers*, and off in presentation and
-        // distraction-free mode. With them beside the numbers there is no gutter row between two
-        // lines to click, so the platform reserves no hit area and this would describe an
-        // affordance that never appears. The IDE's own provider asks the same question.
-        if (!EditorUtil.isBreakPointsOnLineNumbers()) return emptyFlow()
+    /** Why this editor gets no gap, or null when it gets one. */
+    private fun decline(editor: Editor): String? = when {
+        !ByLogpoints.pluginDrawsGap() ->
+            "declined: basedpython.logpoints.provider is 'ide', so the IDE's own provider owns the gap"
+        !EditorUtil.isBreakPointsOnLineNumbers() ->
+            "declined: breakpoints are not over the line numbers (gutter right-click | Appearance | " +
+                "Breakpoints Over Line Numbers), or the IDE is in presentation or distraction-free mode"
+        editor.project == null -> "declined: editor has no project"
+        fileOf(editor) == null -> "declined: no file behind the document"
+        !fileOf(editor)!!.extension.equals("by", ignoreCase = true) ->
+            "declined: not a .by file (${fileOf(editor)!!.name})"
+        XDebuggerUtil.getInstance().findBreakpointType(ByLineBreakpointType::class.java) == null ->
+            "declined: the basedpython line breakpoint type is not registered"
+        else -> null
+    }
 
+    private fun fileOf(editor: Editor): VirtualFile? =
+        FileDocumentManager.getInstance().getFile(editor.document)
+
+    private fun offer(editor: Editor): Flow<InterLineBreakpointConfiguration> {
         val project = editor.project ?: return emptyFlow()
-        val file = FileDocumentManager.getInstance().getFile(editor.document) ?: return emptyFlow()
-        if (!file.extension.equals("by", ignoreCase = true)) return emptyFlow()
-
+        val file = fileOf(editor) ?: return emptyFlow()
         return flowOf(
             InterLineBreakpointConfiguration(
                 // The gap is shorter than a line, which is why the platform's own logpoint provider
@@ -88,6 +104,7 @@ class ByInterLineLogpointProvider : InterLineBreakpointConfigurationProvider {
     }
 
     private companion object {
+        val LOG = Logger.getInstance(ByInterLineLogpointProvider::class.java)
         const val ID = "basedpython-logpoint"
         const val TOOLTIP = "Add Log"
         const val ICON_SCALE = 0.7f

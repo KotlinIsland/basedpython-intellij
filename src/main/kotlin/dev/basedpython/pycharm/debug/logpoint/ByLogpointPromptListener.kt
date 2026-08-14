@@ -23,7 +23,7 @@ import com.intellij.xdebugger.breakpoints.XBreakpointListener
 class ByLogpointPromptListener(private val project: Project) : XBreakpointListener<XBreakpoint<*>> {
 
     override fun breakpointAdded(breakpoint: XBreakpoint<*>) {
-        if (!ByLogpoints.pluginOwnsLogpoints()) return
+        if (!ByLogpoints.pluginOwnsLogpointPrompt()) return
         val logpoint = ByLogpoints.asLogpoint(breakpoint) ?: return
         if (!ByLogpoints.isUnfilled(logpoint)) return
 
