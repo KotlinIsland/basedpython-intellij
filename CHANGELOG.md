@@ -32,13 +32,13 @@
   templates for main guard, async def, match/case, enum, and pytest fixture.
 - Inspections: mutable default argument, binary-not-configured (quick-fix to settings);
   spellchecking for comments/strings/identifiers; TODO/FIXME indexing.
-- Log points for `.by` files. Hover the gutter between two line numbers and click — or press
-  `Ctrl+Alt+F8` — to add a breakpoint that logs an expression instead of stopping, and type
-  the expression in the field that opens in the gap. Enter commits, Escape abandons, and one
-  that is never filled in removes itself rather than leaving an icon that does nothing.
-  During a debug session the output reaches the run console the same way a `print` would.
+- Log points for `.by` files — a breakpoint that logs an expression instead of stopping,
+  whose output reaches the run console the same way a `print` would. `.by` breakpoints now
+  declare inter-line placement, which is what lets the IDE offer one from the gutter gap
+  between two line numbers.
 - Breakpoint expression fields (*Condition*, *Evaluate and log*, Evaluate Expression) are
-  basedpython editors rather than plain text boxes, with highlighting and `by` behind them.
+  basedpython editors rather than plain text boxes, with highlighting and `by` behind them —
+  and without one the inline log point field could not open at all.
 - "`print()` call can be replaced with a log point" inspection, the counterpart of
   Kotlin's `println` one. The quick fix deletes the call and leaves a log point in the gap
   it occupied. Offered only where a log point says the same thing — not for `print()`, not

@@ -297,43 +297,44 @@ have put it.
    tooltip appear in the gap.
 3. Click it. A **Log:** field opens in the gap. Type an expression — `x`, `f"n={n}"`, anything the
    debugger can evaluate.
-4. **Enter** commits, **Escape** abandons. A log point you never fill in removes itself, so an
-   abandoned click leaves nothing behind.
 
-`Ctrl+Alt+F8` does the same from the keyboard: it adds a log point above the caret's line, or opens
-the field on the one already there.
+Outside IntelliJ IDEA there is no gap: set a breakpoint, open its popup, and fill in *Evaluate and
+log*.
 
 The other way in is the `print` inspection — Alt+Enter on a `print(…)` statement offers *Replace
 print with a log point*, which deletes the call and leaves a log point in the gap it occupied.
 
-### Which implementation you are looking at
+### Where it comes from
 
-This is the part that catches people out, and it caught the author out too.
+Almost none of this is plugin code, and the part that is amounts to two overrides.
 
-The whole logpoints feature — gutter gap, inline editor, `Ctrl+Alt+F8` — ships in
+The whole logpoints UI — the gutter gap, the inline field, `Ctrl+Alt+F8` — ships in
 `intellij.debugger.logpoints.*`, modules bundled with **IntelliJ IDEA's Java plugin**. PyCharm has
-none of them, which is why this plugin implements the lot.
+none of them, so there the gap does not exist and a log point is set through *Evaluate and log* in
+the breakpoint popup.
 
-The **gap** is this plugin's in every IDE, IDEA included. It used to stand aside there, on the
-reasoning that IDEA's implementation is the better one; it is, but it never appeared in `.by` files,
-and a better implementation that does not appear is worse than a plainer one that does. A tie is
-survivable because both gaps produce the same breakpoint through the same platform toggle —
-`findFirstConfiguration` collects providers into a map keyed by id and takes the first available for
-the line, so the winner is hash order and the `order=` attribute decides nothing.
+What `.by` files needed to join in was:
 
-The **inline field** does still defer, because two prompts would mean two fields over one log point.
+- **`ByLineBreakpointType.supportsInterLinePlacement`**. It defaults to false, and while it was
+  false the gap could not appear no matter what else was in place: `XDebuggerLineChangeHandler` asks
+  every line breakpoint type that question before it will treat a hover between two line numbers as
+  an inter-line one, and with no type saying yes `BreakpointPromoterEditorListener` sets none of the
+  gutter's hover properties — no icon, no tooltip, not even a cursor change. Kotlin's and Java's
+  types override it. That single default is why the same gesture worked one file type over in the
+  same IDE, and it took an embarrassingly long time to find.
+- **`ByDebuggerEditorsProvider`**. Without it the inline field cannot open — it builds an
+  `XDebuggerExpressionEditor`, which will not take a null provider — and every expression field the
+  IDE offers for a `.by` breakpoint is a plain text box. Extend `XDebuggerEditorsProviderBase`, not
+  `XDebuggerEditorsProvider`: the latter's `createDocument` is a compatibility stub that throws
+  `AbstractMethodError`, so a provider answering only `getFileType()` compiles and then dies the
+  first time a field opens.
 
-Both can be forced with the registry key (*Help | Find Action | Registry…*):
-
-    basedpython.logpoints.provider = auto* | plugin | ide
-
-One thing this plugin's version needed that IDEA's silently relies on: `ByDebuggerEditorsProvider`.
-A breakpoint type without an `XDebuggerEditorsProvider` gets plain text boxes for every expression
-the IDE asks for — *Condition*, *Evaluate and log*, Evaluate Expression — and IDEA's inline log point
-editor cannot open at all, because it builds an `XDebuggerExpressionEditor` and that will not take a
-null provider. It extends `XDebuggerEditorsProviderBase`, not `XDebuggerEditorsProvider`: the
-latter's `createDocument` is a compatibility stub that throws `AbstractMethodError`, so a provider
-answering only `getFileType()` compiles and then dies the first time a field opens.
+A second implementation of the gap and the field did exist here for a while, written on the belief
+that the IDE's could not work for `.by`. It could; the cause was the missing override above. It is
+gone — see FEATURES.md — but the platform pieces it was built on are all present outside IDEA
+(`editor.interLineBreakpointConfigurationProvider`, `InterLineShiftAnimator`, whose null default
+silently stops the gutter opening any gap at all, and `EditorEmbeddedComponentManager`) if PyCharm
+ever wants the gesture.
 
 ## Coverage
 
