@@ -139,6 +139,21 @@ internal class ByLspServerDescriptor(
   override fun startServerProcess(): OSProcessHandler =
     super.startServerProcess().mirrorStderrTo(project, "by")
 
+  /**
+   * Which kinds of inlay hint `by` should bother computing.
+   *
+   * `by` has a switch per kind of hint it produces (`inlayHints.variableTypes`,
+   * `inlayHints.inferredRaises`, …) and this is what turns off the ones set to "never": a hint
+   * nobody will draw is better not inferred than inferred and dropped. Everything else stays on,
+   * push-to-hint included — those hints are drawn from inlays built before the key goes down.
+   *
+   * Sent as initialization options rather than pushed later because `by` does not implement
+   * `workspace/didChangeConfiguration` yet (its own VS Code extension restarts the server on these
+   * settings for the same reason, and so does this plugin — see `BasedPythonLspReloader`).
+   */
+  override fun createInitializationOptions(): Any =
+    mapOf("inlayHints" to BasedPythonSettings.getInstance(project).inlayModes.serverOptions())
+
   // `by` advertises: completion, hover, goto-def/decl/type-def, references, rename,
   // doc highlight, signature help, diagnostics, inlay hints, semantic tokens,
   // code actions, doc/workspace symbols, selection/folding range, type hierarchy.

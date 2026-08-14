@@ -4,46 +4,6 @@ import org.eclipse.lsp4j.InlayHint
 import org.eclipse.lsp4j.InlayHintKind
 
 /**
- * What a hint is *about*, which is what each of the settings switches on.
- *
- * One per thing `by` writes, because they are not read the same way: the type of a binding is a
- * different question from what a call specialised its generic to, and either can be worth having in
- * front of you while the other is noise. Anything the plugin cannot place lands in [OTHER], which
- * has a setting of its own — so a hint `by` grows next release is switchable the day it appears
- * rather than stuck on whatever kind it happened to resemble.
- *
- * **Recognised by shape, not by LSP kind.** The protocol offers exactly two, [InlayHintKind.Type]
- * and [InlayHintKind.Parameter], which is not enough to tell a return annotation from a binding's,
- * let alone either from `override `. But a hint stands in for code, so it is written the way the
- * language writes that code, and the shape is the signal: `-> T` is a return, `: T` is a binding,
- * `[T]` is a type argument, and a bare word making room after itself adorns the declaration that
- * follows it. The one kind taken from LSP is [PARAMETER], which the protocol does say.
- *
- * Probed against `by ruff/0.0.1`: it emits `: T` on bindings, `[T]` on calls that specialise a
- * generic, `name=` on arguments and adornments like `override `. No `-> T` yet, so [RETURN_TYPE] is
- * what its setting will mean when it does.
- */
-enum class ByHintKind {
-    /** `foo(<name=>value)` — an argument's parameter name. */
-    PARAMETER,
-
-    /** `def f() <-> T>:` — an inferred return type. */
-    RETURN_TYPE,
-
-    /** `x<: T> = …` — an inferred type of a binding. */
-    TYPE,
-
-    /** `A<[int]>(1)` — what a call specialised a generic to. */
-    TYPE_ARGUMENT,
-
-    /** `<override >def f():` — a modifier the declaration carries without writing it. */
-    MODIFIER,
-
-    /** Anything else `by` sends, so that everything it sends has a setting. */
-    OTHER,
-}
-
-/**
  * Reading `by`'s `textDocument/inlayHint` replies — the parts that are pure, and so testable
  * without a server, an editor or a project.
  */
@@ -63,17 +23,24 @@ object ByInlayHints {
 
     private const val ELLIPSIS = "…"
 
-    /** The arrow every server writes a return-type hint with. */
-    private const val RETURN_ARROW = "->"
-
-    /** How an annotation is introduced in the language, and so how a binding's type hint opens. */
+    /**
+     * The literal openings `by` writes each kind of hint with.
+     *
+     * Not patterns to match loosely: these are the exact strings its label constructors emit
+     * (`ty_ide::InlayHint::inferred_raises`, `revealed_type`, `inferred_override` and friends), and
+     * matching them is how the fourteen kinds are recovered from the two LSP carries.
+     */
+    private const val RAISES = "raises "
+    private const val REVEALED = "revealed:"
+    private const val OVERRIDE = "override"
+    private const val REIFIED = "reified"
+    private const val PROMOTION_BAR = "|"
     private const val TYPE_COLON = ":"
-
-    /** How a generic is subscripted, and so how a type-argument hint opens. */
     private const val TYPE_ARGUMENT_BRACKET = "["
+    private const val BINDS = "="
 
-    /** How an argument is named at a call site, and so how a parameter-name hint closes. */
-    private const val NAMED_ARGUMENT_EQUALS = "="
+    /** The whole of what a variance hint can say, keyword for keyword. */
+    private val VARIANCE_KEYWORDS = setOf("out", "in", "in out")
 
     /**
      * The hint's text, with the label's parts joined and nothing else done to it.
@@ -97,38 +64,39 @@ object ByInlayHints {
     }
 
     /**
-     * What the hint is about — see [ByHintKind] for why this is read off the label rather than off
-     * the LSP kind, which only ever says "type" or "parameter".
+     * What the hint looks like on the wire, which is as much as can be told about it.
      *
-     * A modifier is the one shape with two conditions: a bare word *and* a label that makes room
-     * after itself, which is `override `'s trailing space. That space is how an adornment says it
-     * prefixes the declaration, and requiring it keeps a one-word type name from being read as one.
-     * Anything left over is [ByHintKind.OTHER] rather than forced into the nearest kind.
+     * LSP says only "type" or "parameter"; the rest is read off the label, and can be, because
+     * `by`'s labels are fixed strings rather than free text. `override ` is written `override `
+     * every time. See [ByHintShape].
      *
-     * `name=` is read as a parameter as well as taken from the LSP kind, since it is the shape of
-     * one and a server that forgets the kind should not cost the setting its meaning.
+     * The two LSP kinds still do work: they split `name=` on an argument from `T=` on a type
+     * argument, which are the same characters standing for different things, and they mark the
+     * hints that name a parameter the source never spells.
      */
-    fun kindOf(hint: InlayHint, label: String): ByHintKind {
-        if (hint.kind == InlayHintKind.Parameter) return ByHintKind.PARAMETER
+    fun shapeOf(hint: InlayHint, label: String): ByHintShape {
         val text = label.trim()
+        if (hint.kind == InlayHintKind.Parameter) {
+            return when {
+                // `x=` names the argument that follows it; `ctx=value` *is* the argument.
+                text.endsWith(BINDS) -> ByHintShape.ARGUMENT_NAME
+                text.contains(BINDS) -> ByHintShape.IMPLICIT_ARGUMENT
+                else -> ByHintShape.IMPLICIT_PARAMETER
+            }
+        }
         return when {
-            text.startsWith(RETURN_ARROW) -> ByHintKind.RETURN_TYPE
-            text.startsWith(TYPE_COLON) -> ByHintKind.TYPE
-            text.startsWith(TYPE_ARGUMENT_BRACKET) -> ByHintKind.TYPE_ARGUMENT
-            isNamedArgument(text) -> ByHintKind.PARAMETER
-            label.endsWith(' ') && text.isNotEmpty() && text.all(::isModifierChar) -> ByHintKind.MODIFIER
-            else -> ByHintKind.OTHER
+            text.startsWith(RAISES) -> ByHintShape.RAISES
+            text.startsWith(REVEALED) -> ByHintShape.REVEALED_TYPE
+            text == OVERRIDE -> ByHintShape.OVERRIDE
+            text == REIFIED -> ByHintShape.REIFICATION
+            text in VARIANCE_KEYWORDS -> ByHintShape.VARIANCE
+            text.startsWith(PROMOTION_BAR) -> ByHintShape.NUMERIC_PROMOTION
+            text.startsWith(TYPE_ARGUMENT_BRACKET) -> ByHintShape.TYPE_ARGUMENTS
+            text.endsWith(BINDS) -> ByHintShape.TYPE_ARGUMENT_NAME
+            text.startsWith(TYPE_COLON) -> ByHintShape.TYPE
+            else -> ByHintShape.UNKNOWN
         }
     }
-
-    /** `t=` — a name and the `=` that binds it, which is how an argument's name is written. */
-    private fun isNamedArgument(text: String): Boolean =
-        text.length > 1 && text.endsWith(NAMED_ARGUMENT_EQUALS) && text.dropLast(1).all(::isNameChar)
-
-    /** A modifier is words: `override `, and whatever else `by` writes the same way. */
-    private fun isModifierChar(c: Char): Boolean = c.isLetter() || c == '_' || c == ' '
-
-    private fun isNameChar(c: Char): Boolean = c.isLetterOrDigit() || c == '_'
 
     /** The hint's tooltip text, if it has one — lsp4j's `string | MarkupContent`. */
     fun tooltipOf(hint: InlayHint): String? {
@@ -144,14 +112,4 @@ object ByInlayHints {
     /** [text] as drawn, cut to [max] characters. */
     fun truncate(text: String, max: Int = MAX_CHARS): String =
         if (text.length <= max) text else text.take(max - ELLIPSIS.length) + ELLIPSIS
-
-    /**
-     * Whether the inlay sits after the text it belongs to.
-     *
-     * It decides which side of the inlay the caret lands on when you type at exactly its offset, and
-     * which side a selection swallows it with. A parameter name introduces the argument after it and
-     * a modifier the declaration after it; every other hint completes the code before it.
-     */
-    fun relatesToPrecedingText(kind: ByHintKind): Boolean =
-        kind != ByHintKind.PARAMETER && kind != ByHintKind.MODIFIER
 }

@@ -23,6 +23,8 @@ import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.env.ByEnvironmentKind
 import dev.basedpython.pycharm.env.ByLaunch
+import dev.basedpython.pycharm.lsp.inlay.ByHintKind
+import dev.basedpython.pycharm.lsp.inlay.ByHintMode
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
 import org.junit.jupiter.api.AfterEach
@@ -163,14 +165,10 @@ class LspServerDescriptorTest {
     // editor font. What this switches off is only the platform's own small-text-in-a-pill
     // rendering of the same hints, which would otherwise draw them a second time.
     val s = BasedPythonSettings.getInstance(project)
-    s.inlayParameterHints = true
-    s.inlayTypeHints = true
-    s.inlayReturnHints = true
+    for (kind in ByHintKind.entries) s.setInlayMode(kind, ByHintMode.ALWAYS)
     assertSame(LspInlayHintDisabled, byDescriptor().lspCustomization.inlayHintCustomizer)
 
-    s.inlayParameterHints = false
-    s.inlayTypeHints = false
-    s.inlayReturnHints = false
+    for (kind in ByHintKind.entries) s.setInlayMode(kind, ByHintMode.NEVER)
     assertSame(LspInlayHintDisabled, byDescriptor().lspCustomization.inlayHintCustomizer)
   }
 
@@ -236,12 +234,49 @@ class LspServerDescriptorTest {
     assertEquals(listOf("server"), cmd.parametersList.list)
   }
 
+  // ---------------------------------------------------------------------------
+  // by initialization options: which hints the server is asked to compute
+  // ---------------------------------------------------------------------------
+
+  @Test
+  fun `by is told to skip only the kinds of hint set to never`() {
+    val s = BasedPythonSettings.getInstance(project)
+    s.setInlayMode(ByHintKind.VARIABLE_TYPES, ByHintMode.NEVER)
+    s.setInlayMode(ByHintKind.INFERRED_RAISES, ByHintMode.ON_PUSH)
+    s.setInlayMode(ByHintKind.CALL_ARGUMENT_NAMES, ByHintMode.ALWAYS)
+
+    val options = byDescriptor().createInitializationOptions()
+    @Suppress("UNCHECKED_CAST")
+    val hints = (options as Map<String, Any>)["inlayHints"] as Map<String, Boolean>
+
+    assertEquals(false, hints["variableTypes"], "a hint nobody draws should not be computed")
+    // On push still needs computing: the inlay is built before the key goes down.
+    assertEquals(true, hints["inferredRaises"])
+    assertEquals(true, hints["callArgumentNames"])
+    assertFalse(hints.containsKey("other"), "the plugin's catch-all is not one of `by`'s options")
+  }
+
+  @Test
+  fun `the option names are the ones by answers to`() {
+    // Names `by` does not recognise are reported back to the user as unknown options, so this is
+    // spelling that has to match the server's `InlayHintOptions`, field for field.
+    @Suppress("UNCHECKED_CAST")
+    val hints =
+      (byDescriptor().createInitializationOptions() as Map<String, Any>)["inlayHints"] as Map<String, Boolean>
+    assertEquals(
+      setOf(
+        "variableTypes", "lambdaParameterTypes", "callTypeArguments", "typeArgumentNames",
+        "numericPromotions", "revealedTypes", "inferredRaises", "callArgumentNames",
+        "implicitParameters", "implicitSelf", "implicitArguments", "inferredOverride",
+        "inferredVariance", "inferredReification",
+      ),
+      hints.keys,
+    )
+  }
+
   @AfterEach
   fun resetSettings() {
-    val s = BasedPythonSettings.getInstance(project)
-    s.inlayParameterHints = true
-    s.inlayTypeHints = true
-    s.inlayReturnHints = true
+    BasedPythonSettings.getInstance(project).loadState(BasedPythonSettings.State())
   }
 
   /** Creates an in-memory virtual file with the given name (extension drives support). */

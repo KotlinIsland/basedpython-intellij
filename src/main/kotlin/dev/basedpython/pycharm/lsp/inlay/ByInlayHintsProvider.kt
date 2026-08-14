@@ -132,8 +132,10 @@ private class ByInlayHintsCollector(
             val offset = getOffsetInDocument(document, position) ?: continue
             val label = ByInlayHints.labelOf(hint)
             if (label.isEmpty()) continue
-            val kind = ByInlayHints.kindOf(hint, label)
-            val mode = modes[kind]
+            val shape = ByInlayHints.shapeOf(hint, label)
+            val mode = modes.forShape(shape)
+            // Ordinarily nothing arrives that is switched off, `by` having been told not to compute
+            // it; this is what covers the window before that setting reaches a running server.
             if (!mode.isCollected) continue
 
             val text = ByInlayHints.truncate(label)
@@ -150,7 +152,7 @@ private class ByInlayHintsCollector(
             val tooltip = ByInlayHints.tooltipOf(hint) ?: label.takeIf { it != text }
             sink.addInlineElement(
                 offset,
-                ByInlayHints.relatesToPrecedingText(kind),
+                shape.relatesToPrecedingText,
                 tooltip?.let { factory.withTooltip(it, presentation) } ?: presentation,
                 false,
             )

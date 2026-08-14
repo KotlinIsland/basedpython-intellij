@@ -27,6 +27,19 @@ enum class ByHintMode(val id: String, val display: String) {
     ON_PUSH("push", "While the push key is held"),
     ;
 
+    /**
+     * How much of the file's hints this mode shows, as a number two modes can be compared by.
+     *
+     * Written out rather than left to the declaration order, since [ByHintModes.forShape] turns on
+     * it: two kinds the wire cannot separate are drawn under the more visible of their settings.
+     */
+    val visibility: Int
+        get() = when (this) {
+            NEVER -> 0
+            ON_PUSH -> 1
+            ALWAYS -> 2
+        }
+
     /** Whether a hint in this mode is drawn right now, [pushed] being whether the key is down. */
     fun isShown(pushed: Boolean): Boolean = when (this) {
         NEVER -> false
@@ -66,34 +79,55 @@ enum class ByHintMode(val id: String, val display: String) {
 }
 
 /**
- * The mode every kind of hint is on — the settings as the collector reads them, in one value.
+ * The mode every kind of hint is on — the settings as the rest of the plugin reads them.
  *
- * One place to ask rather than a parameter per kind: the kinds are a list that grows with what `by`
- * emits (see [ByHintKind]), and each new one would otherwise be a new argument threaded through the
- * provider, the collector and everything that builds one in a test.
+ * One value rather than a parameter per kind, because the kinds are `by`'s list and it grows: a
+ * kind the server adds is one enum entry here, not another argument threaded through the provider,
+ * the collector and every test that builds one.
  */
-data class ByHintModes(
-    val parameter: ByHintMode,
-    val type: ByHintMode,
-    val returnType: ByHintMode,
-    val typeArgument: ByHintMode,
-    val modifier: ByHintMode,
-    val other: ByHintMode,
-) {
-    operator fun get(kind: ByHintKind): ByHintMode = when (kind) {
-        ByHintKind.PARAMETER -> parameter
-        ByHintKind.TYPE -> type
-        ByHintKind.RETURN_TYPE -> returnType
-        ByHintKind.TYPE_ARGUMENT -> typeArgument
-        ByHintKind.MODIFIER -> modifier
-        ByHintKind.OTHER -> other
-    }
+class ByHintModes(private val modes: Map<ByHintKind, ByHintMode>) {
+
+    operator fun get(kind: ByHintKind): ByHintMode = modes[kind] ?: ByHintMode.ALWAYS
 
     /** Whether anything at all is worth asking `by` for. */
     val anyCollected: Boolean get() = ByHintKind.entries.any { this[it].isCollected }
 
+    /**
+     * The mode a hint of this shape is drawn under.
+     *
+     * A shape can stand for more than one kind — `by` writes a variable's type and a lambda
+     * parameter's identically — and the wire cannot say which arrived. Where their settings
+     * disagree the more visible one wins, so a peek at one of them is never mistaken for the other
+     * being switched off. The disagreement can only be *always* against *on push*: a kind set to
+     * [ByHintMode.NEVER] is switched off at the server and never arrives to be confused with
+     * anything (see [ByHintKind.option]).
+     */
+    fun forShape(shape: ByHintShape): ByHintMode =
+        ByHintKind.of(shape).maxByOrNull { this[it].visibility }?.let { this[it] } ?: ByHintMode.ALWAYS
+
+    /**
+     * What to send `by` as its `inlayHints` options: every kind it knows a name for, on unless the
+     * setting says never.
+     *
+     * "Never" is the one mode the server can enforce itself, and enforcing it there means the hint
+     * is not computed rather than computed and dropped. The other two both need the hint, since an
+     * on-push hint is drawn from an inlay that was built before the key went down.
+     */
+    fun serverOptions(): Map<String, Boolean> = ByHintKind.entries
+        .mapNotNull { kind -> kind.option?.let { it to (this[kind] != ByHintMode.NEVER) } }
+        .toMap()
+
+    override fun equals(other: Any?): Boolean =
+        this === other || (other is ByHintModes && ByHintKind.entries.all { this[it] == other[it] })
+
+    override fun hashCode(): Int = ByHintKind.entries.map { this[it] }.hashCode()
+
+    override fun toString(): String =
+        ByHintKind.entries.joinToString(prefix = "ByHintModes(", postfix = ")") { "${it.name}=${this[it]}" }
+
     companion object {
-        /** Every kind on the same mode — the shape a test usually wants. */
-        fun all(mode: ByHintMode): ByHintModes = ByHintModes(mode, mode, mode, mode, mode, mode)
+        /** Every kind on the same mode — what a test usually wants. */
+        fun all(mode: ByHintMode): ByHintModes =
+            ByHintModes(ByHintKind.entries.associateWith { mode })
     }
 }

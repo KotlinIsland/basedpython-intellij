@@ -1,6 +1,7 @@
 package dev.basedpython.pycharm.settings
 
 import com.intellij.testFramework.junit5.RunInEdt
+import com.intellij.util.xmlb.XmlSerializer
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.lsp.inlay.ByHintKind
 import dev.basedpython.pycharm.lsp.inlay.ByHintMode
@@ -64,13 +65,7 @@ class BasedPythonSettingsTest {
             formatOnSave = true,
             inlayParameterHints = false,
             inlayTypeHints = false,
-            inlayReturnHints = false,
-            inlayParameterMode = "push",
-            inlayTypeMode = "never",
-            inlayReturnMode = "always",
-            inlayTypeArgumentMode = "push",
-            inlayModifierMode = "always",
-            inlayOtherMode = "never",
+            inlayHintModes = mutableMapOf("variableTypes" to "push", "inferredRaises" to "never"),
             inlayPushKey = "alt",
             lspTraceLevel = "verbose",
             indexGeneratedPython = true,
@@ -86,13 +81,8 @@ class BasedPythonSettingsTest {
         assertTrue(settings.formatOnSave)
         assertFalse(settings.inlayParameterHints)
         assertFalse(settings.inlayTypeHints)
-        assertFalse(settings.inlayReturnHints)
-        assertEquals(ByHintMode.ON_PUSH, settings.inlayParameterMode)
-        assertEquals(ByHintMode.NEVER, settings.inlayTypeMode)
-        assertEquals(ByHintMode.ALWAYS, settings.inlayReturnMode)
-        assertEquals(ByHintMode.ON_PUSH, settings.inlayTypeArgumentMode)
-        assertEquals(ByHintMode.ALWAYS, settings.inlayModifierMode)
-        assertEquals(ByHintMode.NEVER, settings.inlayOtherMode)
+        assertEquals(ByHintMode.ON_PUSH, settings.inlayMode(ByHintKind.VARIABLE_TYPES))
+        assertEquals(ByHintMode.NEVER, settings.inlayMode(ByHintKind.INFERRED_RAISES))
         assertEquals(ByPushKey.ALT, settings.inlayPushKey)
         assertEquals("verbose", settings.lspTraceLevel)
         assertTrue(settings.indexGeneratedPython)
@@ -101,85 +91,87 @@ class BasedPythonSettingsTest {
     // ---- Inlay hint modes (push-to-hint) ----
 
     @Test
-    fun `hint modes default to always, which is what the old booleans said`() {
-        assertEquals(ByHintMode.ALWAYS, settings.inlayParameterMode)
-        assertEquals(ByHintMode.ALWAYS, settings.inlayTypeMode)
-        assertEquals(ByHintMode.ALWAYS, settings.inlayReturnMode)
-        assertEquals(ByHintMode.ALWAYS, settings.inlayTypeArgumentMode)
-        assertEquals(ByHintMode.ALWAYS, settings.inlayModifierMode)
-        assertEquals(ByHintMode.ALWAYS, settings.inlayOtherMode)
+    fun `every kind defaults to always, which is what the old toggles said`() {
+        for (kind in ByHintKind.entries) {
+            assertEquals(ByHintMode.ALWAYS, settings.inlayMode(kind), kind.name)
+        }
         assertEquals(ByPushKey.CTRL_ALT, settings.inlayPushKey)
     }
 
     @Test
-    fun `a settings file with only the old booleans reads as never or always`() {
+    fun `a project configured before the modes keeps the hints it had`() {
+        // The old page had two toggles between them covering everything `by` sends: the
+        // parameter-shaped hints, and the rest.
+        settings.loadState(
+            BasedPythonSettings.State(inlayParameterHints = false, inlayTypeHints = true),
+        )
+        assertEquals(ByHintMode.NEVER, settings.inlayMode(ByHintKind.CALL_ARGUMENT_NAMES))
+        assertEquals(ByHintMode.NEVER, settings.inlayMode(ByHintKind.IMPLICIT_SELF))
+        assertEquals(ByHintMode.NEVER, settings.inlayMode(ByHintKind.IMPLICIT_ARGUMENTS))
+        assertEquals(ByHintMode.ALWAYS, settings.inlayMode(ByHintKind.VARIABLE_TYPES))
+        assertEquals(ByHintMode.ALWAYS, settings.inlayMode(ByHintKind.INFERRED_OVERRIDE))
+        assertEquals(ByHintMode.ALWAYS, settings.inlayMode(ByHintKind.OTHER))
+    }
+
+    @Test
+    fun `a mode is written under the name by gives the kind`() {
+        settings.setInlayMode(ByHintKind.INFERRED_VARIANCE, ByHintMode.ON_PUSH)
+        assertEquals("push", settings.state.inlayHintModes["inferredVariance"])
+        assertEquals(ByHintMode.ON_PUSH, settings.inlayMode(ByHintKind.INFERRED_VARIANCE))
+        assertEquals(
+            ByHintMode.ALWAYS,
+            settings.inlayMode(ByHintKind.INFERRED_REIFICATION),
+            "the kinds beside it are untouched",
+        )
+    }
+
+    @Test
+    fun `a kind this plugin has never heard of survives a round trip`() {
+        // A settings file from a newer plugin, whose extra kinds must not be dropped by this one.
+        val incoming = BasedPythonSettings.State(
+            inlayHintModes = mutableMapOf("somethingNewer" to "push"),
+        )
+        settings.loadState(incoming)
+        settings.setInlayMode(ByHintKind.VARIABLE_TYPES, ByHintMode.NEVER)
+        assertEquals("push", settings.state.inlayHintModes["somethingNewer"])
+    }
+
+    @Test
+    fun `an unreadable mode degrades to the fallback rather than failing to load`() {
         settings.loadState(
             BasedPythonSettings.State(
-                inlayParameterHints = true,
                 inlayTypeHints = false,
-                inlayReturnHints = false,
+                inlayHintModes = mutableMapOf("variableTypes" to "on-hover"),
             ),
         )
-        assertEquals(ByHintMode.ALWAYS, settings.inlayParameterMode)
-        assertEquals(ByHintMode.NEVER, settings.inlayTypeMode)
-        assertEquals(ByHintMode.NEVER, settings.inlayReturnMode)
+        assertEquals(ByHintMode.NEVER, settings.inlayMode(ByHintKind.VARIABLE_TYPES))
     }
 
     @Test
-    fun `writing a mode writes the old boolean too, so an older plugin still reads it`() {
-        settings.inlayTypeMode = ByHintMode.ON_PUSH
-        assertEquals("push", settings.state.inlayTypeMode)
-        assertTrue(settings.inlayTypeHints)
+    fun `the modes survive the settings file, not just a bean copy`() {
+        // A map is a shape the serializer has to be able to write and read back, and `loadState`
+        // alone would not notice if it could not.
+        settings.setInlayMode(ByHintKind.VARIABLE_TYPES, ByHintMode.ON_PUSH)
+        settings.setInlayMode(ByHintKind.REVEALED_TYPES, ByHintMode.NEVER)
+        settings.inlayPushKey = ByPushKey.ALT
 
-        settings.inlayTypeMode = ByHintMode.NEVER
-        assertEquals("never", settings.state.inlayTypeMode)
-        assertFalse(settings.inlayTypeHints)
+        val written = XmlSerializer.serialize(settings.state)
+        val read = XmlSerializer.deserialize(written, BasedPythonSettings.State::class.java)
+        settings.loadState(BasedPythonSettings.State())
+        settings.loadState(read)
+
+        assertEquals(ByHintMode.ON_PUSH, settings.inlayMode(ByHintKind.VARIABLE_TYPES))
+        assertEquals(ByHintMode.NEVER, settings.inlayMode(ByHintKind.REVEALED_TYPES))
+        assertEquals(ByPushKey.ALT, settings.inlayPushKey)
     }
 
     @Test
-    fun `the kinds that used to travel with variable types follow it until they are set`() {
-        // `A[int](1)`, `override ` and anything else `by` sends were all drawn under the variable
-        // type toggle before they had settings of their own, so that is what they inherit.
-        settings.inlayTypeMode = ByHintMode.ON_PUSH
-        assertEquals(ByHintMode.ON_PUSH, settings.inlayTypeArgumentMode)
-        assertEquals(ByHintMode.ON_PUSH, settings.inlayModifierMode)
-        assertEquals(ByHintMode.ON_PUSH, settings.inlayOtherMode)
-
-        settings.inlayModifierMode = ByHintMode.NEVER
-        assertEquals(ByHintMode.NEVER, settings.inlayModifierMode)
-        assertEquals(ByHintMode.ON_PUSH, settings.inlayTypeArgumentMode, "the others still follow")
-    }
-
-    @Test
-    fun `a project that had type hints off has every kind that came out of them off`() {
-        settings.loadState(BasedPythonSettings.State(inlayTypeHints = false))
-        assertEquals(ByHintMode.NEVER, settings.inlayTypeMode)
-        assertEquals(ByHintMode.NEVER, settings.inlayTypeArgumentMode)
-        assertEquals(ByHintMode.NEVER, settings.inlayModifierMode)
-        assertEquals(ByHintMode.NEVER, settings.inlayOtherMode)
-    }
-
-    @Test
-    fun `every kind has a mode to read`() {
-        settings.inlayParameterMode = ByHintMode.NEVER
-        settings.inlayOtherMode = ByHintMode.ON_PUSH
+    fun `the modes reach the server config and the collector as one value`() {
+        settings.setInlayMode(ByHintKind.REVEALED_TYPES, ByHintMode.NEVER)
         val modes = settings.inlayModes
-        assertEquals(ByHintMode.NEVER, modes[ByHintKind.PARAMETER])
-        assertEquals(ByHintMode.ON_PUSH, modes[ByHintKind.OTHER])
+        assertEquals(ByHintMode.NEVER, modes[ByHintKind.REVEALED_TYPES])
+        assertEquals(false, modes.serverOptions()["revealedTypes"])
         assertTrue(modes.anyCollected)
-    }
-
-    @Test
-    fun `a written mode wins over the boolean beside it`() {
-        settings.loadState(
-            BasedPythonSettings.State(
-                inlayTypeHints = true,
-                inlayTypeMode = "push",
-                inlayPushKey = "ctrl",
-            ),
-        )
-        assertEquals(ByHintMode.ON_PUSH, settings.inlayTypeMode)
-        assertEquals(ByPushKey.CTRL, settings.inlayPushKey)
     }
 
     // ---- §142 per-server capability toggles ----
