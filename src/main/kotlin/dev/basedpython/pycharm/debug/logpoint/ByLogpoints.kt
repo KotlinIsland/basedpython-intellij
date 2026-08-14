@@ -18,20 +18,32 @@ import dev.basedpython.pycharm.debug.ByLineBreakpointType
 object ByLogpoints {
 
     /**
-     * Whether this plugin should provide the log point UI, rather than defer to the IDE's.
+     * Whether to put the "Add Log" affordance in the gutter gap of `.by` files.
      *
-     * Deferring matters because two live providers is not a tie the plugin can win on purpose:
+     * Yes by default, in every IDE, including IntelliJ IDEA where a provider of its own is also
+     * registered. This used to stand aside there on the reasoning that IDEA's implementation is the
+     * better one — it is — but a better implementation that does not appear in `.by` files is worse
+     * than a plainer one that does, and standing aside meant the feature simply did not exist in the
+     * IDE `runIde` starts.
+     *
+     * Two live providers is not a tie that can be won on purpose:
      * `InterLineBreakpointConfigurationProvider.findFirstConfiguration` collects every provider's
-     * flow into a map keyed by its id and takes the first entry that says it is available for the
-     * line, so with both registered the winner is hash order and the `order=` attribute decides
-     * nothing. Standing aside in IntelliJ IDEA leaves its implementation — the better one, with
-     * caret bridging and a highlighting pass — in sole possession.
-     *
-     * That default is also why nothing here is reachable in IDEA, which is the IDE `runIde` starts,
-     * so `basedpython.logpoints.provider` overrides it: set it to `plugin` to see this
-     * implementation in IDEA, or `ide` to give way in an IDE that has one this cannot detect.
+     * flow into a map keyed by its id and takes the first entry available for the line, so the
+     * winner is hash order and the `order=` attribute decides nothing. That is survivable here only
+     * because the two gaps do the same thing: the click goes through the platform's own toggle
+     * either way and produces the same `ByLineBreakpointType` breakpoint. What must not double up is
+     * the field that opens afterwards — see [pluginOwnsLogpointPrompt].
      */
-    fun pluginOwnsLogpoints(): Boolean = when (preference()) {
+    fun pluginDrawsGap(): Boolean = preference() != "ide"
+
+    /**
+     * Whether *this* plugin opens the inline expression field, rather than the IDE's own prompt.
+     *
+     * This one does defer, because two prompts would mean two fields over one log point. Where the
+     * IDE ships logpoints its prompt is already listening and is the better of the two, and now that
+     * `.by` breakpoints carry an `XDebuggerEditorsProvider` it has what it needs to open on one.
+     */
+    fun pluginOwnsLogpointPrompt(): Boolean = when (preference()) {
         "plugin" -> true
         "ide" -> false
         else -> !ideHasLogpoints()
