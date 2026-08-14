@@ -96,6 +96,22 @@ class ByInterLineLogpointProvider : InterLineBreakpointConfigurationProvider {
     }
 
     /**
+     * Whether the gap is free at [line] — and the probe that says whether the platform is asking.
+     *
+     * "offered" only proves the configuration was built. This is called while the gutter works out
+     * what the mouse is over, so it is the first point at which the platform has *used* it: if these
+     * lines never appear while hovering between two line numbers, the failure is upstream of
+     * anything this class can control, and no amount of correctness here would show a gap.
+     *
+     * Rate-limited because it runs on mouse movement.
+     */
+    private fun logAvailability(line: Int, available: Boolean) {
+        if (probes.incrementAndGet() <= MAX_PROBES) {
+            LOG.info("inter-line log point gap consulted for line $line: available=$available")
+        }
+    }
+
+    /**
      * One shift per gutter, kept on the component: the gutter holds on to whichever animator it was
      * last given and calls `stopShift` on it, so handing it a fresh one per configuration would
      * leave the old one holding a shift nothing will ever clear.
@@ -108,10 +124,12 @@ class ByInterLineLogpointProvider : InterLineBreakpointConfigurationProvider {
 
     /** False once a log point is already in this gap — offering to add a second one is noise. */
     private fun canAddLogpoint(project: Project, file: VirtualFile, line: Int): Boolean {
-        val type = XDebuggerUtil.getInstance().findBreakpointType(ByLineBreakpointType::class.java) ?: return false
-        return XDebuggerManager.getInstance(project).breakpointManager
+        val type = XDebuggerUtil.getInstance().findBreakpointType(ByLineBreakpointType::class.java)
+        val available = type != null && XDebuggerManager.getInstance(project).breakpointManager
             .findBreakpointsAtLine(type, file, line, XLineBreakpointVerticalPlacement.INTER_LINE)
             .isEmpty()
+        logAvailability(line, available)
+        return available
     }
 
     private companion object {
@@ -120,5 +138,7 @@ class ByInterLineLogpointProvider : InterLineBreakpointConfigurationProvider {
         const val TOOLTIP = "Add Log"
         const val ICON_SCALE = 0.7f
         const val SHIFT_KEY = "basedpython.logpoint.interLineShift"
+        const val MAX_PROBES = 40
+        val probes = java.util.concurrent.atomic.AtomicInteger()
     }
 }
