@@ -48,6 +48,10 @@ class ByInterLineLogpointProviderTest {
         assertNotNull(configuration, "expected an inter-line configuration for a .by file")
         assertTrue(configuration!!.breakpointProperties.isLogging, "the gap should add a log point")
         assertEquals("Add Log", configuration.hoverTooltip)
+        assertNotNull(
+            configuration.animator,
+            "without an animator the gutter opens no gap and paints nothing, however good the rest is",
+        )
     }
 
     /** The gap does not defer, but the field that opens after it does — two prompts would be two fields. */

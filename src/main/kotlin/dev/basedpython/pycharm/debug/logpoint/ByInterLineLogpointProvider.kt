@@ -79,20 +79,31 @@ class ByInterLineLogpointProvider : InterLineBreakpointConfigurationProvider {
     private fun offer(editor: Editor): Flow<InterLineBreakpointConfiguration> {
         val project = editor.project ?: return emptyFlow()
         val file = fileOf(editor) ?: return emptyFlow()
+        val gutter = editor.gutter as? EditorGutterComponentEx
         return flowOf(
             InterLineBreakpointConfiguration(
                 // The gap is shorter than a line, which is why the platform's own logpoint provider
                 // scales the same icon by the same factor rather than drawing it full size.
-                icon = IconUtil.scale(
-                    AllIcons.Debugger.Db_no_suspend_breakpoint,
-                    editor.gutter as? EditorGutterComponentEx,
-                    ICON_SCALE,
-                ),
+                icon = IconUtil.scale(AllIcons.Debugger.Db_no_suspend_breakpoint, gutter, ICON_SCALE),
                 hoverTooltip = TOOLTIP,
                 breakpointProperties = InterLineBreakpointProperties(isLogging = true),
+                // Not optional, whatever the signature's default says: without it the gutter opens
+                // no gap at all. See ByInterLineShift.
+                animator = animatorFor(gutter),
                 availableFor = { line -> canAddLogpoint(project, file, line) },
             )
         )
+    }
+
+    /**
+     * One shift per gutter, kept on the component: the gutter holds on to whichever animator it was
+     * last given and calls `stopShift` on it, so handing it a fresh one per configuration would
+     * leave the old one holding a shift nothing will ever clear.
+     */
+    private fun animatorFor(gutter: EditorGutterComponentEx?): ByInterLineShift? {
+        if (gutter == null) return null
+        (gutter.getClientProperty(SHIFT_KEY) as? ByInterLineShift)?.let { return it }
+        return ByInterLineShift(gutter).also { gutter.putClientProperty(SHIFT_KEY, it) }
     }
 
     /** False once a log point is already in this gap — offering to add a second one is noise. */
@@ -108,5 +119,6 @@ class ByInterLineLogpointProvider : InterLineBreakpointConfigurationProvider {
         const val ID = "basedpython-logpoint"
         const val TOOLTIP = "Add Log"
         const val ICON_SCALE = 0.7f
+        const val SHIFT_KEY = "basedpython.logpoint.interLineShift"
     }
 }
