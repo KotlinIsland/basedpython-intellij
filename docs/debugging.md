@@ -289,10 +289,10 @@ have put it.
 
 ### Using one
 
-1. **Turn on breakpoints over line numbers** — *Settings | Editor | General | Appearance | Show
-   breakpoints over line numbers*. Without it the gutter has no row *between* two lines, so there is
-   nothing to hover; this is the single most likely reason the feature appears not to exist. It is
-   also off in Presentation and Distraction-free mode.
+1. **Turn on breakpoints over line numbers** — right-click the editor gutter, *Appearance |
+   Breakpoints Over Line Numbers*. It is a toggle action in that menu, not an entry in the Settings
+   dialog. Without it the gutter has no row *between* two lines, so there is nothing to hover. It is
+   also forced off in Presentation and Distraction-free mode.
 2. Hover the gutter **between two line numbers** in a `.by` file. A dimmed dot and an *Add Log*
    tooltip appear in the gap.
 3. Click it. A **Log:** field opens in the gap. Type an expression — `x`, `f"n={n}"`, anything the
@@ -312,19 +312,20 @@ This is the part that catches people out, and it caught the author out too.
 
 The whole logpoints feature — gutter gap, inline editor, `Ctrl+Alt+F8` — ships in
 `intellij.debugger.logpoints.*`, modules bundled with **IntelliJ IDEA's Java plugin**. PyCharm has
-none of them, which is why this plugin implements the lot. But `runIde` starts IDEA, and there the
-plugin's version **switches itself off by default** and lets IDEA's run instead: the platform picks
-between competing providers by hash order (`findFirstConfiguration` collects them into a map keyed
-by id), so two live implementations is a coin flip rather than a preference, and IDEA's is the
-better one — it has caret bridging between the file and the field, and its own highlighting pass.
+none of them, which is why this plugin implements the lot.
 
-So in IDEA you are exercising JetBrains' implementation, on this plugin's breakpoints. To see this
-plugin's instead, set the registry key (*Help | Find Action | Registry…*):
+The **gap** is this plugin's in every IDE, IDEA included. It used to stand aside there, on the
+reasoning that IDEA's implementation is the better one; it is, but it never appeared in `.by` files,
+and a better implementation that does not appear is worse than a plainer one that does. A tie is
+survivable because both gaps produce the same breakpoint through the same platform toggle —
+`findFirstConfiguration` collects providers into a map keyed by id and takes the first available for
+the line, so the winner is hash order and the `order=` attribute decides nothing.
 
-    basedpython.logpoints.provider = plugin
+The **inline field** does still defer, because two prompts would mean two fields over one log point.
 
-`ide` forces the opposite. `auto`, the default, uses IDEA's where it exists and this plugin's
-everywhere else.
+Both can be forced with the registry key (*Help | Find Action | Registry…*):
+
+    basedpython.logpoints.provider = auto* | plugin | ide
 
 One thing this plugin's version needed that IDEA's silently relies on: `ByDebuggerEditorsProvider`.
 A breakpoint type without an `XDebuggerEditorsProvider` gets plain text boxes for every expression

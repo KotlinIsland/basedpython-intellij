@@ -50,10 +50,9 @@ support, run configurations, CLI actions, and editor tooling.
 - **Log points** — hover the gutter between two line numbers and click (or press
   `Ctrl+Alt+F8`) to add a breakpoint that logs an expression instead of stopping, and type
   the expression in the field that opens in the gap. Enter commits, Escape abandons; one
-  that is never filled in removes itself. Needs *Settings → Editor → General → Appearance →
-  Show breakpoints over line numbers* — without it the gutter has no row between two lines
-  to click. In IntelliJ IDEA you get IDEA's own implementation of this unless you set the
-  registry key `basedpython.logpoints.provider` to `plugin`; see
+  that is never filled in removes itself. Needs *Breakpoints Over Line Numbers* — a toggle in
+  the editor gutter's right-click menu, under *Appearance*, not in the Settings dialog —
+  since without it the gutter has no row between two lines to click. See
   [docs/debugging.md](docs/debugging.md#log-points).
 - Breakpoint expression fields (*Condition*, *Evaluate and log*) are basedpython editors,
   not plain text boxes.
