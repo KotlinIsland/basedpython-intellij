@@ -22,7 +22,22 @@ import com.intellij.xdebugger.breakpoints.XBreakpointListener
  */
 class ByLogpointPromptListener(private val project: Project) : XBreakpointListener<XBreakpoint<*>> {
 
+    private val LOG = com.intellij.openapi.diagnostic.Logger.getInstance(ByLogpointPromptListener::class.java)
+
+    /**
+     * Records anyone taking a `.by` log point away, with the stack that did it.
+     *
+     * A log point that appears for a frame and vanishes has several possible authors — this class,
+     * the inline field abandoning an empty one, or the platform's own toggle running twice over one
+     * click — and they are indistinguishable on screen.
+     */
+    override fun breakpointRemoved(breakpoint: XBreakpoint<*>) {
+        val logpoint = ByLogpoints.asLogpoint(breakpoint) ?: return
+        LOG.info("log point at line ${logpoint.line} removed", Throwable("removed here"))
+    }
+
     override fun breakpointAdded(breakpoint: XBreakpoint<*>) {
+        LOG.info("log point candidate added: ${ByLogpoints.asLogpoint(breakpoint)?.let { "inter-line at line " + it.line } ?: "not a .by inter-line breakpoint"}")
         if (!ByLogpoints.pluginOwnsLogpointPrompt()) return
         val logpoint = ByLogpoints.asLogpoint(breakpoint) ?: return
         if (!ByLogpoints.isUnfilled(logpoint)) return
