@@ -20,6 +20,7 @@ import com.intellij.ui.JBColor
 import com.intellij.ui.awt.RelativePoint
 import dev.basedpython.pycharm.inspections.explain.ByRuleExplainer
 import dev.basedpython.pycharm.inspections.explain.ByRuleExplanation
+import dev.basedpython.pycharm.markup.ByCodeSpans
 import dev.basedpython.pycharm.util.BasedPythonBundle
 
 /** Show a balloon explaining the rule code under the caret (or prompt for one). */
@@ -57,7 +58,8 @@ class ExplainRuleAction : AnAction() {
         val html = buildString {
             append("<html><body style='font-family:sans-serif'>")
             append("<b>").append(escape(code)).append("</b><br/>")
-            append(escape(body).replace("\n", "<br/>"))
+            // `by explain rule` answers in markdown, so its `code` spans are marked up as code.
+            append(ByCodeSpans.toHtml(body))
             append("</body></html>")
         }
         ApplicationManager.getApplication().invokeLater {

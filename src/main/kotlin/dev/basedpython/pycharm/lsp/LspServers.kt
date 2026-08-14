@@ -36,6 +36,7 @@ import com.intellij.platform.lsp.api.customization.LspSignatureHelpDisabled
 import com.intellij.platform.lsp.api.customization.LspTypeHierarchyDisabled
 import dev.basedpython.pycharm.env.ByLaunch
 import dev.basedpython.pycharm.lang.dialect.BasedPythonProjectDetector
+import dev.basedpython.pycharm.lsp.diagnostics.ByDiagnosticsSupport
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import dev.basedpython.pycharm.ui.log.BasedPythonLog
 
@@ -164,6 +165,9 @@ internal class ByLspServerDescriptor(
 
   /** Disables only the `by` capabilities the user turned off in settings. */
   private class ByCapabilityCustomization(private val s: BasedPythonSettings) : LspCustomization() {
+    /** Not a toggle: `by`'s messages are written in markdown, and a tooltip is HTML. */
+    override val diagnosticsCustomizer = ByDiagnosticsSupport()
+
     override val completionCustomizer
       get() = if (s.byCompletion) super.completionCustomizer else LspCompletionDisabled
     override val goToDefinitionCustomizer
@@ -249,6 +253,10 @@ internal class BuffLspServerDescriptor(
     BuffCapabilityCustomization(BasedPythonSettings.getInstance(project))
 
   private class BuffCapabilityCustomization(private val s: BasedPythonSettings) : LspCustomization() {
+    // `buff`'s messages quote names in backticks the same way `by`'s do (it is a ruff fork), so
+    // its tooltips are rendered the same way.
+    override val diagnosticsCustomizer = ByDiagnosticsSupport()
+
     // Always-off (handled by `by`):
     override val goToDefinitionCustomizer = LspGoToDefinitionDisabled
     override val goToTypeDefinitionCustomizer = LspGoToTypeDefinitionDisabled
