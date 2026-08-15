@@ -85,7 +85,7 @@ class ByDapLaunchArgumentsProvider : DapLaunchArgumentsProvider {
     @Throws(ExecutionException::class)
     private fun prepare(project: Project): ByDebugSetup {
         val settings = BasedPythonSettings.getInstance(project)
-        return when (ByDebugBackend.of(settings.debugBackend)) {
+        return when (settings.debugBackend) {
             ByDebugBackend.DEBUGPY -> ByDebugSetup.create()
             ByDebugBackend.BPD -> {
                 val launch = ByEnvironments.resolve(project, BY_BINARY)
