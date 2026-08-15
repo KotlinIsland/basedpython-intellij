@@ -284,6 +284,13 @@
              than an annotator because it draws where there is no text to attribute. -->
         <highlightingPassFactory
             implementation="dev.basedpython.pycharm.editor.highlight.ByStringMarginPassFactory"/>
+        <!-- What a stopped program's own state settles about the code below it: a condition that
+             will go one way, a branch that will not run. A pass because the daemon owns when it
+             runs and `ByDataFlowSession` restarts it when a stop changes what is known — an inlay
+             provider would run when the daemon felt like it, which is not when the program
+             stopped. Off unless the user turns it on. -->
+        <highlightingPassFactory
+            implementation="dev.basedpython.pycharm.debug.dfa.ByDataFlowPassFactory"/>
         <annotator
             language="basedpython"
             implementationClass="dev.basedpython.pycharm.highlight.fstring.FStringInterpolationAnnotator"/>

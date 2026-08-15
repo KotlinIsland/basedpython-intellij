@@ -78,6 +78,14 @@ class BasedPythonSettings : PersistentStateComponent<BasedPythonSettings.State> 
     var byCodeLens: Boolean = true,
     var byDocumentHighlight: Boolean = true,
     var bySignatureHelp: Boolean = true,
+    /**
+     * Draw what a stopped program's own state settles about the code below it.
+     *
+     * Off by default. It costs a round trip to the debuggee on every stop and every step, and it
+     * only says anything at all when a debugger is attached — a user who has not asked for it
+     * should not be paying for it.
+     */
+    var debuggerDataFlow: Boolean = false,
     // `buff` server capabilities:
     var buffFormatting: Boolean = true,
     var buffCodeActions: Boolean = true,
@@ -205,6 +213,9 @@ class BasedPythonSettings : PersistentStateComponent<BasedPythonSettings.State> 
   var bySignatureHelp: Boolean
     get() = state.bySignatureHelp
     set(value) { state.bySignatureHelp = value }
+  var debuggerDataFlow: Boolean
+    get() = state.debuggerDataFlow
+    set(value) { state.debuggerDataFlow = value }
   var buffFormatting: Boolean
     get() = state.buffFormatting
     set(value) { state.buffFormatting = value }
