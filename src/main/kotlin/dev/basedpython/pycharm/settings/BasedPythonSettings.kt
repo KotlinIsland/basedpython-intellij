@@ -86,6 +86,15 @@ class BasedPythonSettings : PersistentStateComponent<BasedPythonSettings.State> 
      * should not be paying for it.
      */
     var debuggerDataFlow: Boolean = false,
+    /**
+     * Which debugger drives a `.by` session — `bpd` or `debugpy`.
+     *
+     * A `String` rather than the enum for the same reason `pyFileHandling` is: the serializer
+     * persists a constant's name and throws on one it cannot match, so a settings file written by
+     * a newer plugin would fail to load instead of falling back. `ByDebugBackend.of` does the
+     * falling back.
+     */
+    var debugBackend: String = "bpd",
     // `buff` server capabilities:
     var buffFormatting: Boolean = true,
     var buffCodeActions: Boolean = true,
@@ -216,6 +225,9 @@ class BasedPythonSettings : PersistentStateComponent<BasedPythonSettings.State> 
   var debuggerDataFlow: Boolean
     get() = state.debuggerDataFlow
     set(value) { state.debuggerDataFlow = value }
+  var debugBackend: String
+    get() = state.debugBackend
+    set(value) { state.debugBackend = value }
   var buffFormatting: Boolean
     get() = state.buffFormatting
     set(value) { state.buffFormatting = value }
