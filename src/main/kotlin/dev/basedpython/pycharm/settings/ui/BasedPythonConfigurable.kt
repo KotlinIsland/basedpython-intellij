@@ -19,6 +19,7 @@ import dev.basedpython.pycharm.lsp.inlay.ByHintKind
 import dev.basedpython.pycharm.lsp.inlay.ByHintMode
 import dev.basedpython.pycharm.lsp.inlay.ByPushKey
 import dev.basedpython.pycharm.lsp.reload.BasedPythonLspReloader
+import dev.basedpython.pycharm.debug.bpd.ByDebugBackend
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import java.awt.BorderLayout
 import java.awt.GridBagConstraints
@@ -94,6 +95,18 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
         renderer = SimpleListCellRenderer.create("") { it.display }
     }
 
+    private val debugBackendCombo = ComboBox(ByDebugBackend.entries.toTypedArray()).apply {
+        renderer = SimpleListCellRenderer.create("") {
+            when (it) {
+                ByDebugBackend.BPD -> "bpd (recommended)"
+                ByDebugBackend.DEBUGPY -> "debugpy"
+                null -> ""
+            }
+        }
+    }
+
+    private val debuggerDataFlow = JCheckBox("Show what a stopped program settles about the code below it")
+
     // Per-server capability toggles (§142)
     private val byCompletion = JCheckBox("Completion")
     private val byGoToDefinition = JCheckBox("Go to definition / type definition")
@@ -157,6 +170,17 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
                             "files in a basedpython project either way.",
                     )
                 row { cell(indexGeneratedPython) }
+            }
+            group("Debugger") {
+                row("Debugger:") { cell(debugBackendCombo) }
+                    .comment(
+                        "bpd is PEP 669 native and is the only backend that can seed the " +
+                            "data-flow analysis below. debugpy needs no extra binary.",
+                    )
+                row { cell(debuggerDataFlow) }
+                    .comment(
+                        "While stopped, draw which branches will be taken. Needs the bpd backend.",
+                    )
             }
             group("by server capabilities") {
                 row { cell(byCompletion) }
@@ -251,6 +275,8 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
             (lspTraceCombo.selectedItem as? String ?: "off") != s.lspTraceLevel ||
             indexGeneratedPython.isSelected != s.indexGeneratedPython ||
             pyFileHandlingCombo.selectedItem != s.pyFileHandling ||
+            debugBackendCombo.selectedItem != s.debugBackend ||
+            debuggerDataFlow.isSelected != s.debuggerDataFlow ||
             byCompletion.isSelected != s.byCompletion ||
             byGoToDefinition.isSelected != s.byGoToDefinition ||
             byFindReferences.isSelected != s.byFindReferences ||
@@ -294,6 +320,8 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
 
         val handlingChanged = pyFileHandlingCombo.selectedItem != s.pyFileHandling
         s.pyFileHandling = pyFileHandlingCombo.selectedItem as? PyFileHandling ?: PyFileHandling.AUTO
+        s.debugBackend = debugBackendCombo.selectedItem as? ByDebugBackend ?: ByDebugBackend.BPD
+        s.debuggerDataFlow = debuggerDataFlow.isSelected
         // File types are cached per file; without this, open .py editors keep the old one.
         if (handlingChanged) FileTypeManagerEx.getInstanceEx().makeFileTypesChange(
             "basedpython .py handling changed",
@@ -362,6 +390,8 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
         lspTraceCombo.selectedItem = s.lspTraceLevel
         indexGeneratedPython.isSelected = s.indexGeneratedPython
         pyFileHandlingCombo.selectedItem = s.pyFileHandling
+        debugBackendCombo.selectedItem = s.debugBackend
+        debuggerDataFlow.isSelected = s.debuggerDataFlow
         byCompletion.isSelected = s.byCompletion
         byGoToDefinition.isSelected = s.byGoToDefinition
         byFindReferences.isSelected = s.byFindReferences

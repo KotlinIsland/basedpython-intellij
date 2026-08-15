@@ -7,6 +7,7 @@ import com.intellij.openapi.components.Storage
 import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
 import com.intellij.util.xmlb.XmlSerializerUtil
+import dev.basedpython.pycharm.debug.bpd.ByDebugBackend
 import dev.basedpython.pycharm.lsp.inlay.ByHintKind
 import dev.basedpython.pycharm.lsp.inlay.ByHintMode
 import dev.basedpython.pycharm.lsp.inlay.ByHintModes
@@ -225,9 +226,9 @@ class BasedPythonSettings : PersistentStateComponent<BasedPythonSettings.State> 
   var debuggerDataFlow: Boolean
     get() = state.debuggerDataFlow
     set(value) { state.debuggerDataFlow = value }
-  var debugBackend: String
-    get() = state.debugBackend
-    set(value) { state.debugBackend = value }
+  var debugBackend: ByDebugBackend
+    get() = ByDebugBackend.of(state.debugBackend)
+    set(value) { state.debugBackend = ByDebugBackend.settingFor(value) }
   var buffFormatting: Boolean
     get() = state.buffFormatting
     set(value) { state.buffFormatting = value }

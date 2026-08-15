@@ -218,33 +218,84 @@ Nothing in the bootstrap may take the user's program down with it: every step ru
   unverified rather than bind to the wrong place. `by` records absolute source paths, so this has
   not been observed; it is the first thing to check if breakpoints silently do not bind.
 
-## The other debugger in this ecosystem
+## The other debugger in this ecosystem, and the switch to it
 
 `bpd` ([basedpythondebugger](https://github.com/KotlinIsland/basedpythondebugger)) is a Python
-debugger built on PEP 669, and it now has an IntelliJ plugin of its own — `editors/intellij/` —
-registering the **same two extension points this one does**,
-`platform.dap.debugAdapterSupportProvider` and `platform.dap.launchArgumentsProvider`. That is not
-a conflict, since the platform routes on adapter id and run configuration type, but it is
-duplicated plumbing.
+debugger built on PEP 669. **This plugin can now drive it, and it is the default** — the setting is
+*Settings | basedpython | Debugger*, and debugpy stays reachable there.
 
-**The agreement between the two plugins, and the plan for converging them, lives here:**
-[bpd and the basedpython pycharm plugin](https://github.com/KotlinIsland/basedpythondebugger/blob/main/docs/development/basedpython-pycharm.md)
+The agreement between the two plugins is
+[bpd and the basedpython pycharm plugin](https://github.com/KotlinIsland/basedpythondebugger/blob/main/docs/development/basedpython-pycharm.md),
+which said the switch was this plugin's to make. It has been made.
 
-The short version: they are not merged, because this plugin debugs `.by` and `bpd` cannot yet.
-The end state is this plugin **switching its adapter from debugpy to `bpd`** once `bpd` can, at
-which point there is one adapter between them and packaging is the only question left.
+**Why bpd is the default.** It is PEP 669 native — a line with no breakpoint on it is `DISABLE`d
+the first time it is seen. It reports `.by` locations through the source map itself, in its agent,
+where a location is *made*, rather than through pydevd's generated-code support. It verifies the
+digest of both artefacts before mapping anything, where the debugpy path maps a line whether or
+not the pair still matches. And it is the only backend that answers `bpd/facts`, which the
+data-flow analysis is seeded from.
 
-Two things from this page are ahead of `bpd`'s plugin and are recorded there as such: the console
-(`DapXDebugProcess` builds one over the adapter's own process handler, and `bpd` spawns the
-interpreter itself) and adapter `output` events. A third — a failure surfacing as an IDE internal
-error naming `CoroutineScheduler` — `bpd`'s plugin already handles.
+### The two backends are not the same shape
 
-**What `bpd` needs from `by`, and it is one thing.** `bpd` will not report a line that came from a
-map it could not verify against the thing the map describes. `_by_sourcemap.py` has the mapping and
-has the provenance — `None` for prelude lines — and carries **no digest of the two artefacts**. That
-digest is the whole of what stands between `bpd` and `.by` support. `bpd`'s roadmap recorded this as
-"blocked upstream, the transpiler must emit a source map", which this page had already disproved;
-that entry has been corrected to ask for the digest and nothing else.
+| | debugpy | bpd |
+| --- | --- | --- |
+| Where the adapter lives | inside the debuggee, via `debugpy.listen()` | its own process, started by the wrapper |
+| The DAP start request | `Attach`, with a `connect` block | `Launch` |
+| How the IDE reaches it | `PYTHONPATH` + `sitecustomize.py` | `PYTHON` + a wrapper script |
+| Who maps `.by` lines | the IDE, via `setPydevdSourceMap` | bpd's own agent |
+
+### Why bpd needs a wrapper
+
+`by run` transpiles into a temp directory, writes `_by_sourcemap.py` beside the generated Python,
+runs `$PYTHON _by_runner.py <module>` **with that directory as the working directory**, and deletes
+the tree when the program ends. The map lives exactly as long as the program does. So bpd cannot be
+handed the program from outside — it has to *be* the interpreter `by run` starts, which is what
+bpd's own source-mapping page concluded.
+
+The IDE controls the environment of `by run` and nothing else, which leaves `PYTHON`. The wrapper
+has two jobs, because `by run` calls `$PYTHON` twice:
+
+1. `$PYTHON -c "import sys; print(…)"`, to decide which Python version to emit code for. **Passed
+   straight through to the real interpreter** — answering it any other way would make `by run` emit
+   code for a python that is not the one running it
+2. `$PYTHON _by_runner.py <module>`, which is the program. Recorded, then `bpd dap --listen` is
+   started; the IDE reads the record and sends it back as the `launch` request
+
+The record is lines rather than JSON: quoting a path into JSON from `sh` needs `sed` and gets a
+backslash subtly wrong, and a line needs no quoting at all. bpd's own announcement — where it bound
+and the token to present — is appended below it, so one file carries everything.
+
+**Windows is refused by name.** `by run` starts `$PYTHON` with `CreateProcess`, which runs an
+executable rather than honouring a shebang, so a shell script cannot be the interpreter there.
+Switch the backend to debugpy, or run under WSL.
+
+## Data flow: what a stopped program settles about the code below it
+
+Off by default; the switch is beside the backend one. While the program is stopped, the branches
+below the stop line are answered as the definite `true` or `false` they will be, and code that will
+not run is greyed.
+
+It is not a second analysis. `by` reads the same file under a program that pins some names to what
+the debugger observed, and its existing reachability machinery then evaluates to something definite
+where it would otherwise say "could go either way".
+
+**Only bpd can seed it**, and the reason is the interesting part. A fact is worth carrying to code
+that has not run only if it is still true when that code runs — and that judgement can only be made
+by something holding the object: whether its type is a heap type (so `__class__` could be
+reassigned), whether instances keep a dictionary, whether a length can change. A DAP `variables`
+reply carries none of it. So a debugpy session draws nothing rather than drawing something built on
+a guess.
+
+The facts that do not survive the trip are dropped here rather than sent: a container's length is
+true now and false after the next `append`. A reading that lasts until `__class__` is reassigned
+*is* sent, because a type checker already assumes nobody does that, and being stricter than the
+checker this feeds would be incoherent rather than safe.
+
+**What it will not tell you.** A condition it cannot decide gets nothing at all — an ambiguous
+verdict is what an unseeded reading says about nearly every condition, and a mark on each would be
+a screen full of hints that say nothing. A name bound by a loop around the stop line is never
+seeded, because the back edge rebinds it: what was observed is true for this iteration and false
+for the next.
 
 ## Two things the console taught us
 
