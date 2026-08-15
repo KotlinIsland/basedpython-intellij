@@ -342,6 +342,15 @@
             instance="dev.basedpython.pycharm.settings.app.BasedPythonAppConfigurable"/>
     </extensions>
 
+    <projectListeners>
+        <!-- Turns every stop into a `bpd/facts` question and a `by/dataFlowAt` answer. Registered
+             as a listener rather than driven from the drawing pass because the daemon decides when
+             a pass runs, and that is not when the program stopped. -->
+        <listener
+            class="dev.basedpython.pycharm.debug.dfa.ByDataFlowListener"
+            topic="com.intellij.xdebugger.XDebuggerManagerListener"/>
+    </projectListeners>
+
     <applicationListeners>
         <listener class="dev.basedpython.pycharm.run.watch.WatchModeSaveListener"
                   topic="com.intellij.openapi.fileEditor.FileDocumentManagerListener"/>
