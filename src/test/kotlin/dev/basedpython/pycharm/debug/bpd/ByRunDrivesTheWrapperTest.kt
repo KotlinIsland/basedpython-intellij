@@ -70,7 +70,7 @@ class ByRunDrivesTheWrapperTest {
             script,
             "#!/bin/sh\n" +
                 """echo '{"listening":{"host":"127.0.0.1","port":51234,""" +
-                """"header":"X-Bpd-Token","token":"tok"}}'""" + "\n",
+                """"header":"x-bpd-token","token":"tok"}}'""" + "\n",
         )
         script.toFile().setExecutable(true)
         return script

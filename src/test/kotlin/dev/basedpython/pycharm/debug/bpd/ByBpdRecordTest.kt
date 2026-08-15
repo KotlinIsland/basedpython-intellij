@@ -16,7 +16,7 @@ import org.junit.jupiter.api.Test
 class ByBpdRecordTest {
 
     private val announcement =
-        """{"listening":{"host":"127.0.0.1","port":51234,"header":"X-Bpd-Token","token":"abc"}}"""
+        """{"listening":{"host":"127.0.0.1","port":51234,"header":"x-bpd-token","token":"abc"}}"""
 
     @Test
     fun `a finished record carries what to launch and where to connect`() {
@@ -33,7 +33,7 @@ class ByBpdRecordTest {
         assertEquals("/tmp/by-build-1", ready.cwd)
         assertEquals(listOf("_by_runner.py", "demo", "--verbose"), ready.argv)
         assertEquals(51234, ready.port)
-        assertEquals("X-Bpd-Token", ready.tokenHeader)
+        assertEquals("x-bpd-token", ready.tokenHeader)
         assertEquals("abc", ready.token)
     }
 
