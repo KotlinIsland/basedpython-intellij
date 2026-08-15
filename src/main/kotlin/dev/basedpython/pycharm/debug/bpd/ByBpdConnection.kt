@@ -107,7 +107,9 @@ class ByBpdConnection private constructor(
                     BasedPythonBundle.message(
                         "debug.bpd.error.connect",
                         ready.host,
-                        ready.port,
+                        // as text: `MessageFormat` groups a number by locale, so a port arrives
+                        // as `50,488` and the address it forms is one nobody can dial
+                        ready.port.toString(),
                         failed.message ?: failed.toString(),
                     ),
                     failed,
