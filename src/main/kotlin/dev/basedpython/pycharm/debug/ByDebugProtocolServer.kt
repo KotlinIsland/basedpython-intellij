@@ -26,6 +26,20 @@ interface ByDebugProtocolServer : IDebugProtocolServer {
      */
     @JsonRequest("setPydevdSourceMap")
     fun setPydevdSourceMap(args: SetPydevdSourceMapArguments): CompletableFuture<Any?>
+
+    /**
+     * What `bpd` can prove about a frame's names, and how long each reading stays true.
+     *
+     * `bpd`'s alone: debugpy has no such request and answers `unknown command`, which is what the
+     * data-flow feature reads as "this session has no facts" — see
+     * [dev.basedpython.pycharm.debug.dfa.ByDataFlowRequests].
+     *
+     * Untyped for the reason [setPydevdSourceMap]'s result is: the answer is a shape
+     * [dev.basedpython.pycharm.debug.dfa.ByDataFlowFacts] reads field by field, and giving Gson a
+     * class for it would put the same vocabulary in two places that have to agree.
+     */
+    @JsonRequest("bpd/facts")
+    fun facts(args: dev.basedpython.pycharm.debug.dfa.ByFactsArguments): CompletableFuture<Any?>
 }
 
 /**

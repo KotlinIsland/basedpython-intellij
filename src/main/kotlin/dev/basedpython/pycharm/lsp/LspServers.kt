@@ -34,6 +34,7 @@ import com.intellij.platform.lsp.api.customization.LspSelectionRangeDisabled
 import com.intellij.platform.lsp.api.customization.LspSemanticTokensDisabled
 import com.intellij.platform.lsp.api.customization.LspSignatureHelpDisabled
 import com.intellij.platform.lsp.api.customization.LspTypeHierarchyDisabled
+import dev.basedpython.pycharm.debug.dfa.ByDataFlowServer
 import dev.basedpython.pycharm.env.ByLaunch
 import dev.basedpython.pycharm.lang.dialect.BasedPythonProjectDetector
 import dev.basedpython.pycharm.lsp.diagnostics.ByDiagnosticsSupport
@@ -152,6 +153,16 @@ internal class ByLspServerDescriptor(
    * `workspace/didChangeConfiguration` yet (its own VS Code extension restarts the server on these
    * settings for the same reason, and so does this plugin — see `BasedPythonLspReloader`).
    */
+  /**
+   * Adds `by/dataFlowAt`; see [dev.basedpython.pycharm.debug.dfa.ByDataFlowServer].
+   *
+   * LSP has no request whose shape fits "what does this program's own state settle about the code
+   * below it" — an `inlayHint` carries a range and nowhere to put what a debugger saw — so it is a
+   * protocol extension, which is what `lsp4jServerClass` is for.
+   */
+  override val lsp4jServerClass: Class<out org.eclipse.lsp4j.services.LanguageServer> =
+    ByDataFlowServer::class.java
+
   override fun createInitializationOptions(): Any =
     mapOf("inlayHints" to BasedPythonSettings.getInstance(project).inlayModes.serverOptions())
 
