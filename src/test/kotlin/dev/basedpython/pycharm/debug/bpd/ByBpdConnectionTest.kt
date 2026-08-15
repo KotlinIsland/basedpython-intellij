@@ -61,7 +61,7 @@ class ByBpdConnectionTest {
             cwd ${dir.toAbsolutePath()}
             arg _by_runner.py
             arg demo
-            {"listening":{"host":"127.0.0.1","port":${listener.port},"header":"X-Bpd-Token","token":"$token"}}
+            {"listening":{"host":"127.0.0.1","port":${listener.port},"header":"x-bpd-token","token":"$token"}}
             """.trimIndent() + "\n",
         )
         return file
@@ -75,7 +75,7 @@ class ByBpdConnectionTest {
             }
             connection.use {
                 assertEquals(
-                    "X-Bpd-Token: secret-1\r\n",
+                    "x-bpd-token: secret-1\r\n",
                     listener.greeting(),
                     "bpd checks the token before it acts on anything, so it has to arrive first",
                 )
@@ -106,7 +106,7 @@ class ByBpdConnectionTest {
         Files.writeString(
             file,
             "cwd /tmp/x\narg _by_runner.py\n" +
-                """{"listening":{"host":"127.0.0.1","port":$free,"header":"X-Bpd-Token","token":"t"}}""" + "\n",
+                """{"listening":{"host":"127.0.0.1","port":$free,"header":"x-bpd-token","token":"t"}}""" + "\n",
         )
 
         val failed = assertThrows<ExecutionException> {

@@ -83,7 +83,7 @@ class ByBpdWrapperExecutionTest {
         stub(
             dir,
             "bpd",
-            """echo '{"listening":{"host":"127.0.0.1","port":51234,"header":"X-Bpd-Token","token":"tok"}}'""",
+            """echo '{"listening":{"host":"127.0.0.1","port":51234,"header":"x-bpd-token","token":"tok"}}'""",
         )
         val record = dir.resolve("record")
 
@@ -98,7 +98,7 @@ class ByBpdWrapperExecutionTest {
         assertEquals(dir.toRealPath().toString(), Path.of(ready.cwd).toRealPath().toString())
         assertEquals(51234, ready.port)
         assertEquals("tok", ready.token)
-        assertEquals("X-Bpd-Token", ready.tokenHeader)
+        assertEquals("x-bpd-token", ready.tokenHeader)
     }
 
     @Test
