@@ -53,6 +53,37 @@ class PluginXmlResourcesTest {
     }
 
     /**
+     * Every class plugin.xml names exists.
+     *
+     * The platform resolves these by name at load time and logs a warning for one it cannot find,
+     * which is not a failure anybody sees — the extension is simply absent, and whatever it was
+     * registering silently does not happen. A highlighting pass that never runs and a listener that
+     * never fires look exactly like a feature that does not work.
+     *
+     * Covers every attribute a registration can name an implementation with, so a new kind of
+     * extension is covered the day it is added rather than the day somebody remembers to add it
+     * here.
+     */
+    @Test
+    fun `every class named in plugin xml resolves`() {
+        val named = listOf("implementation", "implementationClass", "class", "instance", "factoryClass", "serviceImplementation", "interface", "topic")
+            .flatMap { attribute ->
+                Regex("""$attribute="([^"]+)"""").findAll(pluginXml).map { it.groupValues[1] }
+            }
+            // an inner class is named with a `$`, which `Class.forName` takes as written
+            .filter { it.contains('.') && !it.contains(' ') }
+            .distinct()
+
+        assertTrue(named.size > 20, "plugin.xml named only ${named.size} classes, which is too few to be right")
+
+        val missing = named.filter { runCatching { Class.forName(it) }.isFailure }
+        assertTrue(
+            missing.isEmpty(),
+            "plugin.xml names classes that do not exist, so the platform will skip them: $missing",
+        )
+    }
+
+    /**
      * `defaultLiveTemplates` takes an extensionless path and appends `.xml`. Case matters inside a
      * jar, so a lowercase reference to `BasedPython.xml` resolves to nothing on every platform.
      */
