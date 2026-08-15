@@ -4,6 +4,9 @@ import com.intellij.execution.ExecutionException
 import com.intellij.openapi.util.Key
 import com.intellij.openapi.util.io.FileUtil
 import com.intellij.util.net.NetUtils
+import dev.basedpython.pycharm.debug.bpd.ByBpdWrapper
+import dev.basedpython.pycharm.debug.bpd.ByDebugBackend
+import dev.basedpython.pycharm.env.Executables
 import dev.basedpython.pycharm.util.BasedPythonBundle
 import kotlinx.coroutines.delay
 import java.io.IOException
@@ -26,7 +29,27 @@ class ByDebugSetup(
     val port: Int,
     val bootstrapDir: Path,
     val infoFile: Path,
+    /**
+     * Which debugger this session is for.
+     *
+     * The two backends put entirely different things in [bootstrapDir] and reach the debuggee in
+     * entirely different ways — one through `PYTHONPATH` and a `sitecustomize.py`, the other
+     * through `PYTHON` and a wrapper — so every later step has to know which one it is looking at.
+     */
+    val backend: ByDebugBackend = ByDebugBackend.DEBUGPY,
+    /**
+     * The `bpd` binary, when [backend] is [ByDebugBackend.BPD].
+     *
+     * Resolved at setup rather than at launch, because setup is the first moment that can refuse:
+     * a session with no `bpd` should never get as far as running the program.
+     */
+    val bpd: Path? = null,
+    /** The interpreter `by run` would have used, for the wrapper to pass a version probe to. */
+    val python: String? = null,
 ) {
+    /** The script `PYTHON` is pointed at, for a [ByDebugBackend.BPD] session. */
+    val wrapper: Path get() = wrapperOf(bootstrapDir)
+
     companion object {
         val KEY: Key<ByDebugSetup> = Key.create("basedpython.debug.setup")
 
@@ -43,13 +66,66 @@ class ByDebugSetup(
          * IDE controls is the environment, and `PYTHONPATH` plus a `sitecustomize.py` is the one
          * hook that reaches an interpreter you did not launch.
          */
+        /**
+         * Prepare a `bpd` session: a wrapper script, a port, and a file for the two of them to
+         * meet in.
+         *
+         * `bpd` cannot be handed the program from outside. `by run` transpiles into a temp
+         * directory, writes `_by_sourcemap.py` beside the generated python, and deletes the tree
+         * when the program ends — so the map lives exactly as long as the program, and the only
+         * way for a debugger to be in the picture is to *be* the interpreter `by run` starts. See
+         * [ByBpdWrapper].
+         */
+        @Throws(ExecutionException::class)
+        fun forBpd(bpd: Path, python: String): ByDebugSetup {
+            if (!ByBpdWrapper.isSupported(System.getProperty("os.name").orEmpty())) {
+                throw ExecutionException(BasedPythonBundle.message("debug.bpd.error.unsupported"))
+            }
+            val dir = tempDir()
+            val wrapper = dir.resolve("bpd-python")
+            try {
+                Files.writeString(wrapper, ByBpdWrapper.script())
+            } catch (e: IOException) {
+                throw ExecutionException(
+                    BasedPythonBundle.message("debug.error.bootstrapFailed", e.message ?: ""),
+                    e,
+                )
+            }
+            if (!Executables.makeExecutable(wrapper)) {
+                throw ExecutionException(
+                    BasedPythonBundle.message("debug.bpd.error.wrapperNotExecutable", wrapper.toString()),
+                )
+            }
+            return ByDebugSetup(
+                port = freePort(),
+                bootstrapDir = dir,
+                infoFile = dir.resolve("bpd-record"),
+                backend = ByDebugBackend.BPD,
+                bpd = bpd,
+                python = python,
+            )
+        }
+
+        /** The wrapper `by run` is pointed at, which only a bpd session has. */
+        private fun wrapperOf(dir: Path): Path = dir.resolve("bpd-python")
+
+        @Throws(ExecutionException::class)
+        private fun tempDir(): Path = try {
+            FileUtil.createTempDirectory("basedpython-debug", null, true).toPath()
+        } catch (e: IOException) {
+            throw ExecutionException(BasedPythonBundle.message("debug.error.bootstrapFailed", e.message ?: ""), e)
+        }
+
+        @Throws(ExecutionException::class)
+        private fun freePort(): Int = try {
+            NetUtils.findAvailableSocketPort()
+        } catch (e: IOException) {
+            throw ExecutionException(BasedPythonBundle.message("debug.error.noPort", e.message ?: ""), e)
+        }
+
         @Throws(ExecutionException::class)
         fun create(): ByDebugSetup {
-            val dir = try {
-                FileUtil.createTempDirectory("basedpython-debug", null, true).toPath()
-            } catch (e: IOException) {
-                throw ExecutionException(BasedPythonBundle.message("debug.error.bootstrapFailed", e.message ?: ""), e)
-            }
+            val dir = tempDir()
             val bootstrap = ByDebugSetup::class.java.getResourceAsStream(BOOTSTRAP_RESOURCE)
                 ?: throw ExecutionException(BasedPythonBundle.message("debug.error.bootstrapMissing", BOOTSTRAP_RESOURCE))
             try {
@@ -57,12 +133,7 @@ class ByDebugSetup(
             } catch (e: IOException) {
                 throw ExecutionException(BasedPythonBundle.message("debug.error.bootstrapFailed", e.message ?: ""), e)
             }
-            val port = try {
-                NetUtils.findAvailableSocketPort()
-            } catch (e: IOException) {
-                throw ExecutionException(BasedPythonBundle.message("debug.error.noPort", e.message ?: ""), e)
-            }
-            return ByDebugSetup(port, dir, dir.resolve("debug-info.json"))
+            return ByDebugSetup(freePort(), dir, dir.resolve("debug-info.json"))
         }
     }
 }

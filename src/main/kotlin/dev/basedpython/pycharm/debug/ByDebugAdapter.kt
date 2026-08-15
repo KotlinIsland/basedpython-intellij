@@ -28,6 +28,9 @@ import com.intellij.platform.dap.xdebugger.DapXDebugProcess
 import com.intellij.xdebugger.XDebugSession
 import com.intellij.xdebugger.breakpoints.XBreakpointHandler
 import dev.basedpython.pycharm.actions.ByCli
+import dev.basedpython.pycharm.debug.bpd.ByBpdConnection
+import dev.basedpython.pycharm.debug.bpd.ByBpdWrapper
+import dev.basedpython.pycharm.debug.bpd.ByDebugBackend
 import dev.basedpython.pycharm.run.ByCommandLineState
 import dev.basedpython.pycharm.util.BasedPythonBundle
 import kotlinx.coroutines.CoroutineScope
@@ -99,12 +102,31 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
         val commandLine = state as? ByCommandLineState
             ?: throw ExecutionException(BasedPythonBundle.message("debug.error.unsupportedState"))
 
-        commandLine.infrastructureEnv[ByDebugSetup.ENV_PORT] = setup.port.toString()
-        commandLine.infrastructureEnv[ByDebugSetup.ENV_INFO_OUT] = setup.infoFile.toString()
-        // pydevd warns on stderr about frozen modules on every start otherwise, which reads like a
-        // failure in the run console.
-        commandLine.infrastructureEnv[PYDEVD_DISABLE_FILE_VALIDATION] = "1"
-        commandLine.pythonPathPrefix += setup.bootstrapDir.toString()
+        when (setup.backend) {
+            ByDebugBackend.DEBUGPY -> {
+                commandLine.infrastructureEnv[ByDebugSetup.ENV_PORT] = setup.port.toString()
+                commandLine.infrastructureEnv[ByDebugSetup.ENV_INFO_OUT] = setup.infoFile.toString()
+                // pydevd warns on stderr about frozen modules on every start otherwise, which
+                // reads like a failure in the run console.
+                commandLine.infrastructureEnv[PYDEVD_DISABLE_FILE_VALIDATION] = "1"
+                commandLine.pythonPathPrefix += setup.bootstrapDir.toString()
+            }
+
+            // bpd is reached through `PYTHON` rather than `PYTHONPATH`, because it does not run
+            // *inside* the interpreter — it **is** the interpreter `by run` starts. See
+            // `ByBpdWrapper` for why that is the only place a debugger fits.
+            ByDebugBackend.BPD -> {
+                commandLine.infrastructureEnv[ENV_PYTHON] = setup.wrapper.toString()
+                commandLine.infrastructureEnv[ByBpdWrapper.ENV_PYTHON] =
+                    setup.python ?: DEFAULT_PYTHON
+                commandLine.infrastructureEnv[ByBpdWrapper.ENV_PORT] = setup.port.toString()
+                commandLine.infrastructureEnv[ByBpdWrapper.ENV_RECORD] = setup.infoFile.toString()
+                commandLine.infrastructureEnv[ByBpdWrapper.ENV_BPD] =
+                    setup.bpd?.toString() ?: throw ExecutionException(
+                        BasedPythonBundle.message("debug.bpd.error.notFound"),
+                    )
+            }
+        }
     }
 
     /**
@@ -120,6 +142,14 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
     ): DebugAdapterHandle {
         val setup = setup ?: throw ExecutionException(BasedPythonBundle.message("debug.error.noSetup"))
         val processHandler = executionResult?.processHandler
+
+        if (setup.backend == ByDebugBackend.BPD) {
+            // No source maps to invert and none to publish: bpd reads `_by_sourcemap.py` itself,
+            // from the filesystem the program is on, and reports `.by` locations from the agent.
+            // `mappings` stays empty and `BySourceMapPublisher` sends nothing, which is right —
+            // sending pydevd's request to bpd would be sending it a request it does not have
+            return ByBpdConnection.open(setup.infoFile, processHandler)
+        }
 
         val info = awaitDebuggeeInfo(setup.infoFile) { processHandler?.isProcessTerminated != true }
             ?: fail(BasedPythonBundle.message("debug.error.noReport"), null, processHandler)
@@ -242,6 +272,12 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
         private val LOG = Logger.getInstance(ByDebugAdapterDescriptor::class.java)
 
         private const val LOCALHOST = "127.0.0.1"
+
+        /** What `by run` reads the interpreter out of. */
+        private const val ENV_PYTHON = "PYTHON"
+
+        /** What `by run` falls back to when `PYTHON` names nothing. */
+        private const val DEFAULT_PYTHON = "python3"
         private const val PYDEVD_DISABLE_FILE_VALIDATION = "PYDEVD_DISABLE_FILE_VALIDATION"
 
         /** The bootstrap only writes its report once the port is open, so this is a formality. */
