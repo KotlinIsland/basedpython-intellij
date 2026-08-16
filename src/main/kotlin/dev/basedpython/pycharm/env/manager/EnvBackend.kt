@@ -129,6 +129,21 @@ interface EnvBackend {
      */
     val projectMarkers: List<String>
 
+    /**
+     * File names at a project root that an operation may rewrite.
+     *
+     * Separate from [projectMarkers] even where the two happen to list the same files, because they
+     * answer different questions and diverge for real backends: conda recognises a project by its
+     * `environment.yml` and then never writes back to it, so treating "how I recognise you" as "what
+     * I edit" would have the IDE re-reading a file that cannot have changed while missing the one
+     * that did.
+     *
+     * What this drives is [EnvFiles]: unsaved editor changes to these are flushed before a command
+     * reads them, and they are re-read afterwards so the editor is not left showing a version of the
+     * file that no longer exists on disk.
+     */
+    val managedFiles: List<String>
+
     /** True when this backend manages the project rooted at [projectRoot]. */
     fun claims(projectRoot: Path): Boolean
 

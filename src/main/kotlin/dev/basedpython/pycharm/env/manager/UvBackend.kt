@@ -29,6 +29,14 @@ object UvBackend : EnvBackend {
     override val installer: EnvToolInstaller = UvDownload
     override val projectMarkers: List<String> = listOf("uv.lock", "pyproject.toml")
 
+    /**
+     * `uv add`, `uv remove` and `uv lock` all rewrite these, and none of them goes through the IDE.
+     *
+     * `pyproject.toml` first: it is the one a user is likely to have open, and the one whose staleness
+     * is visible.
+     */
+    override val managedFiles: List<String> = listOf("pyproject.toml", "uv.lock")
+
     override fun claims(projectRoot: Path): Boolean =
         projectMarkers.any { Files.isRegularFile(projectRoot.resolve(it)) }
 

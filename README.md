@@ -180,6 +180,17 @@ support, run configurations, CLI actions, and editor tooling.
   you point at it.
 - Reading the tree never modifies the project. (`uv tree` re-locks by default; the plugin always
   asks for the frozen one. A project with no lock file falls back to a flat installed list.)
+- **`pyproject.toml` stays in step with what the tools did to it.** Adding or removing a
+  dependency runs a separate process that rewrites the file on disk, so the plugin flushes any
+  unsaved editor changes to it first — otherwise they are overwritten — and re-reads it
+  afterwards, instead of leaving an open editor showing a version of the file that no longer
+  exists.
+- The **Python version** button carries the version it is on (`Python 3.12`), so the toolbar
+  says what you are running as well as offering to change it.
+- **Sync** installs, removes and updates packages so the environment matches the project; it is
+  the only command in the toolbar that changes anything about the environment. **Re-read** — in
+  the right-click and ⋮ menus, since the view keeps itself current on its own — only re-reads
+  what is on disk.
 - Add and remove dependencies, upgrade everything past the lock file's pins, and choose the
   Python version — installed ones and ones that will be downloaded, offered together, because
   "I want 3.13" should not require first knowing whether 3.13 is installed.

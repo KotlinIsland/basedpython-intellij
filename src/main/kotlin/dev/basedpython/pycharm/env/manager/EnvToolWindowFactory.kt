@@ -20,6 +20,7 @@ internal class EnvToolWindowFactory : ToolWindowFactory, DumbAware {
         content.isCloseable = false
         content.setDisposer(panel)
         toolWindow.contentManager.addContent(content)
+        toolWindow.setAdditionalGearActions(panel.gearActions())
     }
 }
 

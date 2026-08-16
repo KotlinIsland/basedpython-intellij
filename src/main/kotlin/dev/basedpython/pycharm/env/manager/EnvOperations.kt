@@ -164,6 +164,15 @@ internal object EnvOperations {
      * cached an answer about the environment.
      */
     private fun runInBackground(project: Project, title: String, body: (ProgressIndicator) -> Unit) {
+        val service = EnvService.getInstance(project)
+        val backend = service.status.backend
+        val root = service.status.projectRoot
+
+        // Before the command starts, and on the thread the action was invoked from: the command is
+        // about to read these files off disk, so anything still sitting unsaved in an editor has to
+        // reach disk first or it is silently overwritten.
+        if (backend != null && root != null) EnvFiles.saveBeforeOperation(project, backend, root)
+
         ProgressManager.getInstance().run(object : Task.Backgroundable(project, title, true) {
             /**
              * The whole gesture is one busy stretch, not one per step: the toolbar disables what
@@ -172,7 +181,15 @@ internal object EnvOperations {
              * environment.
              */
             override fun run(indicator: ProgressIndicator) {
-                EnvService.getInstance(project).busyWhile { body(indicator) }
+                try {
+                    service.busyWhile { body(indicator) }
+                } finally {
+                    // In a finally, and off the EDT, because a cancelled or failed command has
+                    // usually already written something — a `uv add` that failed to resolve has
+                    // still edited `pyproject.toml` — and the editor must not be left showing the
+                    // file as it was before.
+                    if (backend != null && root != null) EnvFiles.refreshAfterOperation(backend, root)
+                }
             }
 
             /**
@@ -181,7 +198,7 @@ internal object EnvOperations {
              * view must be re-read rather than left showing the state from before.
              */
             override fun onFinished() {
-                EnvService.getInstance(project).refresh()
+                service.refresh()
                 afterEnvironmentChanged(project)
             }
         })

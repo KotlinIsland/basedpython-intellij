@@ -198,7 +198,7 @@ internal class EnvPanel(private val project: Project) :
             return status.error?.let { error ->
                 EditorNotificationPanel(EditorNotificationPanel.Status.Error).apply {
                     text = BasedPythonBundle.message("env.banner.error", error)
-                    createActionLabel(BasedPythonBundle.message("env.action.refresh")) { service.refresh() }
+                    createActionLabel(BasedPythonBundle.message("env.action.reread")) { service.refresh() }
                 }
             }
         }
@@ -383,6 +383,17 @@ internal class EnvPanel(private val project: Project) :
 
     // ---- actions -----------------------------------------------------------
 
+    /**
+     * The toolbar.
+     *
+     * *Re-read* is deliberately **not** here, next to *Sync*. The two were impossible to tell apart:
+     * both were named after refreshing and both wore a circular arrow, while one installs packages
+     * and takes minutes and the other just re-reads state and takes no time at all. Since the view
+     * already re-reads itself — on open, whenever a manifest changes, and after every operation — a
+     * permanent button for it was mostly there to be confused with the one that matters. It keeps
+     * its place in the context menu and the ⋮ menu, for the case the view cannot see: something
+     * installed straight into the environment behind the manifests' back.
+     */
     private fun toolbarActions(): DefaultActionGroup = DefaultActionGroup().apply {
         add(SetUpAction())
         add(SyncAction())
@@ -395,7 +406,6 @@ internal class EnvPanel(private val project: Project) :
         addSeparator()
         add(ExpandAllAction())
         add(CollapseAllAction())
-        add(RefreshAction())
     }
 
     private fun popupActions(): DefaultActionGroup = DefaultActionGroup().apply {
@@ -403,7 +413,12 @@ internal class EnvPanel(private val project: Project) :
         add(RemoveAction())
         addSeparator()
         add(SyncAction())
-        add(RefreshAction())
+        add(ReReadAction())
+    }
+
+    /** The tool window's ⋮ menu, set by [EnvToolWindowFactory]. */
+    fun gearActions(): DefaultActionGroup = DefaultActionGroup().apply {
+        add(ReReadAction())
     }
 
     private fun hasEnvironment(): Boolean = service.status.environment != null
@@ -512,18 +527,43 @@ internal class EnvPanel(private val project: Project) :
         }
     }
 
+    /**
+     * Which Python the environment is built on, and the way to change it.
+     *
+     * Carries the current version as its label rather than an icon. There is no icon in the
+     * platform's set that means "Python interpreter" — the Python logo belongs to the Python plugin,
+     * which this plugin deliberately does not depend on — and every generic one that was tried read
+     * as something else entirely. The version is also strictly more useful than any glyph could be:
+     * the button answers "what am I on" and offers "change it" in the same place, which is what
+     * PyCharm's own interpreter widget does.
+     */
     private inner class InterpreterAction : DumbAwareAction(
         BasedPythonBundle.messagePointer("env.action.interpreter"),
         BasedPythonBundle.messagePointer("env.action.interpreter.description"),
-        AllIcons.Nodes.Console,
+        // Typed, because a bare null cannot pick between the Icon and Supplier<Icon> overloads.
+        null as Icon?,
     ) {
         override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
 
         override fun update(e: AnActionEvent) {
             e.presentation.isEnabled = service.status.backend != null && !service.busy
+            e.presentation.text = pythonLabel()
+            e.presentation.putClientProperty(ActionUtil.SHOW_TEXT_IN_TOOLBAR, true)
         }
 
-        override fun actionPerformed(e: AnActionEvent) = EnvPythonPicker.choose(project, tree)
+        /** `Python 3.12` once an environment exists, and the bare invitation before one does. */
+        private fun pythonLabel(): String {
+            val version = service.status.environment?.pythonVersion
+            return if (version.isNullOrBlank()) {
+                BasedPythonBundle.message("env.action.interpreter")
+            } else {
+                BasedPythonBundle.message("env.action.interpreter.current", version)
+            }
+        }
+
+        // The action event's own context, so the popup opens at the button. Anchoring it to the tree
+        // put it under the whole tree, which is the bottom of the tool window.
+        override fun actionPerformed(e: AnActionEvent) = EnvPythonPicker.choose(project, e.dataContext)
     }
 
     private inner class ExpandAllAction : DumbAwareAction(
@@ -548,9 +588,15 @@ internal class EnvPanel(private val project: Project) :
         }
     }
 
-    private inner class RefreshAction : DumbAwareAction(
-        BasedPythonBundle.messagePointer("env.action.refresh"),
-        BasedPythonBundle.messagePointer("env.action.refresh.description"),
+    /**
+     * Re-reads what is on disk into the view. Changes nothing.
+     *
+     * Named *Re-read* rather than *Refresh* for the same reason it left the toolbar: beside a
+     * *Sync* that installs packages, a second command named after refreshing is a coin flip.
+     */
+    private inner class ReReadAction : DumbAwareAction(
+        BasedPythonBundle.messagePointer("env.action.reread"),
+        BasedPythonBundle.messagePointer("env.action.reread.description"),
         AllIcons.Actions.ForceRefresh,
     ) {
         override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
