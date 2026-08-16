@@ -113,6 +113,8 @@
   from any run, with a parent showing the worst of its children. The tree also collects at
   project open and re-collects a couple of seconds after the project's sources change, so
   it keeps itself in step without pressing Refresh.
+- Filter the test view by state (funnel on its toolbar): show only failed tests, only
+  skipped, only what has not run yet. The toolbar says when something is hidden.
 - *View Collection Output* in the test tool window's ⋮ menu: the exact commands, exit codes
   and output of the last collection, for when the view disagrees with pytest run by hand.
   A collection stopped by `by run`'s type check now says so, with the diagnostic count.
