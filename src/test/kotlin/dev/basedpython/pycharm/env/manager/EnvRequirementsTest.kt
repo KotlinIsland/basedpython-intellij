@@ -1,6 +1,8 @@
 package dev.basedpython.pycharm.env.manager
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
 
@@ -127,6 +129,45 @@ class EnvRequirementsTest {
     fun `a requirement with no name is left alone`() {
         val url = "git+https://github.com/x/y@main"
         assertEquals(url, EnvRequirements.withExtras(url, listOf("http2")))
+    }
+
+    // ---- what keeps the completion popup open --------------------------------
+
+    /**
+     * This predicate is the autopopup.
+     *
+     * `TextCompletionContributor.invokeAutoPopup` opens the list only when the provider's
+     * `acceptChar` returns `ADD_TO_PREFIX`, and the platform's default returns null — so getting
+     * this wrong is not a cosmetic issue, it is the difference between completion appearing as you
+     * type and completion only ever appearing on Ctrl+Space.
+     */
+    @Test
+    fun `the characters a package name is made of keep the popup open`() {
+        for (c in "abzABZ09") {
+            assertTrue(EnvRequirements.continuesPackageName(c), "'$c' is part of a name")
+        }
+        for (c in "-_.") {
+            assertTrue(EnvRequirements.continuesPackageName(c), "'$c' is a PEP 503 separator")
+        }
+    }
+
+    /** Once a specifier, an extra or a marker begins, the catalogue has nothing more to offer. */
+    @Test
+    fun `the characters that end a name do not`() {
+        for (c in " \t>=<![](),;@/'\"") {
+            assertFalse(EnvRequirements.continuesPackageName(c), "'$c' ends the name")
+        }
+    }
+
+    /** Every character of a real name has to be accepted, or the popup closes mid-word. */
+    @Test
+    fun `every character of the names this completes is accepted`() {
+        for (name in listOf("basedpython", "Flask-SQLAlchemy", "zope.interface", "ruamel_yaml", "urllib3")) {
+            assertTrue(
+                name.all { EnvRequirements.continuesPackageName(it) },
+                "$name contains a character that would close the popup",
+            )
+        }
     }
 
     // ---- pinning a version --------------------------------------------------

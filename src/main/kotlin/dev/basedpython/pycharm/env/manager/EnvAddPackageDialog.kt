@@ -7,6 +7,7 @@ import com.intellij.openapi.ui.ComboBox
 import com.intellij.openapi.ui.DialogWrapper
 import com.intellij.openapi.ui.ValidationInfo
 import com.intellij.codeInsight.completion.CompletionParameters
+import com.intellij.codeInsight.lookup.CharFilter
 import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.progress.util.ProgressIndicatorUtils
 import com.intellij.ui.JBColor
@@ -316,6 +317,27 @@ internal class EnvAddPackageDialog(
         TextFieldWithAutoCompletionListProvider<String>(emptyList()) {
 
         override fun getLookupString(item: String): String = item
+
+        /**
+         * Whether typing [c] should open, or keep open, the completion popup.
+         *
+         * **This method is the autopopup.** `TextCompletionContributor.invokeAutoPopup` decides
+         * whether a keystroke opens the list with
+         * `CharFilter.Result.ADD_TO_PREFIX == provider.acceptChar(c)`, and
+         * `TextFieldWithAutoCompletionListProvider.acceptChar` returns *null* by default — so a
+         * provider that does not override this never autopopups at all, and its completion is
+         * reachable only by an explicit Ctrl+Space. That was the entire reason the list appeared to
+         * need triggering by hand.
+         *
+         * Characters that end a name hide the popup rather than merely not extending it: once a
+         * specifier, an extra or a marker has begun, the catalogue has nothing left to say.
+         */
+        override fun acceptChar(c: Char): CharFilter.Result? =
+            if (EnvRequirements.continuesPackageName(c)) {
+                CharFilter.Result.ADD_TO_PREFIX
+            } else {
+                CharFilter.Result.HIDE_LOOKUP
+            }
 
         /** Said in the lookup while the catalogue is still arriving, so an empty list is explained. */
         override fun getAdvertisement(): String? {

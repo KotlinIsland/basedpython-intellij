@@ -21,6 +21,19 @@ internal object EnvRequirements {
         text.split(' ', '\t', '\n').map { it.trim() }.filter { it.isNotEmpty() }
 
     /**
+     * True when [c] is part of a package name rather than something that ends one.
+     *
+     * Names are letters, digits and the three separators PEP 503 normalises (`-`, `_`, `.`).
+     * Everything else — a space, a `>` or `=` starting a specifier, a `[` opening extras, a `;`
+     * before a marker — means the name is finished and the catalogue has nothing further to offer.
+     *
+     * This is what decides whether typing keeps the completion popup open, so it is deliberately a
+     * plain predicate with its own tests rather than a condition buried in a UI callback.
+     */
+    fun continuesPackageName(c: Char): Boolean =
+        c.isLetterOrDigit() || c == '-' || c == '_' || c == '.'
+
+    /**
      * The package name in [requirement], or null when there is not one to find.
      *
      * What the index gets asked about. Everything a requirement can carry after the name is cut:
