@@ -136,6 +136,19 @@
   they disagree, the row says so: a package the environment does not have is greyed, one
   installed at a version other than the lock's is called out. That is drift shown on the row it
   happens on, rather than only asserted in a banner.
+- *Add Package* now knows what is in the index. Typing a name shows what the package is and its
+  newest version, and its declared extras appear as checkboxes that write themselves into the
+  requirement — so `httpx[http2]` is something you can discover instead of something you have to
+  already know, which previously meant reading the project's own documentation. The field is still
+  free text and still takes anything the tool accepts, and everything about it works with the index
+  unreachable, the catalogue not yet downloaded, or the package private.
+- That data is cached on disk under `~/.basedpython/cache`, keyed by the index it came from so a
+  private mirror and the public PyPI never share one. Two lifetimes, because the two things age
+  differently: the package catalogue weekly, per-package metadata daily. Nothing is fetched until
+  Add Package is opened — a user gesture — and never on project open.
+- The catalogue is 872,009 names, so it is streamed out of the index rather than parsed into memory,
+  stored as a sorted file, and searched in place with a binary search over byte offsets. Holding it
+  as a list would be roughly 40 MB of heap, permanently, for data only read while a dialog is open.
 - Adding or removing a dependency now leaves `pyproject.toml` in step with what actually happened
   to it. These commands are separate processes that read the file off disk and rewrite it, knowing
   nothing about the editor showing it, which left a gap on both sides: unsaved editor changes were

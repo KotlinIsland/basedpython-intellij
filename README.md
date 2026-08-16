@@ -197,6 +197,14 @@ support, run configurations, CLI actions, and editor tooling.
 - The environment's Python version is read from its own `pyvenv.cfg` rather than by running the
   interpreter, so it is still reported for an environment whose interpreter is broken — which is
   when it is most worth knowing.
+- **Add Package knows the index.** Type a name and it shows what the package is, its newest
+  version, and — as checkboxes — the extras it declares, so `httpx[http2]` is something you can
+  discover rather than something you have to already know. The field still takes anything the
+  tool accepts (`httpx>=0.27`, a git URL, a local path), and works unchanged with the index
+  unreachable or the package private.
+- That information is cached under `~/.basedpython/cache`, keyed by the index it came from, and
+  fetched only when you open Add — never on project open. The package catalogue is refreshed
+  weekly and per-package metadata daily, because neither changes faster than that.
 - **uv today, pluggable by construction.** `env.manager.EnvBackend` is the seam a conda or pixi
   backend slots into: adding one is writing a single object and listing it in `EnvBackends.ALL`.
 - **uv installs itself if it is missing** — the release binary, into the plugin's own

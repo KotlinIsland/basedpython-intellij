@@ -468,7 +468,9 @@ internal class EnvPanel(private val project: Project) :
         override fun actionPerformed(e: AnActionEvent) {
             val groups = service.status.dependencies.map { it.target }
             val target = EnvTreeRows.targetForAdd(selection())
-            val request = EnvAddPackageDialog(project, target, groups).ask() ?: return
+            val status = service.status
+            val index = status.projectRoot?.let { root -> status.backend?.packageIndex(root) }
+            val request = EnvAddPackageDialog(project, target, groups, index).ask() ?: return
             EnvOperations.add(project, request.requirements, request.target)
         }
     }
