@@ -32,7 +32,21 @@ class BasedPythonSettings : PersistentStateComponent<BasedPythonSettings.State> 
     var byExtraArgs: String = "",
     var buffExtraArgs: String = "",
     var pythonVersion: String = "3.10",
+    /**
+     * Reformat and optimize imports when a document is saved.
+     *
+     * Kept under its original name so a project that had "format on save" on keeps it on. What it
+     * does has grown: the pass now sorts imports and drops the unused ones as well as formatting,
+     * because those three together are what a save is expected to tidy and doing them separately
+     * costs a round trip and an undo step each.
+     */
     var formatOnSave: Boolean = false,
+    /** Apply every fix the project's lint configuration asks for when a document is saved. */
+    var fixAllOnSave: Boolean = false,
+    /** Reformat and optimize imports across the files being committed. */
+    var formatOnCommit: Boolean = false,
+    /** Apply every fix the project's lint configuration asks for across the files being committed. */
+    var fixAllOnCommit: Boolean = false,
     /**
      * The two toggles that came before the per-kind modes, kept as what an unset kind falls back
      * to: a project configured before this reads exactly as it did, its parameter-ish hints
@@ -140,6 +154,32 @@ class BasedPythonSettings : PersistentStateComponent<BasedPythonSettings.State> 
   var formatOnSave: Boolean
     get() = state.formatOnSave
     set(value) { state.formatOnSave = value }
+
+  var fixAllOnSave: Boolean
+    get() = state.fixAllOnSave
+    set(value) { state.fixAllOnSave = value }
+
+  var formatOnCommit: Boolean
+    get() = state.formatOnCommit
+    set(value) { state.formatOnCommit = value }
+
+  var fixAllOnCommit: Boolean
+    get() = state.fixAllOnCommit
+    set(value) { state.fixAllOnCommit = value }
+
+  /** The cleanup passes to run when a document is saved. */
+  val cleanupOnSave: Set<dev.basedpython.pycharm.format.ByCleanupOp>
+    get() = cleanupOps(formatOnSave, fixAllOnSave)
+
+  /** The cleanup passes to run over the files being committed. */
+  val cleanupOnCommit: Set<dev.basedpython.pycharm.format.ByCleanupOp>
+    get() = cleanupOps(formatOnCommit, fixAllOnCommit)
+
+  private fun cleanupOps(format: Boolean, fixAll: Boolean): Set<dev.basedpython.pycharm.format.ByCleanupOp> =
+    buildSet {
+      if (fixAll) add(dev.basedpython.pycharm.format.ByCleanupOp.FixAll)
+      if (format) add(dev.basedpython.pycharm.format.ByCleanupOp.FormatAndOptimizeImports)
+    }
 
   var inlayParameterHints: Boolean
     get() = state.inlayParameterHints

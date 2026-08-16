@@ -63,6 +63,9 @@ class BasedPythonSettingsTest {
             buffExtraArgs = "--y",
             pythonVersion = "3.13",
             formatOnSave = true,
+            fixAllOnSave = true,
+            formatOnCommit = true,
+            fixAllOnCommit = true,
             inlayParameterHints = false,
             inlayTypeHints = false,
             inlayHintModes = mutableMapOf("variableTypes" to "push", "inferredRaises" to "never"),
@@ -79,6 +82,9 @@ class BasedPythonSettingsTest {
         assertEquals("--y", settings.buffExtraArgs)
         assertEquals("3.13", settings.pythonVersion)
         assertTrue(settings.formatOnSave)
+        assertTrue(settings.fixAllOnSave)
+        assertTrue(settings.formatOnCommit)
+        assertTrue(settings.fixAllOnCommit)
         assertFalse(settings.inlayParameterHints)
         assertFalse(settings.inlayTypeHints)
         assertEquals(ByHintMode.ON_PUSH, settings.inlayMode(ByHintKind.VARIABLE_TYPES))
@@ -234,5 +240,42 @@ class BasedPythonSettingsTest {
     fun resetSettings() {
         // Reset to defaults so we don't leak state between fixtures.
         settings.loadState(BasedPythonSettings.State())
+    }
+
+    /** The two save toggles become the passes the on-save action runs, in run order. */
+    @Test
+    fun `save toggles become cleanup passes`() {
+        settings.formatOnSave = false
+        settings.fixAllOnSave = false
+        assertTrue(settings.cleanupOnSave.isEmpty())
+
+        settings.formatOnSave = true
+        assertEquals(
+            setOf(dev.basedpython.pycharm.format.ByCleanupOp.FormatAndOptimizeImports),
+            settings.cleanupOnSave,
+        )
+
+        settings.fixAllOnSave = true
+        assertEquals(
+            setOf(
+                dev.basedpython.pycharm.format.ByCleanupOp.FixAll,
+                dev.basedpython.pycharm.format.ByCleanupOp.FormatAndOptimizeImports,
+            ),
+            settings.cleanupOnSave,
+        )
+    }
+
+    /** Commit is configured separately from save, so one being on says nothing about the other. */
+    @Test
+    fun `commit toggles are independent of save`() {
+        settings.formatOnSave = true
+        settings.fixAllOnSave = true
+        assertTrue(settings.cleanupOnCommit.isEmpty())
+
+        settings.fixAllOnCommit = true
+        assertEquals(
+            setOf(dev.basedpython.pycharm.format.ByCleanupOp.FixAll),
+            settings.cleanupOnCommit,
+        )
     }
 }

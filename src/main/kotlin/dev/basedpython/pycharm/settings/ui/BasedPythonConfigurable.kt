@@ -71,7 +71,8 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
 
     private val pythonVersionCombo = ComboBox(arrayOf("3.10", "3.11", "3.12", "3.13"))
 
-    private val formatOnSave = JCheckBox("Reformat with buff on save")
+    private val formatOnSave = JCheckBox("Reformat and optimize imports with buff on save")
+    private val fixAllOnSave = JCheckBox("Apply all buff fixes on save")
 
     /**
      * One mode per kind of hint `by` sends, in `by`'s own list order (see [ByHintKind]): each kind
@@ -150,8 +151,9 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
             group("Target") {
                 row("Min Python version:") { cell(pythonVersionCombo) }
             }
-            group("Formatting") {
+            group("On save") {
                 row { cell(formatOnSave) }
+                row { cell(fixAllOnSave) }
             }
             group("Inlay hints") {
                 for ((kind, combo) in inlayModeCombos) {
@@ -271,6 +273,7 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
             buffExtraArgs.text != s.buffExtraArgs ||
             (pythonVersionCombo.selectedItem as? String ?: "3.10") != s.pythonVersion ||
             formatOnSave.isSelected != s.formatOnSave ||
+            fixAllOnSave.isSelected != s.fixAllOnSave ||
             inlayModified() ||
             (lspTraceCombo.selectedItem as? String ?: "off") != s.lspTraceLevel ||
             indexGeneratedPython.isSelected != s.indexGeneratedPython ||
@@ -307,6 +310,7 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
         s.buffExtraArgs = buffExtraArgs.text
         s.pythonVersion = pythonVersionCombo.selectedItem as? String ?: "3.10"
         s.formatOnSave = formatOnSave.isSelected
+        s.fixAllOnSave = fixAllOnSave.isSelected
         val inlayChanged = inlayModified()
         for ((kind, combo) in inlayModeCombos) {
             s.setInlayMode(kind, combo.selectedItem as? ByHintMode ?: ByHintMode.ALWAYS)
@@ -385,6 +389,7 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
         buffExtraArgs.text = s.buffExtraArgs
         pythonVersionCombo.selectedItem = s.pythonVersion
         formatOnSave.isSelected = s.formatOnSave
+        fixAllOnSave.isSelected = s.fixAllOnSave
         for ((kind, combo) in inlayModeCombos) combo.selectedItem = s.inlayMode(kind)
         inlayPushKeyCombo.selectedItem = s.inlayPushKey
         lspTraceCombo.selectedItem = s.lspTraceLevel

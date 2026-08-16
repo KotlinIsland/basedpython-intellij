@@ -3,142 +3,99 @@ package dev.basedpython.pycharm.format
 import com.intellij.ide.actionsOnSave.ActionOnSaveContext
 import com.intellij.ide.actionsOnSave.ActionOnSaveInfo
 import com.intellij.ide.actionsOnSave.ActionOnSaveInfoProvider
-import com.intellij.ide.actionsOnSave.impl.ActionsOnSaveFileDocumentManagerListener.ActionOnSave
+import com.intellij.ide.actionsOnSave.impl.ActionsOnSaveFileDocumentManagerListener.DocumentUpdatingActionOnSave
 import com.intellij.openapi.editor.Document
-import com.intellij.openapi.fileEditor.FileDocumentManager
-import com.intellij.openapi.progress.ProgressIndicator
-import com.intellij.openapi.progress.ProgressManager
-import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.vfs.VfsUtil
-import dev.basedpython.pycharm.actions.ByCli
 import dev.basedpython.pycharm.lang.BasedPythonFileType
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import dev.basedpython.pycharm.util.BasedPythonBundle
 
 // ---------------------------------------------------------------------------
-// ActionOnSave — executes buff format when documents are saved
+// The action itself
 // ---------------------------------------------------------------------------
 
 /**
- * Runs `buff format <path>` on every `.by` document that is being saved,
- * provided the user has enabled "Format .by files on save" in the
- * Actions on Save settings panel.
+ * Runs the enabled [ByCleanupOp]s over each `.by` document as it is saved.
  *
- * The enabled flag is read from [BasedPythonSettings.formatOnSave] via
- * reflection so that this file compiles before the integrator adds the field;
- * if the field is absent the action is silently skipped (safe default: off).
+ * One action rather than one per pass, because the platform gives no ordering guarantee across
+ * separately registered actions — they run in extension-point order — while these passes are not
+ * interchangeable: the formatter has to go last. Registering one keeps the order here, where it can
+ * be stated.
+ *
+ * [DocumentUpdatingActionOnSave] rather than the older `processDocuments`, because the platform
+ * waits for this to finish before it saves the document. The previous implementation shelled out to
+ * `buff format` from a background task it did not wait on, so the save raced the formatter and the
+ * formatter's output was written to disk behind the editor.
  */
-class BuffFormatOnSaveAction : ActionOnSave() {
+internal class BuffFormatOnSaveAction : DocumentUpdatingActionOnSave() {
 
-    override fun isEnabledForProject(project: Project): Boolean =
-        FormatOnSaveUtil.isEnabled(project)
+  override val presentableName: String = BasedPythonBundle.message("actionOnSave.cleanupName")
 
-    override fun processDocuments(project: Project, documents: Array<Document>) {
-        if (!isEnabledForProject(project)) return
+  override fun isEnabledForProject(project: Project): Boolean =
+    BasedPythonSettings.getInstance(project).cleanupOnSave.isNotEmpty()
 
-        val fdm = FileDocumentManager.getInstance()
-        val toFormat = documents.mapNotNull { doc ->
-            val vf = fdm.getFile(doc) ?: return@mapNotNull null
-            if (vf.fileType == BasedPythonFileType.INSTANCE) vf else null
-        }
-        if (toFormat.isEmpty()) return
+  override suspend fun updateDocument(project: Project, document: Document) {
+    val ops = BasedPythonSettings.getInstance(project).cleanupOnSave
+    if (ops.isEmpty()) return
 
-        ProgressManager.getInstance().run(
-            object : Task.Backgroundable(project, BasedPythonBundle.message("progress.formatOnSave"), false) {
-                override fun run(indicator: ProgressIndicator) {
-                    indicator.isIndeterminate = true
-                    for (vf in toFormat) {
-                        indicator.text2 = vf.name
-                        val path = vf.toNioPath()
-                        val out = ByCli.runBuff(
-                            project,
-                            "format", path.toString(),
-                            cwd = path.parent,
-                            contextFile = vf,
-                            title = "buff format",
-                        ) ?: continue
-                        if (out.exitCode != 0) {
-                            ByCli.notifyError(
-                                project,
-                                BasedPythonBundle.message("notification.formatFailed.title"),
-                                out.stderr.ifBlank { BasedPythonBundle.message("notification.exitCode", out.exitCode) },
-                            )
-                        } else {
-                            VfsUtil.markDirtyAndRefresh(true, false, false, vf)
-                        }
-                    }
-                }
-            }
-        )
-    }
+    val file = fileOf(document) ?: return
+    if (file.fileType != BasedPythonFileType.INSTANCE) return
+
+    ByCleanup.run(project, file, document, ops)
+  }
 }
 
 // ---------------------------------------------------------------------------
-// ActionOnSaveInfoProvider — registers the checkbox in the Actions on Save UI
+// The rows under Settings | Tools | Actions on Save
 // ---------------------------------------------------------------------------
 
-class BuffFormatOnSaveInfoProvider : ActionOnSaveInfoProvider() {
-    override fun getActionOnSaveInfos(context: ActionOnSaveContext): List<ActionOnSaveInfo> =
-        listOf(BuffFormatOnSaveInfo(context))
+internal class BuffFormatOnSaveInfoProvider : ActionOnSaveInfoProvider() {
+  override fun getActionOnSaveInfos(context: ActionOnSaveContext): List<ActionOnSaveInfo> =
+    listOf(
+      CleanupOnSaveInfo(context, ByCleanupToggle.FormatAndOptimizeImports),
+      CleanupOnSaveInfo(context, ByCleanupToggle.FixAll),
+    )
 }
 
 /**
- * One-checkbox entry shown under Editor → Actions on Save.
+ * One row per pass, so each can be turned on by itself.
  *
- * [apply] / [isModified] delegate to [FormatOnSaveUtil] so the persistent
- * state goes through [BasedPythonSettings.formatOnSave] (added reflectively).
- * The "settings" snapshot held by the parent [ActionOnSaveContext] is used for
- * the Apply/Revert cycle; here we keep a simple local dirty flag.
+ * Two rows behind one action is deliberate: the checkboxes are independent because the passes do
+ * different things — one formats and tidies imports, the other applies the project's lint fixes —
+ * but whichever are ticked run together, in the order [ByCleanupOp] fixes.
  */
-class BuffFormatOnSaveInfo(context: ActionOnSaveContext) : ActionOnSaveInfo(context) {
+private class CleanupOnSaveInfo(
+  context: ActionOnSaveContext,
+  private val toggle: ByCleanupToggle,
+) : ActionOnSaveInfo(context) {
 
-    // Shadow of the persisted value, tracks UI state until Apply is clicked.
-    private var uiEnabled: Boolean = FormatOnSaveUtil.isEnabled(project)
+  private val settings get() = BasedPythonSettings.getInstance(project)
 
-    override fun getActionOnSaveName(): String = BasedPythonBundle.message("actionOnSave.formatName")
+  private fun persisted(): Boolean = when (toggle) {
+    ByCleanupToggle.FormatAndOptimizeImports -> settings.formatOnSave
+    ByCleanupToggle.FixAll -> settings.fixAllOnSave
+  }
 
-    override fun isActionOnSaveEnabled(): Boolean = uiEnabled
+  // Shadows the persisted value until Apply is clicked.
+  private var uiEnabled: Boolean = persisted()
 
-    override fun setActionOnSaveEnabled(enabled: Boolean) {
-        uiEnabled = enabled
+  override fun getActionOnSaveName(): String = when (toggle) {
+    ByCleanupToggle.FormatAndOptimizeImports -> BasedPythonBundle.message("actionOnSave.formatName")
+    ByCleanupToggle.FixAll -> BasedPythonBundle.message("actionOnSave.fixAllName")
+  }
+
+  override fun isActionOnSaveEnabled(): Boolean = uiEnabled
+
+  override fun setActionOnSaveEnabled(enabled: Boolean) {
+    uiEnabled = enabled
+  }
+
+  override fun isModified(): Boolean = uiEnabled != persisted()
+
+  override fun apply() {
+    when (toggle) {
+      ByCleanupToggle.FormatAndOptimizeImports -> settings.formatOnSave = uiEnabled
+      ByCleanupToggle.FixAll -> settings.fixAllOnSave = uiEnabled
     }
-
-    override fun isModified(): Boolean = uiEnabled != FormatOnSaveUtil.isEnabled(project)
-
-    override fun apply() {
-        FormatOnSaveUtil.setEnabled(project, uiEnabled)
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Helper — reflective read/write of BasedPythonSettings.formatOnSave
-// ---------------------------------------------------------------------------
-
-internal object FormatOnSaveUtil {
-
-    /** Reads `BasedPythonSettings.formatOnSave`; defaults to `false` if absent. */
-    fun isEnabled(project: Project): Boolean {
-        val settings = BasedPythonSettings.getInstance(project)
-        return try {
-            val field = settings.javaClass.getDeclaredField("formatOnSave")
-            field.isAccessible = true
-            field.getBoolean(settings)
-        } catch (_: NoSuchFieldException) {
-            // Field not yet added by the integrator — safe default: off
-            false
-        }
-    }
-
-    /** Writes `BasedPythonSettings.formatOnSave`; no-op if the field is absent. */
-    fun setEnabled(project: Project, value: Boolean) {
-        val settings = BasedPythonSettings.getInstance(project)
-        try {
-            val field = settings.javaClass.getDeclaredField("formatOnSave")
-            field.isAccessible = true
-            field.setBoolean(settings, value)
-        } catch (_: NoSuchFieldException) {
-            // Field not yet added — ignore
-        }
-    }
+  }
 }
