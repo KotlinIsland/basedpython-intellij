@@ -1,0 +1,84 @@
+{
+ "info": {
+  "name": "basedpython",
+  "version": "0.0.0",
+  "summary": "Add your description here",
+  "home_page": null,
+  "package_url": "https://pypi.org/project/basedpython/",
+  "provides_extra": null
+ },
+ "releases": {
+  "0.0.0": [
+   {
+    "filename": "basedpython-0.0.0-py3-none-any.whl",
+    "yanked": false,
+    "yanked_reason": null,
+    "requires_python": ">=3.10"
+   }
+  ],
+  "0.0.1a1": [
+   {
+    "filename": "basedpython-0.0.1a1-py3-none-linux_armv6l.whl",
+    "yanked": false,
+    "yanked_reason": null,
+    "requires_python": ">=3.7"
+   }
+  ],
+  "0.0.1a3": [
+   {
+    "filename": "basedpython-0.0.1a3-py3-none-linux_armv6l.whl",
+    "yanked": false,
+    "yanked_reason": null,
+    "requires_python": ">=3.7"
+   }
+  ],
+  "0.0.1a4": [
+   {
+    "filename": "basedpython-0.0.1a4-py3-none-linux_armv6l.whl",
+    "yanked": false,
+    "yanked_reason": null,
+    "requires_python": ">=3.7"
+   }
+  ],
+  "0.0.1a5": [
+   {
+    "filename": "basedpython-0.0.1a5-py3-none-linux_armv6l.whl",
+    "yanked": false,
+    "yanked_reason": null,
+    "requires_python": ">=3.7"
+   }
+  ],
+  "0.0.1a6": [
+   {
+    "filename": "basedpython-0.0.1a6-py3-none-linux_armv6l.whl",
+    "yanked": false,
+    "yanked_reason": null,
+    "requires_python": ">=3.7"
+   }
+  ],
+  "0.0.1a7": [
+   {
+    "filename": "basedpython-0.0.1a7-py3-none-linux_armv6l.whl",
+    "yanked": false,
+    "yanked_reason": null,
+    "requires_python": ">=3.7"
+   }
+  ],
+  "0.0.1a8": [
+   {
+    "filename": "basedpython-0.0.1a8-py3-none-linux_armv6l.whl",
+    "yanked": false,
+    "yanked_reason": null,
+    "requires_python": ">=3.7"
+   }
+  ],
+  "0.0.1a9": [
+   {
+    "filename": "basedpython-0.0.1a9-py3-none-linux_armv6l.whl",
+    "yanked": false,
+    "yanked_reason": null,
+    "requires_python": ">=3.7"
+   }
+  ]
+ }
+}

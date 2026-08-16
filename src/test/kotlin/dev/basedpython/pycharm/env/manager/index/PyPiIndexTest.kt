@@ -172,6 +172,33 @@ class PyPiIndexTest {
         assertTrue(details.releases.isEmpty())
     }
 
+    /**
+     * The real `basedpython` document, verbatim from PyPI apart from trimming each release to one
+     * file entry.
+     *
+     * Kept as a fixture because it is the shape that exposed the problem: a package whose only
+     * stable is an ancient `0.0.0` and whose actual releases are eight alphas above it. The index
+     * calls `0.0.0` the latest, so anything that trusts `info.version` alone describes this package
+     * as if none of its real releases existed.
+     */
+    @Test
+    fun `a package whose releases are nearly all pre-releases parses in full`() {
+        val document = checkNotNull(javaClass.getResourceAsStream("/env/pypi-basedpython.json"))
+            .use { it.readBytes().decodeToString() }
+
+        val details = requireNotNull(PyPiIndex.parseDetails("basedpython", document))
+
+        assertEquals("0.0.0", details.latestVersion, "the index's latest is its newest *stable*")
+        assertEquals(9, details.releases.size)
+        assertEquals(
+            listOf("0.0.1a9", "0.0.1a8", "0.0.1a7", "0.0.1a6", "0.0.1a5", "0.0.1a4", "0.0.1a3", "0.0.1a1", "0.0.0"),
+            details.releases.map { it.version },
+            "newest first, which puts every alpha above the stable",
+        )
+        assertTrue(details.releases.none { it.yanked })
+        assertEquals(">=3.7", details.releases.first().requiresPython)
+    }
+
     // ---- cache identity -----------------------------------------------------
 
     /**
