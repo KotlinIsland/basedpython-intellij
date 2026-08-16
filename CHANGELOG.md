@@ -136,6 +136,15 @@
   they disagree, the row says so: a package the environment does not have is greyed, one
   installed at a version other than the lock's is called out. That is drift shown on the row it
   happens on, rather than only asserted in a banner.
+- Completion in *Add Package* offers names that actually start with what you typed, and re-asks the
+  catalogue on every keystroke. Typing `ba` used to offer `b-aws-dynamodb-backup`, for two
+  compounding reasons: a query returns at most fifty names, and in a PEP 503-sorted catalogue the
+  first fifty beginning with `b` are all `b-…` with not one `ba` among them — so the answer for `b`
+  is not a superset of the answer for `ba`, and the platform was narrowing that first set
+  client-side rather than asking again. Meanwhile the matcher accepted those leftovers twice over:
+  camel-hump treats the query as a subsequence, and `PlainPrefixMatcher`'s one-argument form is
+  `containsIgnoreCase`, which matches the `ba` in `backup`. Now: re-query per keystroke, and a
+  strict start match.
 - Completion in *Add Package* opens as you type, without Ctrl+Space. It never could before:
   `TextCompletionContributor` decides whether a keystroke opens the list with
   `CharFilter.Result.ADD_TO_PREFIX == provider.acceptChar(c)`, and the platform's
