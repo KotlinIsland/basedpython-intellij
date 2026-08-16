@@ -352,6 +352,13 @@
         <listener
             class="dev.basedpython.pycharm.debug.dfa.ByDataFlowListener"
             topic="com.intellij.xdebugger.XDebuggerManagerListener"/>
+
+        <!-- Catches a hint drawn twice. The daemon's finish is the only event that follows every way
+             hints can change, and the pass has applied by then; it writes to the log only when
+             something is actually doubled. See lsp.inlay.ByInlayAudit. -->
+        <listener
+            class="dev.basedpython.pycharm.lsp.inlay.ByInlayAuditListener"
+            topic="com.intellij.codeInsight.daemon.DaemonCodeAnalyzer$DaemonListener"/>
     </projectListeners>
 
     <applicationListeners>
@@ -390,6 +397,8 @@
 
             <separator/>
             <reference ref="basedpython.RestartLsp"/>
+            <action id="basedpython.DumpInlayHints"
+                    class="dev.basedpython.pycharm.lsp.inlay.ByDumpInlayHintsAction"/>
         </group>
 
         <!-- Editor + Project View popups expose transpile actions directly. -->
