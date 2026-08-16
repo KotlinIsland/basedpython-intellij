@@ -7,6 +7,8 @@ import com.intellij.openapi.ui.ComboBox
 import com.intellij.openapi.ui.DialogWrapper
 import com.intellij.openapi.ui.ValidationInfo
 import com.intellij.codeInsight.completion.CompletionParameters
+import com.intellij.openapi.progress.ProcessCanceledException
+import com.intellij.openapi.progress.util.ProgressIndicatorUtils
 import com.intellij.ui.JBColor
 import com.intellij.ui.TextFieldWithAutoCompletion
 import com.intellij.ui.TextFieldWithAutoCompletionListProvider
@@ -64,6 +66,10 @@ internal class EnvAddPackageDialog(
      * A completion-capable editor rather than a plain field, so the 872,009-name catalogue is
      * reachable as a dropdown while you type. It stays free text: completion offers, it does not
      * constrain, and a name the index has never heard of is typed and added exactly as before.
+     *
+     * This constructor already asks for the autopopup, so typing opens the list without a
+     * Ctrl+Space. What it cannot do is have an answer before the catalogue exists — see
+     * [CatalogueCompletion].
      */
     private val field: TextFieldWithAutoCompletion<String> =
         TextFieldWithAutoCompletion(project, CatalogueCompletion(), false, "")
@@ -189,9 +195,9 @@ internal class EnvAddPackageDialog(
      */
     private fun warmCatalogue() {
         val index = index ?: return
-        ApplicationManager.getApplication().executeOnPooledThread {
-            PackageIndexCache.getInstance().refreshCatalogue(index)
-        }
+        // Starts the download and returns immediately; completion awaits the same future if the user
+        // types before it lands.
+        PackageIndexCache.getInstance().refreshCatalogue(index)
     }
 
     private fun scheduleLookup() {
@@ -311,6 +317,16 @@ internal class EnvAddPackageDialog(
 
         override fun getLookupString(item: String): String = item
 
+        /** Said in the lookup while the catalogue is still arriving, so an empty list is explained. */
+        override fun getAdvertisement(): String? {
+            val index = index ?: return null
+            return if (PackageIndexCache.getInstance().isRefreshing(index)) {
+                BasedPythonBundle.message("env.add.downloadingCatalogue")
+            } else {
+                null
+            }
+        }
+
         override fun getItems(
             prefix: String?,
             cached: Boolean,
@@ -322,7 +338,29 @@ internal class EnvAddPackageDialog(
             val typed = prefix.orEmpty().substringAfterLast(' ')
             val name = EnvRequirements.packageName(typed) ?: return emptyList()
             if (name != typed) return emptyList()
-            return PackageIndexCache.getInstance().names(index).startingWith(name)
+
+            val cache = PackageIndexCache.getInstance()
+            // The pass that may wait. The platform runs this one on a pooled thread under a
+            // cancellable indicator — see TextFieldWithAutoCompletionListProvider.addNonCachedItems —
+            // which is exactly the place a completion is allowed to block, and typing another
+            // character cancels it. Waiting here is what turns the first Add on a machine from "No
+            // suggestions" into "the list appears once the download lands"; without it the answer
+            // was empty and wrong, and looked like a broken feature rather than a 9.5 MB download.
+            if (!cached && !cache.isCatalogueFresh(index)) {
+                awaitCatalogue(cache, index)
+            }
+            return cache.names(index).startingWith(name)
+        }
+
+        /** Waits for the in-flight catalogue, giving up the moment the completion is cancelled. */
+        private fun awaitCatalogue(cache: PackageIndexCache, index: PackageIndex) {
+            try {
+                ProgressIndicatorUtils.awaitWithCheckCanceled(cache.refreshCatalogue(index))
+            } catch (e: ProcessCanceledException) {
+                throw e
+            } catch (_: Exception) {
+                // A download that failed leaves no catalogue, which the empty list already conveys.
+            }
         }
     }
 

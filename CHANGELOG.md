@@ -136,6 +136,13 @@
   they disagree, the row says so: a package the environment does not have is greyed, one
   installed at a version other than the lock's is called out. That is drift shown on the row it
   happens on, rather than only asserted in a banner.
+- Completion in *Add Package* no longer reports "No suggestions" while the catalogue is still
+  downloading. The first Add on a machine starts a 9.5 MB fetch, and typing during it asked a
+  catalogue that did not exist yet — so the field said there were no matches, and the identical
+  query a few seconds later on Ctrl+Space returned the right ones. The answer was never wrong, it
+  was early. A lookup that needs the catalogue now waits for the download already in flight, on the
+  pooled thread the platform runs it on and cancellable by the next keystroke, and the lookup
+  advertises "Downloading the package list…" while it does.
 - *Add Package* completes against the package catalogue as you type, and gained a **version
   picker**. The list is honest about what it contains: a release the maintainer withdrew is marked
   *yanked* with their reason, and one whose `requires_python` this environment does not satisfy is
