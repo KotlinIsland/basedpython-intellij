@@ -1,5 +1,6 @@
 package dev.basedpython.pycharm.env.manager
 
+import dev.basedpython.pycharm.env.manager.index.PackageIndex
 import java.nio.file.Path
 
 /**
@@ -170,6 +171,16 @@ interface EnvBackend {
 
     /** The command implementing [op], or null when this backend cannot express it. */
     fun command(op: EnvOp): EnvCommand?
+
+    /**
+     * Where this project's packages can be looked up, or null when the backend has no index this
+     * plugin knows how to read.
+     *
+     * Takes the project root because the answer is a property of the *project*, not of the manager:
+     * two uv projects can install from different indexes, and the one pointed at a private mirror
+     * must not be offered the public catalogue.
+     */
+    fun packageIndex(projectRoot: Path): PackageIndex? = null
 
     /** The installed packages, from the stdout of [EnvOp.ListPackages]. */
     fun parsePackages(stdout: String): List<EnvPackage>

@@ -3,6 +3,8 @@ package dev.basedpython.pycharm.env.manager
 import com.google.gson.JsonParser
 import com.intellij.openapi.util.SystemInfo
 import dev.basedpython.pycharm.env.ByEnvironments
+import dev.basedpython.pycharm.env.manager.index.PackageIndex
+import dev.basedpython.pycharm.env.manager.index.PyPiIndex
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -191,6 +193,17 @@ object UvBackend : EnvBackend {
     }
 
     override fun parseTree(stdout: String): List<EnvDependencyGroup> = UvTree.parse(stdout)
+
+    /**
+     * The index uv would install from.
+     *
+     * PyPI unless the project says otherwise. Reading a project's configured index out of
+     * `[[tool.uv.index]]` is not done yet, so a project on a private mirror gets completion from the
+     * public catalogue — names it may not be able to install. That is a wrong-but-harmless
+     * suggestion in a field that takes free text anyway, and the alternative until it is read
+     * properly is no completion for anyone.
+     */
+    override fun packageIndex(projectRoot: Path): PackageIndex = PyPiIndex.pypi()
 
     /**
      * `uv sync --check`: 0 when the environment already matches, 1 when it would change.

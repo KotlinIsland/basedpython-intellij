@@ -375,6 +375,11 @@
                     factoryClass="dev.basedpython.pycharm.env.manager.EnvToolWindowFactory"/>
         <postStartupActivity
             implementation="dev.basedpython.pycharm.env.manager.EnvSyncActivity"/>
+        <!-- The package catalogue and per-package metadata, cached under ~/.basedpython/cache.
+             Application-level because an index is shared by every project pointed at it. Nothing is
+             fetched until the user opens Add Package. -->
+        <applicationService
+            serviceImplementation="dev.basedpython.pycharm.env.manager.index.PackageIndexCache"/>
     </extensions>
 
     <projectListeners>
