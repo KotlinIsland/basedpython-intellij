@@ -7,6 +7,7 @@
     <depends>com.intellij.modules.platform</depends>
     <depends>com.intellij.modules.lsp</depends>
     <depends>org.toml.lang</depends>
+    <depends>com.intellij.modules.vcs</depends>
     <!-- Optional: adds `by` / `bython` markdown code fences when the Markdown plugin is present. -->
     <depends optional="true" config-file="basedpython-markdown.xml">org.intellij.plugins.markdown</depends>
     <!-- The SM test runner left the core platform in 2026.2; see basedpython-testrunner.xml. -->
@@ -119,6 +120,11 @@
             implementation="dev.basedpython.pycharm.format.BuffFormatOnSaveInfoProvider"/>
         <actionOnSave
             implementation="dev.basedpython.pycharm.format.BuffFormatOnSaveAction"/>
+        <!-- The same passes, offered under Before Commit. One handler rather than one per pass:
+             the passes are not interchangeable (the formatter goes last) and the platform gives no
+             ordering guarantee across separately registered handlers. -->
+        <checkinHandlerFactory
+            implementation="dev.basedpython.pycharm.vcs.ByCleanupCheckinHandlerFactory"/>
         <lang.importOptimizer
             language="basedpython"
             implementationClass="dev.basedpython.pycharm.format.BuffImportOptimizer"/>
