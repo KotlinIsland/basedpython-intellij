@@ -1,5 +1,7 @@
 package dev.basedpython.pycharm.env.manager
 
+import com.intellij.ide.DataManager
+import com.intellij.openapi.actionSystem.DataContext
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.popup.JBPopupFactory
@@ -27,20 +29,30 @@ import javax.swing.JComponent
 internal object EnvPythonPicker {
 
     /**
-     * Opens the picker near [near] and acts on the choice.
+     * Opens the picker and acts on the choice.
+     *
+     * [context] decides where it appears, and is the reason this takes a [DataContext] rather than a
+     * component: anchoring to the tree put the popup under the *whole tree*, which is the bottom of
+     * the tool window and nowhere near the button that was pressed. A data context lets the platform
+     * place it where the click was.
      *
      * The interpreter list costs a process, so it is fetched off the EDT and the popup opens when it
      * arrives. Call on the EDT.
      */
-    fun choose(project: Project, near: JComponent) {
+    fun choose(project: Project, context: DataContext) {
         val service = EnvService.getInstance(project)
         ApplicationManager.getApplication().executeOnPooledThread {
             val candidates = service.listPythons()
             ApplicationManager.getApplication().invokeLater({
                 if (project.isDisposed) return@invokeLater
-                showPopup(project, near, entries(candidates, service.status))
+                showPopup(project, context, entries(candidates, service.status))
             }, project.disposed)
         }
+    }
+
+    /** The picker anchored to [component], for callers that have one rather than an action event. */
+    fun choose(project: Project, component: JComponent) {
+        choose(project, DataManager.getInstance().getDataContext(component))
     }
 
     /** One row of the picker. */
@@ -111,7 +123,7 @@ internal object EnvPythonPicker {
         0
     }
 
-    private fun showPopup(project: Project, near: JComponent, entries: List<Entry>) {
+    private fun showPopup(project: Project, context: DataContext, entries: List<Entry>) {
         if (entries.isEmpty()) return
         JBPopupFactory.getInstance()
             .createPopupChooserBuilder(entries.map { it.label })
@@ -120,7 +132,7 @@ internal object EnvPythonPicker {
                 entries.firstOrNull { it.label == label }?.let { apply(project, it) }
             }
             .createPopup()
-            .showUnderneathOf(near)
+            .showInBestPositionFor(context)
     }
 
     /**

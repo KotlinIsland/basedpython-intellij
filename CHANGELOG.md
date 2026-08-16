@@ -136,6 +136,27 @@
   they disagree, the row says so: a package the environment does not have is greyed, one
   installed at a version other than the lock's is called out. That is drift shown on the row it
   happens on, rather than only asserted in a banner.
+- Adding or removing a dependency now leaves `pyproject.toml` in step with what actually happened
+  to it. These commands are separate processes that read the file off disk and rewrite it, knowing
+  nothing about the editor showing it, which left a gap on both sides: unsaved editor changes were
+  silently overwritten, because uv read the old file and wrote it back; and afterwards the IDE went
+  on displaying the stale content until something else happened to make it look again. Unsaved
+  changes to the manifests are now flushed before a command runs, and the files re-read once it is
+  done — including one it created, such as a first `uv.lock`. The environment directory is
+  deliberately left alone: it is thousands of files after a sync, and nothing here reads it through
+  the IDE's virtual file system.
+- The *Python version* button carries the version it is on — `Python 3.12` — rather than an icon.
+  Nothing in the platform's icon set means "Python interpreter" without depending on the Python
+  plugin, and the version is more use than any glyph: the button says what you are running and
+  offers to change it in the same place. Its popup also opens at the button now, instead of at the
+  bottom of the tool window.
+- *Refresh* is gone from the environment toolbar, and what is left is named *Re-read*. Sitting
+  beside *Sync*, it was a coin flip: both were named after refreshing and both wore a circular
+  arrow, while one installs packages and takes minutes and the other re-reads state and takes no
+  time. The view already re-reads itself on open, whenever a manifest changes, and after every
+  operation, so the button was mostly there to be mistaken for the other one; it keeps its place in
+  the right-click and ⋮ menus for what the view cannot see — something installed straight into the
+  environment behind the manifests' back.
 - Reading that tree never writes to the project. `uv tree` re-locks and writes `uv.lock` unless
   told not to, so the plugin always asks for the frozen one — otherwise opening a project would
   create a lock file, and every save of `pyproject.toml` would rewrite it. A project with no lock
