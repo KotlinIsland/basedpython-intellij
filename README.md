@@ -159,10 +159,34 @@ support, run configurations, CLI actions, and editor tooling.
   operators; External Documentation (Ctrl+Shift+I) opens the basedpython docs.
 - **basedpython Syntax Quick Reference** action with a bundled cheat-sheet.
 
-### Smart editing & environment
+### Environment management
+- **basedpython Environment** tool window — which environment this project runs in, what is
+  installed in it, and the one thing to press when something is wrong. It answers the question
+  the interpreter dropdown does not: *is* there an environment, does it match what the project
+  declares, and what do I do about it.
+- A banner names the single problem worth fixing, and **Set Up** fixes it: it installs the
+  environment manager, creates the environment and syncs it, as far as this project needs.
+  A healthy project gets no banner at all.
+- Add and remove dependencies, upgrade everything past the lock file's pins, and choose the
+  Python version — installed ones and ones that will be downloaded, offered together, because
+  "I want 3.13" should not require first knowing whether 3.13 is installed.
+- The environment's Python version is read from its own `pyvenv.cfg` rather than by running the
+  interpreter, so it is still reported for an environment whose interpreter is broken — which is
+  when it is most worth knowing.
+- **uv today, pluggable by construction.** `env.manager.EnvBackend` is the seam a conda or pixi
+  backend slots into: adding one is writing a single object and listing it in `EnvBackends.ALL`.
+- **uv installs itself if it is missing** — the release binary, into the plugin's own
+  `~/.basedpython/bin`. No shell profile is edited and no `PATH` is changed. An already-installed
+  uv is found even when the IDE's `PATH` cannot see it, which is the usual case for an IDE
+  started from a launcher rather than a terminal.
+- **Nothing happens on its own.** Reading the environment starts no process unless one exists to
+  ask about; creating, syncing, adding and downloading only ever run from a click.
+
+### Smart editing
 - Enter auto-indents after a `:` block header; Backspace dedents by a full indent step.
 - Editor banner when `by` is missing — one-click **Install with uv**
-  (`uv add --dev basedpython`) or jump to settings; **uv sync** action.
+  (`uv add --dev basedpython`), open the environment window, or jump to settings; **uv sync**
+  action. A successful install restarts the language servers and clears the banner by itself.
 
 ### Project & config
 - **New Project → basedpython** wizard scaffolds `pyproject.toml`, `src/main.by`,

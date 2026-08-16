@@ -115,6 +115,37 @@
   it keeps itself in step without pressing Refresh.
 - Filter the test view by state (funnel on its toolbar): show only failed tests, only
   skipped, only what has not run yet. The toolbar says when something is hidden.
+- *basedpython Environment* tool window: which environment this project runs in, what is
+  installed in it, and the one thing to press when something is wrong. It answers what an
+  interpreter dropdown does not — whether there *is* an environment, whether it matches what the
+  project declares, and what to do about it — with a banner naming the single problem and a
+  *Set Up* button that installs the environment manager, creates the environment and syncs it, as
+  far as this project needs. A healthy project gets no banner at all. Add and remove dependencies,
+  upgrade past the lock file's pins, and pick the Python version, with installed and downloadable
+  versions offered together.
+- That window reads the environment's Python version from its own `pyvenv.cfg` rather than by
+  running the interpreter, so it still reports what an environment was built on when its
+  interpreter is broken — a Homebrew upgrade, or a project copied between machines — which is
+  when it is most worth knowing. An environment whose interpreter is gone is reported as no
+  environment rather than as a healthy one.
+- uv is the only backend today, and the code is shaped so that is a fact about the list rather
+  than about the design: `env.manager.EnvBackend` decides which projects a manager claims, where
+  it puts the environment, what argv each operation becomes, and how to read its own output, so a
+  conda or pixi backend is one object added to `EnvBackends.ALL` and nothing else. What each
+  command uv is given actually is, and what its output parses to, is checked against a real uv by
+  a live test rather than argued about.
+- uv installs itself when it is missing, from its release binary into the plugin's own
+  `~/.basedpython/bin` — not by piping its install script into a shell. Nothing outside that
+  directory is touched. An already-installed uv is also found in `~/.local/bin` and
+  `~/.cargo/bin`, which is what fixes "uv is installed but the IDE cannot find it": an IDE started
+  from a launcher inherits the session's `PATH`, not a login shell's.
+- Installing or syncing from anywhere in the plugin now restarts the language servers and
+  re-evaluates the editor banners afterwards. Both the *Install with uv* banner and the *uv sync*
+  action used to spawn uv themselves and do neither, which is how a successful install could leave
+  the editor still insisting `by` was missing.
+- Nothing in any of this runs on its own. Reading the environment starts no process unless there
+  is one to ask about, and creating, syncing, adding or downloading only ever happens from a
+  click — the same rule that has always kept `uv run` out of automatic binary resolution.
 - *basedpython Tasks* tool window: the repository's own checks, listed where they can be run —
   the built-in npm view, for the task runners a Python project uses. Reads
   `.pre-commit-config.yaml` (hooks under the repo they come from), `lefthook.yml` and its

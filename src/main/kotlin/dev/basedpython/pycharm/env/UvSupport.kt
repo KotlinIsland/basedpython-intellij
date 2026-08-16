@@ -1,24 +1,32 @@
 package dev.basedpython.pycharm.env
 
-import com.intellij.execution.configurations.PathEnvironmentVariableUtil
-import com.intellij.notification.NotificationGroupManager
-import com.intellij.notification.NotificationType
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.util.SystemInfo
+import dev.basedpython.pycharm.env.manager.EnvTools
+import dev.basedpython.pycharm.env.manager.UvBackend
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
 
-/** Shared helpers for locating `uv` and reporting through the "basedpython" notification group. */
+/**
+ * Locating uv and recognising a uv project, for the callers that are not the environment manager.
+ *
+ * Two of them: [ByEnvironments]'s `uv` environment source, and the debugpy installer. Both want the
+ * same two answers the manager wants, so both get them from the same place — this used to do its own
+ * `PATH` lookup, which stopped being the same answer the moment the plugin gained the ability to
+ * install uv into a directory of its own.
+ */
 internal object UvSupport {
 
-    const val NOTIFICATION_GROUP_ID: String = "basedpython"
-
-    /** Locate a `uv` executable on PATH, or `null`. */
-    fun findUv(): Path? {
-        val name = if (SystemInfo.isWindows) "uv.exe" else "uv"
-        return PathEnvironmentVariableUtil.findInPath(name)?.toPath()
-    }
+    /**
+     * Locate a `uv` executable, or `null`.
+     *
+     * Delegates to [EnvTools], which is the plugin's single answer to "where is this tool": the
+     * plugin's own install directory first, then `PATH`, then the directories uv's installers use.
+     * A bare `PATH` lookup — what this was — would miss a uv the plugin itself had just installed,
+     * so a run configuration pinned to the `uv` environment would report it missing immediately
+     * after the environment window said it was installed.
+     */
+    fun findUv(): Path? = EnvTools.find(UvBackend)
 
     /** Project base path as a [Path], or `null`. */
     fun basePath(project: Project): Path? = project.basePath?.let { Paths.get(it) }
@@ -26,17 +34,6 @@ internal object UvSupport {
     /** True when a uv-managed project marker exists at the base. */
     fun hasProjectMarker(project: Project): Boolean {
         val base = basePath(project) ?: return false
-        return Files.isRegularFile(base.resolve("uv.lock")) ||
-            Files.isRegularFile(base.resolve("pyproject.toml"))
-    }
-
-    /** True when `uv sync` is meaningful: a `uv` exe is on PATH or a project marker exists. */
-    fun canSync(project: Project): Boolean = findUv() != null || hasProjectMarker(project)
-
-    fun notify(project: Project, title: String, content: String, type: NotificationType) {
-        NotificationGroupManager.getInstance()
-            .getNotificationGroup(NOTIFICATION_GROUP_ID)
-            .createNotification(title, content, type)
-            .notify(project)
+        return UvBackend.projectMarkers.any { Files.isRegularFile(base.resolve(it)) }
     }
 }

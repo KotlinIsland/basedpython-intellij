@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Tool window stripe icon: a shipping crate seen head-on — a box with a lid seam and a band across
+  it. The "packages live in here" metaphor, which is what the window actually shows; a snake or a
+  Python logo would claim the language rather than the environment, and the environment is the
+  subject.
+
+  Monochrome line art in the platform's stripe style (#6C707E light / #CED0D6 dark), because a
+  stripe button sits among the platform's own icons and a coloured badge does not belong there.
+  The lid seam sits at a third of the height rather than the middle: at 16px an exactly centred
+  seam reads as two stacked boxes instead of one with a lid.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
+  <g stroke="#6C707E" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M2.4 4.3 8 1.8l5.6 2.5v7.4L8 14.2 2.4 11.7z"/>
+    <path d="M2.4 4.3 8 6.8l5.6-2.5"/>
+    <path d="M8 6.8v7.4"/>
+  </g>
+</svg>
