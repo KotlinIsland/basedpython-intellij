@@ -145,9 +145,34 @@ class UvTreeTest {
         assertTrue(b.children.single().children.isEmpty())
     }
 
+    /**
+     * The main list is where dependencies go by default, so a project with none has an *empty* main
+     * list rather than no main list. Hiding it leaves a project whose only dependencies are dev ones
+     * looking like it has no main list at all — and nothing to select before pressing Add.
+     */
+    @Test
+    fun `the main list is shown even when it is empty`() {
+        val json = """
+            {"roots":[{"id":"root"},{"id":"dev"}],
+             "resolution":{
+               "root":{"name":"proj","version":"1","kind":"package","dependencies":[]},
+               "dev":{"name":"proj","version":"1","kind":{"group":"dev"},
+                      "dependencies":[{"id":"pytest"}]},
+               "pytest":{"name":"pytest","version":"9","kind":"package","dependencies":[]}}}
+        """.trimIndent()
+
+        val groups = UvTree.parse(json)
+        assertEquals(
+            listOf(EnvDependencyTarget.Main, EnvDependencyTarget.Group("dev")),
+            groups.map { it.target },
+        )
+        assertTrue(groups.first().roots.isEmpty())
+        assertEquals(0, groups.first().packageCount())
+    }
+
     /** A group whose requirements all failed to resolve would be an empty heading. */
     @Test
-    fun `a group with nothing in it is not shown`() {
+    fun `an empty group other than the main list is not shown`() {
         val json = """
             {"roots":[{"id":"root"},{"id":"empty"}],
              "resolution":{

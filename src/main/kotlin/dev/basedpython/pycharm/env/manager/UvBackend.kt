@@ -59,8 +59,15 @@ object UvBackend : EnvBackend {
     override fun pythonExecutable(envRoot: Path): Path = ByEnvironments.venvBinary(envRoot, "python")
 
     override fun command(op: EnvOp): EnvCommand = when (op) {
-        is EnvOp.Create ->
-            EnvCommand(listOf("venv") + (op.python?.let { listOf("--python", it) } ?: emptyList()))
+        // `--clear` only when replacing. uv refuses to overwrite an existing environment without it
+        // ("A virtual environment already exists at: .venv"), so a recreate without the flag fails
+        // and the version never changes; and passing it unconditionally would turn an ordinary
+        // create into a silent wipe of whatever happened to be at that path.
+        is EnvOp.Create -> EnvCommand(
+            listOf("venv") +
+                (if (op.replaceExisting) listOf("--clear") else emptyList()) +
+                (op.python?.let { listOf("--python", it) } ?: emptyList()),
+        )
 
         EnvOp.Sync -> EnvCommand(listOf("sync"))
 

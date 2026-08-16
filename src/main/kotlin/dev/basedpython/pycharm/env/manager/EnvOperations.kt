@@ -72,24 +72,25 @@ internal object EnvOperations {
      * apply the project's own `requires-python`, which is the right answer whenever the project
      * states one — and the reason the picker's first entry is "whatever the project asks for".
      */
+    /**
+     * Creates the environment, replacing one that is already there.
+     *
+     * Whether this is a create or a recreate is read from the current state rather than asked of the
+     * caller, because it is not really a choice: if an environment exists, the backend has to be told
+     * to replace it or it refuses to do anything at all. The caller's job is to have confirmed with
+     * the user first, which [EnvPythonPicker] does — this is where everything installed goes away.
+     */
     fun createEnvironment(project: Project, python: String?) {
-        val backend = EnvService.getInstance(project).status.backend ?: return
+        val service = EnvService.getInstance(project)
+        val backend = service.status.backend ?: return
+        val replacing = service.status.environment != null
         runInBackground(project, BasedPythonBundle.message("env.progress.creating")) { indicator ->
             if (!ensureTool(project, backend, indicator)) return@runInBackground
-            if (!runBlockingOp(project, backend, EnvOp.Create(python))) return@runInBackground
+            if (!runBlockingOp(project, backend, EnvOp.Create(python, replacing))) return@runInBackground
             indicator.text = BasedPythonBundle.message("env.progress.syncing")
             runBlockingOp(project, backend, EnvOp.Sync)
         }
     }
-
-    /**
-     * Recreates the environment on [python], replacing whatever is there.
-     *
-     * "Change the Python version" is not an operation any of these tools has — an environment is
-     * built against one interpreter and cannot be moved to another — so it is spelled out here as
-     * what it actually is, and the caller confirms it with the user first.
-     */
-    fun changePython(project: Project, python: String) = createEnvironment(project, python)
 
     fun sync(project: Project) = simple(project, EnvOp.Sync, BasedPythonBundle.message("env.progress.syncing"))
 
@@ -142,11 +143,13 @@ internal object EnvOperations {
 
     /** Installs an interpreter the machine does not have, then builds the environment on it. */
     fun installPythonAndCreate(project: Project, version: String) {
-        val backend = EnvService.getInstance(project).status.backend ?: return
+        val service = EnvService.getInstance(project)
+        val backend = service.status.backend ?: return
+        val replacing = service.status.environment != null
         runInBackground(project, BasedPythonBundle.message("env.progress.installingPython", version)) { indicator ->
             if (!runBlockingOp(project, backend, EnvOp.InstallPython(version))) return@runInBackground
             indicator.text = BasedPythonBundle.message("env.progress.creating")
-            if (!runBlockingOp(project, backend, EnvOp.Create(version))) return@runInBackground
+            if (!runBlockingOp(project, backend, EnvOp.Create(version, replacing))) return@runInBackground
             indicator.text = BasedPythonBundle.message("env.progress.syncing")
             runBlockingOp(project, backend, EnvOp.Sync)
         }

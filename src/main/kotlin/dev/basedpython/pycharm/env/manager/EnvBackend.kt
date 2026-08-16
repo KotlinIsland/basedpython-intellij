@@ -12,8 +12,18 @@ import java.nio.file.Path
  */
 sealed interface EnvOp {
 
-    /** Create the environment, optionally on a specific interpreter ([python] as the backend spells it). */
-    data class Create(val python: String? = null) : EnvOp
+    /**
+     * Create the environment, optionally on a specific interpreter ([python] as the backend spells it).
+     *
+     * [replaceExisting] is the difference between creating one and *re*creating one, and it is not
+     * optional detail: an environment is built against a single interpreter and cannot be moved to
+     * another, so "change the Python version" is really "throw this one away and build a new one".
+     * Backends refuse to overwrite silently — `uv venv` on an existing `.venv` fails outright and
+     * tells you to pass `--clear` — so a recreate that does not say so does not happen at all.
+     *
+     * Only ever true after the user has confirmed: it discards everything installed.
+     */
+    data class Create(val python: String? = null, val replaceExisting: Boolean = false) : EnvOp
 
     /** Make the environment match the project's declared dependencies. */
     data object Sync : EnvOp

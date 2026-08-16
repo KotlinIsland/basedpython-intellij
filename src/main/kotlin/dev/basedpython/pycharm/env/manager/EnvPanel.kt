@@ -561,9 +561,15 @@ internal class EnvPanel(private val project: Project) :
             }
         }
 
-        // The action event's own context, so the popup opens at the button. Anchoring it to the tree
-        // put it under the whole tree, which is the bottom of the tool window.
-        override fun actionPerformed(e: AnActionEvent) = EnvPythonPicker.choose(project, e.dataContext)
+        /**
+         * The clicked button is the anchor, not the action's data context.
+         *
+         * The context reports this panel's *tree* — [toolbar]'s target component, which it has to be
+         * for the toolbar to read the tree selection — so positioning against it puts the popup at
+         * the bottom of the tool window. The input event knows where the click actually was.
+         */
+        override fun actionPerformed(e: AnActionEvent) =
+            EnvPythonPicker.choose(project, e.inputEvent?.component, e.dataContext)
     }
 
     private inner class ExpandAllAction : DumbAwareAction(

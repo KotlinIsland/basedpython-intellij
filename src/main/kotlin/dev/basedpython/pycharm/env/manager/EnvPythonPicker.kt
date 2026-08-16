@@ -6,6 +6,7 @@ import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.popup.JBPopupFactory
 import dev.basedpython.pycharm.util.BasedPythonBundle
+import java.awt.Component
 import javax.swing.JComponent
 
 /**
@@ -31,28 +32,40 @@ internal object EnvPythonPicker {
     /**
      * Opens the picker and acts on the choice.
      *
-     * [context] decides where it appears, and is the reason this takes a [DataContext] rather than a
-     * component: anchoring to the tree put the popup under the *whole tree*, which is the bottom of
-     * the tool window and nowhere near the button that was pressed. A data context lets the platform
-     * place it where the click was.
+     * ### Where it opens, and why it took two goes to get right
+     *
+     * [anchor] is the component the popup hangs under, and it has to be passed in because neither
+     * obvious source of one is correct here.
+     *
+     * Anchoring to the tree put the popup under the *whole tree* — the bottom of the tool window,
+     * nowhere near the button. Switching to `showInBestPositionFor(dataContext)` looked like the fix
+     * and changed nothing, for a reason worth writing down: the toolbar's `targetComponent` is the
+     * tree (it has to be, so that toolbar actions can read the tree's selection), so the action's
+     * data context reports the *tree* as its context component and "best position" is faithfully
+     * computed against it. Both roads led to the same wrong place.
+     *
+     * What actually knows where the click was is the input event's own component — the toolbar
+     * button. [context] stays as the fallback for an invocation that has no button behind it, a
+     * keyboard shortcut or a menu, where positioning at the focused component *is* right.
      *
      * The interpreter list costs a process, so it is fetched off the EDT and the popup opens when it
-     * arrives. Call on the EDT.
+     * arrives — which is why the anchor is re-checked for [Component.isShowing] at that point rather
+     * than trusted from when the click happened. Call on the EDT.
      */
-    fun choose(project: Project, context: DataContext) {
+    fun choose(project: Project, anchor: Component?, context: DataContext?) {
         val service = EnvService.getInstance(project)
         ApplicationManager.getApplication().executeOnPooledThread {
             val candidates = service.listPythons()
             ApplicationManager.getApplication().invokeLater({
                 if (project.isDisposed) return@invokeLater
-                showPopup(project, context, entries(candidates, service.status))
+                showPopup(project, anchor, context, entries(candidates, service.status))
             }, project.disposed)
         }
     }
 
     /** The picker anchored to [component], for callers that have one rather than an action event. */
     fun choose(project: Project, component: JComponent) {
-        choose(project, DataManager.getInstance().getDataContext(component))
+        choose(project, component, DataManager.getInstance().getDataContext(component))
     }
 
     /** One row of the picker. */
@@ -123,16 +136,28 @@ internal object EnvPythonPicker {
         0
     }
 
-    private fun showPopup(project: Project, context: DataContext, entries: List<Entry>) {
+    private fun showPopup(
+        project: Project,
+        anchor: Component?,
+        context: DataContext?,
+        entries: List<Entry>,
+    ) {
         if (entries.isEmpty()) return
-        JBPopupFactory.getInstance()
+        val popup = JBPopupFactory.getInstance()
             .createPopupChooserBuilder(entries.map { it.label })
             .setTitle(BasedPythonBundle.message("env.python.title"))
             .setItemChosenCallback { label ->
                 entries.firstOrNull { it.label == label }?.let { apply(project, it) }
             }
             .createPopup()
-            .showInBestPositionFor(context)
+
+        when {
+            anchor != null && anchor.isShowing -> popup.showUnderneathOf(anchor)
+            context != null -> popup.showInBestPositionFor(context)
+            // Nothing to hang it on — a project whose tool window went away while the interpreter
+            // list was being fetched. Centring beats not showing at all.
+            else -> popup.showInFocusCenter()
+        }
     }
 
     /**
@@ -145,12 +170,18 @@ internal object EnvPythonPicker {
     private fun apply(project: Project, entry: Entry) {
         val status = EnvService.getInstance(project).status
         if (status.environment != null) {
+            // Named as a version where there is one, and as what it actually means where there is
+            // not — the picker's own "Whatever the project asks for" reads as nonsense dropped into
+            // the middle of a sentence.
+            val onWhat = entry.request
+                ?.let { BasedPythonBundle.message("env.python.recreate.onVersion", it) }
+                ?: BasedPythonBundle.message("env.python.recreate.onProject")
             val confirmed = EnvOperations.confirm(
                 project,
                 BasedPythonBundle.message("env.python.recreate.title"),
                 BasedPythonBundle.message(
                     "env.python.recreate.message",
-                    entry.request ?: BasedPythonBundle.message("env.python.fromProject"),
+                    onWhat,
                     status.environment.root.toString(),
                 ),
             )

@@ -5,7 +5,6 @@ import com.intellij.openapi.ui.ComboBox
 import com.intellij.openapi.ui.DialogWrapper
 import com.intellij.openapi.ui.ValidationInfo
 import com.intellij.ui.JBColor
-import com.intellij.ui.SimpleListCellRenderer
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBTextField
 import com.intellij.util.ui.FormBuilder
@@ -39,23 +38,16 @@ internal class EnvAddPackageDialog(
     private val field = JBTextField(30)
 
     /**
-     * The lists a requirement can join.
+     * The lists a requirement can join, as text.
      *
-     * Always offers the main list and `dev`, whether or not the project declares them yet: they are
-     * the two answers for almost every add, and a project that has neither is exactly the project
-     * about to gain its first one.
+     * Text rather than [EnvDependencyTarget] because this combo is editable — a new group can be
+     * typed — and an editable combo renders its selected value through its *editor*, which calls
+     * `toString()`, not through any renderer set on it. A typed model therefore put `Group(name=dev)`
+     * on screen. [EnvTargetLabels] owns the mapping in both directions.
      */
-    private val targets: List<EnvDependencyTarget> = buildList {
-        add(EnvDependencyTarget.Main)
-        add(EnvDependencyTarget.DEV)
-        existingTargets.forEach { if (it !in this) add(it) }
-        if (initialTarget !in this) add(initialTarget)
-    }
-
-    private val targetBox = ComboBox(targets.toTypedArray()).apply {
+    private val targetBox = ComboBox(EnvTargetLabels.options(existingTargets, initialTarget).toTypedArray()).apply {
         isEditable = true
-        renderer = SimpleListCellRenderer.create("") { it?.let(::describe).orEmpty() }
-        selectedItem = initialTarget
+        selectedItem = EnvTargetLabels.format(initialTarget)
     }
 
     init {
@@ -98,26 +90,9 @@ internal class EnvAddPackageDialog(
         return Request(EnvRequirements.split(field.text), selectedTarget() ?: initialTarget)
     }
 
-    /**
-     * The chosen list.
-     *
-     * The combo is editable, so its value is a [EnvDependencyTarget] when the user picked one and a
-     * typed [String] when they did not. A typed name is read as a dependency group — the thing that
-     * can be created on demand. An extra cannot be conjured that way, which is why extras are only
-     * ever offered, never typed: adding to `[project.optional-dependencies]` is a decision about the
-     * package's public interface, not a place to put a test dependency.
-     */
-    private fun selectedTarget(): EnvDependencyTarget? = when (val value = targetBox.selectedItem) {
-        is EnvDependencyTarget -> value
-        is String -> value.trim().takeIf { it.isNotEmpty() }?.let { EnvDependencyTarget.Group(it) }
-        else -> null
-    }
-
-    private fun describe(target: EnvDependencyTarget): String = when (target) {
-        EnvDependencyTarget.Main -> BasedPythonBundle.message("env.add.target.main")
-        is EnvDependencyTarget.Group -> BasedPythonBundle.message("env.add.target.group", target.name)
-        is EnvDependencyTarget.Extra -> BasedPythonBundle.message("env.add.target.extra", target.name)
-    }
+    /** The chosen list, whether it was picked from the list or typed. */
+    private fun selectedTarget(): EnvDependencyTarget? =
+        EnvTargetLabels.parse(targetBox.selectedItem?.toString().orEmpty())
 }
 
 /** Turning what the user typed into arguments. */
