@@ -30,6 +30,13 @@ internal object EnvVersionChoices {
         val yanked: Boolean,
         /** True when this release cannot run on the environment's interpreter. */
         val incompatible: Boolean,
+        /**
+         * True for an alpha, beta, release candidate or dev build.
+         *
+         * Marked rather than hidden, and worth marking because a resolver will not choose one on its
+         * own: pinning it is the only way to get it, so the row has to say that is what it is.
+         */
+        val preRelease: Boolean = false,
     ) {
         /** True when picking this is a choice the user should look at twice. */
         val isQuestionable: Boolean get() = yanked || incompatible
@@ -59,6 +66,7 @@ internal object EnvVersionChoices {
                 label = label(release, incompatible),
                 yanked = release.yanked,
                 incompatible = incompatible,
+                preRelease = Pep440.isPreRelease(release.version),
             )
         }
         return rows
@@ -73,6 +81,9 @@ internal object EnvVersionChoices {
      */
     private fun label(release: PackageRelease, incompatible: Boolean): String {
         val notes = buildList {
+            if (Pep440.isPreRelease(release.version)) {
+                add(BasedPythonBundle.message("env.version.prerelease"))
+            }
             if (release.yanked) {
                 add(
                     release.yankedReason
@@ -89,6 +100,22 @@ internal object EnvVersionChoices {
             }
         }
         return if (notes.isEmpty()) release.version else "${release.version}  (${notes.joinToString("; ")})"
+    }
+
+    /**
+     * The newest release, when it is a pre-release the index does not call "latest".
+     *
+     * An index reports its newest *stable* release as the latest, so a package whose real work
+     * happens in alphas — `basedpython` itself, at the time of writing — reports a long-superseded
+     * stable and never mentions the rest. Saying only that is misleading; saying only the alpha
+     * would be worse, since a resolver will not pick one. So both are shown, and this is the half
+     * the index does not tell you.
+     */
+    fun newerPreRelease(releases: List<PackageRelease>, latestStable: String?): String? {
+        val newest = releases.map { it.version }.maxWithOrNull(Pep440::compare) ?: return null
+        if (!Pep440.isPreRelease(newest)) return null
+        if (latestStable != null && Pep440.compare(newest, latestStable) <= 0) return null
+        return newest
     }
 
     /** The row for [version], or the pins-nothing row when it is not among them. */

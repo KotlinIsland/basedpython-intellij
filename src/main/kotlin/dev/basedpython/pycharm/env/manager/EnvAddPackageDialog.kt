@@ -286,6 +286,8 @@ internal class EnvAddPackageDialog(
                 BasedPythonBundle.message("env.add.unknownPackage", details.name)
             else -> listOfNotNull(
                 details.latestVersion?.let { BasedPythonBundle.message("env.add.latest", it) },
+                EnvVersionChoices.newerPreRelease(details.releases, details.latestVersion)
+                    ?.let { BasedPythonBundle.message("env.add.newerPreRelease", it) },
                 details.summary,
             ).joinToString(" · ")
         }

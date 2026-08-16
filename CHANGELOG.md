@@ -136,6 +136,14 @@
   they disagree, the row says so: a package the environment does not have is greyed, one
   installed at a version other than the lock's is called out. That is drift shown on the row it
   happens on, rather than only asserted in a banner.
+- Pre-releases are visible in *Add Package* rather than implied. A package index reports its newest
+  *stable* release as "latest", so a project whose real work happens in alphas — `basedpython`
+  itself, whose only stable is an ancient `0.0.0` beneath eight `0.0.1aN` — was described as if none
+  of its actual releases existed. The summary now names the newest pre-release when it is newer than
+  the index's latest, and the version list marks each pre-release as one. They were always in the
+  dropdown; nothing said what they were, and nothing said one existed before you opened it. Both
+  halves are shown deliberately: a resolver will not choose a pre-release on its own, so `latest` is
+  still what you get by default, and pinning is the only way to the alpha.
 - *Add Package* has a results list under the field, instead of an editor completion popup. Typing
   filters the package catalogue and the list is repopulated in place, so it no longer blinks on
   every keystroke; Up/Down move through it from the field and Enter or a double-click picks a name.
