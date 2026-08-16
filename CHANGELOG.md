@@ -136,6 +136,13 @@
   they disagree, the row says so: a package the environment does not have is greyed, one
   installed at a version other than the lock's is called out. That is drift shown on the row it
   happens on, rather than only asserted in a banner.
+- Completion in *Add Package* opens as you type, without Ctrl+Space. It never could before:
+  `TextCompletionContributor` decides whether a keystroke opens the list with
+  `CharFilter.Result.ADD_TO_PREFIX == provider.acceptChar(c)`, and the platform's
+  `TextFieldWithAutoCompletionListProvider.acceptChar` returns *null* — so a provider that does not
+  override it is reachable only by an explicit invocation, however well everything behind it works.
+  Characters that end a package name now hide the popup instead, since once a version specifier, an
+  extra or a marker has begun the catalogue has nothing left to offer.
 - Completion in *Add Package* no longer reports "No suggestions" while the catalogue is still
   downloading. The first Add on a machine starts a 9.5 MB fetch, and typing during it asked a
   catalogue that did not exist yet — so the field said there were no matches, and the identical
