@@ -44,6 +44,11 @@
   `Ctrl+Alt+F8` — to add a breakpoint that logs an expression instead of stopping, and type
   the expression in the field that opens in the gap. Enter commits, Escape abandons, and one
   that is never filled in removes itself rather than leaving an icon that does nothing.
+  In IntelliJ IDEA this is the IDE's own feature, whose modules are bundled with its Java
+  plugin and built on the JVM debugger; PyCharm has none of it, so an equivalent ships here
+  and the two never both run.
+  Ctrl+Z takes a log point back, including the one the `print` quick fix leaves — undo used
+  to restore the deleted call and keep the log point, logging the value twice.
   During a debug session the output reaches the run console the same way a `print` would.
 - Breakpoint expression fields (*Condition*, *Evaluate and log*, Evaluate Expression) are
   basedpython editors rather than plain text boxes, with highlighting and `by` behind them.
