@@ -33,9 +33,10 @@ import javax.swing.tree.TreeSelectionModel
  * The "basedpython Tests" tool window: the test tree as `--collect-only` reports it, with the
  * actions that make it useful — run, debug, and jump to the source.
  *
- * This is a *collected* tree, not a results tree: it is what tests exist, available before anything
- * has run and without running anything. Outcomes stay where the platform already shows them, in the
- * run window's test tree, which the same configuration feeds.
+ * A *collected* tree first: what tests exist, available before anything has run and without running
+ * anything. It then carries the outcome of whatever has run since — from any run, since
+ * [ByTestRunStateListener] listens to the SM runner rather than to this view's own buttons — so the
+ * question "did that pass" is answered where the tests are listed, not only in the run window.
  */
 internal class ByTestNodePanel(private val project: Project) :
     SimpleToolWindowPanel(true, true), Disposable {
@@ -51,7 +52,7 @@ internal class ByTestNodePanel(private val project: Project) :
         tree.isRootVisible = false
         tree.showsRootHandles = true
         tree.selectionModel.selectionMode = TreeSelectionModel.SINGLE_TREE_SELECTION
-        tree.cellRenderer = NodeRenderer()
+        tree.cellRenderer = NodeRenderer { states }
         TreeSpeedSearch.installOn(tree)
 
         object : DoubleClickListener() {
@@ -69,10 +70,23 @@ internal class ByTestNodePanel(private val project: Project) :
         setContent(JBScrollPane(tree))
 
         service.addListener(this) { render() }
+        // An outcome changes what a row looks like, never which rows there are, so it repaints
+        // rather than rebuilding — a run reports one of these per test, and rebuilding the tree
+        // that often would collapse it under the user mid-run.
+        service.addOutcomeListener(this) { refreshStates() }
         render()
     }
 
     override fun dispose() = Unit
+
+    /** Per-node outcome, recomputed whenever the tree or the results change. */
+    private var states: Map<ByTestNode, ByTestState> = emptyMap()
+
+    private fun refreshStates() {
+        val tree = (root.userObject as? ByTestNode)
+        states = tree?.let { ByTestStates.of(it, service.outcomes) } ?: emptyMap()
+        this.tree.repaint()
+    }
 
     // ---- rendering ---------------------------------------------------------
 
@@ -106,6 +120,7 @@ internal class ByTestNodePanel(private val project: Project) :
             restoreExpanded(expanded)
         }
         selected?.let(::selectTarget)
+        refreshStates()
     }
 
     /**
@@ -139,13 +154,40 @@ internal class ByTestNodePanel(private val project: Project) :
         ) { service.refresh() }
     }
 
+    /**
+     * Runs the selected node, or — with nothing selected — everything, which is one launch per kind
+     * of test in the tree (see [ByTestNodeActions.runAll]).
+     */
+    private fun launch(executor: com.intellij.execution.Executor) {
+        val node = selectedNode()
+        if (node == null || node.target == null) {
+            ByTestNodeActions.runAll(project, executor, sourcesInTree())
+        } else {
+            ByTestNodeActions.run(project, node.target, executor, node.source)
+        }
+    }
+
+    /** Which kinds of test the current tree holds; empty before anything is collected. */
+    private fun sourcesInTree(): Set<ByTestSource> {
+        val root = root.userObject as? ByTestNode ?: return emptySet()
+        val sources = LinkedHashSet<ByTestSource>()
+        fun walk(node: ByTestNode) {
+            if (node.kind == ByTestNodeKind.FILE) sources += node.source
+            node.children.forEach(::walk)
+        }
+        walk(root)
+        return sources
+    }
+
     private fun build(node: ByTestNode): DefaultMutableTreeNode {
         val swing = DefaultMutableTreeNode(node)
         node.children.forEach { swing.add(build(it)) }
         return swing
     }
 
-    private class NodeRenderer : ColoredTreeCellRenderer() {
+    private class NodeRenderer(
+        private val states: () -> Map<ByTestNode, ByTestState>,
+    ) : ColoredTreeCellRenderer() {
         override fun customizeCellRenderer(
             tree: JTree,
             value: Any?,
@@ -156,7 +198,8 @@ internal class ByTestNodePanel(private val project: Project) :
             hasFocus: Boolean,
         ) {
             val node = (value as? DefaultMutableTreeNode)?.userObject as? ByTestNode ?: return
-            icon = iconFor(node.kind)
+            val state = states()[node] ?: ByTestState.NOT_RUN
+            icon = iconFor(node.kind, state)
             append(node.name)
             node.detail?.let {
                 append("  $it", SimpleTextAttributes.ERROR_ATTRIBUTES)
@@ -173,7 +216,31 @@ internal class ByTestNodePanel(private val project: Project) :
             }
         }
 
-        private fun iconFor(kind: ByTestNodeKind): Icon = when (kind) {
+        /**
+         * The icon for a node: what it *is*, until a run has said something about it.
+         *
+         * A test carries its own outcome; a file, class or directory carries the worst of what is
+         * under it, so a collapsed tree still points at the failure. Containers keep their own icon
+         * while nothing has run, since a folder of never-run tests is a folder, not a result.
+         */
+        private fun iconFor(kind: ByTestNodeKind, state: ByTestState): Icon {
+            if (state != ByTestState.NOT_RUN) {
+                outcomeIcon(state)?.let { return it }
+            }
+            return structureIcon(kind)
+        }
+
+        private fun outcomeIcon(state: ByTestState): Icon? = when (state) {
+            ByTestState.PASSED -> AllIcons.RunConfigurations.TestPassed
+            ByTestState.FAILED -> AllIcons.RunConfigurations.TestFailed
+            ByTestState.SKIPPED -> AllIcons.RunConfigurations.TestSkipped
+            // No animation in this tree: the row is repainted per event, not per frame, and a
+            // spinner that only moves when a test finishes is worse than one that does not move.
+            ByTestState.RUNNING -> AllIcons.Process.Step_2
+            ByTestState.NOT_RUN -> null
+        }
+
+        private fun structureIcon(kind: ByTestNodeKind): Icon = when (kind) {
             ByTestNodeKind.ROOT -> AllIcons.Nodes.TestSourceFolder
             ByTestNodeKind.DIRECTORY -> AllIcons.Nodes.Folder
             ByTestNodeKind.FILE -> BasedPythonIcons.Logo
@@ -280,7 +347,9 @@ internal class ByTestNodePanel(private val project: Project) :
             e.presentation.isEnabled = service.state !is ByTestNodeService.State.Collecting
         }
 
-        override fun actionPerformed(e: AnActionEvent) = service.refresh()
+        override fun actionPerformed(e: AnActionEvent) {
+            service.refresh()
+        }
     }
 
     /** Runs the selected node, or — with nothing selected — every test in the project. */
@@ -295,13 +364,7 @@ internal class ByTestNodePanel(private val project: Project) :
             e.presentation.isEnabled = selectedNode()?.kind != ByTestNodeKind.ERROR
         }
 
-        override fun actionPerformed(e: AnActionEvent) {
-            val node = selectedNode()
-            ByTestNodeActions.run(
-                project, node?.target, DefaultRunExecutor.getRunExecutorInstance(),
-                node?.source ?: ByTestSource.TRANSPILED,
-            )
-        }
+        override fun actionPerformed(e: AnActionEvent) = launch(DefaultRunExecutor.getRunExecutorInstance())
     }
 
     private inner class DebugAction : DumbAwareAction(
@@ -315,13 +378,7 @@ internal class ByTestNodePanel(private val project: Project) :
             e.presentation.isEnabled = selectedNode()?.kind != ByTestNodeKind.ERROR
         }
 
-        override fun actionPerformed(e: AnActionEvent) {
-            val node = selectedNode()
-            ByTestNodeActions.run(
-                project, node?.target, DefaultDebugExecutor.getDebugExecutorInstance(),
-                node?.source ?: ByTestSource.TRANSPILED,
-            )
-        }
+        override fun actionPerformed(e: AnActionEvent) = launch(DefaultDebugExecutor.getDebugExecutorInstance())
     }
 
     private inner class NavigateAction : DumbAwareAction(

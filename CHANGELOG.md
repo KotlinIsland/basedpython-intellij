@@ -109,6 +109,10 @@
   sees the transpiled `.by` tree, so a second plain `pytest --collect-only` runs in the
   project and the two are combined. A `.py` test runs as `python -m pytest` in the project,
   where its `pyproject.toml` and `conftest.py` apply.
+- Test nodes show the state of the last run — not run, running, passed, failed, skipped —
+  from any run, with a parent showing the worst of its children. The tree also collects at
+  project open and re-collects a couple of seconds after the project's sources change, so
+  it keeps itself in step without pressing Refresh.
 - *View Collection Output* in the test tool window's ⋮ menu: the exact commands, exit codes
   and output of the last collection, for when the view disagrees with pytest run by hand.
   A collection stopped by `by run`'s type check now says so, with the diagnostic count.

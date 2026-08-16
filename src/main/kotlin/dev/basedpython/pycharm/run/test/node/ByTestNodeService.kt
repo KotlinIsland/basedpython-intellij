@@ -21,6 +21,10 @@ import dev.basedpython.pycharm.util.BasedPythonBundle
 import java.nio.file.Paths
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -34,7 +38,13 @@ import java.util.concurrent.atomic.AtomicBoolean
  * or save: a file watcher would transpile the world each time a character lands in a `.by` file.
  */
 @Service(Service.Level.PROJECT)
-internal class ByTestNodeService(private val project: Project) {
+internal class ByTestNodeService(
+    private val project: Project,
+    private val scope: CoroutineScope,
+) : Disposable {
+
+    /** Nothing to release: this exists so listeners can be tied to the service's own lifetime. */
+    override fun dispose() = Unit
 
     /** What the view has to show right now. */
     sealed interface State {
@@ -74,12 +84,108 @@ internal class ByTestNodeService(private val project: Project) {
     /** Guards against a second collection while one is in flight. */
     private val running = AtomicBoolean(false)
 
+    /** The pending debounced re-collection, if the project has changed recently. */
+    private var syncJob: Job? = null
+
     private val listeners = CopyOnWriteArrayList<() -> Unit>()
+
+    /**
+     * What the last run said about each test, keyed by the pytest node id the tree stores as a
+     * node's target.
+     *
+     * Outcomes outlive the run that produced them and are only replaced per test, so running one
+     * test leaves every other result standing — the whole point of showing them in a view of what
+     * the project *has*. A collection does not clear them either: rediscovering the same tests is
+     * no reason to forget how they did, and anything that has genuinely gone stops being looked up
+     * the moment it leaves the tree.
+     */
+    @Volatile
+    var outcomes: Map<String, ByTestState> = emptyMap()
+        private set
+
+    private val outcomeListeners = CopyOnWriteArrayList<() -> Unit>()
 
     /** Registers [listener], called on the EDT after every [state] change, until [parent] is disposed. */
     fun addListener(parent: Disposable, listener: () -> Unit) {
         listeners += listener
         Disposer.register(parent) { listeners -= listener }
+    }
+
+    /**
+     * Registers [listener], called on the EDT after every [outcomes] change.
+     *
+     * Separate from [addListener] because the two mean different things to a view: a collection
+     * changes which nodes exist and costs a rebuild, while an outcome changes only what a row
+     * looks like — and a run reports one of those per test, far too often to rebuild a tree for.
+     */
+    fun addOutcomeListener(parent: Disposable, listener: () -> Unit) {
+        outcomeListeners += listener
+        Disposer.register(parent) { outcomeListeners -= listener }
+    }
+
+    /**
+     * Marks every test under [target] (null meaning all of [source]) as running.
+     *
+     * Called when a run is launched rather than when a test reports, because pytest's `-v` output
+     * gives no earlier moment: it prints the node id and the outcome on one line, so a parsed run
+     * only learns a test existed once it is over. What *is* known at launch is the scope that was
+     * asked for, and showing that is the difference between a view that reacts and one that sits
+     * still until the whole suite is done.
+     *
+     * Outcomes overwrite these as they arrive, and [clearRunning] sweeps up whatever never reported.
+     */
+    fun markRunning(target: String?, source: ByTestSource) {
+        val tree = (state as? State.Collected)?.tree ?: return
+        val running = HashMap(outcomes)
+        forEachTest(tree) { node ->
+            if (node.source == source && node.target != null && covers(target, node.target)) {
+                running[node.target] = ByTestState.RUNNING
+            }
+        }
+        if (running == outcomes) return
+        outcomes = running
+        fireOutcomes()
+    }
+
+    /** True when a run of [target] includes [nodeId]; a null target is the whole project. */
+    private fun covers(target: String?, nodeId: String): Boolean = when {
+        target == null -> true
+        nodeId == target -> true
+        // The boundaries matter: `tests/test_a.py` must not swallow `tests/test_ab.py`, while
+        // `…::test_param` has to take its `[1-2]` cases with it.
+        else -> nodeId.startsWith("$target::") || nodeId.startsWith("$target/") ||
+            nodeId.startsWith("$target[")
+    }
+
+    private fun forEachTest(node: ByTestNode, action: (ByTestNode) -> Unit) {
+        if (node.children.isEmpty()) action(node) else node.children.forEach { forEachTest(it, action) }
+    }
+
+    /** Records [state] for the test [nodeId], as reported by a run. */
+    fun setOutcome(nodeId: String, state: ByTestState) {
+        outcomes = outcomes + (nodeId to state)
+        fireOutcomes()
+    }
+
+    /**
+     * Clears anything still [ByTestState.RUNNING], for when a run ends without reporting them.
+     *
+     * A stopped run, a crashed interpreter, a test that killed the process: the tests it had
+     * started would otherwise spin in the view until the next collection.
+     */
+    fun clearRunning() {
+        val stuck = outcomes.filterValues { it == ByTestState.RUNNING }
+        if (stuck.isEmpty()) return
+        outcomes = outcomes - stuck.keys
+        fireOutcomes()
+    }
+
+    private fun fireOutcomes() {
+        ApplicationManager.getApplication().invokeLater(
+            { outcomeListeners.forEach { it() } },
+            ModalityState.any(),
+            project.disposed,
+        )
     }
 
     /**
@@ -94,13 +200,33 @@ internal class ByTestNodeService(private val project: Project) {
         if (state == State.Idle) refresh()
     }
 
-    /** Re-runs collection, unless one is already in flight. */
-    fun refresh() {
-        if (!running.compareAndSet(false, true)) return
+    /**
+     * Re-collects a short while after the project stops changing.
+     *
+     * Debounced rather than immediate because the trigger is a file changing on disk, and a
+     * collection is a real `by run` — transpiling the project on the first save of an editing burst
+     * and again on each of the next ten would cost more than it tells anyone. Each new change
+     * restarts the wait, so a burst collects once, at the end.
+     *
+     * A change that lands while a collection is already running does not lose its update: the
+     * refresh is simply rescheduled, since the run in flight was started before that change.
+     */
+    fun scheduleSync() {
+        syncJob?.cancel()
+        syncJob = scope.launch {
+            delay(SYNC_DELAY_MILLIS)
+            if (!refresh()) scheduleSync()
+        }
+    }
+
+    /** Re-runs collection, unless one is already in flight; true when this call started one. */
+    fun refresh(): Boolean {
+        if (!running.compareAndSet(false, true)) return false
         setState(State.Collecting(state.shownTree))
         // Scheduled rather than started here: this is called from the daemon's threads as well as
         // from the tool window's, and starting a Backgroundable task is the EDT's job.
         ApplicationManager.getApplication().invokeLater({ start() }, ModalityState.any(), project.disposed)
+        return true
     }
 
     private fun start() {
@@ -278,6 +404,15 @@ internal class ByTestNodeService(private val project: Project) {
         private const val TIMEOUT_MS = 120_000
 
         private const val UNKNOWN_FAILURE = "collection failed"
+
+        /**
+         * How long the project has to stop changing before re-collecting.
+         *
+         * Long enough that saving a file, then its neighbour, then a third is one collection rather
+         * than three; short enough that a test added and saved shows up while the user is still
+         * looking at it.
+         */
+        private const val SYNC_DELAY_MILLIS = 2_500L
 
         /** How the two halves of a collection are named in *View Collection Output*. */
         private const val BY_RUN_LABEL = "by run pytest (tests transpiled from .by)"
