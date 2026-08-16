@@ -136,30 +136,17 @@
   they disagree, the row says so: a package the environment does not have is greyed, one
   installed at a version other than the lock's is called out. That is drift shown on the row it
   happens on, rather than only asserted in a banner.
-- Completion in *Add Package* offers names that actually start with what you typed, and re-asks the
-  catalogue on every keystroke. Typing `ba` used to offer `b-aws-dynamodb-backup`, for two
-  compounding reasons: a query returns at most fifty names, and in a PEP 503-sorted catalogue the
-  first fifty beginning with `b` are all `b-…` with not one `ba` among them — so the answer for `b`
-  is not a superset of the answer for `ba`, and the platform was narrowing that first set
-  client-side rather than asking again. Meanwhile the matcher accepted those leftovers twice over:
-  camel-hump treats the query as a subsequence, and `PlainPrefixMatcher`'s one-argument form is
-  `containsIgnoreCase`, which matches the `ba` in `backup`. Now: re-query per keystroke, and a
-  strict start match.
-- Completion in *Add Package* opens as you type, without Ctrl+Space. It never could before:
-  `TextCompletionContributor` decides whether a keystroke opens the list with
-  `CharFilter.Result.ADD_TO_PREFIX == provider.acceptChar(c)`, and the platform's
-  `TextFieldWithAutoCompletionListProvider.acceptChar` returns *null* — so a provider that does not
-  override it is reachable only by an explicit invocation, however well everything behind it works.
-  Characters that end a package name now hide the popup instead, since once a version specifier, an
-  extra or a marker has begun the catalogue has nothing left to offer.
-- Completion in *Add Package* no longer reports "No suggestions" while the catalogue is still
-  downloading. The first Add on a machine starts a 9.5 MB fetch, and typing during it asked a
-  catalogue that did not exist yet — so the field said there were no matches, and the identical
-  query a few seconds later on Ctrl+Space returned the right ones. The answer was never wrong, it
-  was early. A lookup that needs the catalogue now waits for the download already in flight, on the
-  pooled thread the platform runs it on and cancellable by the next keystroke, and the lookup
-  advertises "Downloading the package list…" while it does.
-- *Add Package* completes against the package catalogue as you type, and gained a **version
+- *Add Package* has a results list under the field, instead of an editor completion popup. Typing
+  filters the package catalogue and the list is repopulated in place, so it no longer blinks on
+  every keystroke; Up/Down move through it from the field and Enter or a double-click picks a name.
+  This is the shape PyCharm's own package dialog uses, and adopting it retires a run of defects that
+  all came from the completion machinery's defaults rather than from anything specific to packages:
+  the autopopup does not fire unless the provider overrides `acceptChar`; its matchers accept
+  subsequences (`ba` matching `b-aws-dynamodb-backup`) and, in `PlainPrefixMatcher`'s one-argument
+  form, substrings (the `ba` in `backup`); and a lookup assumes the answer for a short prefix
+  contains the answer for a longer one, which a capped query over 872,009 names cannot promise —
+  forcing a restart per keystroke fixed the results and produced the blinking.
+- *Add Package* searches the package catalogue as you type, and gained a **version
   picker**. The list is honest about what it contains: a release the maintainer withdrew is marked
   *yanked* with their reason, and one whose `requires_python` this environment does not satisfy is
   marked with what it needs. Neither is filtered out — a version missing from a list with no
