@@ -8,9 +8,12 @@ import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.DefaultActionGroup
+import com.intellij.openapi.actionSystem.ToggleAction
+import com.intellij.openapi.actionSystem.ex.ActionUtil
 import com.intellij.openapi.project.DumbAwareAction
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.SimpleToolWindowPanel
+import com.intellij.ui.AnimatedIcon
 import com.intellij.ui.ColoredTreeCellRenderer
 import com.intellij.ui.DoubleClickListener
 import com.intellij.ui.PopupHandler
@@ -46,6 +49,20 @@ internal class ByTestNodePanel(private val project: Project) :
     private val model = DefaultTreeModel(root)
     private val tree = Tree(model)
 
+    /** Per-node outcome, recomputed whenever the tree or the results change. */
+    private var states: Map<ByTestNode, ByTestState> = emptyMap()
+
+    /** The tree as collected, before filtering; what [states] are computed against. */
+    private var collectedTree: ByTestNode? = null
+
+    /**
+     * Which outcomes to show; all of them until the user says otherwise.
+     *
+     * Declared above `init` on purpose: `init` renders, rendering filters, and a Kotlin property
+     * declared below an init block is still null while that block runs.
+     */
+    private val visibleStates: MutableSet<ByTestState> = ByTestFilter.ALL.toMutableSet()
+
     init {
         // Visibility is decided per render: a root row is always a row, and a tree that has one can
         // never show its empty text. See [render].
@@ -53,6 +70,11 @@ internal class ByTestNodePanel(private val project: Project) :
         tree.showsRootHandles = true
         tree.selectionModel.selectionMode = TreeSelectionModel.SINGLE_TREE_SELECTION
         tree.cellRenderer = NodeRenderer { states }
+        // Lets the running spinner actually spin: a cell renderer paints once per repaint, so the
+        // icon has to be allowed to drive repaints of its own row.
+        com.intellij.util.ui.UIUtil.putClientProperty(
+            tree, AnimatedIcon.ANIMATION_IN_RENDERER_ALLOWED, true,
+        )
         TreeSpeedSearch.installOn(tree)
 
         object : DoubleClickListener() {
@@ -73,20 +95,28 @@ internal class ByTestNodePanel(private val project: Project) :
         // An outcome changes what a row looks like, never which rows there are, so it repaints
         // rather than rebuilding — a run reports one of these per test, and rebuilding the tree
         // that often would collapse it under the user mid-run.
-        service.addOutcomeListener(this) { refreshStates() }
+        service.addOutcomeListener(this) { outcomesChanged() }
         render()
     }
 
     override fun dispose() = Unit
 
-    /** Per-node outcome, recomputed whenever the tree or the results change. */
-    private var states: Map<ByTestNode, ByTestState> = emptyMap()
-
-    private fun refreshStates() {
-        val tree = (root.userObject as? ByTestNode)
-        states = tree?.let { ByTestStates.of(it, service.outcomes) } ?: emptyMap()
-        this.tree.repaint()
+    /**
+     * Takes in a change of results.
+     *
+     * A repaint is enough while everything is shown — the rows are the same rows, only their icons
+     * moved. With a filter on, an outcome can move a row *out* of the tree, so that needs the
+     * rebuild [render] does.
+     */
+    private fun outcomesChanged() {
+        if (visibleStates.containsAll(ByTestFilter.ALL)) recomputeStates() else render()
     }
+
+    private fun recomputeStates() {
+        states = collectedTree?.let { ByTestStates.of(it, service.outcomes) } ?: emptyMap()
+        tree.repaint()
+    }
+
 
     // ---- rendering ---------------------------------------------------------
 
@@ -104,9 +134,15 @@ internal class ByTestNodePanel(private val project: Project) :
         val expanded = expandedPaths()
         val selected = selectedNode()?.target
 
-        root.userObject = source
+        // States belong to the collected tree: computing them after filtering would ask a pruned
+        // parent what its remaining children did, which is not what its icon should say.
+        collectedTree = source
+        states = source?.let { ByTestStates.of(it, service.outcomes) } ?: emptyMap()
+        val shown = source?.let { ByTestFilter.apply(it, states, visibleStates) }
+
+        root.userObject = shown
         root.removeAllChildren()
-        source?.children?.forEach { root.add(build(it)) }
+        shown?.children?.forEach { root.add(build(it)) }
         model.reload()
         // The root carries the total, which is worth a row — but only once there is something under
         // it, since a visible root is a row and a tree with a row shows no empty text.
@@ -120,7 +156,6 @@ internal class ByTestNodePanel(private val project: Project) :
             restoreExpanded(expanded)
         }
         selected?.let(::selectTarget)
-        refreshStates()
     }
 
     /**
@@ -139,6 +174,20 @@ internal class ByTestNodePanel(private val project: Project) :
             return
         }
         val collected = state is ByTestNodeService.State.Collected
+        // "No tests" and "no tests you asked to see" are different answers, and offering Refresh
+        // for the second would send the user chasing a collection that is working fine.
+        val filteredOut = collected && (collectedTree?.testCount ?: 0) > 0
+        if (filteredOut) {
+            text.setText(BasedPythonBundle.message("testNodes.empty.filtered"))
+            text.appendLine(
+                BasedPythonBundle.message("testNodes.action.filter.showAll"),
+                SimpleTextAttributes.LINK_PLAIN_ATTRIBUTES,
+            ) {
+                visibleStates.addAll(ByTestFilter.ALL)
+                render()
+            }
+            return
+        }
         text.setText(
             BasedPythonBundle.message(if (collected) "testNodes.empty.collected" else "testNodes.empty"),
         )
@@ -234,9 +283,10 @@ internal class ByTestNodePanel(private val project: Project) :
             ByTestState.PASSED -> AllIcons.RunConfigurations.TestPassed
             ByTestState.FAILED -> AllIcons.RunConfigurations.TestFailed
             ByTestState.SKIPPED -> AllIcons.RunConfigurations.TestSkipped
-            // No animation in this tree: the row is repainted per event, not per frame, and a
-            // spinner that only moves when a test finishes is worse than one that does not move.
-            ByTestState.RUNNING -> AllIcons.Process.Step_2
+            // The platform's spinner, which paints its own frames — but only in a renderer whose
+            // tree opted in with ANIMATION_IN_RENDERER_ALLOWED; without that flag a renderer is
+            // assumed to be a stamp and the icon never advances.
+            ByTestState.RUNNING -> AnimatedIcon.Default.INSTANCE
             ByTestState.NOT_RUN -> null
         }
 
@@ -307,6 +357,7 @@ internal class ByTestNodePanel(private val project: Project) :
 
     private fun toolbarActions(): DefaultActionGroup = DefaultActionGroup().apply {
         add(RefreshAction())
+        add(filterActions())
         addSeparator()
         add(RunAction())
         add(DebugAction())
@@ -323,6 +374,76 @@ internal class ByTestNodePanel(private val project: Project) :
         addSeparator()
         add(RefreshAction())
         add(ByShowCollectionOutputAction(project))
+    }
+
+    /**
+     * The funnel: one toggle per outcome, plus a way back to all of them.
+     *
+     * A popup rather than five toolbar buttons, because the answer is "all" almost always and a row
+     * of five permanently-lit toggles would spend the toolbar on a question nobody is asking. The
+     * icon says whether anything is filtered, which is the part that must never be missed — a view
+     * that quietly hides tests is worse than no view.
+     */
+    private fun filterActions(): DefaultActionGroup {
+        val group = object : DefaultActionGroup(
+            BasedPythonBundle.messagePointer("testNodes.action.filter"),
+            true,
+        ) {
+            override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
+
+            override fun update(e: AnActionEvent) {
+                val hidden = ByTestFilter.ALL - visibleStates
+                e.presentation.icon = AllIcons.General.Filter
+                // A filtered view must say so on the toolbar, not only inside a popup nobody has
+                // open: a tree quietly missing tests is worse than no tree. There is no
+                // "filter is on" icon in the platform set, so the button grows a label instead.
+                e.presentation.putClientProperty(ActionUtil.SHOW_TEXT_IN_TOOLBAR, hidden.isNotEmpty())
+                e.presentation.text = if (hidden.isEmpty()) {
+                    BasedPythonBundle.message("testNodes.action.filter")
+                } else {
+                    BasedPythonBundle.message("testNodes.action.filter.on", hidden.size)
+                }
+                e.presentation.description = hidden
+                    .takeIf { it.isNotEmpty() }
+                    ?.joinToString(", ") { BasedPythonBundle.message("testNodes.state.${it.name.lowercase()}") }
+                    ?.let { BasedPythonBundle.message("testNodes.action.filter.hiding", it) }
+                    ?: BasedPythonBundle.message("testNodes.action.filter.description")
+            }
+        }
+        group.templatePresentation.icon = AllIcons.General.Filter
+        for (state in ByTestState.entries) group.add(StateFilterAction(state))
+        group.addSeparator()
+        group.add(ShowAllAction())
+        return group
+    }
+
+    /** One outcome's visibility. */
+    private inner class StateFilterAction(private val state: ByTestState) : ToggleAction(
+        BasedPythonBundle.messagePointer("testNodes.state.${state.name.lowercase()}"),
+    ) {
+        override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
+
+        override fun isSelected(e: AnActionEvent): Boolean = state in visibleStates
+
+        override fun setSelected(e: AnActionEvent, selected: Boolean) {
+            if (selected) visibleStates += state else visibleStates -= state
+            render()
+        }
+    }
+
+    private inner class ShowAllAction : DumbAwareAction(
+        BasedPythonBundle.messagePointer("testNodes.action.filter.showAll"),
+    ) {
+        override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
+
+        override fun update(e: AnActionEvent) {
+            e.presentation.isEnabled = !visibleStates.containsAll(ByTestFilter.ALL)
+        }
+
+        override fun actionPerformed(e: AnActionEvent) {
+            visibleStates.addAll(ByTestFilter.ALL)
+            render()
+        }
     }
 
     /**
