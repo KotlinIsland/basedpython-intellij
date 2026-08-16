@@ -1,12 +1,21 @@
 <!--
   Loaded only when the Test Runner plugin is present.
 
-  It carries no extensions: the dependency itself is the point. The SM test runner
-  (SMTRunnerConsoleProperties, OutputToGeneralTestEventsConverter, SMTestLocator, …) left the core
-  platform in 2026.2 for the bundled `intellij.testRunner.plugin`, so without this the test
-  configuration's classes do not resolve there — 19 NoSuchClassError risks, which is exactly what
-  the plugin verifier reported. Optional because 2026.1 still has those classes in the platform and
-  has no such plugin to depend on; a hard dependency, in either the v1 or the v2 form, stops the
-  plugin loading there at all.
+  The dependency itself was the original point: the SM test runner (SMTRunnerConsoleProperties,
+  OutputToGeneralTestEventsConverter, SMTestLocator, …) left the core platform in 2026.2 for the
+  bundled `intellij.testRunner.plugin`, so without this the test configuration's classes do not
+  resolve there — 19 NoSuchClassError risks, which is exactly what the plugin verifier reported.
+  Optional because 2026.1 still has those classes in the platform and has no such plugin to depend
+  on; a hard dependency, in either the v1 or the v2 form, stops the plugin loading there at all.
+
+  The listener below belongs here for the same reason: it implements an SM runner interface, so it
+  may only be instantiated where that interface exists.
 -->
-<idea-plugin/>
+<idea-plugin>
+    <projectListeners>
+        <!-- Test outcomes for the node view's tree, from every run the SM runner reports —
+             whichever button started it. -->
+        <listener class="dev.basedpython.pycharm.run.test.node.ByTestRunStateListener"
+                  topic="com.intellij.execution.testframework.sm.runner.SMTRunnerEventsListener"/>
+    </projectListeners>
+</idea-plugin>

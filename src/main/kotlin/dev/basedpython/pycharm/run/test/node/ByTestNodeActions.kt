@@ -27,6 +27,19 @@ internal object ByTestNodeActions {
      * right-click Run produce: it shows up in the run combo box, can be edited or saved from
      * there, and is evicted once enough others accumulate.
      */
+    /**
+     * Runs everything, which takes one launch per kind of test the tree holds.
+     *
+     * The two halves are two different commands — `by run pytest` cannot see a `.py` test and plain
+     * pytest is not given the transpiled tree — so "run all" in a project with both is genuinely two
+     * runs, and pretending otherwise would silently skip half the suite. A project with one kind
+     * gets one run, which is every project until it isn't.
+     */
+    fun runAll(project: Project, executor: Executor, sources: Set<ByTestSource>) {
+        val kinds = sources.ifEmpty { setOf(ByTestSource.TRANSPILED) }
+        for (source in kinds.sortedBy { it.ordinal }) run(project, null, executor, source)
+    }
+
     fun run(
         project: Project,
         target: String?,
@@ -39,7 +52,11 @@ internal object ByTestNodeActions {
         val paths = target?.let { if (plain) it else ByTestNodes.sourceTarget(it) }.orEmpty()
         val runManager = RunManager.getInstance(project)
         val settings = runManager.createConfiguration(
-            if (paths.isBlank()) "pytest" else "pytest $paths",
+            when {
+                paths.isNotBlank() -> "pytest $paths"
+                plain -> "pytest (.py tests)"
+                else -> "pytest"
+            },
             ByTestConfigurationType.getInstance().testFactory,
         )
         val configuration = settings.configuration as ByTestConfiguration
@@ -49,6 +66,8 @@ internal object ByTestNodeActions {
             project.basePath?.let { configuration.options.workingDir = it }
         }
         runManager.setTemporaryConfiguration(settings)
+        // Show the scope as running before the process has said anything; see [markRunning].
+        ByTestNodeService.getInstance(project).markRunning(target, source)
         ProgramRunnerUtil.executeConfiguration(settings, executor)
     }
 

@@ -307,6 +307,9 @@
         <bundledColorScheme path="/colorSchemes/BasedPythonLight"/>
         <postStartupActivity
             implementation="dev.basedpython.pycharm.lsp.reload.BasedPythonLspReloadActivity"/>
+        <!-- Collects the test tree on open, and again when the project's sources change. -->
+        <postStartupActivity
+            implementation="dev.basedpython.pycharm.run.test.node.ByTestSyncActivity"/>
 
         <!-- ===== Wave 9: log tool window, module facet, explain intention ===== -->
         <toolWindow id="basedpython"
