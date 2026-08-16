@@ -16,6 +16,7 @@ import com.intellij.xdebugger.breakpoints.XLineBreakpointAdditionalInfo
 import com.intellij.xdebugger.breakpoints.XLineBreakpointVerticalPlacement
 import com.intellij.xdebugger.evaluation.EvaluationMode
 import dev.basedpython.pycharm.debug.ByLineBreakpointType
+import dev.basedpython.pycharm.debug.logpoint.ByLogpointUndo
 import dev.basedpython.pycharm.lang.BasedPythonFile
 import dev.basedpython.pycharm.lang.BasedPythonLanguage
 
@@ -107,6 +108,10 @@ private class ReplaceWithLogpointFix : LocalQuickFix {
             breakpoint.logExpressionObject = XDebuggerUtil.getInstance()
                 .createExpression(candidate.expression, BasedPythonLanguage, null, EvaluationMode.EXPRESSION)
         }
+
+        // Undo has to take both halves or neither. Without this the deleted line came back and the
+        // log point stayed, so the value was logged twice — the one outcome nobody asked for.
+        ByLogpointUndo.record(project, document, breakpoint)
     }
 
     /**

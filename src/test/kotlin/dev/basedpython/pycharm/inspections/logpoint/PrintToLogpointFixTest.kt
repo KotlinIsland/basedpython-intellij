@@ -4,6 +4,8 @@ import com.intellij.codeInspection.InspectionManager
 import com.intellij.codeInspection.LocalQuickFix
 import com.intellij.codeInspection.ProblemDescriptor
 import com.intellij.openapi.command.WriteCommandAction
+import com.intellij.openapi.command.undo.UndoManager
+import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import com.intellij.xdebugger.XDebuggerManager
@@ -100,6 +102,23 @@ class PrintToLogpointFixTest {
         val logged = breakpoint.logExpressionObject
         assertNotNull(logged, "expected a log expression")
         assertEquals("f\"x={x}\"", logged!!.expression)
+    }
+
+    @Test
+    fun `undo takes the log point back along with the deleted line`() {
+        applyFix("def f(x):\n    print(x)\n    return x * 2\n")
+        assertTrue(
+            XDebuggerManager.getInstance(fixture.project).breakpointManager.getBreakpoints(type).isNotEmpty(),
+        )
+
+        UndoManager.getInstance(fixture.project)
+            .undo(FileEditorManager.getInstance(fixture.project).getSelectedEditor(fixture.file.virtualFile))
+
+        assertEquals("def f(x):\n    print(x)\n    return x * 2\n", fixture.editor.document.text)
+        assertTrue(
+            XDebuggerManager.getInstance(fixture.project).breakpointManager.getBreakpoints(type).isEmpty(),
+            "undo restoring the print while leaving the log point would log the value twice",
+        )
     }
 
     @Test
