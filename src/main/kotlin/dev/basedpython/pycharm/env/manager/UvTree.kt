@@ -69,6 +69,15 @@ object UvTree {
         emptyList()
     }
 
+    /**
+     * The main list is kept even when it is empty; every other group is dropped when it is.
+     *
+     * An empty group heading is noise — a project that declares no `docs` group should not have a
+     * `docs` row — but the main list is different in kind. It is where dependencies go by default,
+     * so a project with none has an empty main list rather than no main list, and the row is the
+     * thing that says so and the thing you select before pressing *Add*. Hiding it leaves a project
+     * whose only dependencies are dev ones looking like it has no main list at all.
+     */
     private fun parseOrThrow(stdout: String): List<EnvDependencyGroup> {
         val root = JsonParser.parseString(stdout.trim().ifEmpty { "{}" })
         if (!root.isJsonObject) return emptyList()
@@ -85,7 +94,8 @@ object UvTree {
             .orEmpty()
 
         val groups = rootIds.mapNotNull { id -> group(id, entries, rootIds.toSet()) }
-        return groups.filter { it.roots.isNotEmpty() }.sortedWith(GROUP_ORDER)
+        return groups.filter { it.target == EnvDependencyTarget.Main || it.roots.isNotEmpty() }
+            .sortedWith(GROUP_ORDER)
     }
 
     /** One root's group, or null when the root is not something the view shows. */

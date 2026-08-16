@@ -28,6 +28,22 @@ class UvBackendTest {
         assertEquals(listOf("venv", "--python", "3.12"), args(EnvOp.Create("3.12")))
     }
 
+    /**
+     * Without `--clear`, uv refuses outright — "A virtual environment already exists at: .venv" —
+     * so a recreate that does not ask to replace does not happen at all, and changing the Python
+     * version silently fails. With it, an ordinary create would wipe whatever is at that path, so
+     * it only goes out when the caller has established there is something to replace.
+     */
+    @Test
+    fun `replacing an environment says so, and creating one does not`() {
+        assertEquals(
+            listOf("venv", "--clear", "--python", "3.12"),
+            args(EnvOp.Create("3.12", replaceExisting = true)),
+        )
+        assertEquals(listOf("venv", "--clear"), args(EnvOp.Create(replaceExisting = true)))
+        assertEquals(listOf("venv"), args(EnvOp.Create()))
+    }
+
     @Test
     fun `sync is plain, and the drift probe is the same command asked not to act`() {
         assertEquals(listOf("sync"), args(EnvOp.Sync))
