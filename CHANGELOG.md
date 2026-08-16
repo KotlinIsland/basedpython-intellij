@@ -115,6 +115,21 @@
   it keeps itself in step without pressing Refresh.
 - Filter the test view by state (funnel on its toolbar): show only failed tests, only
   skipped, only what has not run yet. The toolbar says when something is hidden.
+- *basedpython Tasks* tool window: the repository's own checks, listed where they can be run —
+  the built-in npm view, for the task runners a Python project uses. Reads
+  `.pre-commit-config.yaml` (hooks under the repo they come from), `lefthook.yml` and its
+  variants (each git hook with its commands, scripts and jobs), and `[tool.pyprojectx.aliases]`
+  in `pyproject.toml`. Double-click runs a row as a run configuration, so it appears in the run
+  combo with Rerun and can be edited or saved; the row then carries how it went, and a group
+  turns red when anything under it failed. *All files* is on by default, since a hook run with
+  nothing staged would otherwise inspect nothing and report success. `.pre-commit-config.yaml`
+  runs under `prek` when that is the only one of the two installed, `pre-commit` otherwise, and
+  pyprojectx aliases run through the `./pw` wrapper checked into the repository.
+- Finding those tasks starts no process — it is a fixed list of file names read at the project
+  root — so the list follows the configuration as it is edited, and the tool window appears when a
+  project grows its first hook config. A hook that declares `stages: [pre-push]` is run with its
+  stage rather than skipped silently by the default one; a lefthook `scripts:` entry says in the
+  row that it runs its whole git hook, because `lefthook run` has no flag that selects a script.
 - *View Collection Output* in the test tool window's ⋮ menu: the exact commands, exit codes
   and output of the last collection, for when the view disagrees with pytest run by hand.
   A collection stopped by `by run`'s type check now says so, with the diagnostic count.

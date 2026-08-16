@@ -135,6 +135,25 @@ support, run configurations, CLI actions, and editor tooling.
 - **Debug .by (pdb)** — builds, then runs the generated `.py` under `python -m pdb` in an
   interactive console with clickable frames.
 
+### Hook tasks (pre-commit, prek, lefthook, pyprojectx)
+- **basedpython Tasks** tool window — the repository's own checks, listed where they can be
+  run, the way the built-in npm view lists a `package.json`'s scripts. Reads
+  `.pre-commit-config.yaml` (hooks, grouped by the repo they come from), `lefthook.yml`
+  (each git hook with its commands, scripts and jobs, groups included), and a
+  `pyproject.toml` with `[tool.pyprojectx.aliases]`.
+- Double-click a row to run it; the run is a real run configuration, so it lands in the run
+  combo box with a Rerun button and can be edited or saved. The row then shows how it went,
+  and a group turns red when anything under it failed.
+- **All files** toggle (on by default): a hook run from a tool window with nothing staged
+  would otherwise inspect nothing and report success.
+- Runners come from the project first — `.venv/bin/pre-commit` before a global one — and
+  pyprojectx runs through the `./pw` wrapper checked into the repository, so a clone needs
+  nothing installed. `.pre-commit-config.yaml` is run with `prek` when that is the only one
+  of the two installed.
+- Discovery is a fixed list of file names read at the project root and nothing else — no
+  process is started to find out what exists — so the list follows the config file as it is
+  edited, and the window appears by itself when a project grows its first one.
+
 ### Docs & help
 - Quick Documentation (Ctrl+Q) for basedpython keywords, modifiers, and the `?.` / `??`
   operators; External Documentation (Ctrl+Shift+I) opens the basedpython docs.
