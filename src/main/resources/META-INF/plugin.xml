@@ -357,6 +357,18 @@
             implementation="dev.basedpython.pycharm.tasks.ByTaskConfigurationType"/>
         <postStartupActivity
             implementation="dev.basedpython.pycharm.tasks.ByTaskSyncActivity"/>
+
+        <!-- ===== Wave 16: environment management (§5) =====
+             Which environment the project runs in, what is in it, and the one button that fixes it.
+             uv is the only backend today; `env.manager.EnvBackend` is the seam a conda or pixi one
+             slots into, and `EnvBackends.ALL` is the whole registration. Nothing here creates or
+             modifies an environment without a user gesture — see env.manager.EnvOperations. -->
+        <toolWindow id="basedpython Environment"
+                    anchor="right"
+                    icon="/icons/basedpythonEnv.svg"
+                    factoryClass="dev.basedpython.pycharm.env.manager.EnvToolWindowFactory"/>
+        <postStartupActivity
+            implementation="dev.basedpython.pycharm.env.manager.EnvSyncActivity"/>
     </extensions>
 
     <projectListeners>
@@ -497,6 +509,18 @@
         <action id="basedpython.UvSync"
                 class="dev.basedpython.pycharm.env.UvSyncAction">
             <add-to-group group-id="basedpython.ActionGroup" anchor="last"/>
+        </action>
+
+        <!-- ===== Wave 16: environment management (§5) =====
+             Two entries only. The tool window is where this feature lives; a menu item per operation
+             would be a worse copy of a toolbar that has the environment's state next to it. -->
+        <action id="basedpython.env.SetUp"
+                class="dev.basedpython.pycharm.env.manager.EnvSetUpAction">
+            <add-to-group group-id="basedpython.ActionGroup" anchor="after" relative-to-action="basedpython.UvSync"/>
+        </action>
+        <action id="basedpython.env.Show"
+                class="dev.basedpython.pycharm.env.manager.ShowEnvToolWindowAction">
+            <add-to-group group-id="basedpython.ActionGroup" anchor="after" relative-to-action="basedpython.env.SetUp"/>
         </action>
 
         <!-- ===== Wave 11: REPL console (§182) ===== -->

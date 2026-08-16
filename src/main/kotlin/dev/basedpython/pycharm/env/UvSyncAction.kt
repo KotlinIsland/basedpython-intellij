@@ -1,67 +1,36 @@
 package dev.basedpython.pycharm.env
 
-import com.intellij.execution.configurations.GeneralCommandLine
-import com.intellij.execution.process.OSProcessHandler
-import com.intellij.execution.process.ProcessAdapter
-import com.intellij.execution.process.ProcessEvent
-import com.intellij.execution.process.ProcessTerminatedListener
-import com.intellij.notification.NotificationType
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
-import com.intellij.openapi.application.ApplicationManager
-import com.intellij.openapi.project.Project
-import dev.basedpython.pycharm.util.BasedPythonBundle
-import java.nio.file.Path
+import dev.basedpython.pycharm.env.manager.EnvOperations
+import dev.basedpython.pycharm.env.manager.EnvService
 
 /**
- * Runs `uv sync` at the project base. Enabled only when a `uv` executable is on PATH or a
- * `uv.lock` / `pyproject.toml` exists at the base (see [UvSupport.canSync]).
+ * Runs the project's environment manager's sync — `uv sync` for a uv project.
  *
- * Output is surfaced via a lightweight notification carrying the exit code; the process runs
- * through an [OSProcessHandler] so we don't pull in a full console for a one-shot sync.
+ * A thin front for [EnvOperations.sync], which is where the work and the wiring live: output streams
+ * into the plugin's log, the environment view re-reads afterwards, and the language servers are
+ * restarted because a sync is exactly when `by` starts or stops resolving. This action used to spawn
+ * `uv sync` itself and do none of that, which is how a successful sync could leave the editor still
+ * insisting the binary was missing.
+ *
+ * Enabled whenever a backend claims the project. Unlike before, that no longer includes projects
+ * where the tool is absent — [EnvOperations.sync] would have nothing to run, and the tool window's
+ * banner is where a missing uv gets offered an install.
  */
 class UvSyncAction : AnAction() {
 
     override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
 
     override fun update(e: AnActionEvent) {
-        val project = e.project
-        e.presentation.isEnabledAndVisible = project != null && UvSupport.canSync(project)
+        val service = e.project?.let { EnvService.getInstance(it) }
+        e.presentation.isEnabledAndVisible =
+            service != null && service.status.backend != null && service.status.toolPath != null
     }
 
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
-        val base: Path = UvSupport.basePath(project) ?: run {
-            UvSupport.notify(project, BasedPythonBundle.message("uv.sync.title"), BasedPythonBundle.message("uv.noBasePath"), NotificationType.WARNING)
-            return
-        }
-        val uv = UvSupport.findUv()
-
-        val cmd = GeneralCommandLine()
-            .withExePath(uv?.toString() ?: "uv")
-            .withParameters("sync")
-            .withWorkDirectory(base.toFile())
-            .withCharset(Charsets.UTF_8)
-
-        ApplicationManager.getApplication().executeOnPooledThread {
-            try {
-                val handler = OSProcessHandler(cmd)
-                ProcessTerminatedListener.attach(handler)
-                handler.addProcessListener(object : ProcessAdapter() {
-                    override fun processTerminated(event: ProcessEvent) {
-                        val code = event.exitCode
-                        if (code == 0) {
-                            UvSupport.notify(project, BasedPythonBundle.message("uv.sync.title"), BasedPythonBundle.message("uv.sync.success"), NotificationType.INFORMATION)
-                        } else {
-                            UvSupport.notify(project, BasedPythonBundle.message("uv.sync.title"), BasedPythonBundle.message("uv.sync.exitCode", code), NotificationType.ERROR)
-                        }
-                    }
-                })
-                handler.startNotify()
-            } catch (ex: Exception) {
-                UvSupport.notify(project, BasedPythonBundle.message("uv.sync.title"), BasedPythonBundle.message("uv.sync.startFailed", ex.message ?: ""), NotificationType.ERROR)
-            }
-        }
+        EnvOperations.sync(project)
     }
 }
