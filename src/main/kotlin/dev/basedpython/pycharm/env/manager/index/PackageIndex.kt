@@ -70,10 +70,37 @@ data class PackageDetails(
     val extras: List<String>,
     /** Project or documentation URL, for the link in the dialog. */
     val homepage: String?,
+    /**
+     * Every release the index offers, newest first.
+     *
+     * Carries what the version picker has to say about each one beyond its number: a yanked release
+     * is one the maintainer withdrew and should not be installed fresh, and one whose
+     * `requires_python` excludes this environment cannot be installed at all. Both are shown rather
+     * than hidden — a version missing from the list with no explanation is worse than one that says
+     * why it is unavailable.
+     */
+    val releases: List<PackageRelease> = emptyList(),
 ) {
     companion object {
         /** What is known about a package the index has never heard of. */
         fun unknown(name: String): PackageDetails =
-            PackageDetails(name, null, null, emptyList(), null)
+            PackageDetails(name, null, null, emptyList(), null, emptyList())
     }
 }
+
+/**
+ * One release of a package, as the version picker needs it.
+ *
+ * [requiresPython] is the raw specifier the release declares, kept unevaluated because whether it is
+ * satisfied depends on the environment being looked at — the same release is installable in one
+ * project and not in another, so the judgement belongs at the point of display, not here.
+ */
+data class PackageRelease(
+    val version: String,
+    /** The maintainer withdrew this release; PEP 592. */
+    val yanked: Boolean,
+    /** Why it was withdrawn, when they said. */
+    val yankedReason: String?,
+    /** e.g. `>=3.8`, or null when the release declares nothing. */
+    val requiresPython: String?,
+)

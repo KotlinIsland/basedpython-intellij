@@ -197,11 +197,16 @@ support, run configurations, CLI actions, and editor tooling.
 - The environment's Python version is read from its own `pyvenv.cfg` rather than by running the
   interpreter, so it is still reported for an environment whose interpreter is broken — which is
   when it is most worth knowing.
-- **Add Package knows the index.** Type a name and it shows what the package is, its newest
-  version, and — as checkboxes — the extras it declares, so `httpx[http2]` is something you can
-  discover rather than something you have to already know. The field still takes anything the
-  tool accepts (`httpx>=0.27`, a git URL, a local path), and works unchanged with the index
-  unreachable or the package private.
+- **Add Package knows the index.** The requirement field completes against the whole package
+  catalogue as you type, and once a name is recognised it shows what the package is, offers a
+  **version picker**, and lists the **extras** it declares as checkboxes — so `httpx[http2]` is
+  something you can discover rather than something you have to already know. The field still
+  takes anything the tool accepts (`httpx>=0.27`, a git URL, a local path), and works unchanged
+  with the index unreachable or the package private.
+- The version list is **honest about what it offers**: a release the maintainer withdrew is
+  marked *yanked* with their reason, and one whose `requires_python` this environment does not
+  satisfy is marked with what it needs. Neither is hidden — a version missing from a list with no
+  explanation is worse than one that says why it is a bad idea.
 - That information is cached under `~/.basedpython/cache`, keyed by the index it came from, and
   fetched only when you open Add — never on project open. The package catalogue is refreshed
   weekly and per-package metadata daily, because neither changes faster than that.

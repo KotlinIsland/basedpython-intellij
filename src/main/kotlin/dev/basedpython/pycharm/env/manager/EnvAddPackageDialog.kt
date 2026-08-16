@@ -6,12 +6,13 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.ComboBox
 import com.intellij.openapi.ui.DialogWrapper
 import com.intellij.openapi.ui.ValidationInfo
-import com.intellij.ui.DocumentAdapter
+import com.intellij.codeInsight.completion.CompletionParameters
 import com.intellij.ui.JBColor
+import com.intellij.ui.TextFieldWithAutoCompletion
+import com.intellij.ui.TextFieldWithAutoCompletionListProvider
 import com.intellij.ui.components.JBCheckBox
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBScrollPane
-import com.intellij.ui.components.JBTextField
 import com.intellij.util.Alarm
 import com.intellij.util.ui.FormBuilder
 import com.intellij.util.ui.JBUI
@@ -23,7 +24,6 @@ import dev.basedpython.pycharm.util.BasedPythonBundle
 import java.awt.FlowLayout
 import javax.swing.JComponent
 import javax.swing.JPanel
-import javax.swing.event.DocumentEvent
 
 /**
  * "Add package": a requirement line, which of the project's dependency lists it joins, and — once
@@ -51,12 +51,22 @@ internal class EnvAddPackageDialog(
     private val initialTarget: EnvDependencyTarget,
     existingTargets: List<EnvDependencyTarget>,
     private val index: PackageIndex? = null,
+    /** The environment's interpreter, which is what `requires_python` is judged against. */
+    private val pythonVersion: String? = null,
 ) : DialogWrapper(project) {
 
     /** What the dialog asks for. */
     data class Request(val requirements: List<String>, val target: EnvDependencyTarget)
 
-    private val field = JBTextField(30)
+    /**
+     * The requirement, with the catalogue behind it.
+     *
+     * A completion-capable editor rather than a plain field, so the 872,009-name catalogue is
+     * reachable as a dropdown while you type. It stays free text: completion offers, it does not
+     * constrain, and a name the index has never heard of is typed and added exactly as before.
+     */
+    private val field: TextFieldWithAutoCompletion<String> =
+        TextFieldWithAutoCompletion(project, CatalogueCompletion(), false, "")
 
     /**
      * The lists a requirement can join, as text.
@@ -70,6 +80,17 @@ internal class EnvAddPackageDialog(
         isEditable = true
         selectedItem = EnvTargetLabels.format(initialTarget)
     }
+
+    /** Which release to pin, or the row that pins nothing. */
+    private val versionBox = ComboBox(arrayOf(BasedPythonBundle.message("env.version.any"))).apply {
+        isEnabled = false
+    }
+
+    /** The rows [versionBox] is currently showing, so a selection can be read back to a version. */
+    private var versionChoices: List<EnvVersionChoices.Choice> = emptyList()
+
+    /** Guards the field-rewrite that selecting a version performs against re-entering the lookup. */
+    private var updatingField = false
 
     private val summaryLabel = JBLabel().apply {
         componentStyle = UIUtil.ComponentStyle.SMALL
@@ -99,9 +120,12 @@ internal class EnvAddPackageDialog(
     init {
         title = BasedPythonBundle.message("env.add.title")
         setOKButtonText(BasedPythonBundle.message("env.add.ok"))
-        field.document.addDocumentListener(object : DocumentAdapter() {
-            override fun textChanged(e: DocumentEvent) = scheduleLookup()
+        field.addDocumentListener(object : com.intellij.openapi.editor.event.DocumentListener {
+            override fun documentChanged(event: com.intellij.openapi.editor.event.DocumentEvent) {
+                if (!updatingField) scheduleLookup()
+            }
         })
+        versionBox.addActionListener { if (!updatingField) applyVersionToField() }
         init()
         warmCatalogue()
         renderDetails(null)
@@ -116,6 +140,7 @@ internal class EnvAddPackageDialog(
             },
         )
         .addComponentToRightColumn(summaryLabel)
+        .addLabeledComponent(BasedPythonBundle.message("env.add.version"), versionBox)
         .addLabeledComponent(
             extrasLabel,
             JBScrollPane(extrasPanel).apply {
@@ -200,6 +225,7 @@ internal class EnvAddPackageDialog(
         }
 
         summaryLabel.text = BasedPythonBundle.message("env.add.lookingUp", name)
+        rebuildVersions(null)
         val modality = ModalityState.stateForComponent(field)
         ApplicationManager.getApplication().executeOnPooledThread {
             val details = cache.detailsFor(index, name)
@@ -229,6 +255,7 @@ internal class EnvAddPackageDialog(
             ).joinToString(" · ")
         }
         rebuildExtras(details?.extras.orEmpty())
+        rebuildVersions(details)
     }
 
     /**
@@ -268,7 +295,93 @@ internal class EnvAddPackageDialog(
         if (requirements.isEmpty()) return
         requirements[requirements.lastIndex] =
             EnvRequirements.withExtras(requirements.last(), selectedExtras)
-        field.text = requirements.joinToString(" ")
+        setFieldText(requirements.joinToString(" "))
+    }
+
+    /**
+     * Offers catalogue names as you type.
+     *
+     * Queried straight off the sorted catalogue file — a prefix lookup is about twenty seeks — so
+     * this can answer on the completion thread without anything cached in memory. An index that has
+     * not been downloaded, or a project with none, simply offers nothing and the field stays plain
+     * free text.
+     */
+    private inner class CatalogueCompletion :
+        TextFieldWithAutoCompletionListProvider<String>(emptyList()) {
+
+        override fun getLookupString(item: String): String = item
+
+        override fun getItems(
+            prefix: String?,
+            cached: Boolean,
+            parameters: CompletionParameters?,
+        ): Collection<String> {
+            val index = index ?: return emptyList()
+            // Complete the package name only. Once a specifier or an extra has been typed there is
+            // nothing left for the catalogue to say, and offering names inside `>=0.27` is noise.
+            val typed = prefix.orEmpty().substringAfterLast(' ')
+            val name = EnvRequirements.packageName(typed) ?: return emptyList()
+            if (name != typed) return emptyList()
+            return PackageIndexCache.getInstance().names(index).startingWith(name)
+        }
+    }
+
+    // ---- the version picker --------------------------------------------------
+
+    /**
+     * Rebuilds the version rows for [details], keeping the pin already typed if it is still offered.
+     *
+     * Disabled outright when the index said nothing: an empty picker that looks operable is worse
+     * than one that plainly is not.
+     */
+    private fun rebuildVersions(details: PackageDetails?) {
+        val choices = EnvVersionChoices.of(details?.releases.orEmpty(), pythonVersion)
+        versionChoices = choices
+        val pinned = EnvRequirements.split(field.text).lastOrNull()
+            ?.let { EnvRequirements.pinnedVersion(it) }
+
+        updatingField = true
+        try {
+            versionBox.removeAllItems()
+            choices.forEach { versionBox.addItem(it.label) }
+            versionBox.selectedItem = EnvVersionChoices.select(choices, pinned).label
+            versionBox.isEnabled = choices.size > 1
+        } finally {
+            updatingField = false
+        }
+    }
+
+    /**
+     * Writes the chosen version into the requirement being typed.
+     *
+     * Rewrites only the last requirement on the line, and preserves the extras already in it — the
+     * two pickers edit different parts of the same string and must not undo each other.
+     */
+    private fun applyVersionToField() {
+        val selected = versionBox.selectedItem?.toString() ?: return
+        val choice = versionChoices.firstOrNull { it.label == selected } ?: return
+        val requirements = EnvRequirements.split(field.text).toMutableList()
+        if (requirements.isEmpty()) return
+        requirements[requirements.lastIndex] =
+            EnvRequirements.withVersion(requirements.last(), choice.version)
+        setFieldText(requirements.joinToString(" "))
+    }
+
+    /**
+     * Replaces the field's text without re-triggering the lookup.
+     *
+     * Both pickers write back into the field, and both do so in response to the user changing a
+     * control rather than the text — so the resulting document change must not be read as "the user
+     * typed a new package" and start the whole cycle again.
+     */
+    private fun setFieldText(text: String) {
+        if (field.text == text) return
+        updatingField = true
+        try {
+            field.text = text
+        } finally {
+            updatingField = false
+        }
     }
 
     private companion object {

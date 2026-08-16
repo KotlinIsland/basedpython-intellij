@@ -129,6 +129,84 @@ class EnvRequirementsTest {
         assertEquals(url, EnvRequirements.withExtras(url, listOf("http2")))
     }
 
+    // ---- pinning a version --------------------------------------------------
+
+    @Test
+    fun `a plain pin is read back`() {
+        assertEquals("0.28.1", EnvRequirements.pinnedVersion("httpx==0.28.1"))
+        assertEquals("0.28.1", EnvRequirements.pinnedVersion("httpx[http2]==0.28.1"))
+    }
+
+    /**
+     * A range was typed by hand and is not a choice the picker made, so it reports none rather than
+     * showing a version the user did not select.
+     */
+    @Test
+    fun `anything other than a plain pin reads as no selection`() {
+        assertNull(EnvRequirements.pinnedVersion("httpx"))
+        assertNull(EnvRequirements.pinnedVersion("httpx>=0.27"))
+        assertNull(EnvRequirements.pinnedVersion("httpx>=0.27,<1.0"))
+        assertNull(EnvRequirements.pinnedVersion("httpx==0.27,!=0.28"))
+        assertNull(EnvRequirements.pinnedVersion("httpx===0.28.1"))
+    }
+
+    @Test
+    fun `picking a version pins it and keeps the extras`() {
+        assertEquals("httpx==0.28.1", EnvRequirements.withVersion("httpx", "0.28.1"))
+        assertEquals("httpx[http2]==0.28.1", EnvRequirements.withVersion("httpx[http2]", "0.28.1"))
+        assertEquals(
+            "httpx[http2,cli]==0.28.1",
+            EnvRequirements.withVersion("httpx[http2,cli]>=0.27", "0.28.1"),
+        )
+    }
+
+    /** The picker and the field must not end up holding two different answers. */
+    @Test
+    fun `picking a version replaces whatever specifier was there`() {
+        assertEquals("httpx==0.28.1", EnvRequirements.withVersion("httpx>=0.27,<1.0", "0.28.1"))
+        assertEquals("httpx==0.29", EnvRequirements.withVersion("httpx==0.28.1", "0.29"))
+    }
+
+    @Test
+    fun `choosing any removes the pin`() {
+        assertEquals("httpx", EnvRequirements.withVersion("httpx==0.28.1", null))
+        assertEquals("httpx[http2]", EnvRequirements.withVersion("httpx[http2]==0.28.1", null))
+        assertEquals("httpx", EnvRequirements.withVersion("httpx>=0.27", ""))
+    }
+
+    @Test
+    fun `an environment marker survives pinning`() {
+        assertEquals(
+            """httpx==0.28.1 ; python_version < "3.11"""",
+            EnvRequirements.withVersion("""httpx ; python_version < "3.11"""", "0.28.1"),
+        )
+    }
+
+    /** The two pickers edit different parts of one string and must not undo each other. */
+    @Test
+    fun `extras and a version compose in either order`() {
+        val viaExtrasFirst = EnvRequirements.withVersion(
+            EnvRequirements.withExtras("httpx", listOf("http2")),
+            "0.28.1",
+        )
+        val viaVersionFirst = EnvRequirements.withExtras(
+            EnvRequirements.withVersion("httpx", "0.28.1"),
+            listOf("http2"),
+        )
+
+        assertEquals("httpx[http2]==0.28.1", viaExtrasFirst)
+        assertEquals(viaExtrasFirst, viaVersionFirst)
+        assertEquals("0.28.1", EnvRequirements.pinnedVersion(viaExtrasFirst))
+        assertEquals(listOf("http2"), EnvRequirements.extrasOf(viaExtrasFirst))
+    }
+
+    @Test
+    fun `a requirement with no name cannot be pinned`() {
+        val url = "git+https://github.com/x/y@main"
+        assertEquals(url, EnvRequirements.withVersion(url, "1.0"))
+        assertNull(EnvRequirements.pinnedVersion(url))
+    }
+
     /** What the dialog does on every tick has to be stable under repetition. */
     @Test
     fun `writing the same extras twice changes nothing the second time`() {

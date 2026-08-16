@@ -131,11 +131,43 @@ class PyPiIndex(
             return "$safe-${Integer.toHexString(url.hashCode())}"
         }
 
+        /**
+         * Reads `releases` — a map of version to the files published under it.
+         *
+         * A release is yanked when *every* file under it is: PEP 592 yanks files, not versions, and
+         * a release with one live file left is still installable. A release with no files at all is
+         * dropped entirely — the index lists a few of those historically, and there is nothing there
+         * to install. `requires_python` is taken from the first file that declares one, since the
+         * files of a single release do not disagree about it in practice.
+         */
+        private fun parseReleases(root: com.google.gson.JsonObject?): List<PackageRelease> {
+            val releases = root?.getAsJsonObject("releases") ?: return emptyList()
+            val out = ArrayList<PackageRelease>(releases.size())
+            for ((version, filesElement) in releases.entrySet()) {
+                val files = filesElement?.takeIf { it.isJsonArray }?.asJsonArray ?: continue
+                if (files.isEmpty) continue
+                val objects = files.mapNotNull { it.takeIf { f -> f.isJsonObject }?.asJsonObject }
+                if (objects.isEmpty()) continue
+                fun flag(o: com.google.gson.JsonObject, key: String): Boolean =
+                    o.get(key)?.takeIf { it.isJsonPrimitive }?.asBoolean == true
+                fun text(o: com.google.gson.JsonObject, key: String): String? =
+                    o.get(key)?.takeIf { it.isJsonPrimitive }?.asString?.trim()?.takeIf { it.isNotEmpty() }
+                out.add(
+                    PackageRelease(
+                        version = version,
+                        yanked = objects.all { flag(it, "yanked") },
+                        yankedReason = objects.firstNotNullOfOrNull { text(it, "yanked_reason") },
+                        requiresPython = objects.firstNotNullOfOrNull { text(it, "requires_python") },
+                    ),
+                )
+            }
+            return out.sortedWith(compareBy(Pep440.NEWEST_FIRST) { it.version })
+        }
+
         /** Reads the fields the dialog shows out of a project JSON document. */
         fun parseDetails(name: String, body: String): PackageDetails? = try {
-            val info = JsonParser.parseString(body)
-                .takeIf { it.isJsonObject }?.asJsonObject
-                ?.getAsJsonObject("info")
+            val root = JsonParser.parseString(body).takeIf { it.isJsonObject }?.asJsonObject
+            val info = root?.getAsJsonObject("info")
             if (info == null) {
                 null
             } else {
@@ -158,6 +190,7 @@ class PyPiIndex(
                         ?.sorted()
                         .orEmpty(),
                     homepage = string("home_page") ?: string("project_url") ?: string("package_url"),
+                    releases = parseReleases(root),
                 )
             }
         } catch (_: Exception) {
