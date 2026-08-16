@@ -343,6 +343,20 @@
             id="dev.basedpython.pycharm.settings.app"
             displayName="basedpython Defaults"
             instance="dev.basedpython.pycharm.settings.app.BasedPythonAppConfigurable"/>
+
+        <!-- ===== Wave 12: hook tasks (pre-commit / prek / lefthook / pyprojectx) =====
+             What the repository's own checks are, listed where they can be run — the platform's npm
+             view for the tools a Python project actually uses. Discovery is four config files read
+             at the project root, so the window is offered to any project that has one, basedpython
+             or not, and re-scans when one is saved. -->
+        <toolWindow id="basedpython Tasks"
+                    anchor="right"
+                    icon="/icons/basedpythonTasks.svg"
+                    factoryClass="dev.basedpython.pycharm.tasks.ByTaskToolWindowFactory"/>
+        <configurationType
+            implementation="dev.basedpython.pycharm.tasks.ByTaskConfigurationType"/>
+        <postStartupActivity
+            implementation="dev.basedpython.pycharm.tasks.ByTaskSyncActivity"/>
     </extensions>
 
     <projectListeners>

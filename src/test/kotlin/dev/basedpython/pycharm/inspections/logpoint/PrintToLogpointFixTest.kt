@@ -13,6 +13,7 @@ import com.intellij.xdebugger.breakpoints.XLineBreakpoint
 import com.intellij.xdebugger.breakpoints.XLineBreakpointVerticalPlacement
 import dev.basedpython.pycharm.debug.ByLineBreakpointType
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -54,6 +55,33 @@ class PrintToLogpointFixTest {
         PrintToLogpointInspection()
             .checkFile(fixture.file, InspectionManager.getInstance(fixture.project), false)
 
+    /**
+     * Waits out the platform's own reaction to the document this test edited.
+     *
+     * Every test here changes a document, and the platform hashes changed content on a shared
+     * coroutine dispatcher — where the first hash of the JVM run also loads a native xxhash
+     * library. The fixture's thread-leak check runs immediately after each test and fails on any
+     * pool thread still RUNNABLE, so whichever test edits a document first can fail for the
+     * platform's lazy initialisation rather than for anything it asserted. It is a race, and one
+     * that unrelated work tips over: adding a second tool window to plugin.xml was enough to make
+     * it land inside this test's window every time.
+     *
+     * Waiting for the coroutine's own name to leave the worker thread is what makes that
+     * deterministic without touching the leak check itself.
+     */
+    @AfterEach
+    fun letContentHashingFinish() {
+        val deadline = System.currentTimeMillis() + HASH_TIMEOUT_MILLIS
+        while (System.currentTimeMillis() < deadline && isHashing()) {
+            Thread.sleep(POLL_MILLIS)
+        }
+    }
+
+    /** True while a pool thread is running the platform's content-hashing coroutine. */
+    private fun isHashing(): Boolean = Thread.getAllStackTraces().keys.any {
+        it.isAlive && it.state == Thread.State.RUNNABLE && it.name.contains(HASHING_COROUTINE)
+    }
+
     @Test
     fun `the call is gone and the log point sits between the lines it left`() {
         val breakpoint = applyFix("def f(x):\n    print(x)\n    return x * 2\n")
@@ -79,5 +107,14 @@ class PrintToLogpointFixTest {
         // The print is the last statement of the function; the next line runs at import time.
         fixture.configureByText("main.by", "def f(x):\n    print(x)\n\nf(1)\n")
         assertTrue(problems("").isEmpty(), "expected no report for a print at the end of its block")
+    }
+
+    private companion object {
+        /** The coroutine whose name a worker thread carries while it hashes changed content. */
+        const val HASHING_COROUTINE = "ProvenanceEvents"
+
+        /** Long enough for a native library load on a cold, loaded machine; short of a hung build. */
+        const val HASH_TIMEOUT_MILLIS = 30_000L
+        const val POLL_MILLIS = 20L
     }
 }

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Tool window stripe icon: a checklist — three ticked rows, the "things this project runs" metaphor
+  the npm and Gradle task windows use. Monochrome line art in the platform's stripe style
+  (#6C707E light / #CED0D6 dark), because a stripe button sits among the platform's own icons and a
+  coloured badge does not belong there.
+
+  Three rows rather than four: at 16px a row costs ~3.3px of height, and a fourth turns the ticks
+  into a texture. The tick is drawn shorter than a real one so its two strokes stay distinguishable
+  at the size this is actually seen at.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
+  <g stroke="#6C707E" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M2.2 4.1 3.4 5.3 5.6 3"/>
+    <path d="M7.6 4.2h6.2"/>
+    <path d="M2.2 8.4 3.4 9.6 5.6 7.3"/>
+    <path d="M7.6 8.5h6.2"/>
+    <path d="M2.2 12.7 3.4 13.9 5.6 11.6"/>
+    <path d="M7.6 12.8h6.2"/>
+  </g>
+</svg>
