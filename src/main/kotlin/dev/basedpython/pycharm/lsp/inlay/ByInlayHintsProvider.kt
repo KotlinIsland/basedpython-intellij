@@ -25,6 +25,9 @@ import dev.basedpython.pycharm.lsp.ByLspServerSupportProvider
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import dev.basedpython.pycharm.util.BasedPythonBundle
 import org.eclipse.lsp4j.InlayHintParams
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
 import javax.swing.JComponent
 import javax.swing.JPanel
 
@@ -90,23 +93,44 @@ class ByInlayHintsProvider : InlayHintsProvider<NoSettings>, DumbAware {
  * `InlayHintsPass` does not hand a collector a tree to walk down: it flattens the file with
  * `Divider` and calls [collect] on every element it produced, so a `.by` file — whose PSI is the
  * file plus one leaf per token — would mean one call per token. One range request covers the file,
- * so the first call does the work and [asked] makes every later one a field read. A fresh collector
- * is built for each pass, so "once" is once per daemon run.
+ * so the call that claims [asked] does the work and every later one returns on a failed
+ * compare-and-set. A fresh collector is built for each pass, so "once" is once per daemon run.
  *
  * Threading: the platform runs this inside the daemon's background read action, so blocking on the
  * server is allowed here. [LspServer.sendRequestSync] polls `ProgressManager.checkCanceled` while it
  * waits, so an edit cancels the pass rather than queueing behind it.
+ *
+ * **[asked] is atomic because those elements arrive on several threads at once.** The pass pushes
+ * them through `JobLauncher.invokeConcurrentlyUnderProgress`, which splits the list into a chunk per
+ * pool thread and forks — one collector instance, many callers. A plain `if (asked) …; asked = true`
+ * is wrong twice over there: two threads can both read `false` before either writes, and a
+ * non-volatile write is not published to the others at all, so a thread can go on reading `false`
+ * long after the request has been made. Either way more than one thread asks `by`, and each adds the
+ * whole file's hints to the shared sink — which keys hints by offset and keeps a *list*, so
+ * `InlineInlayRenderer` draws both copies end to end and every hint in the file comes out twice
+ * (`def f() → 1 → 1:`). Intermittent by nature, and it repairs itself on the next pass, which is
+ * what made it look like the platform misbehaving. [ByInlayAudit] is the net that would catch it
+ * again.
  */
 private class ByInlayHintsCollector(
     private val modes: ByHintModes,
     private val pushKey: ByPushKey,
 ) : InlayHintsCollector {
 
-    private var asked = false
+    private val asked = AtomicBoolean(false)
+
+    /** Identifies this collector, and so this pass, in what [ByInlayAuditLog] records. */
+    private val pass = PASSES.incrementAndGet()
+
+    /**
+     * How many callers have got past [asked] — one, and counted so that the day it is two, the
+     * record says so rather than the doubling having to be explained again from scratch.
+     */
+    private val runs = AtomicInteger(0)
 
     override fun collect(element: PsiElement, editor: Editor, sink: InlayHintsSink): Boolean {
-        if (asked) return true
-        asked = true
+        if (!asked.compareAndSet(false, true)) return true
+        val run = runs.incrementAndGet()
 
         val file = element.containingFile as? BasedPythonFile ?: return true
         val virtualFile = file.originalFile.virtualFile ?: return true
@@ -125,7 +149,9 @@ private class ByInlayHintsCollector(
         } ?: return true
 
         val factory = PresentationFactory(editor)
-        for (hint in hints) {
+        val thread = Thread.currentThread().name
+        val collected = ArrayList<ByInlayAudit.Collected>(hints.size)
+        for ((index, hint) in hints.withIndex()) {
             val position = hint.position ?: continue
             // A hint whose position no longer exists: the reply raced an edit, and the pass this is
             // running in is about to be restarted against the new text anyway.
@@ -156,7 +182,12 @@ private class ByInlayHintsCollector(
                 tooltip?.let { factory.withTooltip(it, presentation) } ?: presentation,
                 false,
             )
+            collected += ByInlayAudit.Collected(offset, text, run, index, thread)
         }
+        // Nothing is dropped for looking wrong — a hint `by` sent twice is added twice, and the
+        // record is what says so. Quietly de-duplicating here would hide the bug rather than fix it,
+        // and hide it in the one place that can tell it apart from the other two causes.
+        ByInlayAuditLog.getInstance().record(editor, pass, virtualFile.name, document.modificationStamp, collected)
         return true
     }
 
@@ -167,6 +198,9 @@ private class ByInlayHintsCollector(
             .firstOrNull { it.state == LspServerState.Running && it.descriptor.isSupportedFile(virtualFile) }
 
     private companion object {
+        /** Numbers collectors, and so passes, for [ByInlayAuditLog]. */
+        val PASSES = AtomicLong(0)
+
         /**
          * Bounds a server that has stopped answering. The daemon restarts this pass on the next edit,
          * so a slow reply is better dropped than waited on.

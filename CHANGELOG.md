@@ -173,8 +173,27 @@
   conditional expression or a keyword inside a string or comment is not a clause. Nothing here can
   come from the server: LSP has no paired-keyword request, and `textDocument/documentHighlight` —
   which is about occurrences of a symbol — answers `null` at every keyword position in `by`.
+- *Tools | basedpython | Dump Inlay Hint Record* — and a check that runs whenever the daemon
+  finishes — for a hint drawn more times than it should be. Each pass records what it collected,
+  which run of the collector collected it and where it sat in `by`'s reply; the audit reads that
+  against the inlays the editor is actually showing and says which of the three possible causes it
+  was: the collector ran twice in one pass, `by` sent the hint twice, or the platform is holding an
+  inlay the pass never handed it. The check writes to `idea.log` only when something is doubled, and
+  only once per set of findings; the action dumps the whole record — findings, everything collected,
+  everything drawn — to the log and the clipboard whether or not anything is wrong, which is how a
+  doubling that is on screen *now* gets written down before the next keystroke repairs it.
 
 ### Fixed
+
+- Inlay hints are no longer sometimes drawn twice (`def f() → 1 → 1:`). The inlay pass flattens the
+  file and pushes every element through *one* collector with
+  `JobLauncher.invokeConcurrentlyUnderProgress` — a chunk per pool thread — so the flag saying "the
+  server has already been asked for this file" was being read and written from several threads with
+  no synchronisation. Two threads getting past it both asked `by` and both added the whole file's
+  hints; the sink keeps a list per offset and `InlineInlayRenderer` draws that list end to end, so
+  every hint in the file came out twice. The flag is now an `AtomicBoolean` claimed with
+  compare-and-set. It looked like the platform misbehaving because it is intermittent and the next
+  pass silently repairs it, which is also why it now leaves a record — see *Dump Inlay Hint Record*.
 
 - A diagnostic's tooltip reads as the message it is. `by` writes every type and symbol it names in
   markdown code spans, and the platform hands the message to the tooltip unchanged — where it is
