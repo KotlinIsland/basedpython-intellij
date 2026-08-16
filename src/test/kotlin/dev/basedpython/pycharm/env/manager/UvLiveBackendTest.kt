@@ -136,6 +136,42 @@ class UvLiveBackendTest {
             "a declared dependency that is not installed is drift",
         )
 
+        // --- the dependency tree parses into the groups the project declares ---
+        Files.writeString(
+            dir.resolve("pyproject.toml"),
+            """
+            [project]
+            name = "live-test"
+            version = "0.1.0"
+            requires-python = ">=3.9"
+            dependencies = ["iniconfig"]
+
+            [project.optional-dependencies]
+            cli = ["iniconfig"]
+
+            [dependency-groups]
+            dev = ["iniconfig"]
+            """.trimIndent(),
+        )
+        assertEquals(0, run(uv, dir, EnvOp.Sync).first, "uv sync after declaring groups")
+
+        val (treeExit, treeOut) = run(uv, dir, EnvOp.Tree)
+        assertEquals(0, treeExit, "uv tree")
+        val groups = UvBackend.parseTree(treeOut)
+        assertEquals(
+            listOf(
+                EnvDependencyTarget.Main,
+                EnvDependencyTarget.Extra("cli"),
+                EnvDependencyTarget.Group("dev"),
+            ),
+            groups.map { it.target },
+            "every declared list becomes a group, in display order",
+        )
+        assertTrue(
+            groups.all { g -> g.roots.map { it.name } == listOf("iniconfig") },
+            "each group's roots are its own declared requirements: ${groups.map { g -> g.target.label to g.roots.map { it.name } }}",
+        )
+
         // --- interpreters parse, and at least the one running this project is reported installed ---
         val (pythonsExit, pythonsOut) = run(uv, dir, EnvOp.ListPythons)
         assertEquals(0, pythonsExit, "uv python list")
@@ -146,5 +182,53 @@ class UvLiveBackendTest {
             candidates.all { it.featureVersion.count { c -> c == '.' } == 1 },
             "every feature version is major.minor",
         )
+    }
+
+    /**
+     * Reading the dependency tree must not write to the project.
+     *
+     * The plugin's standing rule is that nothing happens to a user's repository because a project
+     * was opened, and this is the command most able to break it: uv's `tree` re-locks by default, so
+     * without `--frozen` a refresh would create a `uv.lock` in a project that had none, and rewrite
+     * it on every save of `pyproject.toml`. Asserted two ways, because the flag being present in the
+     * argv (which [UvBackendTest] checks) is not the same claim as uv honouring it.
+     */
+    @Test
+    fun `reading the dependency tree never writes a lock file`(@TempDir dir: Path) {
+        val uv = uv()
+        assumeTrue(uv != null, "set $UV to a uv binary to run this")
+        requireNotNull(uv)
+
+        Files.writeString(
+            dir.resolve("pyproject.toml"),
+            """
+            [project]
+            name = "frozen-test"
+            version = "0.1.0"
+            requires-python = ">=3.9"
+            dependencies = []
+            """.trimIndent(),
+        )
+
+        // With no lock at all, the command fails rather than creating one — and the empty tree it
+        // produces is what makes the view fall back to listing what is installed.
+        val (exitWithoutLock, outWithoutLock) = run(uv, dir, EnvOp.Tree)
+        assertTrue(exitWithoutLock != 0, "a project with no lock has no resolved tree to show")
+        assertTrue(UvBackend.parseTree(outWithoutLock).isEmpty())
+        assertTrue(
+            Files.notExists(dir.resolve("uv.lock")),
+            "reading the tree created a lock file in a project that had none",
+        )
+
+        // With a lock, it reads it and still leaves it exactly as it was.
+        assertEquals(0, run(uv, dir, EnvOp.Lock).first, "uv lock")
+        val lock = dir.resolve("uv.lock")
+        val before = Files.readAllBytes(lock)
+        val modifiedBefore = Files.getLastModifiedTime(lock)
+
+        assertEquals(0, run(uv, dir, EnvOp.Tree).first, "uv tree against an existing lock")
+
+        assertTrue(Files.readAllBytes(lock).contentEquals(before), "reading the tree rewrote uv.lock")
+        assertEquals(modifiedBefore, Files.getLastModifiedTime(lock), "reading the tree touched uv.lock")
     }
 }

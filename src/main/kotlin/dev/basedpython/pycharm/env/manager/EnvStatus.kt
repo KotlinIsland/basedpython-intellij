@@ -22,7 +22,23 @@ data class EnvStatus(
     /** The environment, when it exists on disk. */
     val environment: ManagedEnvironment?,
     val drift: EnvDrift,
+    /**
+     * What is installed in the environment, flat.
+     *
+     * Ground truth about this machine, and therefore what [dependencies] is checked against: the
+     * tree describes what the project *resolves to*, and the difference between the two is exactly
+     * what drift looks like when you point at it.
+     */
     val packages: List<EnvPackage>,
+    /**
+     * What the project declares, grouped by where it is declared, with transitive dependencies
+     * beneath each.
+     *
+     * Empty when the backend cannot produce one, or when there is nothing resolved to produce it
+     * from — a project with no lock file. The view falls back to listing [packages] flat, which is
+     * still the truthful answer to "what is in this environment".
+     */
+    val dependencies: List<EnvDependencyGroup> = emptyList(),
     /**
      * Why the last refresh could not finish, when it could not.
      *

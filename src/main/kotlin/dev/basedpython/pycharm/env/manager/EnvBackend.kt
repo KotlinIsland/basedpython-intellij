@@ -31,11 +31,27 @@ sealed interface EnvOp {
     /** Re-resolve, allowing newer versions than the lock currently pins. */
     data object Upgrade : EnvOp
 
-    /** Add [requirements] to the project's dependencies and install them. */
-    data class Add(val requirements: List<String>, val dev: Boolean = false) : EnvOp
+    /** Add [requirements] to the project's dependencies under [target] and install them. */
+    data class Add(
+        val requirements: List<String>,
+        val target: EnvDependencyTarget = EnvDependencyTarget.Main,
+    ) : EnvOp
 
-    /** Remove [packages] from the project's dependencies and uninstall them. */
-    data class Remove(val packages: List<String>, val dev: Boolean = false) : EnvOp
+    /** Remove [packages] from the project's dependencies under [target] and uninstall them. */
+    data class Remove(
+        val packages: List<String>,
+        val target: EnvDependencyTarget = EnvDependencyTarget.Main,
+    ) : EnvOp
+
+    /**
+     * The declared dependency graph, grouped by where each requirement is declared.
+     *
+     * Must not modify the project. That is a real constraint rather than a note: the obvious command
+     * for this re-locks as a side effect, so a backend implementing it has to ask for the graph the
+     * lock file already describes. A refresh happens whenever a manifest is saved, and a refresh
+     * that rewrites the lock file is a refresh that edits the user's repository.
+     */
+    data object Tree : EnvOp
 
     /**
      * List what is installed in the environment whose interpreter is [python].
@@ -135,6 +151,15 @@ interface EnvBackend {
 
     /** The interpreters, from the stdout of [EnvOp.ListPythons]. */
     fun parsePythons(stdout: String): List<PythonCandidate>
+
+    /**
+     * The grouped dependency graph, from the stdout of [EnvOp.Tree].
+     *
+     * Defaulted, because it is only reachable for a backend whose [command] answers [EnvOp.Tree] —
+     * a manager with no notion of declared-versus-transitive returns null there and never gets
+     * asked. The view falls back to the flat installed list in that case.
+     */
+    fun parseTree(stdout: String): List<EnvDependencyGroup> = emptyList()
 
     /**
      * What [EnvOp.CheckSync]'s exit code means.

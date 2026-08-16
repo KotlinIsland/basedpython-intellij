@@ -180,6 +180,7 @@ internal class EnvService(
         return base.copy(
             packages = readPackages(backend, root, base.environment),
             drift = readDrift(backend, root),
+            dependencies = readDependencies(backend, root),
         )
     }
 
@@ -219,6 +220,20 @@ internal class EnvService(
         val command = backend.command(EnvOp.ListPackages(environment.python)) ?: return emptyList()
         val result = EnvRunner.run(project, backend, command, root)
         return if (result.isSuccess) backend.parsePackages(result.stdout) else emptyList()
+    }
+
+    /**
+     * The grouped dependency graph, or nothing.
+     *
+     * Nothing is an ordinary outcome rather than a failure worth reporting: a backend that has no
+     * tree concept answers null to the op, and a project with no lock file has nothing resolved to
+     * describe — the command exits non-zero and the view lists what is installed instead. Neither
+     * is an error the user needs told about.
+     */
+    private fun readDependencies(backend: EnvBackend, root: Path): List<EnvDependencyGroup> {
+        val command = backend.command(EnvOp.Tree) ?: return emptyList()
+        val result = EnvRunner.run(project, backend, command, root)
+        return if (result.isSuccess) backend.parseTree(result.stdout) else emptyList()
     }
 
     private fun readDrift(backend: EnvBackend, root: Path): EnvDrift {

@@ -1,0 +1,172 @@
+{
+  "schema": {
+    "version": "preview"
+  },
+  "roots": [
+    {
+      "id": "treedemo:dev==0.1.0@virtual+/p/"
+    },
+    {
+      "id": "treedemo:docs==0.1.0@virtual+/p/"
+    },
+    {
+      "id": "treedemo==0.1.0@virtual+/p/"
+    },
+    {
+      "id": "treedemo[cli]==0.1.0@virtual+/p/"
+    }
+  ],
+  "resolution": {
+    "certifi==2026.7.22@registry+https://pypi.org/simple": {
+      "name": "certifi",
+      "version": "2026.7.22",
+      "kind": "package",
+      "dependencies": []
+    },
+    "charset-normalizer==3.5.1@registry+https://pypi.org/simple": {
+      "name": "charset-normalizer",
+      "version": "3.5.1",
+      "kind": "package",
+      "dependencies": []
+    },
+    "click==8.4.2@registry+https://pypi.org/simple": {
+      "name": "click",
+      "version": "8.4.2",
+      "kind": "package",
+      "dependencies": []
+    },
+    "idna==3.18@registry+https://pypi.org/simple": {
+      "name": "idna",
+      "version": "3.18",
+      "kind": "package",
+      "dependencies": []
+    },
+    "iniconfig==2.3.0@registry+https://pypi.org/simple": {
+      "name": "iniconfig",
+      "version": "2.3.0",
+      "kind": "package",
+      "dependencies": []
+    },
+    "markdown==3.10.3@registry+https://pypi.org/simple": {
+      "name": "markdown",
+      "version": "3.10.3",
+      "kind": "package",
+      "dependencies": []
+    },
+    "packaging==26.3@registry+https://pypi.org/simple": {
+      "name": "packaging",
+      "version": "26.3",
+      "kind": "package",
+      "dependencies": []
+    },
+    "pluggy==1.6.0@registry+https://pypi.org/simple": {
+      "name": "pluggy",
+      "version": "1.6.0",
+      "kind": "package",
+      "dependencies": []
+    },
+    "pygments==2.20.0@registry+https://pypi.org/simple": {
+      "name": "pygments",
+      "version": "2.20.0",
+      "kind": "package",
+      "dependencies": []
+    },
+    "pytest==9.1.1@registry+https://pypi.org/simple": {
+      "name": "pytest",
+      "version": "9.1.1",
+      "kind": "package",
+      "dependencies": [
+        {
+          "id": "iniconfig==2.3.0@registry+https://pypi.org/simple"
+        },
+        {
+          "id": "packaging==26.3@registry+https://pypi.org/simple"
+        },
+        {
+          "id": "pluggy==1.6.0@registry+https://pypi.org/simple"
+        },
+        {
+          "id": "pygments==2.20.0@registry+https://pypi.org/simple"
+        }
+      ]
+    },
+    "requests==2.34.2@registry+https://pypi.org/simple": {
+      "name": "requests",
+      "version": "2.34.2",
+      "kind": "package",
+      "dependencies": [
+        {
+          "id": "certifi==2026.7.22@registry+https://pypi.org/simple"
+        },
+        {
+          "id": "charset-normalizer==3.5.1@registry+https://pypi.org/simple"
+        },
+        {
+          "id": "idna==3.18@registry+https://pypi.org/simple"
+        },
+        {
+          "id": "urllib3==2.7.0@registry+https://pypi.org/simple"
+        }
+      ]
+    },
+    "treedemo:dev==0.1.0@virtual+/p/": {
+      "name": "treedemo",
+      "version": "0.1.0",
+      "kind": {
+        "group": "dev"
+      },
+      "dependencies": [
+        {
+          "id": "pytest==9.1.1@registry+https://pypi.org/simple"
+        }
+      ]
+    },
+    "treedemo:docs==0.1.0@virtual+/p/": {
+      "name": "treedemo",
+      "version": "0.1.0",
+      "kind": {
+        "group": "docs"
+      },
+      "dependencies": [
+        {
+          "id": "markdown==3.10.3@registry+https://pypi.org/simple"
+        }
+      ]
+    },
+    "treedemo==0.1.0@virtual+/p/": {
+      "name": "treedemo",
+      "version": "0.1.0",
+      "kind": "package",
+      "dependencies": [
+        {
+          "id": "requests==2.34.2@registry+https://pypi.org/simple"
+        }
+      ]
+    },
+    "treedemo[cli]==0.1.0@virtual+/p/": {
+      "name": "treedemo",
+      "version": "0.1.0",
+      "kind": {
+        "extra": "cli"
+      },
+      "dependencies": [
+        {
+          "id": "click==8.4.2@registry+https://pypi.org/simple"
+        },
+        {
+          "id": "treedemo==0.1.0@virtual+/p/"
+        }
+      ]
+    },
+    "urllib3==2.7.0@registry+https://pypi.org/simple": {
+      "name": "urllib3",
+      "version": "2.7.0",
+      "kind": "package",
+      "dependencies": []
+    },
+    "workspace+/p": {
+      "kind": "workspace",
+      "dependencies": []
+    }
+  }
+}

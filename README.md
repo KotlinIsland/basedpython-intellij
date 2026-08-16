@@ -167,6 +167,19 @@ support, run configurations, CLI actions, and editor tooling.
 - A banner names the single problem worth fixing, and **Set Up** fixes it: it installs the
   environment manager, creates the environment and syncs it, as far as this project needs.
   A healthy project gets no banner at all.
+- **Dependencies are shown as a tree, grouped by where they are declared** — the main list,
+  optional extras, and named groups such as `dev` — with each requirement's own dependencies
+  beneath it. A flat list cannot say which of forty rows the project actually asked for, or
+  which are test-only; both change what you do next.
+- That structure makes the operations exact rather than approximate. **Remove** is offered only
+  on a requirement the project declares — never on something pulled in by another package, which
+  no tool can remove — and it removes from the right list. **Add** goes into whichever group is
+  selected, and a group that does not exist yet can be typed and will be created.
+- A package the environment does not actually have is greyed, and one installed at a different
+  version than the lock resolves to says so in red — which is what "out of sync" looks like when
+  you point at it.
+- Reading the tree never modifies the project. (`uv tree` re-locks by default; the plugin always
+  asks for the frozen one. A project with no lock file falls back to a flat installed list.)
 - Add and remove dependencies, upgrade everything past the lock file's pins, and choose the
   Python version — installed ones and ones that will be downloaded, offered together, because
   "I want 3.13" should not require first knowing whether 3.13 is installed.

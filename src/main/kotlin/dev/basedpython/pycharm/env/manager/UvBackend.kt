@@ -64,10 +64,22 @@ object UvBackend : EnvBackend {
         EnvOp.Upgrade -> EnvCommand(listOf("lock", "--upgrade"))
 
         is EnvOp.Add ->
-            EnvCommand(listOf("add") + devFlag(op.dev) + op.requirements)
+            EnvCommand(listOf("add") + targetFlags(op.target) + op.requirements)
 
         is EnvOp.Remove ->
-            EnvCommand(listOf("remove") + devFlag(op.dev) + op.packages)
+            EnvCommand(listOf("remove") + targetFlags(op.target) + op.packages)
+
+        // `--frozen` is load-bearing, not an optimisation. Without it `uv tree` re-locks the project
+        // and writes `uv.lock` — verified against 0.12.3 on a project that had none — which would
+        // make merely opening a project edit the user's repository, and make every save of
+        // `pyproject.toml` rewrite the lock behind their back. Frozen reads the existing lock and
+        // touches nothing; on a project with no lock it exits non-zero and the view falls back to
+        // the flat installed list, which is the correct outcome for "there is nothing resolved yet".
+        EnvOp.Tree ->
+            EnvCommand(
+                listOf("tree", "--all-groups", "--frozen", "--format", "json"),
+                isQuery = true,
+            )
 
         is EnvOp.ListPackages ->
             EnvCommand(listOf("pip", "list", "--format", "json") + pythonFlag(op.python), isQuery = true)
@@ -80,7 +92,18 @@ object UvBackend : EnvBackend {
         is EnvOp.InstallPython -> EnvCommand(listOf("python", "install", op.version))
     }
 
-    private fun devFlag(dev: Boolean): List<String> = if (dev) listOf("--dev") else emptyList()
+    /**
+     * How `uv add` / `uv remove` are told which list to act on.
+     *
+     * `dev` goes out as `--group dev` rather than as uv's `--dev` shorthand. The two are the same
+     * operation — `--dev` *is* `[dependency-groups].dev` — and spelling every group the one way
+     * means there is no second code path for the group that happens to have a shorthand.
+     */
+    private fun targetFlags(target: EnvDependencyTarget): List<String> = when (target) {
+        EnvDependencyTarget.Main -> emptyList()
+        is EnvDependencyTarget.Group -> listOf("--group", target.name)
+        is EnvDependencyTarget.Extra -> listOf("--optional", target.name)
+    }
 
     private fun pythonFlag(python: Path?): List<String> =
         python?.let { listOf("--python", it.toString()) } ?: emptyList()
@@ -151,6 +174,8 @@ object UvBackend : EnvBackend {
     } catch (_: Exception) {
         emptyList()
     }
+
+    override fun parseTree(stdout: String): List<EnvDependencyGroup> = UvTree.parse(stdout)
 
     /**
      * `uv sync --check`: 0 when the environment already matches, 1 when it would change.

@@ -46,6 +46,90 @@ data class PythonCandidate(
         get() = version.split('.').take(2).joinToString(".")
 }
 
+/**
+ * Where a dependency is declared — which is also what has to be named to add or remove one.
+ *
+ * A project's requirements are not one list. There is the main list every install gets, optional
+ * extras a consumer opts into, and named groups (`dev` chief among them) that are a development
+ * concern and never ship. The three are declared in different places and are added and removed with
+ * different flags, so "remove httpx" is not answerable without knowing which of them it came from —
+ * which is the concrete reason the tree below is grouped rather than flat.
+ */
+sealed interface EnvDependencyTarget {
+
+    /** How this target is shown in the UI. */
+    val label: String
+
+    /** The main dependency list — `[project.dependencies]`, installed by everything. */
+    data object Main : EnvDependencyTarget {
+        override val label: String = "dependencies"
+    }
+
+    /**
+     * A named dependency group — `[dependency-groups]`.
+     *
+     * `dev` is one of these rather than a case of its own. Tools spell it as a shorthand flag, but
+     * it is an ordinary group, and giving it its own branch here would mean every operation had two
+     * paths that must not drift apart.
+     */
+    data class Group(val name: String) : EnvDependencyTarget {
+        override val label: String get() = name
+    }
+
+    /** An optional extra — `[project.optional-dependencies]`, opted into by a consumer. */
+    data class Extra(val name: String) : EnvDependencyTarget {
+        override val label: String get() = name
+    }
+
+    companion object {
+        /** The group tools treat as the default development one. */
+        val DEV: Group = Group("dev")
+    }
+}
+
+/**
+ * One package in the dependency tree, with whatever depends on it beneath.
+ *
+ * [version] is the *resolved* version — what the lock file settles on — which is not necessarily
+ * what is installed. The view cross-references the installed list to say when the two differ; that
+ * comparison is deliberately not baked in here, so this stays a description of the project's
+ * declared graph rather than a description of one machine.
+ */
+data class EnvDependencyNode(
+    val name: String,
+    val version: String,
+    val children: List<EnvDependencyNode> = emptyList(),
+    /**
+     * True when this package's dependencies are shown under an earlier occurrence instead of here.
+     *
+     * A dependency graph is a graph, not a tree: `certifi` is under half of what a project pulls in.
+     * Expanding it everywhere turns a readable tree into thousands of rows, so it is expanded once
+     * and marked afterwards — the convention every dependency tree uses, including the one the tool
+     * prints itself.
+     */
+    val expandedElsewhere: Boolean = false,
+)
+
+/** The dependencies declared under one [target], and everything they pull in. */
+data class EnvDependencyGroup(
+    val target: EnvDependencyTarget,
+    /** The declared requirements themselves; their transitive dependencies are their children. */
+    val roots: List<EnvDependencyNode>,
+) {
+    /** Every distinct package under this target, declared or transitive. For the group's count. */
+    fun packageCount(): Int {
+        val seen = HashSet<String>()
+        fun walk(nodes: List<EnvDependencyNode>) {
+            for (node in nodes) {
+                seen += node.name
+                walk(node.children)
+            }
+        }
+        walk(roots)
+        return seen.size
+    }
+}
+
 /** An environment that exists on disk. */
 data class ManagedEnvironment(
     /** [EnvBackend.id] of whichever backend produced this. */
