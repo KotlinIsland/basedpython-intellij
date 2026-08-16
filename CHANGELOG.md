@@ -136,6 +136,17 @@
   they disagree, the row says so: a package the environment does not have is greyed, one
   installed at a version other than the lock's is called out. That is drift shown on the row it
   happens on, rather than only asserted in a banner.
+- *Add Package* completes against the package catalogue as you type, and gained a **version
+  picker**. The list is honest about what it contains: a release the maintainer withdrew is marked
+  *yanked* with their reason, and one whose `requires_python` this environment does not satisfy is
+  marked with what it needs. Neither is filtered out — a version missing from a list with no
+  explanation is a worse outcome than one that says why picking it is a bad idea. Picking a version
+  pins it, preserving any extras already ticked; the two pickers edit different parts of the same
+  requirement and do not undo each other.
+- Judging that needed PEP 440 — sorting versions as text puts `1.9` above `1.10`, and a real
+  `requires_python` like urllib3's `>=2.7, !=3.0.*, !=3.1.*, <4` cannot be evaluated by any amount
+  of string handling. Versions, pre-releases, epochs and the specifier operators are implemented and
+  tested against specifiers taken from PyPI itself.
 - *Add Package* now knows what is in the index. Typing a name shows what the package is and its
   newest version, and its declared extras appear as checkboxes that write themselves into the
   requirement — so `httpx[http2]` is something you can discover instead of something you have to

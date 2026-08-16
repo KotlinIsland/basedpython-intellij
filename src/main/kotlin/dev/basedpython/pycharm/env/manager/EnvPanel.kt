@@ -470,7 +470,9 @@ internal class EnvPanel(private val project: Project) :
             val target = EnvTreeRows.targetForAdd(selection())
             val status = service.status
             val index = status.projectRoot?.let { root -> status.backend?.packageIndex(root) }
-            val request = EnvAddPackageDialog(project, target, groups, index).ask() ?: return
+            val request = EnvAddPackageDialog(
+                project, target, groups, index, status.environment?.pythonVersion,
+            ).ask() ?: return
             EnvOperations.add(project, request.requirements, request.target)
         }
     }

@@ -54,6 +54,44 @@ internal object EnvRequirements {
     }
 
     /**
+     * The version pinned in [requirement], when it is pinned with a plain `==`.
+     *
+     * Only `==`, because that is the only form the version picker produces and the only one it can
+     * faithfully show back. A requirement carrying a range was typed by hand, and the picker reports
+     * no selection rather than pretending a range is a choice it made.
+     */
+    fun pinnedVersion(requirement: String): String? {
+        val name = packageName(requirement) ?: return null
+        val tail = requirement.trim().substring(name.length).let { t ->
+            val open = t.indexOf('[')
+            val close = t.indexOf(']', startIndex = open + 1)
+            if (open == 0 && close > 0) t.substring(close + 1) else t
+        }.trim()
+        if (!tail.startsWith("==") || tail.startsWith("===")) return null
+        val value = tail.removePrefix("==").substringBefore(';').trim()
+        // A second clause means a range, not a pin.
+        if (value.isEmpty() || value.contains(',')) return null
+        return value
+    }
+
+    /**
+     * [requirement] pinned to [version], or unpinned when it is null.
+     *
+     * Replaces whatever specifier was there, since the picker offering a version and the field
+     * carrying a different one would be two answers to the same question. Extras are preserved:
+     * `httpx[http2]` pinned to `0.28.1` is `httpx[http2]==0.28.1`.
+     */
+    fun withVersion(requirement: String, version: String?): String {
+        val text = requirement.trim()
+        val name = packageName(text) ?: return requirement
+        val extras = extrasOf(text)
+        val marker = text.substringAfter(';', "").trim()
+        val base = if (extras.isEmpty()) name else "$name[${extras.joinToString(",")}]"
+        val pinned = if (version.isNullOrBlank()) base else "$base==${version.trim()}"
+        return if (marker.isEmpty()) pinned else "$pinned ; $marker"
+    }
+
+    /**
      * [requirement] with exactly [extras] written into it, replacing whatever was there.
      *
      * Inserted after the name and before any version specifier, which is where the syntax puts them:

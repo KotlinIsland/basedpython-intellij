@@ -117,6 +117,61 @@ class PyPiIndexTest {
         assertNull(PyPiIndex.parseDetails("x", """{"info":"""))
     }
 
+    // ---- releases -----------------------------------------------------------
+
+    /** Shaped exactly like urllib3's real `releases`, including its genuinely yanked 2.0.0. */
+    private val withReleases = """
+        {"info":{"name":"urllib3","version":"2.1.0"},
+         "releases":{
+           "1.26.20":[{"filename":"a.whl","yanked":false,"yanked_reason":null,"requires_python":">=2.7"}],
+           "2.0.0":[{"filename":"b.whl","yanked":true,"yanked_reason":"Broken release","requires_python":">=3.7"},
+                    {"filename":"b.tar.gz","yanked":true,"yanked_reason":"Broken release","requires_python":">=3.7"}],
+           "2.1.0":[{"filename":"c.whl","yanked":false,"requires_python":">=3.8"}],
+           "0.3":[]}}
+    """.trimIndent()
+
+    @Test
+    fun `releases come back newest first, with yanked and requires-python`() {
+        val details = requireNotNull(PyPiIndex.parseDetails("urllib3", withReleases))
+
+        assertEquals(listOf("2.1.0", "2.0.0", "1.26.20"), details.releases.map { it.version })
+
+        val yanked = details.releases.first { it.version == "2.0.0" }
+        assertTrue(yanked.yanked)
+        assertEquals("Broken release", yanked.yankedReason)
+        assertEquals(">=3.7", yanked.requiresPython)
+
+        assertEquals(false, details.releases.first { it.version == "2.1.0" }.yanked)
+    }
+
+    /** The index lists a few historical releases with nothing published under them. */
+    @Test
+    fun `a release with no files is not offered`() {
+        val details = requireNotNull(PyPiIndex.parseDetails("urllib3", withReleases))
+        assertTrue(details.releases.none { it.version == "0.3" })
+    }
+
+    /**
+     * PEP 592 yanks files, not versions, so a release with one live file left is still installable
+     * and must not be marked.
+     */
+    @Test
+    fun `a release is yanked only when every file under it is`() {
+        val partial = """
+            {"info":{"name":"x"},
+             "releases":{"1.0":[{"yanked":true,"yanked_reason":"oops"},{"yanked":false}]}}
+        """.trimIndent()
+
+        val details = requireNotNull(PyPiIndex.parseDetails("x", partial))
+        assertEquals(false, details.releases.single().yanked)
+    }
+
+    @Test
+    fun `a document with no releases block yields no releases`() {
+        val details = requireNotNull(PyPiIndex.parseDetails("six", """{"info":{"name":"six"}}"""))
+        assertTrue(details.releases.isEmpty())
+    }
+
     // ---- cache identity -----------------------------------------------------
 
     /**
@@ -181,6 +236,22 @@ class PyPiIndexTest {
         assertEquals("httpx", details.name.lowercase())
         assertNotNull(details.latestVersion)
         assertTrue(details.extras.contains("http2"), "extras were ${details.extras}")
+    }
+
+    /** The real urllib3, whose 1.25 and 2.0.0 are yanked on PyPI with "Broken release". */
+    @Test
+    fun `the real index reports urllib3's yanked releases`() {
+        assumeTrue(System.getenv(NETWORK) == "1", "set $NETWORK=1 to allow the request")
+
+        val details = requireNotNull(PyPiIndex.pypi().fetchDetails("urllib3"))
+        assertTrue(details.releases.size > 50, "got ${details.releases.size} releases")
+
+        val yanked = details.releases.filter { it.yanked }.map { it.version }
+        assertTrue(yanked.contains("2.0.0"), "yanked releases were $yanked")
+
+        // Newest first, and modern releases declare a requires_python.
+        assertTrue(Pep440.compare(details.releases.first().version, details.releases.last().version) > 0)
+        assertTrue(details.releases.any { it.requiresPython != null })
     }
 
     @Test
