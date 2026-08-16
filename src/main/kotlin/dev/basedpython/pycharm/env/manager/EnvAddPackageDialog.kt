@@ -7,6 +7,9 @@ import com.intellij.openapi.ui.ComboBox
 import com.intellij.openapi.ui.DialogWrapper
 import com.intellij.openapi.ui.ValidationInfo
 import com.intellij.codeInsight.completion.CompletionParameters
+import com.intellij.codeInsight.completion.CompletionResultSet
+import com.intellij.codeInsight.completion.PlainPrefixMatcher
+import com.intellij.codeInsight.completion.PrefixMatcher
 import com.intellij.codeInsight.lookup.CharFilter
 import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.progress.util.ProgressIndicatorUtils
@@ -23,6 +26,7 @@ import com.intellij.util.ui.UIUtil
 import dev.basedpython.pycharm.env.manager.index.PackageDetails
 import dev.basedpython.pycharm.env.manager.index.PackageIndex
 import dev.basedpython.pycharm.env.manager.index.PackageIndexCache
+import dev.basedpython.pycharm.env.manager.index.PackageNameStore
 import dev.basedpython.pycharm.util.BasedPythonBundle
 import java.awt.FlowLayout
 import javax.swing.JComponent
@@ -317,6 +321,39 @@ internal class EnvAddPackageDialog(
         TextFieldWithAutoCompletionListProvider<String>(emptyList()) {
 
         override fun getLookupString(item: String): String = item
+
+        /**
+         * Strict prefix matching — every result starts with what was typed.
+         *
+         * Two defaults have to be turned off to get that. The platform's camel-hump matcher treats
+         * the query as a *subsequence*, so `ba` matches `b-aws-dynamodb-backup`; and
+         * `PlainPrefixMatcher`'s one-argument constructor is not a prefix matcher at all, it is
+         * `containsIgnoreCase`, which matches that same name on the `ba` in `backup`. Only the
+         * two-argument form asks for a genuine start match.
+         *
+         * Right for class names, where `NPE` should find `NullPointerException`; wrong for a package
+         * index, where someone is typing the beginning of a name they half-remember.
+         */
+        override fun createPrefixMatcher(prefix: String): PrefixMatcher =
+            PlainPrefixMatcher(prefix, /* prefixMatchesOnly = */ true)
+
+        /**
+         * Re-queries the catalogue on every keystroke instead of filtering the previous answer.
+         *
+         * The catalogue is 872,009 names and a query returns at most [PackageNameStore.MAX_RESULTS]
+         * of them, which makes the result for `b` **not** a superset of the result for `ba` — the
+         * first fifty names starting with `b` are all `b-…`, and none of them starts with `ba`.
+         * Without this the platform kept that first set and narrowed it client-side, so typing `ba`
+         * showed leftovers from `b` that happened to fuzzy-match, and the names actually starting
+         * with `ba` never appeared at all.
+         */
+        override fun applyPrefixMatcher(
+            result: CompletionResultSet,
+            prefix: String,
+        ): CompletionResultSet {
+            result.restartCompletionOnAnyPrefixChange()
+            return super.applyPrefixMatcher(result, prefix)
+        }
 
         /**
          * Whether typing [c] should open, or keep open, the completion popup.
