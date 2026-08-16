@@ -215,6 +215,7 @@ class BasedPythonBundleTest {
             "env.add.unknownPackage",
             "env.add.version",
             "env.add.searching",
+            "env.add.downloadingCatalogue",
             "env.version.any",
             "env.version.yanked",
             "env.version.yanked.reason",

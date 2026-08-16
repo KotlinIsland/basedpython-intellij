@@ -7,8 +7,8 @@ import com.intellij.openapi.diagnostic.Logger
 import dev.basedpython.pycharm.env.download.ByBinaryDownloadPlan
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * What the index says, kept on disk so the Add dialog has something to show the moment it opens.
@@ -41,8 +41,12 @@ internal class PackageIndexCache : Disposable {
 
     override fun dispose() = Unit
 
-    /** In-flight or completed name-catalogue refreshes, so two dialogs do not both download 9.5 MB. */
-    private val refreshing = ConcurrentHashMap<String, AtomicBoolean>()
+    /**
+     * The in-flight catalogue download per index, so two dialogs never both fetch 9.5 MB — and, more
+     * importantly, so a caller that needs the catalogue *now* can wait for the one already running
+     * instead of being told there is nothing.
+     */
+    private val refreshes = ConcurrentHashMap<String, CompletableFuture<Boolean>>()
 
     /** Package details this session has already looked up, on top of the disk cache. */
     private val details = ConcurrentHashMap<String, PackageDetails>()
@@ -57,35 +61,42 @@ internal class PackageIndexCache : Disposable {
     }
 
     /**
-     * Downloads the catalogue unless it is already fresh, or already being downloaded.
+     * Starts the catalogue download unless it is fresh, and returns the work in flight.
      *
-     * Blocking; call from a background thread. [onFinished] runs on the calling thread once the
-     * catalogue is on disk, so a dialog can light its completion up.
+     * A future rather than a boolean, because the first Add on a machine is a race nobody wins by
+     * ignoring: the download takes seconds, and a completion asked in the meantime has to be able to
+     * *wait* for it. Told only "a refresh is running", the lookup returned nothing and the user was
+     * shown "No suggestions" — which was false, and looked like a broken feature rather than a
+     * download in progress.
      *
-     * Returns false when nothing was started — the answer callers use to decide whether to say
-     * "downloading package list…" at all.
+     * Every caller for one index shares one future, so the 9.5 MB is fetched once however many
+     * dialogs ask. Never fails: a download that could not finish completes as `false`, since no
+     * catalogue is a missing convenience rather than an error worth interrupting anyone over.
      */
-    fun refreshCatalogue(index: PackageIndex, force: Boolean = false, onFinished: () -> Unit = {}): Boolean {
-        if (!force && isCatalogueFresh(index)) return false
-        val guard = refreshing.computeIfAbsent(index.id) { AtomicBoolean(false) }
-        if (!guard.compareAndSet(false, true)) return false
-        try {
-            val target = namesFile(index)
-            PackageNameStore.Writer(target).use { writer ->
-                index.fetchNames(writer::add)
-                LOG.info("package catalogue for ${index.displayName}: ${writer.count} names")
-            }
-            onFinished()
-            return true
-        } catch (e: Exception) {
-            // No catalogue means no completion, which the dialog already handles — the field takes
-            // free text regardless. Not worth interrupting the user over.
-            LOG.warn("could not refresh the package catalogue for ${index.displayName}", e)
-            return false
-        } finally {
-            guard.set(false)
-        }
+    fun refreshCatalogue(index: PackageIndex, force: Boolean = false): CompletableFuture<Boolean> {
+        if (!force && isCatalogueFresh(index)) return CompletableFuture.completedFuture(false)
+        return refreshes.compute(index.id) { _, existing ->
+            if (existing != null && !existing.isDone) existing else startRefresh(index)
+        }!!
     }
+
+    /** True while a catalogue download for [index] is running. */
+    fun isRefreshing(index: PackageIndex): Boolean =
+        refreshes[index.id]?.isDone == false
+
+    private fun startRefresh(index: PackageIndex): CompletableFuture<Boolean> =
+        CompletableFuture.supplyAsync {
+            try {
+                PackageNameStore.Writer(namesFile(index)).use { writer ->
+                    index.fetchNames(writer::add)
+                    LOG.info("package catalogue for ${index.displayName}: ${writer.count} names")
+                }
+                true
+            } catch (e: Exception) {
+                LOG.warn("could not refresh the package catalogue for ${index.displayName}", e)
+                false
+            }
+        }
 
     /**
      * What the index knows about [name] — from memory, then disk, then the network.
