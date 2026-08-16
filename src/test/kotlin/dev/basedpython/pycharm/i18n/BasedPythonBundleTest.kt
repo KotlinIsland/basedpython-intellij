@@ -216,6 +216,8 @@ class BasedPythonBundleTest {
             "env.add.version",
             "env.add.searching",
             "env.add.downloadingCatalogue",
+            "env.add.startTyping",
+            "env.add.noMatches",
             "env.version.any",
             "env.version.yanked",
             "env.version.yanked.reason",

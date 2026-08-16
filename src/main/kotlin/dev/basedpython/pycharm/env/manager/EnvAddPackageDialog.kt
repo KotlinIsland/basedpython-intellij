@@ -6,19 +6,15 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.ComboBox
 import com.intellij.openapi.ui.DialogWrapper
 import com.intellij.openapi.ui.ValidationInfo
-import com.intellij.codeInsight.completion.CompletionParameters
-import com.intellij.codeInsight.completion.CompletionResultSet
-import com.intellij.codeInsight.completion.PlainPrefixMatcher
-import com.intellij.codeInsight.completion.PrefixMatcher
-import com.intellij.codeInsight.lookup.CharFilter
-import com.intellij.openapi.progress.ProcessCanceledException
-import com.intellij.openapi.progress.util.ProgressIndicatorUtils
+import com.intellij.ui.DocumentAdapter
+import com.intellij.ui.DoubleClickListener
 import com.intellij.ui.JBColor
-import com.intellij.ui.TextFieldWithAutoCompletion
-import com.intellij.ui.TextFieldWithAutoCompletionListProvider
+import com.intellij.ui.ScrollingUtil
 import com.intellij.ui.components.JBCheckBox
 import com.intellij.ui.components.JBLabel
+import com.intellij.ui.components.JBList
 import com.intellij.ui.components.JBScrollPane
+import com.intellij.ui.components.JBTextField
 import com.intellij.util.Alarm
 import com.intellij.util.ui.FormBuilder
 import com.intellij.util.ui.JBUI
@@ -26,11 +22,13 @@ import com.intellij.util.ui.UIUtil
 import dev.basedpython.pycharm.env.manager.index.PackageDetails
 import dev.basedpython.pycharm.env.manager.index.PackageIndex
 import dev.basedpython.pycharm.env.manager.index.PackageIndexCache
-import dev.basedpython.pycharm.env.manager.index.PackageNameStore
 import dev.basedpython.pycharm.util.BasedPythonBundle
 import java.awt.FlowLayout
 import javax.swing.JComponent
+import javax.swing.DefaultListModel
 import javax.swing.JPanel
+import javax.swing.ListSelectionModel
+import javax.swing.event.DocumentEvent
 
 /**
  * "Add package": a requirement line, which of the project's dependency lists it joins, and — once
@@ -66,18 +64,23 @@ internal class EnvAddPackageDialog(
     data class Request(val requirements: List<String>, val target: EnvDependencyTarget)
 
     /**
-     * The requirement, with the catalogue behind it.
+     * The requirement, as plain text.
      *
-     * A completion-capable editor rather than a plain field, so the 872,009-name catalogue is
-     * reachable as a dropdown while you type. It stays free text: completion offers, it does not
-     * constrain, and a name the index has never heard of is typed and added exactly as before.
-     *
-     * This constructor already asks for the autopopup, so typing opens the list without a
-     * Ctrl+Space. What it cannot do is have an answer before the catalogue exists — see
-     * [CatalogueCompletion].
+     * A plain field with a list under it rather than a completion editor. Completion was tried and
+     * abandoned — see [EnvPackageSearch] for what it cost — and this is also the shape PyCharm's own
+     * package dialog uses. The field stays free text: the list offers, it never constrains, and a
+     * name the index has never heard of is typed and added exactly as before.
      */
-    private val field: TextFieldWithAutoCompletion<String> =
-        TextFieldWithAutoCompletion(project, CatalogueCompletion(), false, "")
+    private val field = JBTextField(30)
+
+    /** Catalogue names matching what has been typed. Repopulated, never torn down and rebuilt. */
+    private val resultsModel = DefaultListModel<String>()
+
+    private val results = JBList(resultsModel).apply {
+        selectionMode = ListSelectionModel.SINGLE_SELECTION
+        visibleRowCount = 8
+        emptyText.text = ""
+    }
 
     /**
      * The lists a requirement can join, as text.
@@ -131,11 +134,26 @@ internal class EnvAddPackageDialog(
     init {
         title = BasedPythonBundle.message("env.add.title")
         setOKButtonText(BasedPythonBundle.message("env.add.ok"))
-        field.addDocumentListener(object : com.intellij.openapi.editor.event.DocumentListener {
-            override fun documentChanged(event: com.intellij.openapi.editor.event.DocumentEvent) {
-                if (!updatingField) scheduleLookup()
+        field.document.addDocumentListener(object : DocumentAdapter() {
+            override fun textChanged(e: DocumentEvent) {
+                if (!updatingField) {
+                    refreshResults()
+                    scheduleLookup()
+                }
             }
         })
+        // Up/Down from the field move through the list, which is what makes a field-plus-list feel
+        // like one control rather than two.
+        ScrollingUtil.installActions(results, field)
+        results.addListSelectionListener {
+            if (!it.valueIsAdjusting && !updatingField) results.selectedValue?.let(::chooseName)
+        }
+        object : DoubleClickListener() {
+            override fun onDoubleClick(event: java.awt.event.MouseEvent): Boolean {
+                results.selectedValue?.let(::chooseName)
+                return true
+            }
+        }.installOn(results)
         versionBox.addActionListener { if (!updatingField) applyVersionToField() }
         init()
         warmCatalogue()
@@ -149,6 +167,9 @@ internal class EnvAddPackageDialog(
                 componentStyle = UIUtil.ComponentStyle.SMALL
                 foreground = JBColor.GRAY
             },
+        )
+        .addComponentToRightColumn(
+            JBScrollPane(results).apply { preferredSize = JBUI.size(420, 150) },
         )
         .addComponentToRightColumn(summaryLabel)
         .addLabeledComponent(BasedPythonBundle.message("env.add.version"), versionBox)
@@ -200,9 +221,12 @@ internal class EnvAddPackageDialog(
      */
     private fun warmCatalogue() {
         val index = index ?: return
-        // Starts the download and returns immediately; completion awaits the same future if the user
-        // types before it lands.
-        PackageIndexCache.getInstance().refreshCatalogue(index)
+        val modality = ModalityState.stateForComponent(field)
+        // Starts the download and returns immediately. When it lands the list is repopulated, so a
+        // first Add on a cold machine fills in by itself instead of needing another keystroke.
+        PackageIndexCache.getInstance().refreshCatalogue(index).thenRun {
+            ApplicationManager.getApplication().invokeLater({ refreshResults() }, modality)
+        }
     }
 
     private fun scheduleLookup() {
@@ -317,110 +341,47 @@ internal class EnvAddPackageDialog(
      * not been downloaded, or a project with none, simply offers nothing and the field stays plain
      * free text.
      */
-    private inner class CatalogueCompletion :
-        TextFieldWithAutoCompletionListProvider<String>(emptyList()) {
+    /**
+     * Repopulates the results list from the catalogue.
+     *
+     * The model's contents are replaced rather than the component being rebuilt, so the list stays
+     * where it is instead of blinking — which is what a completion restart per keystroke did.
+     * Reading the catalogue is a handful of file seeks, so this runs inline as you type.
+     */
+    private fun refreshResults() {
+        val index = index
+        val store = index?.let { PackageIndexCache.getInstance().names(it) }
+        val names = if (store == null) emptyList() else EnvPackageSearch.resultsFor(store, field.text)
 
-        override fun getLookupString(item: String): String = item
-
-        /**
-         * Strict prefix matching — every result starts with what was typed.
-         *
-         * Two defaults have to be turned off to get that. The platform's camel-hump matcher treats
-         * the query as a *subsequence*, so `ba` matches `b-aws-dynamodb-backup`; and
-         * `PlainPrefixMatcher`'s one-argument constructor is not a prefix matcher at all, it is
-         * `containsIgnoreCase`, which matches that same name on the `ba` in `backup`. Only the
-         * two-argument form asks for a genuine start match.
-         *
-         * Right for class names, where `NPE` should find `NullPointerException`; wrong for a package
-         * index, where someone is typing the beginning of a name they half-remember.
-         */
-        override fun createPrefixMatcher(prefix: String): PrefixMatcher =
-            PlainPrefixMatcher(prefix, /* prefixMatchesOnly = */ true)
-
-        /**
-         * Re-queries the catalogue on every keystroke instead of filtering the previous answer.
-         *
-         * The catalogue is 872,009 names and a query returns at most [PackageNameStore.MAX_RESULTS]
-         * of them, which makes the result for `b` **not** a superset of the result for `ba` — the
-         * first fifty names starting with `b` are all `b-…`, and none of them starts with `ba`.
-         * Without this the platform kept that first set and narrowed it client-side, so typing `ba`
-         * showed leftovers from `b` that happened to fuzzy-match, and the names actually starting
-         * with `ba` never appeared at all.
-         */
-        override fun applyPrefixMatcher(
-            result: CompletionResultSet,
-            prefix: String,
-        ): CompletionResultSet {
-            result.restartCompletionOnAnyPrefixChange()
-            return super.applyPrefixMatcher(result, prefix)
+        updatingField = true
+        try {
+            val previous = results.selectedValue
+            resultsModel.clear()
+            names.forEach(resultsModel::addElement)
+            // Keep the highlight on the same name when it survives, so typing does not make the
+            // selection jump around under the cursor.
+            previous?.takeIf { names.contains(it) }?.let { results.setSelectedValue(it, false) }
+        } finally {
+            updatingField = false
         }
+        results.emptyText.text = emptyResultsText()
+    }
 
-        /**
-         * Whether typing [c] should open, or keep open, the completion popup.
-         *
-         * **This method is the autopopup.** `TextCompletionContributor.invokeAutoPopup` decides
-         * whether a keystroke opens the list with
-         * `CharFilter.Result.ADD_TO_PREFIX == provider.acceptChar(c)`, and
-         * `TextFieldWithAutoCompletionListProvider.acceptChar` returns *null* by default — so a
-         * provider that does not override this never autopopups at all, and its completion is
-         * reachable only by an explicit Ctrl+Space. That was the entire reason the list appeared to
-         * need triggering by hand.
-         *
-         * Characters that end a name hide the popup rather than merely not extending it: once a
-         * specifier, an extra or a marker has begun, the catalogue has nothing left to say.
-         */
-        override fun acceptChar(c: Char): CharFilter.Result? =
-            if (EnvRequirements.continuesPackageName(c)) {
-                CharFilter.Result.ADD_TO_PREFIX
-            } else {
-                CharFilter.Result.HIDE_LOOKUP
-            }
+    /** What the empty list says, which depends on why it is empty. */
+    private fun emptyResultsText(): String = when {
+        index == null -> ""
+        EnvPackageSearch.queryIn(field.text) == null -> BasedPythonBundle.message("env.add.startTyping")
+        PackageIndexCache.getInstance().isRefreshing(index) ->
+            BasedPythonBundle.message("env.add.downloadingCatalogue")
+        else -> BasedPythonBundle.message("env.add.noMatches")
+    }
 
-        /** Said in the lookup while the catalogue is still arriving, so an empty list is explained. */
-        override fun getAdvertisement(): String? {
-            val index = index ?: return null
-            return if (PackageIndexCache.getInstance().isRefreshing(index)) {
-                BasedPythonBundle.message("env.add.downloadingCatalogue")
-            } else {
-                null
-            }
-        }
-
-        override fun getItems(
-            prefix: String?,
-            cached: Boolean,
-            parameters: CompletionParameters?,
-        ): Collection<String> {
-            val index = index ?: return emptyList()
-            // Complete the package name only. Once a specifier or an extra has been typed there is
-            // nothing left for the catalogue to say, and offering names inside `>=0.27` is noise.
-            val typed = prefix.orEmpty().substringAfterLast(' ')
-            val name = EnvRequirements.packageName(typed) ?: return emptyList()
-            if (name != typed) return emptyList()
-
-            val cache = PackageIndexCache.getInstance()
-            // The pass that may wait. The platform runs this one on a pooled thread under a
-            // cancellable indicator — see TextFieldWithAutoCompletionListProvider.addNonCachedItems —
-            // which is exactly the place a completion is allowed to block, and typing another
-            // character cancels it. Waiting here is what turns the first Add on a machine from "No
-            // suggestions" into "the list appears once the download lands"; without it the answer
-            // was empty and wrong, and looked like a broken feature rather than a 9.5 MB download.
-            if (!cached && !cache.isCatalogueFresh(index)) {
-                awaitCatalogue(cache, index)
-            }
-            return cache.names(index).startingWith(name)
-        }
-
-        /** Waits for the in-flight catalogue, giving up the moment the completion is cancelled. */
-        private fun awaitCatalogue(cache: PackageIndexCache, index: PackageIndex) {
-            try {
-                ProgressIndicatorUtils.awaitWithCheckCanceled(cache.refreshCatalogue(index))
-            } catch (e: ProcessCanceledException) {
-                throw e
-            } catch (_: Exception) {
-                // A download that failed leaves no catalogue, which the empty list already conveys.
-            }
-        }
+    /** Puts [name] into the field, replacing only the requirement being typed. */
+    private fun chooseName(name: String) {
+        val replaced = EnvPackageSearch.replaceLastRequirement(field.text, name)
+        if (replaced == field.text) return
+        setFieldText(replaced)
+        scheduleLookup()
     }
 
     // ---- the version picker --------------------------------------------------
