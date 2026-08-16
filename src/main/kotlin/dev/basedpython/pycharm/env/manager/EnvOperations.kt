@@ -105,22 +105,39 @@ internal object EnvOperations {
         }
     }
 
-    fun add(project: Project, requirements: List<String>, dev: Boolean) {
+    fun add(
+        project: Project,
+        requirements: List<String>,
+        target: EnvDependencyTarget = EnvDependencyTarget.Main,
+    ) {
         if (requirements.isEmpty()) return
         simple(
             project,
-            EnvOp.Add(requirements, dev),
+            EnvOp.Add(requirements, target),
             BasedPythonBundle.message("env.progress.adding", requirements.joinToString(", ")),
         )
     }
 
-    fun remove(project: Project, packages: List<String>, dev: Boolean) {
-        if (packages.isEmpty()) return
-        simple(
-            project,
-            EnvOp.Remove(packages, dev),
-            BasedPythonBundle.message("env.progress.removing", packages.joinToString(", ")),
-        )
+    /**
+     * Removes requirements, each from the group it is declared in.
+     *
+     * A map rather than a list because a selection can span groups, and removing `pytest` from
+     * `dev` and `httpx` from the main list is two edits to two lists that no single command
+     * expresses. They run in sequence in one background task, and the first failure stops the rest —
+     * continuing past a `uv remove` that failed would leave the project half-edited with only a
+     * notification to say which half.
+     */
+    fun remove(project: Project, byTarget: Map<EnvDependencyTarget, List<String>>) {
+        val work = byTarget.filterValues { it.isNotEmpty() }
+        if (work.isEmpty()) return
+        val backend = EnvService.getInstance(project).status.backend ?: return
+        val all = work.values.flatten().joinToString(", ")
+        runInBackground(project, BasedPythonBundle.message("env.progress.removing", all)) { indicator ->
+            for ((target, names) in work) {
+                indicator.text = BasedPythonBundle.message("env.progress.removing", names.joinToString(", "))
+                if (!runBlockingOp(project, backend, EnvOp.Remove(names, target))) return@runInBackground
+            }
+        }
     }
 
     /** Installs an interpreter the machine does not have, then builds the environment on it. */

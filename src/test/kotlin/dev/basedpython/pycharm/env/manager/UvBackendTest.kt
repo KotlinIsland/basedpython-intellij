@@ -41,11 +41,56 @@ class UvBackendTest {
     }
 
     @Test
-    fun `add and remove carry every requirement and the dev flag`() {
+    fun `add and remove carry every requirement`() {
         assertEquals(listOf("add", "httpx", "rich>=13"), args(EnvOp.Add(listOf("httpx", "rich>=13"))))
-        assertEquals(listOf("add", "--dev", "pytest"), args(EnvOp.Add(listOf("pytest"), dev = true)))
         assertEquals(listOf("remove", "httpx"), args(EnvOp.Remove(listOf("httpx"))))
-        assertEquals(listOf("remove", "--dev", "pytest"), args(EnvOp.Remove(listOf("pytest"), dev = true)))
+    }
+
+    /**
+     * `dev` goes out as `--group dev`, not uv's `--dev` shorthand. The two are the same operation,
+     * and spelling every group one way is what keeps the group that happens to have a shorthand
+     * from needing a code path of its own.
+     */
+    @Test
+    fun `the dependency list is named the same way for every group`() {
+        assertEquals(
+            listOf("add", "--group", "dev", "pytest"),
+            args(EnvOp.Add(listOf("pytest"), EnvDependencyTarget.DEV)),
+        )
+        assertEquals(
+            listOf("add", "--group", "docs", "mkdocs"),
+            args(EnvOp.Add(listOf("mkdocs"), EnvDependencyTarget.Group("docs"))),
+        )
+        assertEquals(
+            listOf("remove", "--group", "dev", "pytest"),
+            args(EnvOp.Remove(listOf("pytest"), EnvDependencyTarget.DEV)),
+        )
+    }
+
+    /** An extra is `[project.optional-dependencies]`, which uv spells `--optional`. */
+    @Test
+    fun `an extra is named as an optional dependency`() {
+        assertEquals(
+            listOf("add", "--optional", "cli", "click"),
+            args(EnvOp.Add(listOf("click"), EnvDependencyTarget.Extra("cli"))),
+        )
+        assertEquals(
+            listOf("remove", "--optional", "cli", "click"),
+            args(EnvOp.Remove(listOf("click"), EnvDependencyTarget.Extra("cli"))),
+        )
+    }
+
+    /**
+     * The flag that keeps a refresh from editing the repository.
+     *
+     * Without `--frozen`, `uv tree` re-locks and writes `uv.lock` — so a project merely being opened
+     * would gain a lock file, and every save of `pyproject.toml` would rewrite it.
+     */
+    @Test
+    fun `the dependency tree is asked for without re-locking`() {
+        val command = requireNotNull(UvBackend.command(EnvOp.Tree))
+        assertEquals(listOf("tree", "--all-groups", "--frozen", "--format", "json"), command.args)
+        assertTrue(command.isQuery)
     }
 
     /**

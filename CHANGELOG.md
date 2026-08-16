@@ -123,6 +123,24 @@
   far as this project needs. A healthy project gets no banner at all. Add and remove dependencies,
   upgrade past the lock file's pins, and pick the Python version, with installed and downloadable
   versions offered together.
+- Dependencies in that window are a tree grouped by where they are declared — the main list,
+  optional extras, and named groups such as `dev` — with each requirement's own dependencies
+  beneath it. A flat package list answers "what is installed" and nothing else: it cannot say
+  which of forty rows the project actually asked for, or which are test-only, and both change
+  what you do next. The grouping also makes the operations exact rather than approximate.
+  *Remove* is offered only on a requirement the project declares — never on one pulled in by
+  another package, which no tool can remove — and it removes it from the list it is declared in,
+  with a selection spanning groups becoming one command per group. *Add* goes into whichever
+  group is selected, and a group that does not exist yet can be typed and will be created.
+- The tree is what the project resolves to; the installed list is what the machine has. Where
+  they disagree, the row says so: a package the environment does not have is greyed, one
+  installed at a version other than the lock's is called out. That is drift shown on the row it
+  happens on, rather than only asserted in a banner.
+- Reading that tree never writes to the project. `uv tree` re-locks and writes `uv.lock` unless
+  told not to, so the plugin always asks for the frozen one — otherwise opening a project would
+  create a lock file, and every save of `pyproject.toml` would rewrite it. A project with no lock
+  has nothing resolved to show, and falls back to the flat installed list, which is the right
+  answer rather than an error.
 - That window reads the environment's Python version from its own `pyvenv.cfg` rather than by
   running the interpreter, so it still reports what an environment was built on when its
   interpreter is broken — a Homebrew upgrade, or a project copied between machines — which is
