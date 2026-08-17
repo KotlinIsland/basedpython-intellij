@@ -25,6 +25,11 @@ private val LOG = Logger.getInstance(ByCleanup::class.java)
  * Each one is a source action the server already knows how to build, so the work — which rules
  * apply, in what order, against which configuration — stays on the server side, where it is the
  * same code that answers the editor.
+ *
+ * The three the IDE offers differ in what they are allowed to remove, which is the line the user
+ * draws between them: reformatting may move an import but not delete one, optimizing imports may
+ * delete the ones nothing uses, and the fix-all pass may rewrite anything the project's lint
+ * configuration asks it to.
  */
 enum class ByCleanupOp(val kind: String, private val progressKey: String) {
   /**
@@ -35,12 +40,22 @@ enum class ByCleanupOp(val kind: String, private val progressKey: String) {
 
   /**
    * Sorts imports and drops the ones nothing uses — what *Optimize Imports* means, and more than
-   * `source.organizeImports`, which only sorts. This is what Ctrl+Alt+O runs.
+   * `source.organizeImports`, which only sorts. This is what Ctrl+Alt+O runs, through
+   * [BuffImportOptimizer].
    *
    * Not offered on save or commit: the platform's own *Optimize imports* row already covers it
-   * there, and it reaches this same pass through [BuffImportOptimizer].
+   * there, and reaches this same pass.
    */
   OptimizeImports("source.optimizeImports.ruff", "progress.optimizeImports"),
+
+  /**
+   * Sorts a module's imports and formats what that left behind, as one edit against one buffer.
+   * This is what *Reformat Code* runs, through [dev.basedpython.pycharm.editor.format.BuffFormattingService].
+   *
+   * Sorts without pruning, unlike [OptimizeImports]: laying a file out is not licence to delete
+   * anything from it, and dropping the unused imports is asked for separately.
+   */
+  FormatAndOrganizeImports("source.formatAndOrganizeImports.ruff", "progress.cleanup.format"),
   ;
 
   val progressText: String get() = BasedPythonBundle.message(progressKey)
@@ -84,6 +99,25 @@ object ByCleanup {
     LspServerManager.getInstance(project)
       .getServersForProvider(BuffLspServerSupportProvider::class.java)
       .firstOrNull { it.descriptor.isSupportedFile(file) }
+
+  /**
+   * Whether [server] said at startup that it can answer [op].
+   *
+   * A server that cannot returns no action rather than an error, which is the same answer it gives
+   * for "there was nothing to do" — so without asking this first, an older `buff` looks exactly
+   * like a file that needed no changes. Answers true when the server has not reported its
+   * capabilities yet, because not knowing is not the same as knowing it cannot.
+   */
+  fun advertises(server: LspServer, op: ByCleanupOp): Boolean {
+    val kinds = server.initializeResult
+      ?.capabilities
+      ?.codeActionProvider
+      ?.takeIf { it.isRight }
+      ?.right
+      ?.codeActionKinds
+      ?: return true
+    return op.kind in kinds
+  }
 
   /**
    * Asks the server for [op]'s edit for [file].
@@ -159,6 +193,32 @@ object ByCleanup {
   }
 
   /**
+   * Applies [edits] to [text], and returns what that leaves.
+   *
+   * The [Document] overload is what the editor paths use. This one is for
+   * [com.intellij.formatting.service.AsyncDocumentFormattingService], which is handed the text and
+   * asks for the text back rather than for a document to mutate.
+   */
+  fun applyEditsTo(text: String, edits: List<TextEdit>): String {
+    if (edits.isEmpty()) return text
+    val lines = lineStartsOf(text)
+
+    // Offsets are resolved against the original `text` throughout, which is what makes applying
+    // them last-first correct: an edit's range describes the text as the server saw it, and every
+    // edit still to come lies before the one just applied.
+    return edits
+      .sortedByDescending { text.offsetOf(it.range.start, lines) }
+      .fold(StringBuilder(text)) { built, edit ->
+        built.replace(
+          text.offsetOf(edit.range.start, lines),
+          text.offsetOf(edit.range.end, lines),
+          edit.newText,
+        )
+      }
+      .toString()
+  }
+
+  /**
    * Where [position] falls in [document].
    *
    * An LSP character is a UTF-16 code unit, which is what a [Document] offset counts too — the
@@ -170,6 +230,27 @@ object ByCleanup {
     val line = position.line.coerceAtLeast(0)
     return (getLineStartOffset(line) + position.character.coerceAtLeast(0))
       .coerceAtMost(getLineEndOffset(line))
+  }
+
+  /** The same as [Document.offsetOf], against a plain string. */
+  private fun String.offsetOf(position: Position, lineStarts: IntArray): Int {
+    if (position.line >= lineStarts.size) return length
+    val line = position.line.coerceAtLeast(0)
+    val lineEnd = if (line + 1 < lineStarts.size) lineStarts[line + 1] - 1 else length
+    return (lineStarts[line] + position.character.coerceAtLeast(0)).coerceAtMost(lineEnd)
+  }
+
+  /**
+   * Where each line of [text] begins.
+   *
+   * A document's line separator is always `\n` by the time the platform hands the text over — it
+   * normalizes on load and restores the file's own separator on save — so this is the only one
+   * there is to look for.
+   */
+  private fun lineStartsOf(text: String): IntArray {
+    val starts = mutableListOf(0)
+    text.forEachIndexed { i, c -> if (c == '\n') starts += i + 1 }
+    return starts.toIntArray()
   }
 }
 

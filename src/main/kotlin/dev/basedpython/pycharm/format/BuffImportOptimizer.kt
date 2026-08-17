@@ -7,6 +7,7 @@ import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.psi.PsiFile
 import dev.basedpython.pycharm.lang.BasedPythonFileType
+import dev.basedpython.pycharm.settings.BasedPythonSettings
 
 private val LOG = Logger.getInstance(BuffImportOptimizer::class.java)
 
@@ -27,7 +28,8 @@ private val LOG = Logger.getInstance(BuffImportOptimizer::class.java)
 internal class BuffImportOptimizer : ImportOptimizer {
 
   override fun supports(file: PsiFile): Boolean =
-    file.virtualFile?.fileType == BasedPythonFileType.INSTANCE
+    file.virtualFile?.fileType == BasedPythonFileType.INSTANCE &&
+      BasedPythonSettings.getInstance(file.project).buffFormatting
 
   override fun processFile(file: PsiFile): Runnable {
     // Everything the background half needs, read while still on the EDT.
