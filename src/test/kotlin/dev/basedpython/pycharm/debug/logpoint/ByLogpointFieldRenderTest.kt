@@ -13,6 +13,7 @@ import dev.basedpython.pycharm.testFramework.codeInsightFixture
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import com.intellij.ui.EditorTextField
 import com.intellij.ui.JBColor
 import com.intellij.ui.components.JBLabel
 import java.awt.Container
@@ -56,6 +57,10 @@ class ByLogpointFieldRenderTest {
             .addLineBreakpoint(type, fixture.file.virtualFile.url, 1, null, info)
 
         val field = ByLogpointField.show(fixture.project, editor, logpoint)!!
+        // Forces the text field's editor into existence. It is normally created when the component
+        // joins a window, so an offscreen render showed an empty box — which is exactly the part
+        // that was wrong on screen: the inner border, the background, and the text being clipped.
+        (field.expressionEditor.editorComponent as EditorTextField).getEditor(true)
         val panel = field.component
         val size = panel.preferredSize
         panel.setBounds(0, 0, size.width, size.height)

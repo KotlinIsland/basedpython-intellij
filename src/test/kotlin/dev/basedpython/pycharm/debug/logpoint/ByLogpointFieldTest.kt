@@ -106,6 +106,21 @@ class ByLogpointFieldTest {
     }
 
     @Test
+    fun `a reopened editor gets its own box rather than the closed one`() {
+        // A breakpoint outlives every editor showing it. Parking the box on the breakpoint meant a
+        // reopened tab found a disposed one still attached and drew nothing but the gutter icon.
+        val logpoint = logpointAt(1, expression = "x")
+        val first = ByLogpointField.show(fixture.project, editor(), logpoint)!!
+        first.close()
+
+        val second = ByLogpointField.show(fixture.project, editor(), logpoint)
+
+        assertNotNull(second, "the box has to come back with the editor")
+        assertTrue(first !== second)
+        assertTrue(inlays().isNotEmpty())
+    }
+
+    @Test
     fun `asking twice returns the same box rather than stacking another`() {
         val logpoint = logpointAt(1)
         val first = ByLogpointField.show(fixture.project, editor(), logpoint)
@@ -121,7 +136,7 @@ class ByLogpointFieldTest {
         ByLogpointField.show(fixture.project, editor(), logpoint)!!.close()
 
         assertTrue(inlays().isEmpty())
-        assertNull(ByLogpointField.of(logpoint))
+        assertNull(ByLogpointField.of(editor(), logpoint))
     }
 
     @Test

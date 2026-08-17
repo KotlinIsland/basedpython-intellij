@@ -1,6 +1,8 @@
 package dev.basedpython.pycharm.debug.logpoint
 
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.application.ReadAction
+import com.intellij.openapi.editor.Document
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.event.EditorFactoryEvent
 import com.intellij.openapi.editor.event.EditorFactoryListener
@@ -32,7 +34,12 @@ class ByLogpointFields(private val project: Project) : XBreakpointListener<XBrea
         // does for the IDE's own. A no-op outside a command, which is how log points restored from
         // the workspace at startup avoid becoming undo steps.
         val file = logpoint.sourcePosition?.file ?: return
-        FileDocumentManager.getInstance().getDocument(file)?.let { ByLogpointUndo.record(project, it, logpoint) }
+        // In a read action: breakpoints are added from a coroutine dispatcher as well as from the
+        // EDT, and looking a document up off both is a read-access assertion, not a race to lose.
+        val document = ReadAction.compute<Document?, RuntimeException> {
+            FileDocumentManager.getInstance().getDocument(file)
+        }
+        document?.let { ByLogpointUndo.record(project, it, logpoint) }
 
         // Deferred: the breakpoint's own gutter highlighter is installed as part of adding it, and
         // placing an inlay from inside that notification would be reentrant.
@@ -50,7 +57,8 @@ class ByLogpointFields(private val project: Project) : XBreakpointListener<XBrea
      */
     override fun breakpointRemoved(breakpoint: XBreakpoint<*>) {
         val logpoint = ByLogpoints.asLogpoint(breakpoint) ?: return
-        onEdt { ByLogpointField.of(logpoint)?.close() }
+        val file = logpoint.sourcePosition?.file ?: return
+        onEdt { editorsFor(file).forEach { ByLogpointField.of(it, logpoint)?.close() } }
     }
 
     /**
@@ -60,7 +68,8 @@ class ByLogpointFields(private val project: Project) : XBreakpointListener<XBrea
     override fun breakpointChanged(breakpoint: XBreakpoint<*>) {
         val logpoint = ByLogpoints.asLogpoint(breakpoint) ?: return
         if (!ByLogpoints.pluginProvidesLogpointUi()) return
-        onEdt { ByLogpointField.of(logpoint)?.revert() }
+        val file = logpoint.sourcePosition?.file ?: return
+        onEdt { editorsFor(file).forEach { ByLogpointField.of(it, logpoint)?.revert() } }
     }
 
     /** Runs [action] on the EDT, immediately if that is already where we are. */
