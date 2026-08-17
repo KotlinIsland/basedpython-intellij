@@ -32,12 +32,14 @@ object ByLogpoints {
      * plugin and `intellij.debugger.logpoints.backend` depends on `intellij.java.debugger.impl`, so
      * this is not an optional dependency PyCharm forgot but a feature built on the JVM debugger.
      * PyCharm Professional, which this plugin also ships to, has none of it.
+     *
+     * There is deliberately no way to force this on where the IDE has its own. The setting used to
+     * offer one, for want of any other way to see this code in the IDE `runIde` starts, and it did
+     * exactly what it said: two gaps and two boxes, one of them the good one. `./gradlew runPyCharm`
+     * is how to look at this now, and `ide` — the one direction that cannot produce a duplicate —
+     * is all that is left of the override.
      */
-    fun pluginProvidesLogpointUi(): Boolean = when (preference()) {
-        "plugin" -> true
-        "ide" -> false
-        else -> !ideHasLogpoints()
-    }
+    fun pluginProvidesLogpointUi(): Boolean = preference() != "ide" && !ideHasLogpoints()
 
     /**
      * Whether the IDE ships the logpoints feature itself.

@@ -64,24 +64,9 @@ class ByInterLineLogpointProviderTest {
         assertEquals(!ideHasLogpoints, ByLogpoints.pluginProvidesLogpointUi())
     }
 
-    /**
-     * The path a developer on IntelliJ IDEA has to take to see this implementation at all, since by
-     * default it gives way there — and, for anyone else, the path an IDE the detection misreads
-     * would need.
-     */
-    @Test
-    fun `forcing the plugin's implementation offers the affordance even where the IDE has its own`() {
-        withProvider("plugin") {
-            UISettings.getInstance().showBreakpointsOverLineNumbers = true
-            val configuration = configurationFor("main.by", "x = 1\ny = 2\n")
-            assertNotNull(configuration, "expected the gap affordance once the plugin is forced to draw it")
-            assertTrue(configuration!!.breakpointProperties.isLogging)
-        }
-    }
-
     @Test
     fun `the gap needs breakpoints over the line numbers to be a place you can click`() {
-        withProvider("plugin") {
+        withProvider("auto") {
             UISettings.getInstance().showBreakpointsOverLineNumbers = false
             assertNull(
                 configurationFor("main.by", "x = 1\ny = 2\n"),
@@ -92,7 +77,7 @@ class ByInterLineLogpointProviderTest {
 
     @Test
     fun `other languages are left alone`() {
-        withProvider("plugin") {
+        withProvider("auto") {
             UISettings.getInstance().showBreakpointsOverLineNumbers = true
             assertNull(configurationFor("notes.txt", "x = 1\n"))
         }

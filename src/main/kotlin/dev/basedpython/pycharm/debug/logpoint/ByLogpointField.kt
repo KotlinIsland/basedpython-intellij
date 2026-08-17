@@ -22,12 +22,16 @@ import com.intellij.xdebugger.evaluation.EvaluationMode
 import com.intellij.xdebugger.impl.ui.XDebuggerExpressionEditor
 import dev.basedpython.pycharm.debug.ByDebuggerEditorsProvider
 import dev.basedpython.pycharm.lang.BasedPythonLanguage
-import java.awt.BorderLayout
 import java.awt.Color
+import com.intellij.ui.components.JBLayeredPane
 import java.awt.Dimension
+import java.awt.Graphics
+import java.awt.Graphics2D
+import java.awt.RenderingHints
+import javax.swing.JComponent
+import kotlin.math.ceil
 import java.awt.event.FocusAdapter
 import java.awt.event.FocusEvent
-import javax.swing.JPanel
 
 /**
  * The `Log:` box a log point shows in its gap, holding the expression it logs.
@@ -54,7 +58,7 @@ class ByLogpointField private constructor(
 ) : Disposable {
 
     /** The whole box, label included. Exposed so it can be laid out and painted in a test. */
-    internal lateinit var component: JPanel
+    internal lateinit var component: JComponent
         private set
 
     private var inlay: Inlay<*>? = null
@@ -155,11 +159,19 @@ class ByLogpointField private constructor(
 
         /** Room above and below one line of text, so the box is a box rather than a rule. */
         private const val FIELD_VERTICAL_PADDING = 8
+
+        /** How much of the caption sits above the box, as IntelliJ IDEA measures it. */
+        private const val CAPTION_RISE = 0.6
+
+        /** How far in from the box's border the caption starts. */
+        private const val CAPTION_INDENT = 4
+
+        private val ACTIVE_FOREGROUND = JBColor(Color(0x5A5D63), Color(0xCED0D6))
         private const val LABEL = "Log:"
         private const val PLACEHOLDER = "Enter expression to log"
     }
 
-    private fun buildPanel(): JPanel {
+    private fun buildPanel(): JComponent {
         // getEditorComponent(), not getComponent(): the latter wraps the field in the expand-to-a-
         // dialog affordance, which is the arrow that appeared beside the box and does not belong on
         // a one-line expression.
@@ -169,7 +181,7 @@ class ByLogpointField private constructor(
             setPlaceholder(PLACEHOLDER)
             setShowPlaceholderWhenFocused(true)
             background = FIELD_BACKGROUND
-            border = JBUI.Borders.empty(2, 6)
+            border = JBUI.Borders.empty(2, 8)
         }
 
         // Sized here rather than on the box. An EditorTextField that has not been shown yet has no
@@ -187,24 +199,120 @@ class ByLogpointField private constructor(
         box.border = ShadowJava2DBorder(JBUI.scale(ARC), FIELD_BACKGROUND, FIELD_BORDER)
         box.addToCenter(expressionEditor.editorComponent)
 
-        val label = JBLabel(LABEL).apply {
-            font = JBFont.small()
-            foreground = JBColor.GRAY
-            border = JBUI.Borders.empty(0, 8, 1, 0)
-        }
-
-        val panel = JPanel(BorderLayout())
-        panel.isOpaque = false
-        panel.border = JBUI.Borders.empty(1, 0, 2, 0)
-        panel.add(label, BorderLayout.NORTH)
-        panel.add(box, BorderLayout.WEST)
+        val label = CaptionLabel(hostEditor)
 
         val editorComponent = expressionEditor.editorComponent
         DumbAwareAction.create { commit() }.registerCustomShortcutSet(CommonShortcuts.ENTER, editorComponent, this)
         DumbAwareAction.create { revert() }.registerCustomShortcutSet(CommonShortcuts.ESCAPE, editorComponent, this)
         editorComponent.addFocusListener(object : FocusAdapter() {
-            override fun focusLost(e: FocusEvent) = commit()
+            override fun focusGained(e: FocusEvent) = label.setActive(true)
+
+            override fun focusLost(e: FocusEvent) {
+                label.setActive(false)
+                commit()
+            }
         })
-        return panel
+        return CaptionedBox(box, label)
+    }
+
+    /**
+     * The `Log:` caption, drawn sitting *on* the box's top border rather than above it.
+     *
+     * It paints the editor's own background behind itself first, as a rounded chip, so the border it
+     * overlaps appears to break around the word — which is the whole of the difference between this
+     * looking like IntelliJ IDEA's and looking like a label with a text field under it. Copied from
+     * IDEA's `LogpointLabel`, including the antialiasing, without which the chip's corners tear
+     * against the box's.
+     */
+    private class CaptionLabel(private val hostEditor: EditorEx) : JBLabel(LABEL) {
+
+        init {
+            isOpaque = false
+            border = JBUI.Borders.empty(2, 6)
+            foreground = JBUI.CurrentTheme.ContextHelp.FOREGROUND
+        }
+
+        /**
+         * Keeps the caption small across every look-and-feel change, which is what
+         * `JBLabel(text, ComponentStyle.SMALL)` could not do here.
+         *
+         * That constructor applies the style through `updateUI`, and `updateUI` runs again when the
+         * label joins a window — resetting the font to the theme's default. The label had by then
+         * measured itself with the small font, so it asked for a height the text it went on to paint
+         * did not fit in, and the top of every glyph was shaved off.
+         */
+        override fun updateUI() {
+            super.updateUI()
+            font = JBFont.small().deriveFont(java.awt.Font.PLAIN)
+        }
+
+        /**
+         * Asks for whatever the text it is about to paint actually needs.
+         *
+         * `JLabel` sizes itself from the font it has *at the time it is asked*, and this label's font
+         * changes when the look and feel is applied — so a height measured early was a height the
+         * later, larger text did not fit in, and every glyph lost its top few pixels. Measuring the
+         * current font here means the answer cannot go stale in the direction that clips.
+         */
+        override fun getPreferredSize(): Dimension {
+            val preferred = super.getPreferredSize()
+            val metrics = getFontMetrics(font)
+            val needed = metrics.height + insets.top + insets.bottom
+            return Dimension(preferred.width, maxOf(preferred.height, needed))
+        }
+
+        fun setActive(active: Boolean) {
+            foreground = if (active) ACTIVE_FOREGROUND else JBUI.CurrentTheme.ContextHelp.FOREGROUND
+        }
+
+        override fun paintComponent(g: Graphics) {
+            val g2 = g.create() as Graphics2D
+            try {
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+                g2.color = hostEditor.colorsScheme.defaultBackground
+                g2.fillRoundRect(0, 0, width, height, JBUI.scale(ARC), JBUI.scale(ARC))
+            } finally {
+                g2.dispose()
+            }
+            super.paintComponent(g)
+        }
+    }
+
+    /**
+     * Lays the caption over the box's top-left corner.
+     *
+     * The geometry is IDEA's: the caption overhangs the box by `ceil(captionHeight * 0.6) - 4`, so
+     * roughly its top three-fifths sit above the border and the rest inside, and the box is inset
+     * from the top by exactly that much. A layered pane rather than a border layout because the two
+     * overlap — a caption in its own row is the version that looked wrong.
+     */
+    private class CaptionedBox(private val box: JComponent, private val caption: JComponent) : JBLayeredPane() {
+
+        init {
+            isOpaque = false
+            add(box)
+            add(caption)
+            // Z-order, not layers. `add(component, PALETTE_LAYER)` left both on layer 0 here, and
+            // Swing paints the *highest* index first — so the box, added first, was painting over
+            // the caption and shaving the text. Index 0 is what paints last.
+            setComponentZOrder(caption, 0)
+        }
+
+        private fun overhang(): Int =
+            (ceil(caption.preferredSize.height * CAPTION_RISE).toInt() - JBUI.scale(4)).coerceAtLeast(0)
+
+        override fun getPreferredSize(): Dimension = box.preferredSize.let {
+            Dimension(it.width, it.height + overhang())
+        }
+
+        override fun getMinimumSize(): Dimension = preferredSize
+
+        override fun doLayout() {
+            val overhang = overhang()
+            box.setBounds(0, overhang, width, (height - overhang).coerceAtLeast(0))
+            val insets = box.border?.getBorderInsets(box) ?: JBUI.emptyInsets()
+            val captionSize = caption.preferredSize
+            caption.setBounds(insets.left + JBUI.scale(CAPTION_INDENT), 0, captionSize.width, captionSize.height)
+        }
     }
 }
