@@ -62,7 +62,8 @@ class ByLogpointField private constructor(
         private set
 
     private var inlay: Inlay<*>? = null
-    private var closed = false
+    internal var closed = false
+        private set
 
     override fun dispose() {
         inlay?.let { Disposer.dispose(it) }
@@ -86,7 +87,7 @@ class ByLogpointField private constructor(
     fun close() {
         if (closed) return
         closed = true
-        if (breakpoint.getUserData(FIELD) === this) breakpoint.putUserData(FIELD, null)
+        if (fieldsIn(hostEditor)[breakpoint] === this) fieldsIn(hostEditor).remove(breakpoint)
         Disposer.dispose(this)
     }
 
@@ -101,7 +102,8 @@ class ByLogpointField private constructor(
          * that cannot host components.
          */
         fun show(project: Project, editor: EditorEx, breakpoint: XLineBreakpoint<*>): ByLogpointField? {
-            breakpoint.getUserData(FIELD)?.let { return it }
+            val open = fieldsIn(editor)
+            open[breakpoint]?.let { if (!it.closed) return it else open.remove(breakpoint) }
 
             val document = editor.document
             if (breakpoint.line !in 0 until document.lineCount) return null
@@ -136,18 +138,31 @@ class ByLogpointField private constructor(
                 ?: return null
 
             field.inlay = inlay
-            breakpoint.putUserData(FIELD, field)
+            open[breakpoint] = field
             Disposer.register(inlay) { field.close() }
             return field
         }
 
-        /** The box currently showing for [breakpoint], if any. */
-        fun of(breakpoint: XLineBreakpoint<*>): ByLogpointField? = breakpoint.getUserData(FIELD)
+        /** The box showing for [breakpoint] in [editor], if any. */
+        fun of(editor: EditorEx, breakpoint: XLineBreakpoint<*>): ByLogpointField? = fieldsIn(editor)[breakpoint]
+
+        /**
+         * The boxes open in [editor], keyed by their log point.
+         *
+         * Held on the editor rather than on the breakpoint, which is what a closed and reopened tab
+         * used to trip over: a breakpoint outlives every editor showing it, so a field parked on the
+         * breakpoint was still there — disposed with the old editor — when the new one asked, and the
+         * new editor got nothing but the gutter icon. It is also simply the truth, since one log
+         * point in a split view is two boxes.
+         */
+        private fun fieldsIn(editor: EditorEx): MutableMap<XLineBreakpoint<*>, ByLogpointField> =
+            editor.getUserData(FIELDS) ?: mutableMapOf<XLineBreakpoint<*>, ByLogpointField>()
+                .also { editor.putUserData(FIELDS, it) }
 
         private fun expressionOf(text: String) = XDebuggerUtil.getInstance()
             .createExpression(text, BasedPythonLanguage, null, EvaluationMode.EXPRESSION)
 
-        private val FIELD = Key.create<ByLogpointField>("basedpython.logpoint.field")
+        private val FIELDS = Key.create<MutableMap<XLineBreakpoint<*>, ByLogpointField>>("basedpython.logpoint.fields")
         private const val HISTORY_ID = "basedpython-logpoint"
 
         /** IntelliJ IDEA's own `LogpointEditorColors`, so the two do not look like different features. */
@@ -181,7 +196,25 @@ class ByLogpointField private constructor(
             setPlaceholder(PLACEHOLDER)
             setShowPlaceholderWhenFocused(true)
             background = FIELD_BACKGROUND
-            border = JBUI.Borders.empty(2, 8)
+            border = JBUI.Borders.empty()
+            // The editor inside draws its own border and paints its own background, and neither is
+            // the text field's to set — which is why a second, inset rectangle appeared inside the
+            // rounded box. A settings provider is the hook that runs whenever that editor is
+            // created, including the times it is recreated later.
+            addSettingsProvider { inner ->
+                inner.setBorder(JBUI.Borders.empty(0, 8))
+                // The height reserved below is one host line plus padding, so the text has to be
+                // host-sized or it does not fit in it — which is what cut the bottom off the glyphs.
+                inner.setFontSize(hostEditor.colorsScheme.editorFontSize2D)
+                inner.backgroundColor = FIELD_BACKGROUND
+                inner.setPlaceholder(PLACEHOLDER)
+                inner.setShowPlaceholderWhenFocused(true)
+                inner.settings.isCaretRowShown = false
+                inner.settings.isLineNumbersShown = false
+                inner.settings.isUseSoftWraps = false
+                inner.setVerticalScrollbarVisible(false)
+                inner.setHorizontalScrollbarVisible(false)
+            }
         }
 
         // Sized here rather than on the box. An EditorTextField that has not been shown yet has no
