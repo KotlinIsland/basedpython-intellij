@@ -35,9 +35,24 @@ internal object EnvFiles {
      *
      * Safe from any thread — the save itself needs the EDT.
      */
-    fun saveBeforeOperation(project: Project, backend: EnvBackend, projectRoot: Path) {
+    fun saveBeforeOperation(
+        project: Project,
+        backend: EnvBackend,
+        projectRoot: Path,
+        /**
+         * Files outside the project root that this operation also reads or writes.
+         *
+         * A project with modules has a manifest per module, and `uv add --package` rewrites the
+         * module's rather than the root's — so the file whose unsaved edits would be lost is one the
+         * backend's own [EnvBackend.managedFiles] list cannot name, because it does not know how many
+         * modules there are or where they live. The caller does, and says so.
+         */
+        extra: List<Path> = emptyList(),
+    ) {
         val documents = FileDocumentManager.getInstance()
-        val unsaved = managedVirtualFiles(backend, projectRoot, refresh = false)
+        val candidates = managedVirtualFiles(backend, projectRoot, refresh = false) +
+            virtualFiles(extra, refresh = false)
+        val unsaved = candidates
             // A cached document only exists for a file something has actually opened; asking for a
             // document any other way would load every manifest just to find nothing to save.
             .mapNotNull { documents.getCachedDocument(it) }
@@ -64,10 +79,15 @@ internal object EnvFiles {
      * read with `java.nio` precisely so that a scan does not depend on VFS state — and walking it
      * would cost far more than everything else this feature does put together.
      */
-    fun refreshAfterOperation(backend: EnvBackend, projectRoot: Path) {
-        val files = managedVirtualFiles(backend, projectRoot, refresh = true)
+    fun refreshAfterOperation(backend: EnvBackend, projectRoot: Path, extra: List<Path> = emptyList()) {
+        val files = managedVirtualFiles(backend, projectRoot, refresh = true) + virtualFiles(extra, refresh = true)
         if (files.isEmpty()) return
-        VfsUtil.markDirtyAndRefresh(false, false, false, *files.toTypedArray())
+        // Recursive for the extras, and only for them. A module creation's extra path is the
+        // *directory* uv scaffolded, whose entire contents are new to the IDE; the manifests above
+        // are single files, and walking the root recursively would be walking the whole project.
+        val (directories, plain) = files.distinct().partition { it.isDirectory }
+        if (plain.isNotEmpty()) VfsUtil.markDirtyAndRefresh(false, false, false, *plain.toTypedArray())
+        if (directories.isNotEmpty()) VfsUtil.markDirtyAndRefresh(false, true, true, *directories.toTypedArray())
     }
 
     /**
@@ -82,10 +102,15 @@ internal object EnvFiles {
         backend: EnvBackend,
         projectRoot: Path,
         refresh: Boolean,
-    ): List<VirtualFile> {
+    ): List<VirtualFile> = virtualFiles(
+        backend.managedFiles.mapNotNull { name -> runCatching { projectRoot.resolve(name) }.getOrNull() },
+        refresh,
+    )
+
+    /** [paths] as [VirtualFile]s, dropping the ones that are not there. */
+    private fun virtualFiles(paths: List<Path>, refresh: Boolean): List<VirtualFile> {
         val fs = LocalFileSystem.getInstance()
-        return backend.managedFiles.mapNotNull { name ->
-            val path = runCatching { projectRoot.resolve(name) }.getOrNull() ?: return@mapNotNull null
+        return paths.mapNotNull { path ->
             runCatching {
                 if (refresh) fs.refreshAndFindFileByNioFile(path) else fs.findFileByNioFile(path)
             }.getOrNull()

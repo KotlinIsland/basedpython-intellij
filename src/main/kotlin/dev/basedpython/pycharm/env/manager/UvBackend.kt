@@ -5,6 +5,9 @@ import com.intellij.openapi.util.SystemInfo
 import dev.basedpython.pycharm.env.ByEnvironments
 import dev.basedpython.pycharm.env.manager.index.PackageIndex
 import dev.basedpython.pycharm.env.manager.index.PyPiIndex
+import dev.basedpython.pycharm.env.modules.ModuleKind
+import dev.basedpython.pycharm.env.modules.ModuleLayout
+import dev.basedpython.pycharm.env.modules.UvWorkspace
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -81,10 +84,30 @@ object UvBackend : EnvBackend {
         EnvOp.Upgrade -> EnvCommand(listOf("lock", "--upgrade"))
 
         is EnvOp.Add ->
-            EnvCommand(listOf("add") + targetFlags(op.target) + op.requirements)
+            EnvCommand(listOf("add") + moduleFlags(op.module) + targetFlags(op.target) + op.requirements)
 
         is EnvOp.Remove ->
-            EnvCommand(listOf("remove") + targetFlags(op.target) + op.packages)
+            EnvCommand(listOf("remove") + moduleFlags(op.module) + targetFlags(op.target) + op.packages)
+
+        // Verified against uv 0.12.5, on a project with and without a `[tool.uv.workspace]` table:
+        // running this inside a project adds the new directory to `members` — creating the table
+        // when there is none — and leaves an existing glob that already covers the path alone.
+        // That is the whole reason module creation is one uv command rather than a scaffold plus a
+        // manifest edit of the plugin's own.
+        is EnvOp.InitModule -> EnvCommand(
+            listOf("init", op.path) +
+                (op.name?.let { listOf("--name", it) } ?: emptyList()) +
+                kindFlags(op.kind) +
+                (op.python?.let { listOf("--python", it) } ?: emptyList()) +
+                (op.description?.takeIf { it.isNotBlank() }?.let { listOf("--description", it) } ?: emptyList()) +
+                // A module is part of a repository that already has a VCS, and uv's default is to
+                // initialise one when it does not find a `.git` *in the new directory* — which for a
+                // module means a second repository nested inside the project. `--no-pin-python`
+                // is the same argument about `.python-version`: the project pins the interpreter for
+                // every module in it, and a per-module pin that disagrees is a trap rather than a
+                // feature.
+                listOf("--vcs", "none", "--no-pin-python"),
+        )
 
         // `--frozen` is load-bearing, not an optimisation. Without it `uv tree` re-locks the project
         // and writes `uv.lock` — verified against 0.12.3 on a project that had none — which would
@@ -124,6 +147,40 @@ object UvBackend : EnvBackend {
 
     private fun pythonFlag(python: Path?): List<String> =
         python?.let { listOf("--python", it.toString()) } ?: emptyList()
+
+    /**
+     * Which workspace member an add or a remove edits.
+     *
+     * `--package` names a member by its distribution name, not by its path, and without it uv edits
+     * whichever project the working directory resolves to — the root, since that is where every
+     * command is run from. So the flag is not an optimisation: leaving it off would silently declare
+     * a module's dependency on the root project instead.
+     */
+    private fun moduleFlags(module: String?): List<String> =
+        module?.takeIf { it.isNotBlank() }?.let { listOf("--package", it) } ?: emptyList()
+
+    /**
+     * How `uv init` is told what to scaffold.
+     *
+     * `--lib` implies a build backend and a `src/` layout; `--app` is the unpackaged default and is
+     * still passed explicitly, so that a `UV_INIT_*` setting in the user's environment cannot decide
+     * what the dialog's choice meant. Packaged application is the two together, which is uv's own
+     * spelling of "an application that also installs a console script".
+     */
+    private fun kindFlags(kind: ModuleKind): List<String> = when (kind) {
+        ModuleKind.LIBRARY -> listOf("--lib")
+        ModuleKind.APPLICATION -> listOf("--app")
+        ModuleKind.PACKAGED_APPLICATION -> listOf("--app", "--package")
+        ModuleKind.BARE -> listOf("--bare")
+    }
+
+    /**
+     * The project's modules, read from `[tool.uv.workspace]` and the manifests it points at.
+     *
+     * Answered for every uv project, not only for ones that already have members: a single-package
+     * project is a workspace with none, and it is the project the *New module* action turns into one.
+     */
+    override fun moduleLayout(projectRoot: Path): ModuleLayout? = UvWorkspace.read(projectRoot)
 
     /**
      * `uv pip list --format json` — an array of `{name, version, editable_project_location?}`.

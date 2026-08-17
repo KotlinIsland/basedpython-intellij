@@ -1,5 +1,6 @@
 package dev.basedpython.pycharm.env.manager
 
+import dev.basedpython.pycharm.env.modules.ModuleLayout
 import java.nio.file.Path
 
 /**
@@ -39,6 +40,15 @@ data class EnvStatus(
      * still the truthful answer to "what is in this environment".
      */
     val dependencies: List<EnvDependencyGroup> = emptyList(),
+    /**
+     * How the project is divided into modules, or null when the backend has no notion of that.
+     *
+     * Read on every refresh — a few manifests, no processes — and carried here rather than scanned
+     * by the structure page itself, so that the page, the tool window and the next command all
+     * describe the same instant. Null hides the structure UI; an empty layout is an ordinary
+     * single-package project. See [EnvBackend.moduleLayout].
+     */
+    val modules: ModuleLayout? = null,
     /**
      * Why the last refresh could not finish, when it could not.
      *

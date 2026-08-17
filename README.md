@@ -231,6 +231,36 @@ support, run configurations, CLI actions, and editor tooling.
 - **Nothing happens on its own.** Reading the environment starts no process unless one exists to
   ask about; creating, syncing, adding and downloading only ever run from a click.
 
+### Project structure (modules)
+- **Settings | Languages & Frameworks | basedpython | Modules** — the parts the project is built
+  from, listed with their type, path, version, required Python, and which other modules depend on
+  them. A *module* is what uv calls a workspace member: its own directory and `pyproject.toml`,
+  sharing the project's lock file and environment, importable by its siblings.
+- **New module** scaffolds it and lists it in the workspace in one command. A project that is not
+  a workspace yet becomes one by getting its first module — the `[tool.uv.workspace]` table is
+  written by uv, not by the plugin. Choose a library, an application, a packaged application, or
+  a bare `pyproject.toml`, and optionally the module that should depend on it straight away.
+- The dialog **shows the `uv init` it is about to run**, and keeps it current as you type. Two of
+  the flags are there for a reason worth stating: `--vcs none`, or uv makes a second git
+  repository inside your project, and `--no-pin-python`, or every module gets a
+  `.python-version` that can disagree with the project's.
+- **Editing a module** changes its version, description and required Python, and ticks or unticks
+  the siblings that depend on it — which runs `uv add --package` / `uv remove --package`, so the
+  `[tool.uv.sources]` entry that makes a sibling resolve locally is written by uv.
+- **Removing a module** first stops every sibling declaring it, in each list it was declared in,
+  then stops the project listing it. Deleting the files is a separate checkbox, off by default,
+  as it is for the platform's own *Remove module*. A module a wildcard pattern covers cannot be
+  un-listed by name, so keeping its files excludes the path instead — and the dialog says so.
+- The plugin only edits `pyproject.toml` itself for the two things uv has no command for: taking
+  a `members` entry back out, and setting a project's own version, description or
+  `requires-python`. Those edits rewrite the lines in question and nothing else — your comments,
+  array formatting and line endings survive.
+- Creating a module deliberately **does not sync**. The environment view will report the drift and
+  offer the button, rather than a new directory setting off a resolve that can reach the network.
+- Renaming is not offered. It would mean moving the directory, changing the import package, and
+  rewriting the `import` statements that refer to it — and that last part needs a language server
+  that resolves modules across the project, which `by` does not expose yet.
+
 ### Smart editing
 - Enter auto-indents after a `:` block header; Backspace dedents by a full indent step.
 - Editor banner when `by` is missing — one-click **Install with uv**

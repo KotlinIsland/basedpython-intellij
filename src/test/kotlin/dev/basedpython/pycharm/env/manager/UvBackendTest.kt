@@ -1,5 +1,6 @@
 package dev.basedpython.pycharm.env.manager
 
+import dev.basedpython.pycharm.env.modules.ModuleKind
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -93,6 +94,71 @@ class UvBackendTest {
         assertEquals(
             listOf("remove", "--optional", "cli", "click"),
             args(EnvOp.Remove(listOf("click"), EnvDependencyTarget.Extra("cli"))),
+        )
+    }
+
+    /**
+     * The flag that decides which manifest is edited.
+     *
+     * `--package` names a workspace member by its distribution name. Without it uv edits whatever
+     * project the working directory resolves to — always the root, since that is where the plugin
+     * runs every command — so a missing flag would not fail, it would silently declare the
+     * dependency in the wrong module.
+     */
+    @Test
+    fun `adding to a module names the module`() {
+        assertEquals(
+            listOf("add", "--package", "alpha", "httpx"),
+            args(EnvOp.Add(listOf("httpx"), module = "alpha")),
+        )
+        assertEquals(
+            listOf("remove", "--package", "alpha", "--group", "dev", "pytest"),
+            args(EnvOp.Remove(listOf("pytest"), EnvDependencyTarget.DEV, module = "alpha")),
+        )
+        // The project's own manifest is still the plain command it always was.
+        assertEquals(listOf("add", "httpx"), args(EnvOp.Add(listOf("httpx"))))
+    }
+
+    /**
+     * Checked against uv 0.12.5. `--lib` implies a build backend and a `src` layout; a packaged
+     * application is uv's own spelling of the two together.
+     *
+     * `--vcs none` and `--no-pin-python` are not preferences: without the first, uv initialises a
+     * *second* git repository inside the project, and without the second every module gets a
+     * `.python-version` of its own that can disagree with the project's.
+     */
+    @Test
+    fun `creating a module scaffolds it and lists it in one command`() {
+        assertEquals(
+            listOf(
+                "init", "packages/alpha", "--name", "alpha", "--lib",
+                "--vcs", "none", "--no-pin-python",
+            ),
+            args(EnvOp.InitModule(path = "packages/alpha", name = "alpha", kind = ModuleKind.LIBRARY)),
+        )
+        assertEquals(
+            listOf(
+                "init", "apps/cli", "--name", "cli", "--app", "--package",
+                "--python", "3.13", "--description", "the command line",
+                "--vcs", "none", "--no-pin-python",
+            ),
+            args(
+                EnvOp.InitModule(
+                    path = "apps/cli",
+                    name = "cli",
+                    kind = ModuleKind.PACKAGED_APPLICATION,
+                    python = "3.13",
+                    description = "the command line",
+                ),
+            ),
+        )
+        assertEquals(
+            listOf("init", "tools/x", "--app", "--vcs", "none", "--no-pin-python"),
+            args(EnvOp.InitModule(path = "tools/x", name = null, kind = ModuleKind.APPLICATION)),
+        )
+        assertEquals(
+            listOf("init", "tools/x", "--bare", "--vcs", "none", "--no-pin-python"),
+            args(EnvOp.InitModule(path = "tools/x", name = null, kind = ModuleKind.BARE)),
         )
     }
 
