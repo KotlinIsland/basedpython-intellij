@@ -36,7 +36,14 @@ support, run configurations, CLI actions, and editor tooling.
 ### Run configurations
 - First-class `by run`, `by build`, and `by check` configurations with editable working
   directory, extra CLI args, `--min-version`, and environment variables.
-- Right-click a `.by` file to "Run by run &lt;module&gt;" or "Check with by".
+- Right-click a `.by` file to "Run by run &lt;module&gt;" or "Check with by". Plain `.py`
+  files in a basedpython project get the same, when this plugin owns them (see
+  *Settings | basedpython*): `by run` transpiles only `.by`, so `by run pkg.script` runs
+  `pkg/script.py` as the interpreter finds it. A `.py` beside a `.by` of the same module name
+  is skipped — the transpiled one is what `by run` would start.
+- In a `.py` the run icon marks only `if __name__ == "__main__"`. Reading a top-level `main`
+  as the program's command line — the generated argparse parser and the argument form — is a
+  basedpython feature, and a plain `.py` gets exactly what it wrote.
 
 ### Debugging
 - Debug a `by run` configuration and stop on breakpoints set in `.by` files — stepping,

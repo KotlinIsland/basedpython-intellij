@@ -1,9 +1,8 @@
-package dev.basedpython.pycharm.debug
+package dev.basedpython.pycharm.lang.dialect
 
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
-import dev.basedpython.pycharm.lang.dialect.PyFileHandling
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
 import org.junit.jupiter.api.AfterEach
@@ -15,17 +14,17 @@ import java.nio.file.Path
 import java.nio.file.Paths
 
 /**
- * Which files a basedpython breakpoint may be put in.
+ * Which files this plugin runs and debugs.
  *
- * The interesting case is `.py`, and it is interesting because the answer is not about the debugger
- * at all: a `.py` file is ours to breakpoint exactly when it is ours as a *file type*, which the
- * project markers and the *Settings | basedpython* ownership choice decide between them. Claiming a
- * `.py` PyCharm owns would put a "choose a breakpoint type" popup in front of every gutter click in
- * the file.
+ * The interesting case is `.py`, and it is interesting because the answer is not about running or
+ * debugging at all: a `.py` file is ours exactly when it is ours as a *file type*, which the project
+ * markers and the *Settings | basedpython* ownership choice decide between them. Claiming a `.py`
+ * PyCharm owns would mean two run configurations offered on the file and a "choose a breakpoint
+ * type" popup on every gutter click in it.
  */
 @TestFixtures
 @RunInEdt(writeIntent = true)
-class ByBreakpointFilesTest {
+class BasedPythonSourcesTest {
 
     private val fixture by codeInsightFixture()
 
@@ -68,14 +67,14 @@ class ByBreakpointFilesTest {
     @Test
     fun `a by file always accepts a breakpoint`() {
         makeBasedPythonProject()
-        assertTrue(ByBreakpointFiles.accepts(file("main.by")))
+        assertTrue(BasedPythonSources.isOwnedSource(file("main.by")))
     }
 
     /** `by run` never transpiles this file, so the breakpoint lands on the file itself. */
     @Test
     fun `a py file we own accepts a breakpoint`() {
         makeBasedPythonProject()
-        assertTrue(ByBreakpointFiles.accepts(file("helper.py")))
+        assertTrue(BasedPythonSources.isOwnedSource(file("helper.py")))
     }
 
     /**
@@ -85,21 +84,21 @@ class ByBreakpointFilesTest {
     @Test
     fun `a py file we do not own does not`() {
         makeBasedPythonProject(handling = PyFileHandling.NEVER)
-        assertFalse(ByBreakpointFiles.accepts(file("untouched.py")))
+        assertFalse(BasedPythonSources.isOwnedSource(file("untouched.py")))
     }
 
     /** Stubs declare, they do not execute — neither dialect's. */
     @Test
     fun `stubs never do`() {
         makeBasedPythonProject()
-        assertFalse(ByBreakpointFiles.accepts(file("shape.byi")))
-        assertFalse(ByBreakpointFiles.accepts(file("shape.pyi")))
+        assertFalse(BasedPythonSources.isOwnedSource(file("shape.byi")))
+        assertFalse(BasedPythonSources.isOwnedSource(file("shape.pyi")))
     }
 
     @Test
     fun `an unrelated file does not, and neither does no file at all`() {
         makeBasedPythonProject()
-        assertFalse(ByBreakpointFiles.accepts(file("notes.md")))
-        assertFalse(ByBreakpointFiles.accepts(null))
+        assertFalse(BasedPythonSources.isOwnedSource(file("notes.md")))
+        assertFalse(BasedPythonSources.isOwnedSource(null))
     }
 }

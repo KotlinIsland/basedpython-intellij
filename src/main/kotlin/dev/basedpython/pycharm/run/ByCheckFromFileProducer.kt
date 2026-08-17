@@ -8,8 +8,9 @@ import com.intellij.execution.configurations.ConfigurationFactory
 import com.intellij.openapi.util.Ref
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiElement
+import dev.basedpython.pycharm.lang.dialect.BasedPythonSources
 
-/** Right-click a `.by` file → produce a `by check <path>` configuration. */
+/** Right-click a basedpython source file → produce a `by check <path>` configuration. */
 class ByCheckFromFileProducer : LazyRunConfigurationProducer<ByCheckConfiguration>() {
 
     override fun getConfigurationFactory(): ConfigurationFactory =
@@ -34,7 +35,7 @@ class ByCheckFromFileProducer : LazyRunConfigurationProducer<ByCheckConfiguratio
         sourceElement: Ref<PsiElement>,
     ): Boolean {
         val file = context.location?.virtualFile ?: contextFile(context) ?: return false
-        if (file.extension != "by") return false
+        if (!BasedPythonSources.isOwnedSource(file)) return false
         val base = context.project.basePath
         val rel = if (!base.isNullOrBlank()) {
             com.intellij.openapi.vfs.LocalFileSystem.getInstance().findFileByPath(base)
@@ -54,7 +55,7 @@ class ByCheckFromFileProducer : LazyRunConfigurationProducer<ByCheckConfiguratio
         context: ConfigurationContext,
     ): Boolean {
         val file = context.location?.virtualFile ?: contextFile(context) ?: return false
-        if (file.extension != "by") return false
+        if (!BasedPythonSources.isOwnedSource(file)) return false
         val base = context.project.basePath
         val rel = if (!base.isNullOrBlank()) {
             com.intellij.openapi.vfs.LocalFileSystem.getInstance().findFileByPath(base)

@@ -104,6 +104,12 @@
 - Test tree nodes navigate to their `.by` source, and a test class is its own node in the
   tree rather than being flattened into the file.
 - Test configurations can be debugged, with breakpoints in `.by` test files.
+- Run and check configurations, and the gutter run icon, are offered on the plain `.py` files
+  this plugin owns (see *Settings | basedpython*, and PyCharm keeps `.py` by default).
+  `by run pkg.script` starts `pkg/script.py` from where it was written. A `.py` beside a `.by`
+  of the same module name is skipped, since `by run` would start the transpiled one; and a bare
+  `def main(…)` in a `.py` gets no icon and no argument form, because reading a top-level `main`
+  as the program's command line is a basedpython transform and a `.py` runs as written.
 - Breakpoints and log points can be set in a basedpython project's plain `.py` files, and hit.
   They need no source map — `by run` transpiles only `.by`, so a `.py` module is loaded from
   where it was written — but two things had to change: the line breakpoint type now claims a

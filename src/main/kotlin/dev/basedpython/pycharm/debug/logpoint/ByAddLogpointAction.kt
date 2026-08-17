@@ -13,7 +13,7 @@ import com.intellij.xdebugger.breakpoints.SuspendPolicy
 import com.intellij.xdebugger.breakpoints.XLineBreakpoint
 import com.intellij.xdebugger.breakpoints.XLineBreakpointAdditionalInfo
 import com.intellij.xdebugger.breakpoints.XLineBreakpointVerticalPlacement
-import dev.basedpython.pycharm.debug.ByBreakpointFiles
+import dev.basedpython.pycharm.lang.dialect.BasedPythonSources
 import dev.basedpython.pycharm.debug.ByLineBreakpointType
 
 /**
@@ -51,7 +51,7 @@ class ByAddLogpointAction : DumbAwareAction() {
         val project = e.project ?: return null
         val editor = e.getData(CommonDataKeys.EDITOR) as? EditorEx ?: return null
         val file = e.getData(CommonDataKeys.VIRTUAL_FILE) ?: return null
-        if (!ByBreakpointFiles.accepts(file)) return null
+        if (!BasedPythonSources.isOwnedSource(file)) return null
         return Target(project, editor, file, editor.caretModel.logicalPosition.line)
     }
 

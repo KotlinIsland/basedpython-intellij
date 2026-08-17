@@ -15,7 +15,7 @@ import com.intellij.util.IconUtil
 import com.intellij.xdebugger.XDebuggerManager
 import com.intellij.xdebugger.XDebuggerUtil
 import com.intellij.xdebugger.breakpoints.XLineBreakpointVerticalPlacement
-import dev.basedpython.pycharm.debug.ByBreakpointFiles
+import dev.basedpython.pycharm.lang.dialect.BasedPythonSources
 import dev.basedpython.pycharm.debug.ByLineBreakpointType
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
@@ -67,7 +67,7 @@ class ByInterLineLogpointProvider : InterLineBreakpointConfigurationProvider {
                 "Breakpoints Over Line Numbers), or the IDE is in presentation or distraction-free mode"
         editor.project == null -> "declined: editor has no project"
         fileOf(editor) == null -> "declined: no file behind the document"
-        !ByBreakpointFiles.accepts(fileOf(editor)) ->
+        !BasedPythonSources.isOwnedSource(fileOf(editor)) ->
             "declined: not a basedpython file (${fileOf(editor)!!.name})"
         XDebuggerUtil.getInstance().findBreakpointType(ByLineBreakpointType::class.java) == null ->
             "declined: the basedpython line breakpoint type is not registered"
