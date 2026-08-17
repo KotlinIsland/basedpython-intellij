@@ -60,6 +60,16 @@ abstract class ByCommandLineState(
     /** Directories to put in front of `PYTHONPATH`; see [composePythonPath]. */
     val pythonPathPrefix: MutableList<String> = mutableListOf()
 
+    /**
+     * Whether this subcommand ends up running the transpiled program, and so needs the project's
+     * own `.py` modules to be importable — see [startProcess].
+     *
+     * `run` does, and a test run *is* a `by run pytest`. `build` and `check` emit or inspect code
+     * without ever starting an interpreter, so there is no `sys.path` to repair and no reason to
+     * put a directory in front of a `PYTHONPATH` `by` itself reads.
+     */
+    protected open val startsProgram: Boolean get() = subcommandStartsProgram(subcommand)
+
     override fun startProcess(): ProcessHandler {
         val launch = BasedPythonBinaries.launchBy(project, kind = options.environmentKind)
             ?: throw ExecutionException(notFoundMessage())
@@ -72,8 +82,10 @@ abstract class ByCommandLineState(
         cmd.addParameters(launch.prependArgs)
         cmd.addParameters(buildCommand())
 
-        val wd = options.workingDir.ifBlank { project.basePath ?: System.getProperty("user.home") }
-        cmd.withWorkDirectory(FileUtil.toSystemDependentName(wd))
+        val wd = FileUtil.toSystemDependentName(
+            options.workingDir.ifBlank { project.basePath ?: System.getProperty("user.home") },
+        )
+        cmd.withWorkDirectory(wd)
 
         cmd.withParentEnvironmentType(
             if (options.passParentEnv) GeneralCommandLine.ParentEnvironmentType.CONSOLE
@@ -87,8 +99,21 @@ abstract class ByCommandLineState(
         cmd.withEnvironment(PYTHONUNBUFFERED, "1")
         cmd.withEnvironment(options.envVars)
         cmd.withEnvironment(infrastructureEnv)
-        if (pythonPathPrefix.isNotEmpty()) {
-            cmd.withEnvironment(PYTHONPATH, composePythonPath(pythonPathPrefix, inheritedPythonPath()))
+        // The working directory belongs on `PYTHONPATH`, behind whatever the debugger put there.
+        //
+        // `by run` transpiles into a temp directory and starts `<python> _by_runner.py` *there*, so
+        // `sys.path[0]` is the temp tree rather than the project — and a plain `.py` is never
+        // copied into that tree. A project mixing `helper.py` with `main.by` therefore died on
+        // `ImportError: No module named 'helper'` before a debugger was ever in the picture, while
+        // `by` itself resolved the same import happily when type checking. This restores what
+        // `python main.py` would have given the program: the directory its sources are in.
+        //
+        // Behind the transpiled output, never in front of it: the temp tree stays `sys.path[0]`, so
+        // a generated module still wins over a stale `.py` of the same name left lying beside the
+        // source it was generated from.
+        val prefixes = pythonPathPrefix + listOfNotNull(wd.takeIf { startsProgram })
+        if (prefixes.isNotEmpty()) {
+            cmd.withEnvironment(PYTHONPATH, composePythonPath(prefixes, inheritedPythonPath()))
         }
 
         val handler = KillableColoredProcessHandler(cmd)
@@ -145,6 +170,15 @@ abstract class ByCommandLineState(
                 "setting of this run configuration, or set a path in Settings | basedpython"
         }
 }
+
+/**
+ * Whether [subcommand] ends up starting an interpreter on the transpiled output.
+ *
+ * `run` is the only one, and a test run is not an exception to that but an instance of it: the test
+ * configuration invokes `by run pytest -v`. `build` writes python, `check` type-checks it, and
+ * neither runs anything.
+ */
+internal fun subcommandStartsProgram(subcommand: String): Boolean = subcommand == "run"
 
 /**
  * `PYTHONPATH` with [prefixes] in front of whatever the run already had.

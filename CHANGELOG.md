@@ -104,6 +104,15 @@
 - Test tree nodes navigate to their `.by` source, and a test class is its own node in the
   tree rather than being flattened into the file.
 - Test configurations can be debugged, with breakpoints in `.by` test files.
+- Breakpoints and log points can be set in a basedpython project's plain `.py` files, and hit.
+  They need no source map — `by run` transpiles only `.by`, so a `.py` module is loaded from
+  where it was written — but two things had to change: the line breakpoint type now claims a
+  `.py` whenever this plugin owns the file type (in PyCharm the Python plugin keeps it unless
+  *Settings | basedpython* says otherwise, and only one type ever claims a line, so no
+  "choose a breakpoint type" popup appears), and a run's working directory is now put on
+  `PYTHONPATH`. That last one fixes a plain run too: `by run` makes its temp tree
+  `sys.path[0]`, so a project mixing `helper.py` with `main.by` used to die on
+  `ImportError: No module named 'helper'` while `by` type-checked the same import happily.
 - Exception breakpoints for `.by` programs (*Breakpoints | basedpython Exceptions*), with
   On raise / On termination.
 - *basedpython Tests* tool window: the project's tests as `by run pytest --collect-only`
