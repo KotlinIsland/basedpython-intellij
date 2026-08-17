@@ -44,7 +44,8 @@ internal data class ByTomlEntry(val key: String, val raw: String, val line: Int)
 internal data class ByTomlSection(val path: List<String>, val line: Int, val entries: List<ByTomlEntry>)
 
 /**
- * The slice of TOML that `[tool.pyprojectx]` is written in.
+ * The slice of TOML that `[tool.pyprojectx]` — and, since the module structure view, the rest of a
+ * `pyproject.toml` this plugin reads — is written in.
  *
  * Same trade as [ByYaml], for the same reason: this reads one table out of a `pyproject.toml` to
  * list its aliases, and it does that as a pure function of the file's text, which is what makes it

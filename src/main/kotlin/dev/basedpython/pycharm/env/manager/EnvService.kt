@@ -7,6 +7,7 @@ import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
+import dev.basedpython.pycharm.env.modules.ModuleLayout
 import dev.basedpython.pycharm.ui.log.BasedPythonLog
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -204,6 +205,11 @@ internal class EnvService(
             environment = readEnvironment(backend, envRoot),
             drift = EnvDrift.UNKNOWN,
             packages = emptyList(),
+            // Before the early return below, deliberately. A project's modules are readable from its
+            // manifests alone, and the state that most needs them read is the one that returns
+            // early: a workspace whose environment has not been created yet is exactly when someone
+            // opens the structure page to add the module they are about to sync.
+            modules = readModules(backend, root),
         )
         if (tool == null || base.environment == null) return base
         return base.copy(
@@ -264,6 +270,21 @@ internal class EnvService(
         val result = EnvRunner.run(project, backend, command, root)
         return if (result.isSuccess) backend.parseTree(result.stdout) else emptyList()
     }
+
+    /**
+     * The project's modules, or null when the backend does not divide projects into any.
+     *
+     * Wrapped, because this walks directories the user controls: a `members` glob pointing at a
+     * symlink loop or a directory the IDE cannot read must degrade to "no modules" rather than take
+     * the whole scan — and with it the environment view — down.
+     */
+    private fun readModules(backend: EnvBackend, root: Path): ModuleLayout? =
+        try {
+            backend.moduleLayout(root)
+        } catch (e: Exception) {
+            BasedPythonLog.getInstance(project).warn("could not read the project's modules: $e")
+            null
+        }
 
     private fun readDrift(backend: EnvBackend, root: Path): EnvDrift {
         val command = backend.command(EnvOp.CheckSync) ?: return EnvDrift.UNKNOWN

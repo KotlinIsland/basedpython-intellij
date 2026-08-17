@@ -135,6 +135,21 @@
   it keeps itself in step without pressing Refresh.
 - Filter the test view by state (funnel on its toolbar): show only failed tests, only
   skipped, only what has not run yet. The toolbar says when something is hidden.
+- *Settings | Languages & Frameworks | basedpython | Modules*: the parts a project is built from,
+  created, changed and removed. A *module* is what uv calls a workspace member — its own directory
+  and `pyproject.toml`, sharing the project's lock file and environment, importable by its
+  siblings — and the page lists each one with its type, path, version, required Python, and the
+  siblings that depend on it. *New module* scaffolds it and lists it in the workspace in one uv
+  command, so a project that is not a workspace yet becomes one by getting its first module;
+  editing one changes its metadata and ticks or unticks which siblings depend on it; removing one
+  stops every dependent declaring it before it stops being listed, and deleting its files is a
+  separate checkbox that is off by default. The dialog shows the `uv init` it is about to run.
+  Renaming is deliberately absent: it would leave `import` statements pointing at a name that no
+  longer exists, and finding those needs a language server that resolves modules.
+- The plugin edits `pyproject.toml` itself for exactly two things uv has no command for — taking a
+  `members` entry back out, and setting a project's own version, description or `requires-python`.
+  Those edits rewrite the lines in question and leave the rest of the file alone: comments, array
+  formatting and line endings all survive.
 - *basedpython Environment* tool window: which environment this project runs in, what is
   installed in it, and the one thing to press when something is wrong. It answers what an
   interpreter dropdown does not — whether there *is* an environment, whether it matches what the

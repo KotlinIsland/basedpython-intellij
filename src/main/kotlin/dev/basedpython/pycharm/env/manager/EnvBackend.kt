@@ -1,6 +1,8 @@
 package dev.basedpython.pycharm.env.manager
 
 import dev.basedpython.pycharm.env.manager.index.PackageIndex
+import dev.basedpython.pycharm.env.modules.ModuleKind
+import dev.basedpython.pycharm.env.modules.ModuleLayout
 import java.nio.file.Path
 
 /**
@@ -46,12 +48,46 @@ sealed interface EnvOp {
     data class Add(
         val requirements: List<String>,
         val target: EnvDependencyTarget = EnvDependencyTarget.Main,
+        /**
+         * The module whose manifest this is declared in, or null for the project's own.
+         *
+         * A project with modules has more than one manifest, and "add httpx" is not answerable
+         * without knowing which — see [EnvOp.InitModule]. Null rather than the root module's name so
+         * that a project with no modules produces exactly the command it produced before this
+         * existed.
+         */
+        val module: String? = null,
     ) : EnvOp
 
     /** Remove [packages] from the project's dependencies under [target] and uninstall them. */
     data class Remove(
         val packages: List<String>,
         val target: EnvDependencyTarget = EnvDependencyTarget.Main,
+        /** The module to remove them from — see [Add.module]. */
+        val module: String? = null,
+    ) : EnvOp
+
+    /**
+     * Create a new module of the project at [path], relative to the project root.
+     *
+     * A *module* is what this plugin calls what uv calls a workspace member: a directory with a
+     * manifest of its own, sharing the project's lock file and environment, importable by its
+     * siblings. See [dev.basedpython.pycharm.env.modules.ModuleLayout].
+     *
+     * The manager is asked to do the whole job — scaffold the sources *and* list the module in the
+     * project's manifest — because for uv those are one command, and splitting them would mean this
+     * plugin writing the manifest edit that uv already knows how to write. A backend with no
+     * workspace concept returns null from [EnvBackend.command] and the structure UI is not offered.
+     */
+    data class InitModule(
+        /** Where the module goes, relative to the project root, with `/` separators. */
+        val path: String,
+        /** Its distribution name, or null to let the manager take one from the directory. */
+        val name: String?,
+        val kind: ModuleKind,
+        /** The interpreter its `requires-python` is derived from, as the backend spells it. */
+        val python: String? = null,
+        val description: String? = null,
     ) : EnvOp
 
     /**
@@ -181,6 +217,22 @@ interface EnvBackend {
      * must not be offered the public catalogue.
      */
     fun packageIndex(projectRoot: Path): PackageIndex? = null
+
+    /**
+     * How the project at [projectRoot] is divided into modules, or null when this manager has no
+     * notion of dividing one.
+     *
+     * Reads the filesystem, like [claims] and [environmentRoot] and for the same reason: the answer
+     * is a property of the project on this disk, not of the manager, and there is nothing to run a
+     * process about. It must not *write* — this is called from a background refresh, and a scan that
+     * edits the user's manifests is the thing [EnvOp.Tree] documents at length not to do.
+     *
+     * Null and [ModuleLayout.EMPTY] are different answers. Null is "this manager does not do
+     * modules", and hides the structure UI outright; an empty layout is "it does, and this project
+     * has none yet", which is the ordinary state of every single-package project and the one the
+     * *New module* button acts on.
+     */
+    fun moduleLayout(projectRoot: Path): ModuleLayout? = null
 
     /** The installed packages, from the stdout of [EnvOp.ListPackages]. */
     fun parsePackages(stdout: String): List<EnvPackage>

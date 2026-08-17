@@ -166,7 +166,13 @@ internal object EnvOperations {
      * Runs [body] in a cancellable background task, then refreshes and re-notifies everything that
      * cached an answer about the environment.
      */
-    private fun runInBackground(project: Project, title: String, body: (ProgressIndicator) -> Unit) {
+    fun runInBackground(
+        project: Project,
+        title: String,
+        /** Manifests outside the project root this gesture touches — see [EnvFiles.saveBeforeOperation]. */
+        extraFiles: List<java.nio.file.Path> = emptyList(),
+        body: (ProgressIndicator) -> Unit,
+    ) {
         val service = EnvService.getInstance(project)
         val backend = service.status.backend
         val root = service.status.projectRoot
@@ -174,7 +180,7 @@ internal object EnvOperations {
         // Before the command starts, and on the thread the action was invoked from: the command is
         // about to read these files off disk, so anything still sitting unsaved in an editor has to
         // reach disk first or it is silently overwritten.
-        if (backend != null && root != null) EnvFiles.saveBeforeOperation(project, backend, root)
+        if (backend != null && root != null) EnvFiles.saveBeforeOperation(project, backend, root, extraFiles)
 
         ProgressManager.getInstance().run(object : Task.Backgroundable(project, title, true) {
             /**
@@ -191,7 +197,7 @@ internal object EnvOperations {
                     // usually already written something — a `uv add` that failed to resolve has
                     // still edited `pyproject.toml` — and the editor must not be left showing the
                     // file as it was before.
-                    if (backend != null && root != null) EnvFiles.refreshAfterOperation(backend, root)
+                    if (backend != null && root != null) EnvFiles.refreshAfterOperation(backend, root, extraFiles)
                     // However the gesture ended, nothing is still installing.
                     service.clearProgress()
                 }
@@ -217,7 +223,7 @@ internal object EnvOperations {
      * three package-list processes for one gesture. The single refresh happens in [runInBackground]
      * when the whole gesture is over.
      */
-    private fun runBlockingOp(project: Project, backend: EnvBackend, op: EnvOp): Boolean {
+    fun runBlockingOp(project: Project, backend: EnvBackend, op: EnvOp): Boolean {
         val root = EnvService.getInstance(project).status.projectRoot ?: return false
         val command = backend.command(op) ?: return false
         val service = EnvService.getInstance(project)

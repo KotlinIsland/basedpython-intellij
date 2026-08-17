@@ -95,6 +95,17 @@
             id="dev.basedpython.pycharm.settings"
             displayName="basedpython"
             provider="dev.basedpython.pycharm.settings.ui.BasedPythonConfigurableProvider"/>
+        <!-- The modules a project is built from — uv workspace members — created, changed and
+             removed here. A child of the settings page above rather than a tool window, because it
+             describes the shape of the project rather than a state to watch: the same place, and the
+             same gesture, as the platform's own Project Structure. See env.modules.ModulesConfigurable
+             for why nothing on it waits for Apply. -->
+        <projectConfigurable
+            parentId="dev.basedpython.pycharm.settings"
+            id="dev.basedpython.pycharm.settings.modules"
+            key="modules.page.title"
+            bundle="messages.BasedPythonBundle"
+            provider="dev.basedpython.pycharm.env.modules.ModulesConfigurableProvider"/>
         <statusBarWidgetFactory
             id="dev.basedpython.pycharm.statusbar"
             implementation="dev.basedpython.pycharm.statusbar.BasedPythonStatusBarWidgetFactory"/>
@@ -555,6 +566,12 @@
         <action id="basedpython.env.Show"
                 class="dev.basedpython.pycharm.env.manager.ShowEnvToolWindowAction">
             <add-to-group group-id="basedpython.ActionGroup" anchor="after" relative-to-action="basedpython.env.SetUp"/>
+        </action>
+        <!-- The way in to the Modules settings page. A page three levels down a settings tree is
+             not somewhere anyone browses to, and "add a module" starts from the menu. -->
+        <action id="basedpython.modules.Show"
+                class="dev.basedpython.pycharm.env.modules.ShowModulesAction">
+            <add-to-group group-id="basedpython.ActionGroup" anchor="after" relative-to-action="basedpython.env.Show"/>
         </action>
 
         <!-- ===== Wave 11: REPL console (§182) ===== -->
