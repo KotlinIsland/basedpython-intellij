@@ -43,6 +43,10 @@ support, run configurations, CLI actions, and editor tooling.
   frames, variables and expression evaluation all report `.by` sources, not the transpiled
   output. Built on the platform's Debug Adapter Protocol client and `debugpy`; the line
   translation is done by pydevd in the debuggee, from the map `by run` already writes.
+- Breakpoints work in the project's plain `.py` files too, and need no translation to:
+  `by run` transpiles only `.by`, so a `.py` module runs from where it was written. In
+  PyCharm the Python plugin keeps `.py` unless *Settings | basedpython* says otherwise, and
+  a breakpoint follows whichever of the two owns the file.
 - Requires `debugpy`: `uv add --dev debugpy`. `by run` picks `PYTHON`, else `python3` on
   `PATH`, and since every `by` launch here goes out with the project venv activated, that
   is the project's own interpreter. If `debugpy` is missing, the debugger says so and

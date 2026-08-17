@@ -1,6 +1,8 @@
 package dev.basedpython.pycharm.run
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.io.File
 
@@ -37,5 +39,29 @@ class ByPythonPathTest {
     @Test
     fun `no prefixes leaves the existing path alone`() {
         assertEquals("/a$sep/b", composePythonPath(emptyList(), "/a$sep/b"))
+    }
+
+    /**
+     * The debugger's bootstrap has to stay first. Prepending a directory also prepends its
+     * `sitecustomize.py`, and `site` imports exactly one — a project that ships its own would
+     * displace the bootstrap and the debugger would never start.
+     */
+    @Test
+    fun `the working directory follows the bootstrap directory`() {
+        assertEquals(
+            "/boot$sep/project$sep/inherited",
+            composePythonPath(listOf("/boot", "/project"), "/inherited"),
+        )
+    }
+
+    /**
+     * Only a run puts the project's own `.py` modules within reach, because only a run starts an
+     * interpreter. A test run is a `by run pytest`, so it is the same case rather than a second one.
+     */
+    @Test
+    fun `run starts a program and build and check do not`() {
+        assertTrue(subcommandStartsProgram("run"))
+        assertFalse(subcommandStartsProgram("build"))
+        assertFalse(subcommandStartsProgram("check"))
     }
 }

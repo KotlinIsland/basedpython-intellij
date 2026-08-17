@@ -14,6 +14,7 @@ import com.intellij.xdebugger.XDebuggerManager
 import com.intellij.xdebugger.XDebuggerUtil
 import com.intellij.xdebugger.breakpoints.XBreakpoint
 import com.intellij.xdebugger.breakpoints.XBreakpointListener
+import dev.basedpython.pycharm.debug.ByBreakpointFiles
 import dev.basedpython.pycharm.debug.ByLineBreakpointType
 
 /**
@@ -88,7 +89,7 @@ class ByLogpointFields(private val project: Project) : XBreakpointListener<XBrea
         fun populate(project: Project, editor: EditorEx) {
             if (!ByLogpoints.pluginProvidesLogpointUi()) return
             val file = FileDocumentManager.getInstance().getFile(editor.document) ?: return
-            if (!file.extension.equals("by", ignoreCase = true)) return
+            if (!ByBreakpointFiles.accepts(file)) return
             val type = XDebuggerUtil.getInstance().findBreakpointType(ByLineBreakpointType::class.java) ?: return
             XDebuggerManager.getInstance(project).breakpointManager
                 .getBreakpoints(type)
@@ -114,7 +115,7 @@ class ByLogpointFields(private val project: Project) : XBreakpointListener<XBrea
 class ByLogpointFieldsOnFileOpen(private val project: Project) : FileEditorManagerListener {
 
     override fun fileOpened(source: FileEditorManager, file: VirtualFile) {
-        if (!file.extension.equals("by", ignoreCase = true)) return
+        if (!ByBreakpointFiles.accepts(file)) return
         // After the editor is built and its inlay model is in place.
         ApplicationManager.getApplication().invokeLater({
             if (project.isDisposed) return@invokeLater

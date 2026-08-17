@@ -181,6 +181,49 @@ names the colliding sources and which one actually runs.
 Nothing in the bootstrap may take the user's program down with it: every step runs under a broad
 `except`, and a bootstrap that fails means running without a debugger attached.
 
+## Plain `.py` files in a basedpython project
+
+A project is rarely all `.by`. Breakpoints work in its `.py` files too, and the interesting part is
+how little it takes: **a `.py` breakpoint needs no source map at all.** `by run` transpiles `.by`
+and copies nothing else, so a `.py` module is loaded by the interpreter from where the user wrote
+it — the file the breakpoint names *is* the file that runs, at the line it says. Both backends place
+it without being told anything: pydevd because it is simply not a file a `setPydevdSourceMap` was
+registered for, bpd because its mapping layer sends everything that is not `.by` through to its
+agent untouched. Verified live against debugpy 1.8.21 with a mixed project: `helper.py:2` reports
+`verified`, stops with `a`/`b` bound, and the frames below it are still `main.by:4` and `main.by:7`.
+
+Two things did have to change.
+
+**Who may hold a breakpoint.** `ByLineBreakpointType.canPutAt` accepted `.by` and nothing else, so
+the gutter in a `.py` file did nothing at all — in an IDE with no Python plugin there was no other
+line breakpoint type to fall back on, and in PyCharm the Python plugin's type is one this session
+would never see: `XDebugSessionImpl` dispatches a breakpoint to a handler by **exact type class**,
+never by assignability, and `DapBreakpointsDescription` names exactly one. So the type has to claim
+`.py` itself. It claims it exactly when this plugin owns the file type — see `ByBreakpointFiles`,
+which asks the registry rather than re-deriving the answer from the project markers and the
+*Settings | basedpython* ownership choice. That is also what keeps PyCharm quiet: the platform
+collects *every* type whose `canPutAt` says yes and puts a "choose a type" popup in front of the
+user when more than one does, and here at most one ever can — `PyLineBreakpointType.canPutAt` asks
+whether the file is of `PythonFileType`, which is precisely what the file-type overrider changes.
+The same predicate now gates the log point gutter gap and `Ctrl+Alt+F8`, so a log point goes where a
+breakpoint goes.
+
+**Making the module reachable.** `by run` starts `<python> _by_runner.py` in its temp directory, so
+`sys.path[0]` is the transpiled tree and the project directory is on the path nowhere. A project
+mixing `helper.py` with `main.by` died on `ImportError: No module named 'helper'` before a debugger
+was ever involved — while `by` itself resolved that same import happily when type checking, so the
+editor said the code was fine and the run said it was not. `ByCommandLineState` now puts the run's
+working directory on `PYTHONPATH`, which is what `python main.py` would have given the program
+anyway. It goes *behind* the debugger's bootstrap directory (which must stay first — prepending a
+directory prepends its `sitecustomize.py`, and `site` imports exactly one), and the transpiled tree
+is still `sys.path[0]`, so a generated module continues to win over a stale `.py` of the same name
+lying beside the source it came from. Only `by run` and test configurations get it: `by build` and
+`by check` start no interpreter, and `PYTHONPATH` is a variable `by` itself reads.
+
+This replaces a limit recorded here and in FEATURES.md §64 — that `.py` files were out of scope and
+"fixing it means changing `by run`". The import failure was real; the conclusion drawn from it was
+not.
+
 ## Known limits
 
 - **Frame lines drift by one at a run boundary.** pydevd's
@@ -200,11 +243,6 @@ Nothing in the bootstrap may take the user's program down with it: every step ru
   maps describe the same transpiled tree; verified live, with a breakpoint in a `.by` test
   stopping and reporting its frame against the source. `by build` and `by check` produce no
   running program to attach to.
-- **Only `.by` files — and that one is not the debugger's doing.** `by run` does not copy plain
-  `.py` files into its temp directory at all: a project mixing `helper.py` with `main.by` dies on
-  `ImportError: No module named 'helper'` before any debugger is involved. So there is nothing for
-  a breakpoint in a `.py` file to bind *to*, and no amount of path mapping on this side would
-  change that. Fixing it means changing `by run`.
 - **Exception breakpoints have no "ignore library code" option.** pydevd spells it as a
   `:ignoreLibraries` suffix on the filter id, and with it the breakpoint never fires: the
   transpiled program lives in a temp directory pydevd does not count as project code, and setting
