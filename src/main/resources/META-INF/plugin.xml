@@ -83,8 +83,8 @@
         <editor.interLineBreakpointConfigurationProvider
             implementation="dev.basedpython.pycharm.debug.logpoint.ByInterLineLogpointProvider"/>
         <registryKey key="basedpython.logpoints.provider"
-                     defaultValue="[auto*|plugin|ide]"
-                     description="Who provides basedpython log points — the gutter gap, the inline Log: field, and Add Log Point. auto uses the IDE's own where it has one (IntelliJ IDEA, whose logpoints modules are bundled with its Java plugin) and this plugin's where it does not (PyCharm). plugin forces this plugin's on, which in an IDE that has its own means two gaps and two fields — for development only. ide always gives way."/>
+                     defaultValue="[auto*|ide]"
+                     description="Who provides basedpython log points — the gutter gap, the inline Log: field, and Add Log Point. auto uses the IDE's own where it has one (IntelliJ IDEA, whose logpoints modules are bundled with its Java plugin) and this plugin's where it does not (PyCharm). ide always gives way. There is no setting to force this plugin's on where the IDE has its own, because nothing can switch the IDE's off and the result is two of everything; use ./gradlew runPyCharm to see it."/>
 
         <!-- ===== Stream D: action notification group ===== -->
         <notificationGroup id="basedpython.Actions" displayType="BALLOON"/>

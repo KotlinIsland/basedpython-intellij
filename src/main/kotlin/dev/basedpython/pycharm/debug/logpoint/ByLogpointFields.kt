@@ -36,14 +36,21 @@ class ByLogpointFields(private val project: Project) : XBreakpointListener<XBrea
 
         // Deferred: the breakpoint's own gutter highlighter is installed as part of adding it, and
         // placing an inlay from inside that notification would be reentrant.
-        ApplicationManager.getApplication().invokeLater({
-            if (project.isDisposed) return@invokeLater
+        onEdt {
+            if (project.isDisposed) return@onEdt
             editorsFor(file).forEach { ByLogpointField.show(project, it, logpoint) }
-        }, project.disposed)
+        }
     }
 
+    /**
+     * Takes the box away with the log point — on the EDT, whatever thread the news arrives on.
+     *
+     * `FrontendXBreakpointManager` removes breakpoints from a coroutine dispatcher, and disposing an
+     * inlay off the EDT is an assertion failure rather than a race you get away with.
+     */
     override fun breakpointRemoved(breakpoint: XBreakpoint<*>) {
-        ByLogpoints.asLogpoint(breakpoint)?.let { ByLogpointField.of(it)?.close() }
+        val logpoint = ByLogpoints.asLogpoint(breakpoint) ?: return
+        onEdt { ByLogpointField.of(logpoint)?.close() }
     }
 
     /**
@@ -53,8 +60,13 @@ class ByLogpointFields(private val project: Project) : XBreakpointListener<XBrea
     override fun breakpointChanged(breakpoint: XBreakpoint<*>) {
         val logpoint = ByLogpoints.asLogpoint(breakpoint) ?: return
         if (!ByLogpoints.pluginProvidesLogpointUi()) return
-        val existing = ByLogpointField.of(logpoint) ?: return
-        existing.revert()
+        onEdt { ByLogpointField.of(logpoint)?.revert() }
+    }
+
+    /** Runs [action] on the EDT, immediately if that is already where we are. */
+    private fun onEdt(action: () -> Unit) {
+        val application = ApplicationManager.getApplication()
+        if (application.isDispatchThread) action() else application.invokeLater(action, project.disposed)
     }
 
     private fun editorsFor(file: VirtualFile): List<EditorEx> =
