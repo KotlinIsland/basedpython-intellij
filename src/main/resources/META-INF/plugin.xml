@@ -410,15 +410,17 @@
     <applicationListeners>
         <listener class="dev.basedpython.pycharm.run.watch.WatchModeSaveListener"
                   topic="com.intellij.openapi.fileEditor.FileDocumentManagerListener"/>
-        <!-- Log points outlive editors, so a .by file opened with some already set needs its boxes back. -->
-        <listener class="dev.basedpython.pycharm.debug.logpoint.ByLogpointFieldsOnEditorOpen"
-                  topic="com.intellij.openapi.editor.event.EditorFactoryListener"/>
     </applicationListeners>
 
     <projectListeners>
         <!-- The "Log:" box every .by log point shows in its gap, for as long as it exists. -->
         <listener class="dev.basedpython.pycharm.debug.logpoint.ByLogpointFields"
                   topic="com.intellij.xdebugger.breakpoints.XBreakpointListener"/>
+        <!-- Log points outlive editors, so a .by file opened with some already set needs its boxes
+             back. Not EditorFactoryListener: it declares no Topic, so that registration is accepted
+             and never fires. -->
+        <listener class="dev.basedpython.pycharm.debug.logpoint.ByLogpointFieldsOnFileOpen"
+                  topic="com.intellij.openapi.fileEditor.FileEditorManagerListener"/>
     </projectListeners>
 
     <actions>
