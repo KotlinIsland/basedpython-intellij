@@ -170,6 +170,30 @@ class UvTreeTest {
         assertEquals(0, groups.first().packageCount())
     }
 
+    /**
+     * `dev` is where development dependencies go, so removing the last one should leave a heading to
+     * add to rather than making the group vanish and need conjuring back by name.
+     */
+    @Test
+    fun `the dev group is shown even when it is empty`() {
+        val json = """
+            {"roots":[{"id":"root"},{"id":"dev"},{"id":"docs"}],
+             "resolution":{
+               "root":{"name":"proj","version":"1","kind":"package","dependencies":[{"id":"a"}]},
+               "dev":{"name":"proj","version":"1","kind":{"group":"dev"},"dependencies":[]},
+               "docs":{"name":"proj","version":"1","kind":{"group":"docs"},"dependencies":[]},
+               "a":{"name":"a","version":"1","kind":"package","dependencies":[]}}}
+        """.trimIndent()
+
+        val groups = UvTree.parse(json)
+        assertEquals(
+            listOf(EnvDependencyTarget.Main, EnvDependencyTarget.Group("dev")),
+            groups.map { it.target },
+            "dev survives being empty; docs does not",
+        )
+        assertTrue(groups.last().roots.isEmpty())
+    }
+
     /** A group whose requirements all failed to resolve would be an empty heading. */
     @Test
     fun `an empty group other than the main list is not shown`() {

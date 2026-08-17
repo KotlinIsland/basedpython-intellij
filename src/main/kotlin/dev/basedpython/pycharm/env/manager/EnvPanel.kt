@@ -11,6 +11,7 @@ import com.intellij.openapi.actionSystem.ex.ActionUtil
 import com.intellij.openapi.project.DumbAwareAction
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.SimpleToolWindowPanel
+import com.intellij.ui.AnimatedIcon
 import com.intellij.ui.ColoredTreeCellRenderer
 import com.intellij.ui.EditorNotificationPanel
 import com.intellij.ui.PopupHandler
@@ -21,6 +22,7 @@ import com.intellij.ui.components.JBPanel
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.treeStructure.Tree
 import com.intellij.util.ui.JBUI
+import com.intellij.util.ui.UIUtil
 import com.intellij.util.ui.tree.TreeUtil
 import dev.basedpython.pycharm.util.BasedPythonBundle
 import java.awt.BorderLayout
@@ -88,11 +90,17 @@ internal class EnvPanel(private val project: Project) :
     /** Installed version by package name, for the row that says the tree and the machine disagree. */
     private var installed: Map<String, EnvPackage> = emptyMap()
 
+    /** What each package is doing right now, so a row can spin while it installs. */
+    private var progress: EnvProgress = EnvProgress()
+
     init {
         tree.isRootVisible = false
         tree.showsRootHandles = true
         tree.selectionModel.selectionMode = TreeSelectionModel.DISCONTIGUOUS_TREE_SELECTION
-        tree.cellRenderer = NodeRenderer { installed }
+        tree.cellRenderer = NodeRenderer({ installed }, { progress })
+        // A cell renderer paints once per repaint, so the spinner has to be allowed to drive
+        // repaints of its own row — without this the icon is drawn as a single frozen frame.
+        UIUtil.putClientProperty(tree, AnimatedIcon.ANIMATION_IN_RENDERER_ALLOWED, true)
         TreeSpeedSearch.installOn(tree)
         PopupHandler.installPopupMenu(tree, popupActions(), POPUP_PLACE)
 
@@ -118,6 +126,7 @@ internal class EnvPanel(private val project: Project) :
     private fun render() {
         val status = service.status
         installed = status.packages.associateBy { it.name.lowercase() }
+        progress = service.progress
 
         header.removeAll()
         renderBanner(status)?.let(header::add)
@@ -239,6 +248,11 @@ internal class EnvPanel(private val project: Project) :
 
     /** The one-line description of the environment, always shown once something has looked. */
     private fun describe(status: EnvStatus): String {
+        // While something is installing, the header says what — a package being fetched is the most
+        // useful thing the window can be saying, and it is more specific than "busy".
+        service.progress.headline?.takeIf { service.busy }?.let {
+            return BasedPythonBundle.message("env.summary.working", it)
+        }
         if (!service.scanned) return BasedPythonBundle.message("env.summary.scanning")
         val backend = status.backend ?: return BasedPythonBundle.message("env.summary.unmanaged")
         val env = status.environment
@@ -259,6 +273,7 @@ internal class EnvPanel(private val project: Project) :
 
     private class NodeRenderer(
         private val installed: () -> Map<String, EnvPackage>,
+        private val progress: () -> EnvProgress,
     ) : ColoredTreeCellRenderer() {
 
         override fun customizeCellRenderer(
@@ -295,7 +310,14 @@ internal class EnvPanel(private val project: Project) :
         private fun renderPackage(row: EnvRow.Package) {
             val node = row.node
             val here = installed()[node.name.lowercase()]
-            icon = if (row.declared) AllIcons.Nodes.PpLib else AllIcons.Nodes.PpLibFolder
+            val activity = progress().activityOf(node.name)
+            // The platform's spinner, which paints its own frames — but only in a tree that opted in
+            // with ANIMATION_IN_RENDERER_ALLOWED.
+            icon = when {
+                activity != null -> AnimatedIcon.Default.INSTANCE
+                row.declared -> AllIcons.Nodes.PpLib
+                else -> AllIcons.Nodes.PpLibFolder
+            }
 
             val nameAttributes = when {
                 here == null -> SimpleTextAttributes.GRAYED_ITALIC_ATTRIBUTES
@@ -322,6 +344,12 @@ internal class EnvPanel(private val project: Project) :
                     )
             }
 
+            if (activity != null) {
+                append(
+                    "  " + BasedPythonBundle.message(activityKey(activity)),
+                    SimpleTextAttributes.GRAYED_ITALIC_ATTRIBUTES,
+                )
+            }
             if (node.expandedElsewhere) {
                 append(
                     "  " + BasedPythonBundle.message("env.tree.shownAbove"),
@@ -336,7 +364,8 @@ internal class EnvPanel(private val project: Project) :
         }
 
         private fun renderFlat(row: EnvRow.Flat) {
-            icon = AllIcons.Nodes.PpLib
+            val activity = progress().activityOf(row.pkg.name)
+            icon = if (activity != null) AnimatedIcon.Default.INSTANCE else AllIcons.Nodes.PpLib
             append(row.pkg.name)
             append("  ${row.pkg.version}", SimpleTextAttributes.GRAYED_ATTRIBUTES)
             row.pkg.editableLocation?.let {
@@ -345,6 +374,12 @@ internal class EnvPanel(private val project: Project) :
                     SimpleTextAttributes.GRAYED_ATTRIBUTES,
                 )
             }
+        }
+
+        private fun activityKey(activity: EnvPackageActivity): String = when (activity) {
+            EnvPackageActivity.DOWNLOADING -> "env.activity.downloading"
+            EnvPackageActivity.PREPARING -> "env.activity.preparing"
+            EnvPackageActivity.REMOVING -> "env.activity.removing"
         }
 
         private fun groupIcon(target: EnvDependencyTarget): Icon = when (target) {
