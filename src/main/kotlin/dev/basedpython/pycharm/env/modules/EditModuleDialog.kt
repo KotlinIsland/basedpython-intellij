@@ -25,21 +25,35 @@ import javax.swing.JComponent
  * writing the `[tool.uv.sources] … { workspace = true }` entry that makes a sibling resolve locally,
  * which is uv's job and is easy to get subtly wrong. See [TomlEdits] for where that line is drawn.
  *
- * ### Why the name cannot be changed here
+ * ### The name, and what it costs to change
  *
- * Renaming a module is five edits — the directory, `[project] name`, the `members` entry, the import
- * package under `src/`, and every sibling that declares it — and the fifth one has a sixth behind
- * it: the `import` statements in code, which only a language server that resolves modules can find.
- * `by` has symbol rename and does not implement the file-operation requests
- * (`workspace/willRenameFiles`) that would let it answer for a renamed module, so a rename offered
- * here would be one that quietly leaves imports pointing at a name that no longer exists. The field
- * is shown and disabled rather than hidden, so that the answer to "can I rename it" is on screen.
+ * Renaming a module is six edits: the directory, the import package under `src/`, `[project] name`,
+ * the `members` entry, every sibling that declares it — and the `import` statements in code, which
+ * are the ones no editor can find on its own. That last one is asked of `by`
+ * (`workspace/willRenameFiles`), which resolves every import in the project against the same search
+ * paths the checker uses and can tell a use of the module from a local variable spelled like it.
+ *
+ * So the field is editable exactly when a running `by` says it can answer that question, and
+ * disabled with the reason when it cannot. A rename that moved the directory and left every import
+ * naming the old one would be worse than no rename at all: a broken project, made by a button that
+ * looked like it worked.
  */
 internal class EditModuleDialog(
-    project: Project,
+    private val project: Project,
     private val module: ProjectModule,
     private val layout: ModuleLayout,
 ) : DialogWrapper(project) {
+
+    /**
+     * Editable only when the server can say what the rename costs — see the class documentation.
+     *
+     * Read once, when the dialog opens, rather than on each keystroke: it is a question about the
+     * server that started with the project, and a field that became editable halfway through typing
+     * would be stranger than one that never did.
+     */
+    private val canRename: Boolean = ModuleImportEdits.isSupported(project) && !module.isRoot
+
+    private val nameField = JBTextField(module.name, 24).apply { isEditable = canRename }
 
     private val versionField = JBTextField(module.version.orEmpty(), 16)
 
@@ -60,12 +74,16 @@ internal class EditModuleDialog(
         init()
     }
 
-    override fun getPreferredFocusedComponent(): JComponent = versionField
+    override fun getPreferredFocusedComponent(): JComponent = if (canRename) nameField else versionField
 
     override fun createCenterPanel(): JComponent = panel {
         row(BasedPythonBundle.message("modules.edit.name")) {
-            cell(JBTextField(module.name, 24).apply { isEditable = false })
-        }.rowComment(BasedPythonBundle.message("modules.edit.name.hint"))
+            cell(nameField)
+        }.rowComment(
+            BasedPythonBundle.message(
+                if (canRename) "modules.edit.name.hint" else "modules.edit.name.hint.unsupported",
+            ),
+        )
 
         row(BasedPythonBundle.message("modules.edit.location")) {
             cell(
@@ -110,6 +128,7 @@ internal class EditModuleDialog(
                 .map { it.name }
                 .filter { dependents.isItemSelected(it) }
                 .toSet(),
+            newName = nameField.text.trim().takeIf { canRename && it != module.name },
         )
     }
 
@@ -128,6 +147,16 @@ internal class EditModuleDialog(
      * let through — because the full PEP 440 grammar is not this dialog's to enforce.
      */
     override fun doValidate(): ValidationInfo? {
+        val name = nameField.text.trim()
+        if (canRename && name != module.name) {
+            if (!ModuleNames.isValid(name)) {
+                return ValidationInfo(BasedPythonBundle.message("modules.edit.error.badName"), nameField)
+            }
+            if (layout.byName(name) != null) {
+                return ValidationInfo(BasedPythonBundle.message("modules.edit.error.nameTaken", name), nameField)
+            }
+        }
+
         if (versionField.text.isBlank() && !module.version.isNullOrBlank()) {
             return ValidationInfo(BasedPythonBundle.message("modules.edit.error.noVersion"), versionField)
         }

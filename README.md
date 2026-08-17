@@ -257,9 +257,14 @@ support, run configurations, CLI actions, and editor tooling.
   array formatting and line endings survive.
 - Creating a module deliberately **does not sync**. The environment view will report the drift and
   offer the button, rather than a new directory setting off a resolve that can reach the network.
-- Renaming is not offered. It would mean moving the directory, changing the import package, and
-  rewriting the `import` statements that refer to it — and that last part needs a language server
-  that resolves modules across the project, which `by` does not expose yet.
+- **Renaming a module renames all six things it is called.** The import package under `src/`, the
+  directory, `[project] name`, the workspace `members` entry, every sibling that declares it — and
+  the `import` statements in code, which are asked of the `by` server before anything moves
+  (`workspace/willRenameFiles`). The directory is renamed only if it was named after the module, and
+  keeps the spelling it had; a module kept in a differently-named directory stays where it is.
+- The Name field is editable only when the running `by` says it can rewrite those imports. An older
+  binary gets the field disabled with the reason, rather than a rename that moves a directory and
+  leaves every `import` in the project naming the old one.
 
 ### Smart editing
 - Enter auto-indents after a `:` block header; Backspace dedents by a full indent step.

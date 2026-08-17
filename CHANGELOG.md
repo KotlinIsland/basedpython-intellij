@@ -144,8 +144,12 @@
   editing one changes its metadata and ticks or unticks which siblings depend on it; removing one
   stops every dependent declaring it before it stops being listed, and deleting its files is a
   separate checkbox that is off by default. The dialog shows the `uv init` it is about to run.
-  Renaming is deliberately absent: it would leave `import` statements pointing at a name that no
-  longer exists, and finding those needs a language server that resolves modules.
+- Renaming a module renames everything it is called: the import package under `src/`, the directory,
+  `[project] name`, the workspace `members` entry, every sibling that declares it, and the `import`
+  statements in code. That last one is asked of the `by` server before anything moves, through the
+  protocol's own `workspace/willRenameFiles` — which the server gained for this. The Name field is
+  editable only when the running `by` advertises it; an older one gets the field disabled with the
+  reason, rather than a rename that leaves every import naming a module that is gone.
 - The plugin edits `pyproject.toml` itself for exactly two things uv has no command for — taking a
   `members` entry back out, and setting a project's own version, description or `requires-python`.
   Those edits rewrite the lines in question and leave the rest of the file alone: comments, array
