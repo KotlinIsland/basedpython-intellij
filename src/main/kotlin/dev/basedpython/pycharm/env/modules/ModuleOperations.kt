@@ -63,6 +63,14 @@ internal object ModuleOperations {
         val requiresPython: String?,
         /** The names of the modules that should depend on this one when this is over. */
         val dependents: Set<String>,
+        /**
+         * The name the module should end up with, when the user changed it.
+         *
+         * Null when the field was left alone, which is not the same as "the same name": a rename is
+         * a different operation with different failure modes, and [apply] does it first and
+         * separately rather than folding it into the metadata write.
+         */
+        val newName: String? = null,
     )
 
     /**
@@ -110,51 +118,61 @@ internal object ModuleOperations {
     }
 
     /**
-     * Applies [edit] to [module]: its own metadata first, then who depends on it.
+     * Applies [edit] to [module]: the name first, then its metadata, then who depends on it.
      *
-     * Metadata is written before the commands run rather than after, because `uv add` re-reads the
+     * The order is forced by what each step reads. A rename moves the module's directory and changes
+     * the name every other step is addressed to, so it goes first and the project is re-read
+     * afterwards. Metadata is written before the uv commands run, because `uv add` re-reads the
      * manifest it is about to rewrite — an edit landing afterwards would be an edit to a file uv had
      * already replaced, and the last writer would win by accident.
      */
     fun apply(project: Project, module: ProjectModule, edit: ModuleEdit) {
         val service = EnvService.getInstance(project)
         val backend = service.status.backend ?: return
-        val manifest = module.root.resolve(UvWorkspace.MANIFEST)
+        val root = service.status.projectRoot ?: return
 
         EnvOperations.runInBackground(
             project,
             BasedPythonBundle.message("modules.progress.updating", module.name),
-            extraFiles = listOf(manifest),
+            // The module's directory and the one above it, rather than its manifest: a rename moves
+            // the whole thing, and the parent is what has to be re-read for the IDE to see a
+            // directory that is now called something else.
+            extraFiles = listOfNotNull(module.root, module.root.parent, root.resolve(UvWorkspace.MANIFEST)),
         ) { indicator ->
-            writeMetadata(project, manifest, edit)
+            // The rename comes first and the project is re-read afterwards, because everything
+            // below is addressed to a module whose name and directory it has just changed.
+            val target = edit.newName
+                ?.takeIf { ModuleNames.normalize(it) != module.key }
+                ?.let { newName -> rename(project, backend, root, module, newName, indicator) ?: return@runInBackground }
+                ?: module
 
-            val layout = backend.moduleLayout(service.status.projectRoot ?: return@runInBackground)
-                ?: return@runInBackground
+            writeMetadata(project, target.root.resolve(UvWorkspace.MANIFEST), edit)
+
+            val layout = backend.moduleLayout(root) ?: return@runInBackground
             val wanted = edit.dependents.map(ModuleNames::normalize).toSet()
-            val current = layout.dependents(module.name)
 
-            for (dependent in current) {
+            for (dependent in layout.dependents(target.name)) {
                 if (dependent.key in wanted) continue
-                indicator.text = BasedPythonBundle.message("modules.progress.unwiring", module.name, dependent.name)
+                indicator.text = BasedPythonBundle.message("modules.progress.unwiring", target.name, dependent.name)
                 // Every list it is declared in, not just the main one: `uv remove` without the group
                 // flag reports success having removed nothing.
-                for (target in dependent.dependsOn(module.name)) {
+                for (declaredIn in dependent.dependsOn(target.name)) {
                     EnvOperations.runBlockingOp(
                         project,
                         backend,
-                        EnvOp.Remove(listOf(module.name), target, module = dependent.name),
+                        EnvOp.Remove(listOf(target.name), declaredIn, module = dependent.name),
                     )
                 }
             }
 
             for (name in wanted) {
                 val dependent = layout.byName(name) ?: continue
-                if (dependent.dependsOn(module.name).isNotEmpty()) continue
-                indicator.text = BasedPythonBundle.message("modules.progress.wiring", module.name, dependent.name)
+                if (dependent.dependsOn(target.name).isNotEmpty()) continue
+                indicator.text = BasedPythonBundle.message("modules.progress.wiring", target.name, dependent.name)
                 EnvOperations.runBlockingOp(
                     project,
                     backend,
-                    EnvOp.Add(listOf(module.name), EnvDependencyTarget.Main, module = dependent.name),
+                    EnvOp.Add(listOf(target.name), EnvDependencyTarget.Main, module = dependent.name),
                 )
             }
         }
@@ -202,6 +220,139 @@ internal object ModuleOperations {
 
             unlist(project, root, module, deleteFiles)
             if (deleteFiles) deleteDirectory(project, module)
+        }
+    }
+
+    /**
+     * Renames [module] to [newName], and returns it as it is afterwards — or null when it could not
+     * be done, in which case nothing has been changed.
+     *
+     * Six things have to change together, and the order below is the only one in which each step can
+     * see a project that makes sense:
+     *
+     * 1. **The imports**, asked of `by` before anything moves. That is what the request is for, and
+     *    it is the only moment it is answerable: the old path still holds the module, so the server
+     *    can say which module it is. Nothing else happens if the server cannot answer — a rename
+     *    that moves a directory and leaves every `import` naming the old one is a broken project
+     *    made by a button that looked like it worked.
+     * 2. **The siblings stop declaring it**, while it still exists under its old name. Doing this
+     *    after the move would have uv resolving a workspace that names a member that is not there.
+     * 3. **The directories move** — the import package first, then the module's own directory, since
+     *    the first lives inside the second.
+     * 4. **Its manifest** takes the new `[project] name`.
+     * 5. **The root manifest's `members` entry** follows the directory, when it named it outright.
+     * 6. **The siblings declare it again**, under the new name, which is also what reinstalls it.
+     */
+    private fun rename(
+        project: Project,
+        backend: EnvBackend,
+        root: Path,
+        module: ProjectModule,
+        newName: String,
+        indicator: com.intellij.openapi.progress.ProgressIndicator,
+    ): ProjectModule? {
+        indicator.text = BasedPythonBundle.message("modules.progress.renaming", module.name, newName)
+
+        val plan = ModuleRenamePlan.of(module, newName) { Files.isDirectory(it) } ?: return null
+
+        // 1. The imports, before anything is where it is not.
+        if (ModuleImportEdits.applyFor(project, plan.moves()) == null) {
+            report(project, BasedPythonBundle.message("modules.failed.imports"))
+            return null
+        }
+
+        // 2. Un-declare it everywhere, while the workspace still resolves.
+        val dependents = backend.moduleLayout(root)?.dependents(module.name).orEmpty()
+        for (dependent in dependents) {
+            indicator.text = BasedPythonBundle.message("modules.progress.unwiring", module.name, dependent.name)
+            for (declaredIn in dependent.dependsOn(module.name)) {
+                EnvOperations.runBlockingOp(
+                    project,
+                    backend,
+                    EnvOp.Remove(listOf(module.name), declaredIn, module = dependent.name),
+                )
+            }
+        }
+
+        // 3. Move the directories.
+        for (move in plan.moves()) {
+            if (!moveDirectory(project, move)) return null
+        }
+
+        // 4 and 5. The two manifests that name it.
+        val movedRoot = plan.moduleDirectory?.to ?: module.root
+        writeManifest(project, movedRoot.resolve(UvWorkspace.MANIFEST)) { text ->
+            TomlEdits.setString(text, PROJECT, "name", newName)
+        }
+        plan.memberEntry?.let { entry ->
+            writeManifest(project, root.resolve(UvWorkspace.MANIFEST)) { text ->
+                TomlEdits.addArrayItem(
+                    TomlEdits.removeArrayItem(text, WORKSPACE, "members", entry.from),
+                    WORKSPACE,
+                    "members",
+                    entry.to,
+                )
+            }
+        }
+
+        // 6. Declare it again, under the name it now has.
+        for (dependent in dependents) {
+            indicator.text = BasedPythonBundle.message("modules.progress.wiring", newName, dependent.name)
+            EnvOperations.runBlockingOp(
+                project,
+                backend,
+                EnvOp.Add(listOf(newName), EnvDependencyTarget.Main, module = dependent.name),
+            )
+        }
+
+        return backend.moduleLayout(root)?.byName(newName)
+    }
+
+    /**
+     * Moves one directory through the VFS, in a write action.
+     *
+     * Through the VFS rather than `java.nio` for the same reason a deletion is: open editors follow
+     * the file, the indices are told, and the project view updates. A move that fails is reported and
+     * stops the rename where it is — a half-moved module is not something to press on through.
+     */
+    private fun moveDirectory(project: Project, move: ModuleRenamePlan.Move): Boolean {
+        val fs = LocalFileSystem.getInstance()
+        val source = fs.refreshAndFindFileByNioFile(move.from) ?: return true
+        val parent = fs.refreshAndFindFileByNioFile(move.to.parent ?: return false)
+        val name = move.to.fileName?.toString() ?: return false
+
+        return runCatching {
+            WriteAction.runAndWait<Throwable> {
+                if (parent != null && parent != source.parent) {
+                    source.move(this, parent)
+                }
+                source.rename(this, name)
+            }
+            true
+        }.getOrElse { failure ->
+            report(
+                project,
+                BasedPythonBundle.message(
+                    "modules.failed.move",
+                    move.from.toString(),
+                    move.to.toString(),
+                    failure.message.orEmpty(),
+                ),
+            )
+            false
+        }
+    }
+
+    /** Rewrites [manifest] through [edit], leaving it alone when the edit changes nothing. */
+    private fun writeManifest(project: Project, manifest: Path, edit: (String) -> String) {
+        val original = runCatching { Files.readString(manifest) }.getOrNull() ?: return
+        val updated = edit(original)
+        if (updated == original) return
+        runCatching { Files.writeString(manifest, updated) }.onFailure {
+            report(
+                project,
+                BasedPythonBundle.message("modules.failed.manifest", manifest.toString(), it.message.orEmpty()),
+            )
         }
     }
 
