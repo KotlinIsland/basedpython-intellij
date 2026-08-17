@@ -25,8 +25,8 @@ import dev.basedpython.pycharm.settings.BasedPythonSettings
  *
  * ## What is drawn, and what deliberately is not
  *
- * A decided condition gets an inline `= true` / `= false` beside it, and code that will not run is
- * greyed. Nothing else — in particular an *undecided* condition gets nothing at all. Ambiguous is
+ * A decided condition gets a `= true` / `= false` in the margin past its line, and code that will
+ * not run is greyed. Nothing else — in particular an *undecided* condition gets nothing at all. Ambiguous is
  * what an unseeded reading says about nearly every condition, and a hint on each of them would
  * be a screen full of marks that say nothing.
  */
@@ -48,6 +48,23 @@ class ByDataFlowPassFactory : TextEditorHighlightingPassFactory, TextEditorHighl
 
 /** What this pass drew last time, so it can take it down before drawing again. */
 private val DRAWN: Key<List<RangeHighlighter>> = Key.create("basedpython.dataflow.drawn")
+
+/**
+ * The layer the findings are drawn at, and it has to be this high.
+ *
+ * `ADDITIONAL_SYNTAX` (3000) is where a highlighter that adds to the lexer's colouring belongs, and
+ * it was the obvious choice — but it is *under* the colouring this file actually has. `by` colours
+ * a `.by` file with LSP semantic tokens, which the daemon puts in the document markup at
+ * `WEAK_WARNING` (3750, measured in a running IDE), and a higher layer's foreground is painted
+ * last. So the fade over a branch that will not run was drawn and then completely overpainted by
+ * the token colours: `print("bye")` stayed the same blue and green as the branch above it, and the
+ * whole half of the feature that marks the dead path was invisible while the markup model said it
+ * was there.
+ *
+ * One above them, and no higher: a warning (4000) or an error (5000) on a line that will not run is
+ * still the more urgent thing to see, and greying it out would be this feature hiding a diagnostic.
+ */
+private const val OVER_SEMANTIC_TOKENS: Int = HighlighterLayer.WEAK_WARNING + 1
 
 private class ByDataFlowPass(
     project: Project,
@@ -78,6 +95,11 @@ private class ByDataFlowPass(
             return
         }
 
+        // How far along each line's margin the next verdict starts, in characters. A line with two
+        // decided conditions on it — `a if p else (b if q else c)` — would otherwise draw both
+        // labels at the same place, one over the other
+        val taken = HashMap<Int, Int>()
+
         val drawn = found.mapNotNull { finding ->
             val range = finding.range.toTextRange(editor) ?: return@mapNotNull null
             when (finding.kind) {
@@ -85,7 +107,7 @@ private class ByDataFlowPass(
                     ByDataFlowColors.WILL_NOT_RUN,
                     range.first,
                     range.second,
-                    HighlighterLayer.ADDITIONAL_SYNTAX,
+                    OVER_SEMANTIC_TOKENS,
                     HighlighterTargetArea.EXACT_RANGE,
                 )
 
@@ -93,12 +115,15 @@ private class ByDataFlowPass(
                     ByDataFlowColors.DECIDED_CONDITION,
                     range.first,
                     range.second,
-                    HighlighterLayer.ADDITIONAL_SYNTAX,
+                    OVER_SEMANTIC_TOKENS,
                     HighlighterTargetArea.EXACT_RANGE,
                 ).also { highlighter ->
                     // The verdict itself, drawn after the condition rather than as a tooltip: the
                     // point of the feature is that it is readable without hovering
-                    highlighter.customRenderer = ByDataFlowVerdictRenderer(finding.label)
+                    val line = editor.document.getLineNumber(range.second)
+                    val gap = taken.getOrDefault(line, 0)
+                    taken[line] = gap + finding.label.length + 1
+                    highlighter.customRenderer = ByDataFlowVerdictRenderer(finding.label, gap)
                 }
 
                 // A kind this build does not know is one a newer server grew. Drawing it as
