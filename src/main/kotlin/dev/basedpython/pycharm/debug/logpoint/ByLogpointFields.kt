@@ -3,11 +3,11 @@ package dev.basedpython.pycharm.debug.logpoint
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.editor.Document
-import com.intellij.openapi.editor.Editor
-import com.intellij.openapi.editor.event.EditorFactoryEvent
-import com.intellij.openapi.editor.event.EditorFactoryListener
 import com.intellij.openapi.editor.ex.EditorEx
 import com.intellij.openapi.fileEditor.FileDocumentManager
+import com.intellij.openapi.fileEditor.FileEditorManager
+import com.intellij.openapi.fileEditor.FileEditorManagerListener
+import com.intellij.openapi.fileEditor.TextEditor
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.xdebugger.XDebuggerManager
@@ -100,22 +100,28 @@ class ByLogpointFields(private val project: Project) : XBreakpointListener<XBrea
 }
 
 /**
- * Puts the fields back when a `.by` file is opened with log points already in it.
+ * Puts the boxes back when a `.by` file is opened with log points already in it.
  *
- * Breakpoints outlive editors — they are workspace state — so without this a log point set in a
- * previous session, or in a tab that was closed and reopened, would be a gutter icon with nothing
- * beside it saying what it logs.
+ * Breakpoints outlive editors — they are workspace state — so a log point set in a previous session,
+ * or in a tab that was closed and reopened, would otherwise be a gutter icon with nothing beside it
+ * saying what it logs.
+ *
+ * On `FileEditorManagerListener` rather than `EditorFactoryListener`, which was the first attempt and
+ * silently did nothing: declarative listener registration resolves the `Topic` declared on the
+ * listener interface, and `EditorFactoryListener` has none. The registration was accepted, no
+ * listener was ever attached, and the symptom was exactly the bug it was written to fix.
  */
-class ByLogpointFieldsOnEditorOpen : EditorFactoryListener {
+class ByLogpointFieldsOnFileOpen(private val project: Project) : FileEditorManagerListener {
 
-    override fun editorCreated(event: EditorFactoryEvent) {
-        val editor: Editor = event.editor
-        val project = editor.project ?: return
-        val editorEx = editor as? EditorEx ?: return
+    override fun fileOpened(source: FileEditorManager, file: VirtualFile) {
+        if (!file.extension.equals("by", ignoreCase = true)) return
         // After the editor is built and its inlay model is in place.
         ApplicationManager.getApplication().invokeLater({
-            if (project.isDisposed || editor.isDisposed) return@invokeLater
-            ByLogpointFields.populate(project, editorEx)
+            if (project.isDisposed) return@invokeLater
+            source.getAllEditors(file)
+                .filterIsInstance<TextEditor>()
+                .mapNotNull { it.editor as? EditorEx }
+                .forEach { ByLogpointFields.populate(project, it) }
         }, project.disposed)
     }
 }

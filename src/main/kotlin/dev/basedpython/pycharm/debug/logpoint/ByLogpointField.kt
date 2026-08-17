@@ -181,6 +181,10 @@ class ByLogpointField private constructor(
         /** How far in from the box's border the caption starts. */
         private const val CAPTION_INDENT = 4
 
+        /** How far the caption rises above the box, which is also how far it reaches into it. */
+        fun overhangOf(caption: JComponent): Int =
+            (ceil(caption.preferredSize.height * CAPTION_RISE).toInt() - JBUI.scale(4)).coerceAtLeast(0)
+
         private val ACTIVE_FOREGROUND = JBColor(Color(0x5A5D63), Color(0xCED0D6))
         private const val LABEL = "Log:"
         private const val PLACEHOLDER = "Enter expression to log"
@@ -217,22 +221,26 @@ class ByLogpointField private constructor(
             }
         }
 
-        // Sized here rather than on the box. An EditorTextField that has not been shown yet has no
-        // editor and reports almost no height, so fixing the *box's* preferred size took a snapshot
-        // of that emptiness and kept it — which is how the box came out as a bar a few pixels tall,
-        // with the real field inside it and nowhere to draw. The host editor's line height is what
-        // one line of this text actually needs, and it is known before anything is displayed.
+        // Sized from the host editor's line height rather than from the text field's own idea of
+        // itself: one that has not been shown yet has no editor and reports almost no height, which
+        // is how the box once came out as a bar a few pixels tall.
+        val label = CaptionLabel(hostEditor)
+
+        // The caption is opaque — it paints the editor background to notch the box's border — and it
+        // sits over the box's top-left corner, which is exactly where the text starts. Without room
+        // for it the caption painted over the top of the first glyphs, which read as clipped text
+        // and was not: the box was simply not tall enough to have a line of text below the caption.
+        val intrusion = (label.preferredSize.height - overhangOf(label)).coerceAtLeast(0)
         field?.preferredSize = Dimension(
             JBUI.scale(FIELD_WIDTH),
-            hostEditor.lineHeight + JBUI.scale(FIELD_VERTICAL_PADDING),
+            hostEditor.lineHeight + intrusion + JBUI.scale(FIELD_VERTICAL_PADDING),
         )
+        field?.border = JBUI.Borders.emptyTop(intrusion)
 
         val box = BorderLayoutPanel()
         box.isOpaque = false
         box.border = ShadowJava2DBorder(JBUI.scale(ARC), FIELD_BACKGROUND, FIELD_BORDER)
         box.addToCenter(expressionEditor.editorComponent)
-
-        val label = CaptionLabel(hostEditor)
 
         val editorComponent = expressionEditor.editorComponent
         DumbAwareAction.create { commit() }.registerCustomShortcutSet(CommonShortcuts.ENTER, editorComponent, this)
@@ -331,8 +339,7 @@ class ByLogpointField private constructor(
             setComponentZOrder(caption, 0)
         }
 
-        private fun overhang(): Int =
-            (ceil(caption.preferredSize.height * CAPTION_RISE).toInt() - JBUI.scale(4)).coerceAtLeast(0)
+        private fun overhang(): Int = overhangOf(caption)
 
         override fun getPreferredSize(): Dimension = box.preferredSize.let {
             Dimension(it.width, it.height + overhang())
