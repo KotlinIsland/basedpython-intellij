@@ -20,7 +20,6 @@ import com.intellij.ui.dsl.builder.panel
 import org.eclipse.lsp4j.TextEdit
 import dev.basedpython.pycharm.format.ByCleanup
 import dev.basedpython.pycharm.format.ByCleanupOp
-import dev.basedpython.pycharm.lang.BasedPythonFileType
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import dev.basedpython.pycharm.util.BasedPythonBundle
 import javax.swing.JComponent
@@ -33,18 +32,21 @@ internal class ByCleanupCheckinHandlerFactory : CheckinHandlerFactory() {
 }
 
 /**
- * Runs the enabled [ByCleanupOp]s over the `.by` files being committed.
+ * Applies the project's lint fixes to the files being committed.
+ *
+ * Reformatting and import tidying are not here: the commit dialog's own *Reformat code* and
+ * *Optimize imports* options already cover those, and reach `buff` for the files this plugin owns.
  *
  * Only files the `buff` server already has open are touched, and that is a real limit rather than
- * an oversight. Every pass here is answered from the server's copy of a document, which it has only
- * for a file the editor opened or that has unsaved changes — the platform decides what to hand it
- * and offers no way to push a file in. A commit whose files are all closed is therefore left alone,
+ * an oversight. The pass is answered from the server's copy of a document, which it has only for a
+ * file the editor opened or that has unsaved changes — the platform decides what to hand it and
+ * offers no way to push a file in. A commit whose files are all closed is therefore left alone,
  * which is quiet rather than wrong; running them through a `buff` subprocess instead would resolve
  * the project's configuration by a different route than the editor does, and the two disagreeing
  * about which rules apply is worse than not tidying.
  *
- * Off by default. These passes rewrite files *after* the diff has been reviewed, which the
- * platform's own reformat-on-commit does too, but it should be asked for rather than assumed.
+ * Off by default. It rewrites files *after* the diff has been reviewed, which the platform's own
+ * reformat-on-commit does too, but it should be asked for rather than assumed.
  */
 internal class ByCleanupCheckinHandler(private val panel: CheckinProjectPanel) : CheckinHandler() {
 
@@ -54,14 +56,16 @@ internal class ByCleanupCheckinHandler(private val panel: CheckinProjectPanel) :
   override fun getBeforeCheckinConfigurationPanel(): RefreshableOnComponent = CleanupOptions()
 
   override fun beforeCheckin(): ReturnResult {
-    val ops = settings.cleanupOnCommit
-    if (ops.isEmpty()) return ReturnResult.COMMIT
+    if (!settings.fixAllOnCommit) return ReturnResult.COMMIT
 
-    val files = panel.virtualFiles.filter { it.fileType == BasedPythonFileType.INSTANCE }
+    // No file-type test: which files the fixes apply to is the formatter/linter server's own
+    // answer, and `findServer` below is where it is asked. That covers `.py` and `.pyi` as well as
+    // `.by` and `.byi`.
+    val files = panel.virtualFiles
     if (files.isEmpty()) return ReturnResult.COMMIT
 
     ProgressManager.getInstance().runProcessWithProgressSynchronously(
-      { runCleanup(files, ops) },
+      { runCleanup(files) },
       BasedPythonBundle.message("progress.cleanupOnCommit"),
       true,
       project,
@@ -70,7 +74,7 @@ internal class ByCleanupCheckinHandler(private val panel: CheckinProjectPanel) :
     return ReturnResult.COMMIT
   }
 
-  private fun runCleanup(files: List<VirtualFile>, ops: Set<ByCleanupOp>) {
+  private fun runCleanup(files: Collection<VirtualFile>) {
     val indicator = ProgressManager.getInstance().progressIndicator
     val documents = FileDocumentManager.getInstance()
 
@@ -82,24 +86,19 @@ internal class ByCleanupCheckinHandler(private val panel: CheckinProjectPanel) :
       val server = ByCleanup.findServer(project, file) ?: continue
       val document = documents.getDocument(file) ?: continue
 
-      var fileChanged = false
-      for (op in ByCleanupOp.inRunOrder(ops)) {
-        val edits = ByCleanup.requestEdits(server, file, op)
-        if (edits.isNullOrEmpty()) continue
-        // Asking the server happens here, on the progress thread; the write has to go back to the
-        // EDT, and has to finish before the next pass is asked for, so that the server is answering
-        // from the text this one produced.
-        applyOnEdt(document, edits)
-        fileChanged = true
-      }
-      if (fileChanged) changed += file
+      val edits = ByCleanup.requestEdits(server, file, ByCleanupOp.FixAll)
+      if (edits.isNullOrEmpty()) continue
+
+      // Asking the server happens here, on the progress thread; the write has to go back to the EDT.
+      applyOnEdt(document, edits)
+      changed += file
     }
 
     if (changed.isNotEmpty()) {
       // The committed content is read from disk, so what was just rewritten in memory has to reach
       // it before the commit does.
       applyOnEdt { documents.saveAllDocuments() }
-      LOG.debug("buff cleanup rewrote ${changed.size} file(s) before commit")
+      LOG.debug("cleanup rewrote ${changed.size} file(s) before commit")
     }
   }
 
@@ -120,26 +119,19 @@ internal class ByCleanupCheckinHandler(private val panel: CheckinProjectPanel) :
       .invokeAndWait(action, ModalityState.defaultModalityState())
   }
 
-  /**
-   * The two checkboxes under *Before Commit*, matching the platform's own reformat and optimize
-   * entries.
-   */
+  /** The checkbox under *Before Commit*, beside the platform's own reformat and optimize entries. */
   private inner class CleanupOptions : RefreshableOnComponent {
-    private val format = JBCheckBox(BasedPythonBundle.message("commit.formatName"))
     private val fixAll = JBCheckBox(BasedPythonBundle.message("commit.fixAllName"))
 
     override fun getComponent(): JComponent = panel {
-      row { cell(format) }
       row { cell(fixAll) }
     }
 
     override fun saveState() {
-      settings.formatOnCommit = format.isSelected
       settings.fixAllOnCommit = fixAll.isSelected
     }
 
     override fun restoreState() {
-      format.isSelected = settings.formatOnCommit
       fixAll.isSelected = settings.fixAllOnCommit
     }
   }
