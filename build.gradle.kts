@@ -1,5 +1,6 @@
 import org.jetbrains.changelog.Changelog
 import org.jetbrains.changelog.markdownToHTML
+import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
 import org.jetbrains.intellij.platform.gradle.TestFrameworkType
 import org.jetbrains.intellij.platform.gradle.tasks.VerifyPluginTask
 
@@ -273,5 +274,32 @@ tasks {
   // One zip per platform, distinguishable in build/distributions and as a release asset.
   buildPlugin {
     archiveClassifier = bundledPlatform.orElse("")
+  }
+}
+/** The PyCharm `runPyCharm` downloads when none is named. Kept beside the IDEA version it mirrors. */
+val PYCHARM_VERSION = "2026.2.1"
+
+// --- Running the plugin in PyCharm -------------------------------------------------------------
+//
+// `./gradlew runPyCharm` — the same sandbox launch as `runIde`, in PyCharm Professional instead of
+// IntelliJ IDEA, in a sandbox of its own so the two do not share settings.
+//
+// Worth a task rather than a note in the README, because the two IDEs disagree about this plugin in
+// ways only a launch shows, and the disagreements are invisible from the IDEA side. PyCharm ships
+// none of IntelliJ IDEA's logpoints modules — they are bundled with its Java plugin, and
+// `intellij.debugger.logpoints.backend` is built on `intellij.java.debugger.impl` — so the gutter
+// gap, the inline "Log:" field, *Add Log Point* and log point undo are this plugin's own code there
+// and the IDE's own everywhere else. Only one of those two paths runs in any given IDE, so testing
+// in IDEA exercises neither the code this plugin ships for PyCharm nor the arbitration between them.
+//
+// `-PpycharmPath=/Applications/PyCharm.app` launches a PyCharm already installed — a nightly, say —
+// instead of downloading one. `-PpycharmVersion=2026.3` picks a different published build.
+val runPyCharm by intellijPlatformTesting.runIde.registering {
+  val installed = providers.gradleProperty("pycharmPath")
+  if (installed.isPresent) {
+    localPath = file(installed.get())
+  } else {
+    type = IntelliJPlatformType.PyCharmProfessional
+    version = providers.gradleProperty("pycharmVersion").orElse(PYCHARM_VERSION)
   }
 }
