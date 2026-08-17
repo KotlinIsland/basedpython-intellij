@@ -410,11 +410,14 @@
     <applicationListeners>
         <listener class="dev.basedpython.pycharm.run.watch.WatchModeSaveListener"
                   topic="com.intellij.openapi.fileEditor.FileDocumentManagerListener"/>
+        <!-- Log points outlive editors, so a .by file opened with some already set needs its boxes back. -->
+        <listener class="dev.basedpython.pycharm.debug.logpoint.ByLogpointFieldsOnEditorOpen"
+                  topic="com.intellij.openapi.editor.event.EditorFactoryListener"/>
     </applicationListeners>
 
     <projectListeners>
-        <!-- Opens the inline "Log:" field when a log point is added from the gutter gap. -->
-        <listener class="dev.basedpython.pycharm.debug.logpoint.ByLogpointPromptListener"
+        <!-- The "Log:" box every .by log point shows in its gap, for as long as it exists. -->
+        <listener class="dev.basedpython.pycharm.debug.logpoint.ByLogpointFields"
                   topic="com.intellij.xdebugger.breakpoints.XBreakpointListener"/>
     </projectListeners>
 

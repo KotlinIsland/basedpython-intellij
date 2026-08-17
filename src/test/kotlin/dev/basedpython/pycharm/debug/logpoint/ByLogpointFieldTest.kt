@@ -1,0 +1,132 @@
+package dev.basedpython.pycharm.debug.logpoint
+
+import com.intellij.openapi.editor.ex.EditorEx
+import com.intellij.testFramework.junit5.RunInEdt
+import com.intellij.testFramework.junit5.fixture.TestFixtures
+import com.intellij.xdebugger.XDebuggerManager
+import com.intellij.xdebugger.XDebuggerUtil
+import com.intellij.xdebugger.breakpoints.SuspendPolicy
+import com.intellij.xdebugger.breakpoints.XLineBreakpoint
+import com.intellij.xdebugger.breakpoints.XLineBreakpointAdditionalInfo
+import com.intellij.xdebugger.breakpoints.XLineBreakpointVerticalPlacement
+import com.intellij.xdebugger.evaluation.EvaluationMode
+import dev.basedpython.pycharm.debug.ByLineBreakpointType
+import dev.basedpython.pycharm.lang.BasedPythonLanguage
+import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Test
+
+/**
+ * The `Log:` box, which is how a log point looks rather than a prompt that opens once.
+ *
+ * The distinction is the whole of what "there is no log point UI" meant: a log point made by the
+ * `print` quick fix never went through a prompt, so it was a yellow dot doing something unstated.
+ * A box that is always there also means nothing here has to remove a breakpoint to tidy up after
+ * itself, which is what every focus bug in this feature came from.
+ */
+@TestFixtures
+@RunInEdt(writeIntent = true)
+class ByLogpointFieldTest {
+
+    private val fixture by codeInsightFixture()
+
+    private val breakpoints get() = XDebuggerManager.getInstance(fixture.project).breakpointManager
+
+    private val type get() = XDebuggerUtil.getInstance().findBreakpointType(ByLineBreakpointType::class.java)!!
+
+    private fun logpointAt(line: Int, expression: String? = null): XLineBreakpoint<*> {
+        fixture.configureByText("main.by", "def f(x):\n    return x\n")
+        val info = XLineBreakpointAdditionalInfo.Builder()
+            .setVerticalPlacement(XLineBreakpointVerticalPlacement.INTER_LINE)
+            .setSuspendPolicy(SuspendPolicy.NONE)
+            .apply { expression?.let { setLogExpressionIfEnabled(it) } }
+            .build()
+        return breakpoints.addLineBreakpoint(type, fixture.file.virtualFile.url, line, null, info)
+    }
+
+    private fun editor() = fixture.editor as EditorEx
+
+    private fun inlays() = editor().inlayModel.getBlockElementsInRange(0, editor().document.textLength)
+
+    private fun type(field: ByLogpointField, text: String) {
+        field.expressionEditor.expression = XDebuggerUtil.getInstance()
+            .createExpression(text, BasedPythonLanguage, null, EvaluationMode.EXPRESSION)
+    }
+
+    @Test
+    fun `a log point that already has an expression still gets a box`() {
+        // The print quick fix supplies the expression itself, so this log point never sees a prompt.
+        val logpoint = logpointAt(1, expression = "x * 2")
+        val field = ByLogpointField.show(fixture.project, editor(), logpoint)
+
+        assertNotNull(field, "every log point shows its expression, however it was made")
+        assertEquals("x * 2", field!!.expressionEditor.expression?.expression)
+        assertTrue(inlays().isNotEmpty())
+    }
+
+    @Test
+    fun `committing writes the expression and leaves the box in place`() {
+        val logpoint = logpointAt(1)
+        val field = ByLogpointField.show(fixture.project, editor(), logpoint)!!
+
+        type(field, "x")
+        field.commit()
+
+        assertEquals("x", logpoint.logExpressionObject?.expression)
+        assertTrue(inlays().isNotEmpty(), "the box is how a log point looks, not a prompt that closes")
+    }
+
+    @Test
+    fun `nothing the box does removes the log point`() {
+        val logpoint = logpointAt(1)
+        val field = ByLogpointField.show(fixture.project, editor(), logpoint)!!
+
+        field.commit()
+        field.revert()
+
+        assertTrue(
+            breakpoints.getBreakpoints(type).contains(logpoint),
+            "an empty log point is visible now, so there is nothing to tidy away",
+        )
+    }
+
+    @Test
+    fun `reverting puts back what the log point says`() {
+        val logpoint = logpointAt(1, expression = "kept")
+        val field = ByLogpointField.show(fixture.project, editor(), logpoint)!!
+
+        type(field, "abandoned")
+        field.revert()
+
+        assertEquals("kept", field.expressionEditor.expression?.expression)
+        assertEquals("kept", logpoint.logExpressionObject?.expression)
+    }
+
+    @Test
+    fun `asking twice returns the same box rather than stacking another`() {
+        val logpoint = logpointAt(1)
+        val first = ByLogpointField.show(fixture.project, editor(), logpoint)
+        val second = ByLogpointField.show(fixture.project, editor(), logpoint)
+
+        assertTrue(first === second)
+        assertEquals(1, inlays().size)
+    }
+
+    @Test
+    fun `closing the box takes the inlay with it`() {
+        val logpoint = logpointAt(1)
+        ByLogpointField.show(fixture.project, editor(), logpoint)!!.close()
+
+        assertTrue(inlays().isEmpty())
+        assertNull(ByLogpointField.of(logpoint))
+    }
+
+    @Test
+    fun `a line the document does not have gets no box`() {
+        val logpoint = logpointAt(99)
+        assertNull(ByLogpointField.show(fixture.project, editor(), logpoint))
+    }
+}
