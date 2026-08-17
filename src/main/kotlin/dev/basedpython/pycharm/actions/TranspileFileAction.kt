@@ -12,10 +12,11 @@ import com.intellij.openapi.progress.Task
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.testFramework.LightVirtualFile
 import dev.basedpython.pycharm.lang.BasedPythonFileType
+import dev.basedpython.pycharm.transpile.ByTranspile
 import dev.basedpython.pycharm.util.BasedPythonBundle
 import java.nio.file.Paths
 
-/** Right-click a `.by` file → run `by transpile <file>` → open output in a scratch Python tab. */
+/** Right-click a `.by` file → ask the server what it lowers to → open it in a scratch Python tab. */
 class TranspileFileAction : AnAction() {
 
     override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
@@ -28,19 +29,18 @@ class TranspileFileAction : AnAction() {
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
         val file = e.getData(CommonDataKeys.VIRTUAL_FILE) ?: return
-        val path = file.toNioPath()
 
         ProgressManager.getInstance().run(object : Task.Backgroundable(project, BasedPythonBundle.message("progress.transpiling", file.name), true) {
             override fun run(indicator: ProgressIndicator) {
                 indicator.isIndeterminate = true
-                val out = ByCli.run(project, "transpile", path.toString(), cwd = path.parent, contextFile = file) ?: return
-                if (out.exitCode != 0) {
-                    ByCli.notifyError(project, BasedPythonBundle.message("notification.transpileFailed.title"), out.stderr.ifBlank { BasedPythonBundle.message("notification.exitCode", out.exitCode) })
-                    return
-                }
+                val python = ByTranspile.sourceOrNotify(
+                    project,
+                    file,
+                    failureTitle = BasedPythonBundle.message("notification.transpileFailed.title"),
+                ) ?: return
                 val pyName = file.nameWithoutExtension + ".py"
                 ApplicationManager.getApplication().invokeLater {
-                    val scratch = LightVirtualFile(pyName, com.intellij.openapi.fileTypes.FileTypeManager.getInstance().getFileTypeByExtension("py"), out.stdout)
+                    val scratch = LightVirtualFile(pyName, com.intellij.openapi.fileTypes.FileTypeManager.getInstance().getFileTypeByExtension("py"), python)
                     FileEditorManager.getInstance(project).openFile(scratch, true)
                 }
             }

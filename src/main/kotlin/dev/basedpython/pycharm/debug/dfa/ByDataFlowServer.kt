@@ -13,12 +13,16 @@ import java.util.concurrent.CompletableFuture
  * which is the supported way to add a request the base protocol does not define — the same
  * mechanism [dev.basedpython.pycharm.debug.ByDebugProtocolServer] uses on the DAP side.
  *
+ * Also carries [dev.basedpython.pycharm.lsp.ext.ByServerExtensions], the rest of `by`'s protocol
+ * extensions, because a descriptor names one `lsp4jServerClass` and every custom request the server
+ * answers has to be reachable through it.
+ *
  * **Why not `inlayHint`.** An inlay hint request carries a document and a range and nothing else.
  * The answer here depends entirely on what a debugger saw, and there is nowhere in that request to
  * put it. **Why not `executeCommand`.** That is for things that have an effect; this is a question
  * with an answer.
  */
-interface ByDataFlowServer : LanguageServer {
+interface ByDataFlowServer : LanguageServer, dev.basedpython.pycharm.lsp.ext.ByServerExtensions {
     /**
      * What the program's own state settles about the code below the line it is stopped on.
      *

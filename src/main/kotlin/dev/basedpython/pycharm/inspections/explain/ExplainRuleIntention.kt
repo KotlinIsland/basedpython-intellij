@@ -58,8 +58,8 @@ class ExplainRuleIntention : IntentionAction {
             override fun run(indicator: ProgressIndicator) {
                 indicator.isIndeterminate = true
                 when (val explanation = ByRuleExplainer.explain(project, code)) {
-                    is ByRuleExplanation.Found -> showBalloon(project, editor, code, explanation.body)
-                    is ByRuleExplanation.NotFound -> ByCli.notifyError(
+                    is ByRuleExplanationResult.Found -> showBalloon(project, editor, code, explanation.body)
+                    is ByRuleExplanationResult.NotFound -> ByCli.notifyError(
                         project,
                         BasedPythonBundle.message("explainRule.noExplanationFor.title", code),
                         explanation.message,

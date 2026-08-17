@@ -18,21 +18,20 @@ import com.intellij.ui.JBColor
 import com.intellij.ui.awt.RelativePoint
 import dev.basedpython.pycharm.actions.ByCli
 import dev.basedpython.pycharm.lang.BasedPythonFileType
+import dev.basedpython.pycharm.lsp.ext.ByTranspilationNote
 import dev.basedpython.pycharm.markup.ByCodeSpans
 
 /**
  * Action: "Explain Transpilation" (FEATURES.md §185).
  *
- * Runs `by transpile` on the current .by file, feeds the basedpython source plus the generated
- * Python to the pure [TranspilationExplainer], and shows a human-readable, structured report of the
- * basedpython-specific constructs that were transformed (null-safe access, elvis, data classes,
- * pattern matching, etc.).  This is a deterministic, NON-AI "AI-assist hook": it exposes the
- * basedpython -> python mapping in a form a human (or AI) can consume.
+ * Shows a structured report of the basedpython-specific constructs the file uses — null-safe
+ * access, coalescing, data classes, pattern matching — and what each lowers to.  A deterministic,
+ * NON-AI "AI-assist hook": it exposes the basedpython → python mapping in a form a human (or an AI)
+ * can consume.
  *
- * The action is intentionally thin — all recognition lives in [TranspilationExplainer].  Invocation
- * and display follow the existing transpile-action conventions
- * (see [dev.basedpython.pycharm.transpile.ShowTranspiledDiffAction] and
- * [dev.basedpython.pycharm.transpile.selection.TranspileSelectionAction]).
+ * The recognition is the server's, off the parse tree the transpiler itself runs on.  It used to be
+ * a regex per construct here, over the source text, which cannot tell an operator from the same
+ * characters inside a string or a comment and drifts from the language the moment it grows one.
  */
 class ExplainTranspilationAction : AnAction() {
 
@@ -49,28 +48,11 @@ class ExplainTranspilationAction : AnAction() {
         val file = e.getData(CommonDataKeys.VIRTUAL_FILE) ?: return
         val editor = e.getData(CommonDataKeys.EDITOR)
 
-        // Prefer the live (possibly unsaved) document text so the explanation matches what the
-        // user sees; fall back to disk contents.
-        val bySource = FileDocumentManager.getInstance().getDocument(file)?.text
-            ?: runCatching { String(file.contentsToByteArray(), file.charset) }.getOrNull()
-            ?: ""
-
-        val path = file.toNioPath()
         ProgressManager.getInstance().run(
             object : Task.Backgroundable(project, "Explaining transpilation of ${file.name}", true) {
                 override fun run(indicator: ProgressIndicator) {
                     indicator.isIndeterminate = true
-                    val out = ByCli.run(project, "transpile", path.toString(), cwd = path.parent) ?: return
-                    if (out.exitCode != 0) {
-                        ByCli.notifyError(
-                            project,
-                            "by transpile failed",
-                            out.stderr.ifBlank { "exit ${out.exitCode}" },
-                        )
-                        return
-                    }
-
-                    val notes = TranspilationExplainer.explain(bySource, out.stdout)
+                    val notes = ByTranspilationNotes.of(project, file) ?: return
                     val html = renderHtml(file.name, notes)
                     ApplicationManager.getApplication().invokeLater {
                         showReport(project, editor, html)
@@ -105,7 +87,7 @@ class ExplainTranspilationAction : AnAction() {
 
     companion object {
         /** Build the HTML report for [notes]. Exposed for reuse/testing of the rendering. */
-        fun renderHtml(fileName: String, notes: List<TranspilationNote>): String = buildString {
+        fun renderHtml(fileName: String, notes: List<ByTranspilationNote>): String = buildString {
             append("<html><body style='font-family:sans-serif'>")
             append("<b>Explain Transpilation: ").append(escape(fileName)).append("</b><br/>")
             if (notes.isEmpty()) {
@@ -114,10 +96,10 @@ class ExplainTranspilationAction : AnAction() {
                 append("<ul>")
                 for (note in notes) {
                     append("<li>")
-                    append("<b>").append(escape(note.constructName)).append("</b>")
-                    append(" (line ").append(note.lineNumber).append(")<br/>")
-                    append("<code>").append(escape(note.bySnippet)).append("</code><br/>")
-                    append(ByCodeSpans.toHtml(note.explanation))
+                    append("<b>").append(escape(note.construct.orEmpty())).append("</b>")
+                    append(" (line ").append(note.line).append(")<br/>")
+                    append("<code>").append(escape(note.snippet.orEmpty())).append("</code><br/>")
+                    append(ByCodeSpans.toHtml(note.explanation.orEmpty()))
                     append("</li>")
                 }
                 append("</ul>")

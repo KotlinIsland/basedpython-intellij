@@ -13,10 +13,10 @@ import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.popup.JBPopupFactory
 import com.intellij.openapi.vfs.VirtualFile
-import dev.basedpython.pycharm.actions.ByCli
+import dev.basedpython.pycharm.transpile.ByTranspile
+import dev.basedpython.pycharm.util.BasedPythonBundle
 import dev.basedpython.pycharm.lang.BasedPythonFileType
 import java.awt.datatransfer.StringSelection
-import java.nio.file.Files
 import javax.swing.JButton
 import javax.swing.JComponent
 import javax.swing.JPanel
@@ -32,9 +32,10 @@ import java.awt.Dimension
  * Transpiles JUST the currently selected basedpython snippet to Python and shows the result in a
  * read-only popup with a "Copy" button.
  *
- * The `by` CLI transpiles files (writing Python to stdout — see [dev.basedpython.pycharm.transpile]
- * / TranspileFileAction), so the selection is written to a temp `.by` file, `by transpile` is run on
- * it, and `out.stdout` is shown.
+ * The selection travels to the running `by` server as the text of the request. It used to be
+ * written to a temp `.by` file with the CLI run over it, which is the thing a fragment made look
+ * necessary and never was: a request can carry source, and [CommonDataKeys.VIRTUAL_FILE] is only
+ * there to say which document the fragment came from, so the request reaches a server at all.
  */
 class TranspileSelectionAction : AnAction() {
 
@@ -50,6 +51,7 @@ class TranspileSelectionAction : AnAction() {
 
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
+        val file = e.getData(CommonDataKeys.VIRTUAL_FILE) ?: return
         val editor = e.getData(CommonDataKeys.EDITOR) ?: return
         val selection = editor.selectionModel.selectedText ?: return
         if (selection.isBlank()) return
@@ -59,40 +61,15 @@ class TranspileSelectionAction : AnAction() {
                 override fun run(indicator: ProgressIndicator) {
                     indicator.isIndeterminate = true
 
-                    val tempDir = Files.createTempDirectory("by-transpile-selection")
-                    val tempBy = tempDir.resolve("snippet.by")
-                    try {
-                        Files.writeString(tempBy, selection)
+                    val python = ByTranspile.sourceOrNotifySnippet(
+                        project,
+                        file,
+                        selection,
+                        failureTitle = BasedPythonBundle.message("notification.transpileFailed.title"),
+                    ) ?: return
 
-                        val out = ByCli.run(
-                            project,
-                            "transpile",
-                            tempBy.toString(),
-                            cwd = tempDir,
-                        ) ?: return
-                        if (out.exitCode != 0) {
-                            ByCli.notifyError(
-                                project,
-                                "by transpile failed",
-                                out.stderr.ifBlank { "exit ${out.exitCode}" },
-                            )
-                            return
-                        }
-
-                        // TranspileFileAction reads the generated Python from stdout; fall back to the
-                        // sibling `.py` file if the CLI wrote one instead.
-                        val python = out.stdout.ifBlank {
-                            val generated = tempDir.resolve("snippet.py")
-                            if (Files.exists(generated)) Files.readString(generated) else ""
-                        }
-
-                        ApplicationManager.getApplication().invokeLater {
-                            showPopup(project, editor, python)
-                        }
-                    } finally {
-                        runCatching { Files.deleteIfExists(tempDir.resolve("snippet.py")) }
-                        runCatching { Files.deleteIfExists(tempBy) }
-                        runCatching { Files.deleteIfExists(tempDir) }
+                    ApplicationManager.getApplication().invokeLater {
+                        showPopup(project, editor, python)
                     }
                 }
             },

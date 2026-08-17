@@ -21,6 +21,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.testFramework.LightVirtualFile
 import dev.basedpython.pycharm.actions.ByCli
+import dev.basedpython.pycharm.util.BasedPythonBundle
 import dev.basedpython.pycharm.lang.BasedPythonFileType
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
@@ -50,23 +51,15 @@ class ShowTranspiledDiffAction : AnAction() {
     }
 
     private fun runTranspileAndShowDiff(project: Project, file: VirtualFile) {
-        val path = file.toNioPath()
-
         ProgressManager.getInstance().run(
             object : Task.Backgroundable(project, "Transpiling ${file.name}", true) {
                 override fun run(indicator: ProgressIndicator) {
                     indicator.isIndeterminate = true
-                    val out = ByCli.run(project, "transpile", path.toString(), cwd = path.parent) ?: return
-                    if (out.exitCode != 0) {
-                        ByCli.notifyError(
-                            project,
-                            "by transpile failed",
-                            out.stderr.ifBlank { "exit ${out.exitCode}" },
-                        )
-                        return
-                    }
-
-                    val pythonSource = out.stdout
+                    val pythonSource = ByTranspile.sourceOrNotify(
+                        project,
+                        file,
+                        failureTitle = BasedPythonBundle.message("notification.transpileFailed.title"),
+                    ) ?: return
                     ApplicationManager.getApplication().invokeLater {
                         showDiff(project, file, pythonSource)
                         installDocumentListener(project, file)
@@ -126,16 +119,16 @@ class ShowTranspiledDiffAction : AnAction() {
                 return@Timer
             }
 
-            val path = file.toNioPath()
             val task = object : Task.Backgroundable(project, "Refreshing transpile…", false) {
                 override fun run(indicator: ProgressIndicator) {
                     try {
                         indicator.isIndeterminate = true
-                        val out = ByCli.run(project, "transpile", path.toString(), cwd = path.parent)
-                            ?: return
-                        if (out.exitCode != 0) return   // silently ignore during auto-refresh
-
-                        val pythonSource = out.stdout
+                        // Quiet on failure: this fires while the file is being typed into, and
+                        // source that does not lower yet is the ordinary state mid-edit rather
+                        // than something to interrupt anyone about.
+                        val pythonSource =
+                            (ByTranspile.toPython(project, file) as? ByTranspileResult.Generated)
+                                ?.source ?: return
                         ApplicationManager.getApplication().invokeLater {
                             showDiff(project, file, pythonSource)
                         }
