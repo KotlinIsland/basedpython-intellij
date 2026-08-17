@@ -1,5 +1,6 @@
 package dev.basedpython.pycharm.debug
 
+import com.google.gson.JsonObject
 import org.eclipse.lsp4j.debug.services.IDebugProtocolServer
 import org.eclipse.lsp4j.jsonrpc.services.JsonRequest
 import java.util.concurrent.CompletableFuture
@@ -34,12 +35,20 @@ interface ByDebugProtocolServer : IDebugProtocolServer {
      * data-flow feature reads as "this session has no facts" — see
      * [dev.basedpython.pycharm.debug.dfa.ByDataFlowRequests].
      *
-     * Untyped for the reason [setPydevdSourceMap]'s result is: the answer is a shape
-     * [dev.basedpython.pycharm.debug.dfa.ByDataFlowFacts] reads field by field, and giving Gson a
-     * class for it would put the same vocabulary in two places that have to agree.
+     * No POJO for the answer, for the reason [ByMoved] has none: it is bpd's `Facts` serialised
+     * whole, and a class here would be a second copy of a vocabulary that has to agree.
+     * [dev.basedpython.pycharm.debug.dfa.ByDataFlowFacts] reads it field by field instead.
+     *
+     * **But [JsonObject] rather than `Any?`, and that distinction is the whole feature.** A
+     * declared type is what lsp4j hands Gson to build the body with, and Gson's answer for
+     * `Object` is a [com.google.gson.internal.LinkedTreeMap] — measured against a real lsp4j
+     * `DebugLauncher` pair, replaying a body a real `bpd` sent. A caller that then asks for a
+     * `JsonObject` gets nothing, on every stop, silently, because a debugger with no facts is the
+     * ordinary case this feature is built to shrug at. `JsonObject` is just as untyped and is a
+     * type Gson knows how to build. See `ByFactsWireTest`.
      */
     @JsonRequest("bpd/facts")
-    fun facts(args: dev.basedpython.pycharm.debug.dfa.ByFactsArguments): CompletableFuture<Any?>
+    fun facts(args: dev.basedpython.pycharm.debug.dfa.ByFactsArguments): CompletableFuture<JsonObject?>
 
     /**
      * Which of bpd's own events this client reads.

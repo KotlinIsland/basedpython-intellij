@@ -47,7 +47,7 @@ object ByDataFlowRequests {
                                 // does not go much past it
                                 limit = ByFactsLimit(depth = 3),
                             ),
-                        ).await() as? JsonObject
+                        ).await()
                     }.await()
                 } catch (e: CompletionException) {
                     // The ordinary case, and not an error: an adapter that does not implement the

@@ -18,9 +18,13 @@ import org.junit.jupiter.api.Test
  */
 class ByDataFlowFactsTest {
 
+    // `mode` is an object with its own tag, not a string — that is how a real bpd sends it (see
+    // the capture in `ByFactsWireTest`). Nothing here reads it, which is exactly why it was worth
+    // correcting: an envelope nobody checks is one a reader would otherwise take as documentation
     private fun facts(vararg proved: String) =
-        JsonParser.parseString("""{"proved":[${proved.joinToString(",")}],"silent":[],"mode":"non-stop"}""")
-            .asJsonObject
+        JsonParser.parseString(
+            """{"proved":[${proved.joinToString(",")}],"silent":[],"mode":{"mode":"non_stop"}}""",
+        ).asJsonObject
 
     private fun permanent(name: String, observed: String) = """
         {"name":"$name","scope":"local","observed":$observed,"stability":{"stability":"permanent"}}
