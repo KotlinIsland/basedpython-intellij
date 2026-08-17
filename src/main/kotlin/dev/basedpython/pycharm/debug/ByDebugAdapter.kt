@@ -6,6 +6,7 @@ import com.intellij.execution.ExecutionResult
 import com.intellij.execution.configurations.RunProfileState
 import com.intellij.execution.process.ProcessHandler
 import com.intellij.execution.runners.ExecutionEnvironment
+import com.intellij.execution.ui.ConsoleView
 import com.intellij.execution.ui.ConsoleViewContentType
 import com.intellij.execution.ui.ExecutionConsole
 import com.intellij.openapi.diagnostic.Logger
@@ -19,6 +20,7 @@ import com.intellij.platform.dap.DapDebugSession
 import com.intellij.platform.dap.DapEventConsumer
 import com.intellij.platform.dap.DapExceptionBreakpoint
 import com.intellij.platform.dap.DapExceptionInfo
+import com.intellij.platform.dap.DapInitializationException
 import com.intellij.platform.dap.DapStartRequest
 import com.intellij.platform.dap.DebugAdapterDescriptor
 import com.intellij.platform.dap.DebugAdapterId
@@ -26,17 +28,23 @@ import com.intellij.platform.dap.DebugAdapterSupportProvider
 import com.intellij.platform.dap.connection.DebugAdapterHandle
 import com.intellij.platform.dap.connection.DebugAdapterSocketConnection
 import com.intellij.platform.dap.xdebugger.DapXDebugProcess
+import com.intellij.platform.dap.xdebugger.DapXDebugSessionState
+import com.intellij.platform.dap.xdebugger.DapXSuspendContext
 import com.intellij.xdebugger.XDebugSession
 import com.intellij.xdebugger.breakpoints.XBreakpointHandler
 import com.intellij.xdebugger.frame.XDropFrameHandler
+import com.intellij.xdebugger.frame.XSuspendContext
 import dev.basedpython.pycharm.actions.ByCli
 import dev.basedpython.pycharm.debug.bpd.ByBpdConnection
 import dev.basedpython.pycharm.debug.bpd.ByBpdWrapper
 import dev.basedpython.pycharm.debug.bpd.ByDebugBackend
 import dev.basedpython.pycharm.run.ByCommandLineState
 import dev.basedpython.pycharm.util.BasedPythonBundle
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import java.util.concurrent.ConcurrentLinkedQueue
 import org.eclipse.lsp4j.debug.Capabilities
 import org.eclipse.lsp4j.debug.OutputEventArguments
 import org.eclipse.lsp4j.debug.services.IDebugProtocolServer
@@ -187,7 +195,30 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
         executionResult: ExecutionResult?,
         commandProcessor: DapCommandProcessor,
         sessionScope: CoroutineScope,
-    ): DapClient = ByDapClient(BySourceMapPublisher(eventConsumer, commandProcessor, mappings))
+    ): DapClient = ByDapClient(
+        BySourceMapPublisher(eventConsumer, commandProcessor, mappings),
+        onMoved = { moved -> report(moved, executionResult) },
+    )
+
+    /**
+     * Puts what a jump or a restart really did on the run console.
+     *
+     * The console rather than a notification: it is where the rest of the session's account of
+     * itself is, and this belongs in sequence with it — a balloon over the editor would be reporting
+     * the same move twice, once beside the code and once away from it. Nothing is printed for a move
+     * that went where it was asked and disturbed nothing; see [report].
+     *
+     * bpd sent these as prose until told this plugin reads them ([BySourceMapPublisher]), so this is
+     * a rewrite of a line rather than a second copy of one.
+     */
+    private fun report(moved: ByMoved, executionResult: ExecutionResult?) {
+        val text = moved.report() ?: return
+        val console = executionResult?.executionConsole as? ConsoleView ?: return
+        val type =
+            if (moved.refused) ConsoleViewContentType.ERROR_OUTPUT
+            else ConsoleViewContentType.SYSTEM_OUTPUT
+        console.print("$text\n", type)
+    }
 
     override fun createXDebugProcess(
         session: XDebugSession,
@@ -312,13 +343,13 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
 private class ByDapXDebugProcess(
     session: XDebugSession,
     dapDebugSession: DapDebugSession,
-    xDebugProcessScope: CoroutineScope,
+    private val xDebugProcessScope: CoroutineScope,
     globalScope: CoroutineScope,
     debugAdapterDescriptor: DebugAdapterDescriptor<*>,
-    executionEnvironment: ExecutionEnvironment,
+    private val executionEnvironment: ExecutionEnvironment,
     private val result: ExecutionResult?,
-    startRequestType: DapStartRequest,
-    startRequestArguments: Map<String, Any?>,
+    private val startRequestType: DapStartRequest,
+    private val startRequestArguments: Map<String, Any?>,
     private val forwardsAdapterOutput: Boolean,
 ) : DapXDebugProcess(
     session,
@@ -345,6 +376,138 @@ private class ByDapXDebugProcess(
     init {
         xDebugProcessScope.launch {
             dapDebugSession.capabilities.collect { capabilities = it }
+        }
+    }
+
+    /**
+     * Suspensions that arrived for a thread other than the one on screen — see [shouldApplyNow].
+     *
+     * Ours because the platform's is private and, once this class stops calling
+     * `super.sessionInitialized`, never filled. [resume] drains this one exactly as the platform
+     * drains that one.
+     */
+    private val deferredSuspensions = ConcurrentLinkedQueue<DapXSuspendContext>()
+
+    /**
+     * Starts the session, and installs the four listeners `DapXDebugProcess` would have.
+     *
+     * **`super` is deliberately not called.** The base does exactly four things here — watch for the
+     * session to stop, run the start sequence, listen to the thread list, listen to output — and two
+     * of them are the bugs this plugin cannot otherwise reach:
+     *
+     *  - the start sequence catches only `DapInitializationException`, so an adapter that *answers*
+     *    `launch` with an error has its message dropped and the session never stopped. That is how a
+     *    bpd that will not debug this build produced a live-looking tab and an "Unhandled exception"
+     *    naming `CoroutineScheduler`, with the one sentence saying what to do nowhere
+     *  - the thread-state listener queues any suspension that arrives while the session is already
+     *    suspended, including the `stopped` DAP prescribes after `restartFrame` and `goto`
+     *
+     * Everything the base does *elsewhere* is inherited untouched: stepping, run to cursor, the
+     * breakpoint handlers, the variables tree, expression evaluation, the editors provider. In
+     * particular [applySuspendContext] is the platform's, so log points, breakpoint conditions and
+     * suspend policies keep working exactly as they did — this is the one call that matters and it is
+     * `protected`, which is what makes overriding a lifecycle method the whole of the change rather
+     * than the start of a rewrite.
+     *
+     * See `scratch.ij-dap-issues.md`; when the platform fixes these, this override goes away.
+     */
+    override fun sessionInitialized() {
+        xDebugProcessScope.launch(CoroutineName("basedpython stop-watch")) {
+            dapDebugSession.sessionStopped.await()
+            session.stop()
+        }
+        xDebugProcessScope.launch(CoroutineName("basedpython start")) { start() }
+        launchThreadStateListener()
+        launchOutputListener()
+    }
+
+    /**
+     * The base class's start sequence, with the failure it does not report reported.
+     *
+     * `DapDebugSession.start` throws whatever the adapter answered — lsp4j raises a
+     * `ResponseErrorException` carrying the adapter's own message, which is the only account of why
+     * anything went wrong. The base lets it escape a coroutine, so it lands in the log as an
+     * unhandled exception and the session stays up. Here it stops the session and says the sentence.
+     */
+    private suspend fun start() {
+        try {
+            if (!initBreakpointsCustomWay()) session.initBreakpoints()
+            sessionState.value = DapXDebugSessionState.Connecting
+            dapDebugSession.initialize(executionEnvironment, result)
+            dapDebugSession.start(startRequestType, startRequestArguments)
+            sessionState.value = DapXDebugSessionState.Running
+            session.rebuildViews()
+        } catch (e: DapInitializationException) {
+            // The platform's own case, handled the platform's own way: it has already been through
+            // `launchDebugAdapter`, where this plugin reports what it can itself.
+            session.stop()
+            if (e.userVisible) e.message?.let(session::reportError)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // The case the platform has no branch for. `message` is what the adapter wrote for a
+            // person — DAP puts it in the error response for exactly this — so it is shown as-is
+            // rather than wrapped in a sentence of ours that would say less.
+            PROCESS_LOG.info("the debug adapter refused to start the session", e)
+            session.reportError(e.message ?: BasedPythonBundle.message("debug.error.startRefused"))
+            session.stop()
+        }
+    }
+
+    /**
+     * Mirrors the platform's listener, and changes the one decision in it — see [shouldApplyNow].
+     *
+     * How the thread is found, how the child scope is named and how the context is built are the
+     * platform's, reproduced rather than improved: the disagreement is about what to do with a
+     * suspension, not about how to recognise one, and a second way of reading the same state would
+     * be a second thing to keep in step with it.
+     */
+    private fun launchThreadStateListener() {
+        xDebugProcessScope.launch(CoroutineName("basedpython threads")) {
+            var suspension = 0
+            dapDebugSession.threads.collect { state ->
+                suspension++
+                val thread = state.stoppedThread() ?: return@collect
+                val context = presentationFactory.createSuspendContext(
+                    dapDebugSession.commandProcessor.withChildScope("suspension-$suspension"),
+                    state.threads,
+                    thread,
+                )
+                if (shouldApplyNow(session.isSuspended, session.displayedThreadId(), thread.id)) {
+                    applySuspendContext(context)
+                } else {
+                    deferredSuspensions.add(context)
+                }
+            }
+        }
+    }
+
+    /** The platform's output listener, routed through [formatAndPrintOutput] as its own is. */
+    private fun launchOutputListener() {
+        xDebugProcessScope.launch(CoroutineName("basedpython output")) {
+            for (event in dapDebugSession.output) {
+                event?.let(::formatAndPrintOutput)
+            }
+        }
+    }
+
+    /**
+     * Resume, or show a suspension that was held back while this one was on screen.
+     *
+     * The platform's own shape: a queued suspension is what Resume produces, and the program runs on
+     * only when there is none. Overridden because the queue is [deferredSuspensions] now — the
+     * platform's is private, and after [sessionInitialized] stops calling `super` nothing ever adds
+     * to it, so its `resume` would run the program on while ours still held a thread nobody had been
+     * shown.
+     */
+    override fun resume(context: XSuspendContext?) {
+        val deferred = deferredSuspensions.poll()
+        if (deferred == null) {
+            dapDebugSession.resume()
+            return
+        }
+        xDebugProcessScope.launch(CoroutineName("basedpython deferred")) {
+            applySuspendContext(deferred)
         }
     }
 
@@ -405,6 +568,10 @@ private class ByDapXDebugProcess(
      * `DapXDebugProcess` supplies a line-breakpoint handler only, so exception breakpoints need
      * theirs adding here or nothing would ever send them to the adapter.
      */
+    private companion object {
+        private val PROCESS_LOG = Logger.getInstance(ByDapXDebugProcess::class.java)
+    }
+
     private val handlers: Array<XBreakpointHandler<*>> by lazy {
         super.getBreakpointHandlers() + ByExceptionBreakpointHandler(dapDebugSession)
     }

@@ -307,6 +307,29 @@ and the token to present — is appended below it, so one file carries everythin
 executable rather than honouring a shebang, so a shell script cannot be the interpreter there.
 Switch the backend to debugpy, or run under WSL.
 
+## What bpd tells us that DAP has no field for
+
+A jump — and therefore a frame restart — produces two facts that no `stopped` event has a place for:
+the locals cpython bound to `None` on the way, and the breakpoints on the destination line that will
+not fire for this pass. bpd used to have nowhere to put them but the console, which a person can read
+and a client cannot.
+
+DAP was never the obstacle. Its event bodies are open JSON objects and an adapter may name its own
+events; what drops the extras is a client that deserialises into fixed types, and lsp4j's
+`StoppedEventArguments` is exactly that. But lsp4j binds notifications by reflecting over the
+**runtime class** of the local service — `GenericEndpoint.recursiveFindRpcMethods` calls
+`service.getClass()` — and the platform hands it whatever `DebugAdapterDescriptor.createClient`
+returned, which is `ByDapClient`. So an `@JsonNotification` there receives a custom event with a
+`JsonObject` body and nothing is lost. No platform change and no protocol change were needed.
+
+bpd sends `bpd/moved` carrying its `Jumped` whole; [ByMoved] reads it. And because narrating the same
+facts *and* sending them would show everything twice, a client says what it reads —
+`bpd/understands {"events": [...]}` — and bpd stops narrating those. A client that has never heard of
+the request keeps the prose, which is what makes this an addition rather than a migration: measured
+both ways against one session, the unaware client still gets
+`stop 2: ["later"] held nothing before the move and hold \`None\` now`, and the aware one gets
+`"bound_to_none": ["later"]` and no console line at all.
+
 ## Data flow: what a stopped program settles about the code below it
 
 Off by default; the switch is beside the backend one. While the program is stopped, the branches
@@ -393,6 +416,32 @@ a program whose exception escapes `main` does not compile at all —
 everything, and a `KeyError` from a dict lookup compiles happily and dies at runtime, where the
 breakpoint stops on the right `.by` line. So the PyCharm default carries over: **On termination**
 on, **On raise** off.
+
+## What this plugin does instead of the platform's DAP client
+
+`ByDapXDebugProcess` overrides `sessionInitialized` and does **not** call `super`. That method does
+exactly four things — watch for the session to stop, run the start sequence, listen to the thread
+list, listen to output — and two of them are gaps this plugin cannot otherwise reach. They are
+written up in full in `scratch.ij-dap-issues.md`; in short:
+
+- **a refused start is unreported.** The base catches only `DapInitializationException`, so an
+  adapter that *answers* `launch` with an error has its message dropped, the session is never
+  stopped, and the user gets an "Unhandled exception" naming `CoroutineScheduler`. That is how a bpd
+  which would not debug a build produced a live-looking tab with the one sentence saying what to do
+  nowhere. Ours catches it and shows the adapter's own message
+- **a `stopped` for the thread you are on is queued rather than applied.** The base asks only
+  whether the session is suspended. That is right for a *second* thread stopping under a non-stop
+  adapter, and wrong for the `stopped` DAP prescribes after `restartFrame` and `goto`, which means
+  "this thread moved". Queued, the highlight stays where the code no longer is — and since the
+  platform drains that queue only in `resume`, the next Resume shows the stale position **instead of
+  running the program on**. Ours applies a suspension for the thread already on screen and defers
+  only a different thread's, with `resume` draining its own queue the same way
+
+What is *not* replaced is the part that matters most: `applySuspendContext` is the platform's, and it
+is `protected`, so log points, breakpoint conditions and suspend policies keep working exactly as
+they did. Stepping, run to cursor, the breakpoint handlers, the variables tree, expression evaluation
+and the editors provider are all inherited untouched. This is one lifecycle method, not a fork of the
+client — which is what makes it something to delete when the platform fixes its own.
 
 ## Reset Frame
 
