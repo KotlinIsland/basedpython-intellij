@@ -22,6 +22,7 @@ import com.intellij.platform.dap.DapExceptionBreakpoint
 import com.intellij.platform.dap.DapExceptionInfo
 import com.intellij.platform.dap.DapInitializationException
 import com.intellij.platform.dap.DapStartRequest
+import com.intellij.platform.dap.DapThreadState
 import com.intellij.platform.dap.DebugAdapterDescriptor
 import com.intellij.platform.dap.DebugAdapterId
 import com.intellij.platform.dap.DebugAdapterSupportProvider
@@ -47,6 +48,7 @@ import kotlinx.coroutines.launch
 import java.util.concurrent.ConcurrentLinkedQueue
 import org.eclipse.lsp4j.debug.Capabilities
 import org.eclipse.lsp4j.debug.OutputEventArguments
+import org.eclipse.lsp4j.debug.StoppedEventArguments
 import org.eclipse.lsp4j.debug.services.IDebugProtocolServer
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -344,7 +346,7 @@ private class ByDapXDebugProcess(
     session: XDebugSession,
     dapDebugSession: DapDebugSession,
     private val xDebugProcessScope: CoroutineScope,
-    globalScope: CoroutineScope,
+    private val globalScope: CoroutineScope,
     debugAdapterDescriptor: DebugAdapterDescriptor<*>,
     private val executionEnvironment: ExecutionEnvironment,
     private val result: ExecutionResult?,
@@ -387,6 +389,13 @@ private class ByDapXDebugProcess(
      * drains that one.
      */
     private val deferredSuspensions = ConcurrentLinkedQueue<DapXSuspendContext>()
+
+    /**
+     * The `stopped` event behind the suspension last shown, so the same one is not shown twice.
+     *
+     * Only ever read and written by the single thread-list collector, hence no synchronisation.
+     */
+    private var lastApplied: StoppedEventArguments? = null
 
     /**
      * Starts the session, and installs the four listeners `DapXDebugProcess` would have.
@@ -468,23 +477,50 @@ private class ByDapXDebugProcess(
             dapDebugSession.threads.collect { state ->
                 suspension++
                 val thread = state.stoppedThread() ?: return@collect
+                // One application per `stopped` event, not per emission of the thread list.
+                //
+                // `threads` is a StateFlow republished whenever the list changes at all, and under a
+                // non-stop adapter threads come and go while you sit at a breakpoint. The platform's
+                // rule hid that: it queued everything while suspended. Applying by thread identity
+                // alone would re-run `applySuspendContext` for a stop already on screen, which
+                // re-prints its log points, tears the variables tree down and rebuilds it, and — if
+                // the breakpoint's suspend policy says not to stop — resumes the program from under
+                // a session the user still sees as paused.
+                //
+                // Keyed on the raw event by identity, because that object is what one `stopped`
+                // produced: a thread-list refresh carries it across, and nothing but a new event
+                // makes another.
+                val raw = (thread.state as? DapThreadState.Paused)?.rawEvent
+                if (raw != null && raw === lastApplied) return@collect
                 val context = presentationFactory.createSuspendContext(
                     dapDebugSession.commandProcessor.withChildScope("suspension-$suspension"),
                     state.threads,
                     thread,
                 )
                 if (shouldApplyNow(session.isSuspended, session.displayedThreadId(), thread.id)) {
+                    lastApplied = raw
                     applySuspendContext(context)
                 } else {
+                    // Marked as applied even though it is only deferred: it has been accounted for,
+                    // and leaving it unmarked would let the next republication of the same stop add
+                    // a second copy of it to the queue — one Resume each to get through them.
+                    lastApplied = raw
                     deferredSuspensions.add(context)
                 }
             }
         }
     }
 
-    /** The platform's output listener, routed through [formatAndPrintOutput] as its own is. */
+    /**
+     * The platform's output listener, routed through [formatAndPrintOutput] as its own is.
+     *
+     * On **`globalScope`**, which is where the base puts it and is not a detail: `stopAsync` cancels
+     * `xDebugProcessScope` *before* it tells the adapter to stop, so a pump on that scope drops
+     * whatever is still in the channel at the moment Stop is pressed or the program ends. Under bpd
+     * these events are the program's only voice, so that would be the last thing it printed.
+     */
     private fun launchOutputListener() {
-        xDebugProcessScope.launch(CoroutineName("basedpython output")) {
+        globalScope.launch(CoroutineName("basedpython output")) {
             for (event in dapDebugSession.output) {
                 event?.let(::formatAndPrintOutput)
             }
@@ -568,13 +604,13 @@ private class ByDapXDebugProcess(
      * `DapXDebugProcess` supplies a line-breakpoint handler only, so exception breakpoints need
      * theirs adding here or nothing would ever send them to the adapter.
      */
-    private companion object {
-        private val PROCESS_LOG = Logger.getInstance(ByDapXDebugProcess::class.java)
-    }
-
     private val handlers: Array<XBreakpointHandler<*>> by lazy {
         super.getBreakpointHandlers() + ByExceptionBreakpointHandler(dapDebugSession)
     }
 
     override fun getBreakpointHandlers(): Array<XBreakpointHandler<*>> = handlers
+
+    private companion object {
+        private val PROCESS_LOG = Logger.getInstance(ByDapXDebugProcess::class.java)
+    }
 }

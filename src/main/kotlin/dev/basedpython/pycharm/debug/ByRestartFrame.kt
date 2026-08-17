@@ -29,10 +29,13 @@ import org.eclipse.lsp4j.debug.RestartFrameArguments
  *
  * That is genuinely useful — it is the "I have seen enough, run this again" of a debugger — and it
  * is not what the action's name promises, which is why the difference is stated here and in
- * `docs/debugging.md` rather than left for somebody to discover from a wrong value. bpd also
- * narrates each move on the console (which lines were skipped, that a breakpoint on the destination
- * will not fire for this pass, which unbound locals now hold `None`), and those arrive in the run
- * console now that adapter output is forwarded — see [ByAdapterOutput].
+ * `docs/debugging.md` rather than left for somebody to discover from a wrong value.
+ *
+ * What a restart really did reaches the console through [ByMoved]: which locals cpython bound to
+ * `None` on the way, and — the case worth knowing about here — that cpython **refused** the move.
+ * A refusal is not an error response, so nothing in this class sees it: bpd answers the request
+ * `success` and reports the refusal on `bpd/moved`. The catch below covers a request bpd would not
+ * accept at all, which is a different thing.
  *
  * ## why this exists at all
  *
