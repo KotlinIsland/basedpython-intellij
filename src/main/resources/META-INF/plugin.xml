@@ -448,10 +448,6 @@
                     class="dev.basedpython.pycharm.actions.ReverseTranspileAction"/>
             <action id="basedpython.GenerateApiFile"
                     class="dev.basedpython.pycharm.actions.GenerateApiFileAction"/>
-            <action id="basedpython.FormatWithBuff"
-                    class="dev.basedpython.pycharm.actions.FormatWithBuffAction">
-                <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt shift L"/>
-            </action>
             <action id="basedpython.CheckProject"
                     class="dev.basedpython.pycharm.actions.CheckProjectAction"/>
             <action id="basedpython.CleanCaches"

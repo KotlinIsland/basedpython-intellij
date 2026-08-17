@@ -80,7 +80,6 @@ class BasedPythonBundleTest {
             "notification.action.viewLog",
             "progress.cleaningCaches",
             "progress.explainingRule",
-            "progress.formattingWithBuff",
             "progress.optimizeImports",
             "progress.generatingApiLock",
             "progress.transpiling",
@@ -88,7 +87,6 @@ class BasedPythonBundleTest {
             "notification.cleanCachesFailed.title",
             "notification.cleanCachesSuccess",
             "notification.formatFailed.title",
-            "notification.formatted",
             "format.serverNotRunning",
             "format.serverDidNotAnswer",
             "format.serverTooOld",
@@ -298,8 +296,7 @@ class BasedPythonBundleTest {
     @Test
     fun `file-name placeholders format`() {
         assertEquals("Transpiling foo.by", msg("progress.transpiling", "foo.by"))
-        assertEquals("Formatting foo.by with buff", msg("progress.formattingWithBuff", "foo.by"))
-        assertEquals("Formatted foo.by", msg("notification.formatted", "foo.by"))
+        assertEquals("Reverse-transpiling foo.by", msg("progress.reverseTranspiling", "foo.by"))
     }
 
     @Test
