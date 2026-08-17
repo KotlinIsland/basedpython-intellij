@@ -4,9 +4,15 @@ import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import org.eclipse.lsp4j.CreateFile
 import org.eclipse.lsp4j.Position
 import org.eclipse.lsp4j.Range
+import org.eclipse.lsp4j.ResourceOperation
+import org.eclipse.lsp4j.TextDocumentEdit
 import org.eclipse.lsp4j.TextEdit
+import org.eclipse.lsp4j.VersionedTextDocumentIdentifier
+import org.eclipse.lsp4j.WorkspaceEdit
+import org.eclipse.lsp4j.jsonrpc.messages.Either
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -97,36 +103,67 @@ class ByCleanupTest {
   }
 }
 
-/** The order the passes run in is fixed, and it is not the order they were asked for in. */
-class ByCleanupOpOrderTest {
+/** Each pass names the code action kind the server answers to. */
+class ByCleanupOpKindTest {
 
   @Test
-  fun `formatting runs after the lint pass`() {
-    assertEquals(
-      listOf(ByCleanupOp.FixAll, ByCleanupOp.FormatAndOptimizeImports),
-      ByCleanupOp.inRunOrder(
-        listOf(ByCleanupOp.FormatAndOptimizeImports, ByCleanupOp.FixAll),
-      ),
-    )
-  }
-
-  @Test
-  fun `only the passes asked for run`() {
-    assertEquals(
-      listOf(ByCleanupOp.FormatAndOptimizeImports),
-      ByCleanupOp.inRunOrder(setOf(ByCleanupOp.FormatAndOptimizeImports)),
-    )
-    assertEquals(emptyList<ByCleanupOp>(), ByCleanupOp.inRunOrder(emptySet()))
-  }
-
-  /** Each toggle names the code action kind the server answers to. */
-  @Test
-  fun `toggles map to the server's source action kinds`() {
-    assertEquals(
-      "source.formatAndOptimizeImports.ruff",
-      ByCleanupToggle.FormatAndOptimizeImports.op.kind,
-    )
-    assertEquals("source.fixAll.ruff", ByCleanupToggle.FixAll.op.kind)
+  fun `passes map to the server's source action kinds`() {
+    assertEquals("source.fixAll.ruff", ByCleanupOp.FixAll.kind)
     assertEquals("source.optimizeImports.ruff", ByCleanupOp.OptimizeImports.kind)
+  }
+}
+
+/**
+ * A workspace edit arrives in one of two shapes, and the server picks by what the client claimed
+ * to understand. The platform claims `documentChanges`, so that is the shape `buff` actually sends
+ * — reading only `changes` is what made save and commit do nothing at all.
+ */
+class ByCleanupWorkspaceEditTest {
+
+  private val uri = "file:///project/a.by"
+
+  private fun edit(newText: String) =
+    TextEdit(Range(Position(0, 0), Position(1, 0)), newText)
+
+  private fun documentEdit(forUri: String, vararg edits: TextEdit) =
+    Either.forLeft<TextDocumentEdit, ResourceOperation>(
+      TextDocumentEdit(VersionedTextDocumentIdentifier(forUri, null), edits.toList()),
+    )
+
+  @Test
+  fun `reads edits sent as documentChanges`() {
+    val workspaceEdit = WorkspaceEdit(listOf(documentEdit(uri, edit("fixed\n"))))
+    assertEquals(listOf(edit("fixed\n")), ByCleanup.editsFor(workspaceEdit, uri))
+  }
+
+  /** The other shape, for a client that did not claim `documentChanges`. */
+  @Test
+  fun `reads edits sent as changes`() {
+    val workspaceEdit = WorkspaceEdit(mapOf(uri to listOf(edit("fixed\n"))))
+    assertEquals(listOf(edit("fixed\n")), ByCleanup.editsFor(workspaceEdit, uri))
+  }
+
+  /** A pass may only rewrite the document it was asked about. */
+  @Test
+  fun `ignores edits to other documents`() {
+    val workspaceEdit = WorkspaceEdit(
+      listOf(documentEdit("file:///project/elsewhere.by", edit("no\n"))),
+    )
+    assertEquals(emptyList<TextEdit>(), ByCleanup.editsFor(workspaceEdit, uri))
+  }
+
+  /** Creating, renaming and deleting files are not edits, and are not this plugin's to apply. */
+  @Test
+  fun `ignores resource operations`() {
+    val workspaceEdit = WorkspaceEdit(
+      listOf(Either.forRight<TextDocumentEdit, ResourceOperation>(CreateFile(uri))),
+    )
+    assertEquals(emptyList<TextEdit>(), ByCleanup.editsFor(workspaceEdit, uri))
+  }
+
+  /** Neither shape filled in means there was nothing to do, not a failure. */
+  @Test
+  fun `an empty workspace edit yields no edits`() {
+    assertEquals(emptyList<TextEdit>(), ByCleanup.editsFor(WorkspaceEdit(), uri))
   }
 }

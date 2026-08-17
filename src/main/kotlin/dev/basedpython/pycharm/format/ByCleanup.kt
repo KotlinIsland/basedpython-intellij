@@ -10,17 +10,17 @@ import com.intellij.platform.lsp.api.LspServer
 import com.intellij.platform.lsp.api.LspServerManager
 import dev.basedpython.pycharm.lsp.BuffLspServerSupportProvider
 import dev.basedpython.pycharm.util.BasedPythonBundle
-import org.eclipse.lsp4j.CodeAction
 import org.eclipse.lsp4j.CodeActionContext
 import org.eclipse.lsp4j.CodeActionParams
 import org.eclipse.lsp4j.Position
 import org.eclipse.lsp4j.Range
 import org.eclipse.lsp4j.TextEdit
+import org.eclipse.lsp4j.WorkspaceEdit
 
 private val LOG = Logger.getInstance(ByCleanup::class.java)
 
 /**
- * A pass `buff` can run over a document before it is saved or committed.
+ * A pass the formatter/linter server can run over a whole document.
  *
  * Each one is a source action the server already knows how to build, so the work — which rules
  * apply, in what order, against which configuration — stays on the server side, where it is the
@@ -29,48 +29,21 @@ private val LOG = Logger.getInstance(ByCleanup::class.java)
 enum class ByCleanupOp(val kind: String, private val progressKey: String) {
   /**
    * Every fix the project's lint configuration asks for. Does not format, and does not sort
-   * imports unless the project selected the `I` rules.
+   * imports unless the project selected the `I` rules. This is what save and commit offer.
    */
   FixAll("source.fixAll.ruff", "progress.cleanup.fixAll"),
 
   /**
    * Sorts imports and drops the ones nothing uses — what *Optimize Imports* means, and more than
-   * `source.organizeImports`, which only sorts. Not offered on save or commit, where the pass below
-   * covers it; this is what Ctrl+Alt+O runs.
+   * `source.organizeImports`, which only sorts. This is what Ctrl+Alt+O runs.
+   *
+   * Not offered on save or commit: the platform's own *Optimize imports* row already covers it
+   * there, and it reaches this same pass through [BuffImportOptimizer].
    */
   OptimizeImports("source.optimizeImports.ruff", "progress.optimizeImports"),
-
-  /**
-   * Sorts imports, drops the ones nothing uses, and formats what that left behind — all as one
-   * edit computed against one buffer.
-   */
-  FormatAndOptimizeImports("source.formatAndOptimizeImports.ruff", "progress.cleanup.format"),
   ;
 
   val progressText: String get() = BasedPythonBundle.message(progressKey)
-
-  companion object {
-    /**
-     * The order the passes run in, which is fixed rather than the user's to choose.
-     *
-     * The lint pass rewrites code and the formatter lays out whatever it left, so formatting is
-     * last. The other way round leaves a file that has just been formatted and then edited.
-     */
-    fun inRunOrder(ops: Collection<ByCleanupOp>): List<ByCleanupOp> =
-      entries.filter { it in ops }
-  }
-}
-
-/**
- * The passes a user can switch on for save and for commit.
- *
- * A subset of [ByCleanupOp]: [ByCleanupOp.OptimizeImports] is reachable through *Optimize Imports*
- * but is not offered here, because [ByCleanupOp.FormatAndOptimizeImports] already does it and
- * having both would be two ways to ask for the same thing.
- */
-enum class ByCleanupToggle(val op: ByCleanupOp) {
-  FormatAndOptimizeImports(ByCleanupOp.FormatAndOptimizeImports),
-  FixAll(ByCleanupOp.FixAll),
 }
 
 /**
@@ -85,35 +58,25 @@ enum class ByCleanupToggle(val op: ByCleanupOp) {
  */
 object ByCleanup {
 
-  /**
-   * Applies each of [ops] to [document] in turn, and reports whether anything changed.
-   *
-   * Each pass is a separate request, and that is safe because the platform sends `didChange`
-   * synchronously while the document is being mutated: by the time one pass's edit has been
-   * applied, the server is already answering from the new text. So the second pass sees the first
-   * pass's output rather than the original.
-   */
+  /** Applies [op] to [document], and reports whether anything changed. */
   suspend fun run(
     project: Project,
     file: VirtualFile,
     document: Document,
-    ops: Collection<ByCleanupOp>,
+    op: ByCleanupOp,
   ): Boolean {
     val server = findServer(project, file) ?: run {
       LOG.debug("No running buff server for ${file.path} — skipping cleanup")
       return false
     }
 
-    var changed = false
-    for (op in ByCleanupOp.inRunOrder(ops)) {
-      val edits = requestEdits(server, file, op) ?: continue
-      if (edits.isEmpty()) continue
-      writeCommandAction(project, op.progressText) {
-        applyEditsTo(document, edits)
-      }
-      changed = true
+    val edits = requestEdits(server, file, op)
+    if (edits.isNullOrEmpty()) return false
+
+    writeCommandAction(project, op.progressText) {
+      applyEditsTo(document, edits)
     }
-    return changed
+    return true
   }
 
   /** The `buff` server serving [file], if one is running. */
@@ -151,14 +114,30 @@ object ByCleanup {
       action
     }
 
-    return editsFor(resolved, server, file)
+    val edit = resolved.edit ?: return emptyList()
+    return editsFor(edit, server.getDocumentIdentifier(file).uri)
   }
 
-  /** Pulls out the edits [resolved] makes to [file] itself, ignoring any it makes elsewhere. */
-  private fun editsFor(resolved: CodeAction, server: LspServer, file: VirtualFile): List<TextEdit> {
-    val changes = resolved.edit?.changes ?: return emptyList()
-    val uri = server.getDocumentIdentifier(file).uri
-    return changes[uri].orEmpty()
+  /**
+   * Pulls out the edits [edit] makes to [uri] itself, ignoring any it makes elsewhere.
+   *
+   * A workspace edit says the same thing in one of two shapes, and which one arrives is the
+   * client's own doing: `documentChanges` when the client claimed to understand it, `changes`
+   * otherwise. The platform claims it — it sets `WorkspaceEditCapabilities.documentChanges` — so
+   * `buff` answers in `documentChanges` and leaves `changes` null, and reading only `changes` found
+   * nothing to apply, ever. Both are read here, because that capability is the platform's to
+   * promise and not this plugin's to rely on it keeping.
+   */
+  fun editsFor(edit: WorkspaceEdit, uri: String): List<TextEdit> {
+    edit.changes?.get(uri)?.let { return it }
+
+    // A `documentChanges` entry is either a text edit or a resource operation (create/rename/
+    // delete a file); only the first is an edit to a document, and only these passes' own document
+    // is this plugin's to apply.
+    return edit.documentChanges.orEmpty()
+      .mapNotNull { change -> change.takeIf { it.isLeft }?.left }
+      .filter { it.textDocument.uri == uri }
+      .flatMap { it.edits }
   }
 
   /**
