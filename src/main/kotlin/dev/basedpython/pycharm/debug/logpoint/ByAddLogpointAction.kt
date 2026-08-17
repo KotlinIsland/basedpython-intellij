@@ -36,14 +36,11 @@ class ByAddLogpointAction : DumbAwareAction() {
 
     override fun actionPerformed(e: AnActionEvent) {
         val (project, editor, file, line) = target(e) ?: return
-        val existing = existing(project, file, line)
-        if (existing == null) {
-            // Adding it is enough: an unfilled log point is what ByLogpointPromptListener opens the
-            // field for, and doing it here as well would open a second one over the first.
-            create(project, file, line)
-        } else {
-            ByLogpointInlineEditor.show(project, editor, existing)
-        }
+        // Adding is enough on its own: ByLogpointFields puts a box on every log point, so creating
+        // one here and showing it as well would race its own listener.
+        val logpoint = existing(project, file, line) ?: create(project, file, line)
+        ByLogpointField.show(project, editor, logpoint)?.expressionEditor
+            ?.preferredFocusedComponent?.requestFocusInWindow()
     }
 
     private data class Target(val project: Project, val editor: EditorEx, val file: VirtualFile, val line: Int)

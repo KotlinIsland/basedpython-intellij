@@ -1,0 +1,100 @@
+package dev.basedpython.pycharm.debug.logpoint
+
+import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.editor.Editor
+import com.intellij.openapi.editor.event.EditorFactoryEvent
+import com.intellij.openapi.editor.event.EditorFactoryListener
+import com.intellij.openapi.editor.ex.EditorEx
+import com.intellij.openapi.fileEditor.FileDocumentManager
+import com.intellij.openapi.project.Project
+import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.xdebugger.XDebuggerManager
+import com.intellij.xdebugger.XDebuggerUtil
+import com.intellij.xdebugger.breakpoints.XBreakpoint
+import com.intellij.xdebugger.breakpoints.XBreakpointListener
+import dev.basedpython.pycharm.debug.ByLineBreakpointType
+
+/**
+ * Keeps a [ByLogpointField] on screen for every `.by` log point, for as long as it exists.
+ *
+ * The field is how a log point looks, not a prompt that opens once — so it has to arrive by every
+ * route a log point does. A click in the gutter gap and `Ctrl+Alt+F8` both go through the breakpoint
+ * manager, so [breakpointAdded] catches them and the `print` quick fix alike; a file opened with log
+ * points already in it never fires that at all, which is what [ByLogpointFieldsOnEditorOpen] is for.
+ */
+class ByLogpointFields(private val project: Project) : XBreakpointListener<XBreakpoint<*>> {
+
+    override fun breakpointAdded(breakpoint: XBreakpoint<*>) {
+        val logpoint = ByLogpoints.asLogpoint(breakpoint) ?: return
+        if (!ByLogpoints.pluginProvidesLogpointUi()) return
+
+        // Joins the command the gutter click opened, so Ctrl+Z takes the log point back the way it
+        // does for the IDE's own. A no-op outside a command, which is how log points restored from
+        // the workspace at startup avoid becoming undo steps.
+        val file = logpoint.sourcePosition?.file ?: return
+        FileDocumentManager.getInstance().getDocument(file)?.let { ByLogpointUndo.record(project, it, logpoint) }
+
+        // Deferred: the breakpoint's own gutter highlighter is installed as part of adding it, and
+        // placing an inlay from inside that notification would be reentrant.
+        ApplicationManager.getApplication().invokeLater({
+            if (project.isDisposed) return@invokeLater
+            editorsFor(file).forEach { ByLogpointField.show(project, it, logpoint) }
+        }, project.disposed)
+    }
+
+    override fun breakpointRemoved(breakpoint: XBreakpoint<*>) {
+        ByLogpoints.asLogpoint(breakpoint)?.let { ByLogpointField.of(it)?.close() }
+    }
+
+    /**
+     * Reopens the field on a log point whose expression changed elsewhere — the breakpoint dialog,
+     * or an undo. Editing in the field itself is already in step, so the cheap guard is enough.
+     */
+    override fun breakpointChanged(breakpoint: XBreakpoint<*>) {
+        val logpoint = ByLogpoints.asLogpoint(breakpoint) ?: return
+        if (!ByLogpoints.pluginProvidesLogpointUi()) return
+        val existing = ByLogpointField.of(logpoint) ?: return
+        existing.revert()
+    }
+
+    private fun editorsFor(file: VirtualFile): List<EditorEx> =
+        com.intellij.openapi.editor.EditorFactory.getInstance().allEditors
+            .filterIsInstance<EditorEx>()
+            .filter { it.project == project && FileDocumentManager.getInstance().getFile(it.document) == file }
+
+    companion object {
+        /** Shows fields for every log point already set in [editor]'s file. */
+        fun populate(project: Project, editor: EditorEx) {
+            if (!ByLogpoints.pluginProvidesLogpointUi()) return
+            val file = FileDocumentManager.getInstance().getFile(editor.document) ?: return
+            if (!file.extension.equals("by", ignoreCase = true)) return
+            val type = XDebuggerUtil.getInstance().findBreakpointType(ByLineBreakpointType::class.java) ?: return
+            XDebuggerManager.getInstance(project).breakpointManager
+                .getBreakpoints(type)
+                .filter { it.sourcePosition?.file == file }
+                .mapNotNull { ByLogpoints.asLogpoint(it) }
+                .forEach { ByLogpointField.show(project, editor, it) }
+        }
+    }
+}
+
+/**
+ * Puts the fields back when a `.by` file is opened with log points already in it.
+ *
+ * Breakpoints outlive editors — they are workspace state — so without this a log point set in a
+ * previous session, or in a tab that was closed and reopened, would be a gutter icon with nothing
+ * beside it saying what it logs.
+ */
+class ByLogpointFieldsOnEditorOpen : EditorFactoryListener {
+
+    override fun editorCreated(event: EditorFactoryEvent) {
+        val editor: Editor = event.editor
+        val project = editor.project ?: return
+        val editorEx = editor as? EditorEx ?: return
+        // After the editor is built and its inlay model is in place.
+        ApplicationManager.getApplication().invokeLater({
+            if (project.isDisposed || editor.isDisposed) return@invokeLater
+            ByLogpointFields.populate(project, editorEx)
+        }, project.disposed)
+    }
+}
