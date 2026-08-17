@@ -24,6 +24,7 @@ import dev.basedpython.pycharm.debug.ByDebuggerEditorsProvider
 import dev.basedpython.pycharm.lang.BasedPythonLanguage
 import java.awt.BorderLayout
 import java.awt.Color
+import java.awt.Dimension
 import java.awt.event.FocusAdapter
 import java.awt.event.FocusEvent
 import javax.swing.JPanel
@@ -49,7 +50,12 @@ import javax.swing.JPanel
 class ByLogpointField private constructor(
     private val breakpoint: XLineBreakpoint<*>,
     internal val expressionEditor: XDebuggerExpressionEditor,
+    private val hostEditor: EditorEx,
 ) : Disposable {
+
+    /** The whole box, label included. Exposed so it can be laid out and painted in a test. */
+    internal lateinit var component: JPanel
+        private set
 
     private var inlay: Inlay<*>? = null
     private var closed = false
@@ -107,8 +113,9 @@ class ByLogpointField private constructor(
                 /* showEditor = */ true,
             )
 
-            val field = ByLogpointField(breakpoint, expressionEditor)
+            val field = ByLogpointField(breakpoint, expressionEditor, editor)
             val panel = field.buildPanel()
+            field.component = panel
 
             // showAbove: the gap a log point lives in is the one above the line it is anchored to.
             val properties = EditorEmbeddedComponentManager.Properties(
@@ -145,6 +152,9 @@ class ByLogpointField private constructor(
 
         private const val ARC = 8
         private const val FIELD_WIDTH = 320
+
+        /** Room above and below one line of text, so the box is a box rather than a rule. */
+        private const val FIELD_VERTICAL_PADDING = 8
         private const val LABEL = "Log:"
         private const val PLACEHOLDER = "Enter expression to log"
     }
@@ -162,11 +172,20 @@ class ByLogpointField private constructor(
             border = JBUI.Borders.empty(2, 6)
         }
 
+        // Sized here rather than on the box. An EditorTextField that has not been shown yet has no
+        // editor and reports almost no height, so fixing the *box's* preferred size took a snapshot
+        // of that emptiness and kept it — which is how the box came out as a bar a few pixels tall,
+        // with the real field inside it and nowhere to draw. The host editor's line height is what
+        // one line of this text actually needs, and it is known before anything is displayed.
+        field?.preferredSize = Dimension(
+            JBUI.scale(FIELD_WIDTH),
+            hostEditor.lineHeight + JBUI.scale(FIELD_VERTICAL_PADDING),
+        )
+
         val box = BorderLayoutPanel()
         box.isOpaque = false
         box.border = ShadowJava2DBorder(JBUI.scale(ARC), FIELD_BACKGROUND, FIELD_BORDER)
         box.addToCenter(expressionEditor.editorComponent)
-        box.preferredSize = box.preferredSize.apply { width = JBUI.scale(FIELD_WIDTH) }
 
         val label = JBLabel(LABEL).apply {
             font = JBFont.small()
