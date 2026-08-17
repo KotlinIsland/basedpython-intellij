@@ -6,6 +6,7 @@ import com.intellij.execution.ExecutionResult
 import com.intellij.execution.configurations.RunProfileState
 import com.intellij.execution.process.ProcessHandler
 import com.intellij.execution.runners.ExecutionEnvironment
+import com.intellij.execution.ui.ConsoleViewContentType
 import com.intellij.execution.ui.ExecutionConsole
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
@@ -205,6 +206,11 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
         executionResult,
         startRequestType,
         startRequestArguments,
+        // The setup is gone by now under the debugpy backend — `configureProfileState` consumes it
+        // — but it is this descriptor's own field and lives as long as the session. A session with
+        // no setup at all never reached `launchDebugAdapter`, so the value is moot; false is the
+        // safe way to be wrong, since it can only cost a duplicate of output the console has.
+        forwardsAdapterOutput = setup?.backend?.ownsDebuggeeOutput == true,
     )
 
     /**
@@ -290,10 +296,15 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
  * The stock DAP process with the run configuration's own process and console put back.
  *
  * `DapXDebugProcess` assumes the adapter owns the debuggee and so builds a console over its own
- * process handler, forwarding whatever the adapter reports as `output` events. Here the IDE
- * launched `by run` itself, and that process is what the user needs to see: the transpile step, its
- * diagnostics, and the program's own stdout and stderr, none of which travel over DAP. Reusing its
- * handler also makes the debug session end when `by run` ends, and Stop kill the right process.
+ * process handler. Here the IDE launched `by run` itself, and that process is what the user needs
+ * to see: the transpile step and its diagnostics, which never travel over DAP whichever backend is
+ * running. Reusing its handler also makes the debug session end when `by run` ends, and Stop kill
+ * the right process.
+ *
+ * What that console must *also* carry is the program's own output, and where that comes from is not
+ * the same for both backends — see [forwardsAdapterOutput] and [ByDebugBackend.ownsDebuggeeOutput].
+ *
+ * @param forwardsAdapterOutput whether the adapter's `output` events are the program's only voice
  */
 private class ByDapXDebugProcess(
     session: XDebugSession,
@@ -305,6 +316,7 @@ private class ByDapXDebugProcess(
     private val result: ExecutionResult?,
     startRequestType: DapStartRequest,
     startRequestArguments: Map<String, Any?>,
+    private val forwardsAdapterOutput: Boolean,
 ) : DapXDebugProcess(
     session,
     dapDebugSession,
@@ -321,15 +333,38 @@ private class ByDapXDebugProcess(
     override fun createConsole(): ExecutionConsole = result?.executionConsole ?: super.createConsole()
 
     /**
-     * Drops the adapter's `output` events on the floor.
+     * Prints an adapter `output` event, when it is the program's only voice — and files it by what
+     * DAP says the category means rather than by what the base class assumes.
      *
-     * The base class forwards every one of them to the console, which is right when the adapter
-     * owns the debuggee and its output only ever arrives over DAP. Here the console is already
-     * attached to the real `by run` process, so anything printed this way is a *second* copy at
-     * best — and debugpy's adapter opens every session by emitting two bare events reading `ptvsd`
-     * and `debugpy`, which landed in front of the program's own first line.
+     * Under debugpy nothing here is printed: the console is attached to the real `by run` process,
+     * which the interpreter is a child of, so every one of these is a *second* copy of text the
+     * user already has — and debugpy's adapter opens each session with two bare events reading
+     * `ptvsd` and `debugpy` that landed in front of the program's first line.
+     *
+     * Under bpd the opposite holds and dropping them was a bug: bpd starts the interpreter itself
+     * and captures its streams, and the wrapper points `bpd dap`'s stdout at the record file, so a
+     * program's output reaches the IDE **only** as these events. A `print` went nowhere at all.
+     * (`by run`'s own diagnostics are unaffected either way — they are on the process the IDE
+     * started, and were never on this path.)
+     *
+     * The categories are [ByAdapterOutput]'s to interpret; the base class maps everything that is
+     * not `console` or `stderr` onto stdout, which would print `telemetry` at a person and bury
+     * `important` — the category bpd reserves for the messages that must not scroll past.
      */
-    override fun formatAndPrintOutput(outEvent: OutputEventArguments) = Unit
+    override fun formatAndPrintOutput(outEvent: OutputEventArguments) {
+        if (!forwardsAdapterOutput) return
+        val text = outEvent.output ?: return
+        val contentType = when (ByAdapterOutput.registerFor(outEvent.category)) {
+            ByOutputRegister.NORMAL -> ConsoleViewContentType.NORMAL_OUTPUT
+            ByOutputRegister.SYSTEM -> ConsoleViewContentType.SYSTEM_OUTPUT
+            // The console has no register for "not an error, but do not let this scroll past", and
+            // of the three it has this is the only prominent one. Being read matters more here
+            // than the colour being literally true.
+            ByOutputRegister.PROMINENT -> ConsoleViewContentType.ERROR_OUTPUT
+            ByOutputRegister.HIDDEN -> return
+        }
+        session.consoleView?.print(text, contentType)
+    }
 
     /**
      * `DapXDebugProcess` supplies a line-breakpoint handler only, so exception breakpoints need

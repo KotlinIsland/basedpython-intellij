@@ -346,11 +346,37 @@ client, which is why redirecting to a file never showed it. The bootstrap points
 `os.devnull` across the spawn and restores them immediately; the adapter talks over sockets, so it
 loses nothing.
 
-**The adapter's `output` events are not our output.** `DapXDebugProcess` forwards every one to the
-console, which is right when the adapter owns the debuggee. Here the console is already attached to
-the real `by run` process, so those events are at best a second copy — and debugpy opens each
-session with two bare ones reading `ptvsd` and `debugpy`, which landed in front of the program's
-first line. `ByDapXDebugProcess` drops them.
+**Whether the adapter's `output` events are our output depends on the backend, and getting that
+wrong deletes the program's entire output.** `DapXDebugProcess` forwards every one to the console,
+which is right when the adapter owns the debuggee. Under **debugpy** it does not: the console is
+already attached to the real `by run` process, which the interpreter is a child of, so those events
+are at best a second copy — and debugpy opens each session with two bare ones reading `ptvsd` and
+`debugpy`, which landed in front of the program's first line. They are dropped.
+
+Under **bpd** the opposite holds. bpd starts the interpreter itself and captures its streams, and
+the wrapper points `bpd dap`'s own stdout at the record file, so nothing the program prints reaches
+the process the IDE started. Dropping these was dropping everything: `print` went nowhere at all.
+The two channels are disjoint, and measured so — a `by run` session whose program printed
+`total=3` and whose source drew a `redundant-return-annotation` warning put the warning on the
+process's stdout and the program's line in a single `('stdout', 'total=3\n')` event, neither on the
+other's channel. So forwarding adds the program's output without doubling the diagnostics.
+
+`ByDebugBackend.ownsDebuggeeOutput` is the switch, on the enum rather than derived from
+`DapStartRequest.Launch` — which today picks out the same backend, but attaching and owning the
+debuggee's streams are two facts, and a third backend that split them would silently get the wrong
+answer from the proxy.
+
+**And the category means what DAP says it means.** The platform's mapping is `console` → system,
+`stderr` → error, everything else → stdout, which is wrong in both directions once these events are
+being printed. `telemetry` is data for the client rather than text for a person, and printing it
+puts adapter bookkeeping in the middle of the program's output. `important` is defined as what a
+user should see *even with the console collapsed*, and bpd reserves it for exactly that — a blind
+spot in subprocess tracking, a refused code replacement, a reminder that recording is on and
+costing four times a bare run. Filed as ordinary stdout each of those scrolls past under the
+program's own output. `ByAdapterOutput` maps them: `stdout` ordinary, `console` and an omitted
+category system (DAP's own default), `stderr` and `important` prominent, `telemetry` nowhere, and
+an unrecognised category shown rather than dropped — an adapter may invent one, and silence is the
+only outcome nothing later can recover from.
 
 ## Exception breakpoints
 
