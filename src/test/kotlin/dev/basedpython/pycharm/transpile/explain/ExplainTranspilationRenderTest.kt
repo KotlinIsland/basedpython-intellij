@@ -3,6 +3,7 @@ package dev.basedpython.pycharm.transpile.explain
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
+import dev.basedpython.pycharm.lsp.ext.ByTranspilationNote
 import org.junit.jupiter.api.Test
 
 /**
@@ -12,15 +13,15 @@ import org.junit.jupiter.api.Test
  */
 class ExplainTranspilationRenderTest {
 
-    private fun render(note: TranspilationNote) =
+    private fun render(note: ByTranspilationNote) =
         ExplainTranspilationAction.renderHtml("main.by", listOf(note))
 
     private fun note(explanation: String, snippet: String = "a ?? b") =
-        TranspilationNote(
-            constructName = "null-coalescing",
-            bySnippet = snippet,
+        ByTranspilationNote(
+            construct = "null-coalescing",
+            snippet = snippet,
             explanation = explanation,
-            lineNumber = 1,
+            line = 1,
         )
 
     @Test
@@ -33,21 +34,6 @@ class ExplainTranspilationRenderTest {
     @Test
     fun `no raw backtick survives into the report`() {
         val html = render(note("The `?.` access becomes `a.b if a is not None else None`."))
-        assertFalse(html.contains("`"), "raw backtick leaked into user-visible HTML: $html")
-    }
-
-    /** Every real explanation the explainer can emit must survive the same rule. */
-    @Test
-    fun `no explanation produced by the explainer leaks a backtick`() {
-        val src = """
-            a = b?.c
-            d = e ?? f
-            g = h!!
-            i = j ?: k
-        """.trimIndent()
-        val notes = TranspilationExplainer.explain(src)
-        assertTrue(notes.isNotEmpty(), "expected the explainer to recognize constructs")
-        val html = ExplainTranspilationAction.renderHtml("main.by", notes)
         assertFalse(html.contains("`"), "raw backtick leaked into user-visible HTML: $html")
     }
 

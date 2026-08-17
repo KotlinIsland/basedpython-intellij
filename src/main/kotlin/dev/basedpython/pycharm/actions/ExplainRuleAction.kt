@@ -19,7 +19,7 @@ import com.intellij.openapi.wm.WindowManager
 import com.intellij.ui.JBColor
 import com.intellij.ui.awt.RelativePoint
 import dev.basedpython.pycharm.inspections.explain.ByRuleExplainer
-import dev.basedpython.pycharm.inspections.explain.ByRuleExplanation
+import dev.basedpython.pycharm.inspections.explain.ByRuleExplanationResult
 import dev.basedpython.pycharm.markup.ByCodeSpans
 import dev.basedpython.pycharm.util.BasedPythonBundle
 
@@ -43,8 +43,8 @@ class ExplainRuleAction : AnAction() {
             override fun run(indicator: ProgressIndicator) {
                 indicator.isIndeterminate = true
                 when (val explanation = ByRuleExplainer.explain(project, code)) {
-                    is ByRuleExplanation.Found -> showBalloon(project, editor, code, explanation.body)
-                    is ByRuleExplanation.NotFound -> ByCli.notifyError(
+                    is ByRuleExplanationResult.Found -> showBalloon(project, editor, code, explanation.body)
+                    is ByRuleExplanationResult.NotFound -> ByCli.notifyError(
                         project,
                         BasedPythonBundle.message("explainRule.noExplanationFor.title", code),
                         explanation.message,

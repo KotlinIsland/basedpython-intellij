@@ -257,6 +257,16 @@ internal class BuffLspServerDescriptor(
   override fun startServerProcess(): OSProcessHandler =
     super.startServerProcess().mirrorStderrTo(project, "buff")
 
+  /**
+   * Adds `buff/explainRule`; see [dev.basedpython.pycharm.lsp.ext.BuffServerExtensions].
+   *
+   * LSP has no request for "what does this rule mean" — a diagnostic's `codeDescription` is a URL,
+   * which sends the reader to a browser for prose the server is already holding — so it is a
+   * protocol extension, which is what `lsp4jServerClass` is for.
+   */
+  override val lsp4jServerClass: Class<out org.eclipse.lsp4j.services.LanguageServer> =
+    dev.basedpython.pycharm.lsp.ext.BuffLanguageServer::class.java
+
   // `buff` advertises only formatting + code actions + hover + diagnostics.
   // Everything the type-checker (`by`) handles better stays disabled; the three
   // buff capabilities are individually user-gated (§142).

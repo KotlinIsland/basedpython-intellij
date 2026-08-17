@@ -15,6 +15,7 @@ import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.openapi.vfs.VirtualFile
 import dev.basedpython.pycharm.actions.ByCli
+import dev.basedpython.pycharm.util.BasedPythonBundle
 import dev.basedpython.pycharm.lang.BasedPythonFileType
 import java.nio.file.Paths
 
@@ -52,17 +53,11 @@ class ConvertByToPyAction : AnAction() {
             object : Task.Backgroundable(project, "Converting ${file.name} → .py", true) {
                 override fun run(indicator: ProgressIndicator) {
                     indicator.isIndeterminate = true
-                    val out = ByCli.run(project, "transpile", filePath.toString(), cwd = filePath.parent) ?: return
-                    if (out.exitCode != 0) {
-                        ByCli.notifyError(
-                            project,
-                            "by transpile failed",
-                            out.stderr.ifBlank { "exit ${out.exitCode}" },
-                        )
-                        return
-                    }
-
-                    val pyContent = out.stdout
+                    val pyContent = ByTranspile.sourceOrNotify(
+                        project,
+                        file,
+                        failureTitle = BasedPythonBundle.message("notification.transpileFailed.title"),
+                    ) ?: return
                     val base = Paths.get(basePath)
                     val relPath = try { base.relativize(filePath) } catch (_: IllegalArgumentException) { filePath.fileName }
                     val relStr = relPath.toString().replaceFirst(Regex("\\.by$", RegexOption.IGNORE_CASE), ".py")
@@ -114,19 +109,12 @@ class ConvertPyToByAction : AnAction() {
             object : Task.Backgroundable(project, "Converting ${file.name} → .by", true) {
                 override fun run(indicator: ProgressIndicator) {
                     indicator.isIndeterminate = true
-                    val out =
-                        ByCli.run(project, "transpile", "--reverse", filePath.toString(), cwd = filePath.parent)
-                            ?: return
-                    if (out.exitCode != 0) {
-                        ByCli.notifyError(
-                            project,
-                            "by transpile --reverse failed",
-                            out.stderr.ifBlank { "exit ${out.exitCode}" },
-                        )
-                        return
-                    }
-
-                    val byContent = out.stdout
+                    val byContent = ByTranspile.sourceOrNotify(
+                        project,
+                        file,
+                        reverse = true,
+                        failureTitle = BasedPythonBundle.message("notification.reverseTranspileFailed.title"),
+                    ) ?: return
                     val byPath = filePath.parent.resolve(file.nameWithoutExtension + ".by")
 
                     ApplicationManager.getApplication().invokeLater {
