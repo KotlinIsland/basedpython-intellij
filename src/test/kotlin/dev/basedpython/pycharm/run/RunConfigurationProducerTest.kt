@@ -7,7 +7,9 @@ import com.intellij.execution.actions.RunConfigurationProducer
 import com.intellij.psi.PsiFile
 import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
+import dev.basedpython.pycharm.lang.dialect.PyFileHandling
 import dev.basedpython.pycharm.run.main.ByMainArgumentHistory
+import dev.basedpython.pycharm.settings.BasedPythonSettings
 import dev.basedpython.pycharm.run.test.ByTestConfiguration
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -16,6 +18,8 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import java.nio.file.Files
+import java.nio.file.Paths
 
 /**
  * Exercises the context-based run configuration producers end-to-end through real PSI files
@@ -39,6 +43,32 @@ class RunConfigurationProducerTest {
 
     private inline fun <reified T : RunConfigurationProducer<*>> producer(): T =
         RunConfigurationProducer.getInstance(T::class.java)
+
+    /**
+     * Runs [body] with the project marked basedpython and `.py` pinned to this plugin, then puts
+     * both back — the marker is a real file at the project base, and the ownership choice is a
+     * persisted setting, so leaving either behind would leak into the tests after it.
+     *
+     * Pinned rather than left on AUTO so the outcome does not depend on whether the IDE running the
+     * tests happens to provide the Python language.
+     */
+    private fun asBasedPythonProject(body: () -> Unit) {
+        val settings = BasedPythonSettings.getInstance(project)
+        val handling = settings.pyFileHandling
+        val enabled = settings.byEnabled
+        val marker = Paths.get(project.basePath!!).also { Files.createDirectories(it) }.resolve("api.lock")
+        val created = !Files.exists(marker)
+        if (created) Files.createFile(marker)
+        settings.byEnabled = true
+        settings.pyFileHandling = PyFileHandling.ALWAYS
+        try {
+            body()
+        } finally {
+            settings.pyFileHandling = handling
+            settings.byEnabled = enabled
+            if (created) Files.deleteIfExists(marker)
+        }
+    }
 
     // ------------------------------------------------------------------
     // by run
@@ -71,12 +101,50 @@ class RunConfigurationProducerTest {
         assertEquals("--name bob", config.options.programArgs)
     }
 
+    /**
+     * A `.py` the plugin does not own is PyCharm's, and offering a second configuration on it would
+     * be two green arrows on one file. The fixture project carries no basedpython marker, so this
+     * is that case.
+     */
     @Test
-    fun `by run producer ignores non-by files`() {
+    fun `by run producer ignores a py file it does not own`() {
         val file = fixture.configureByText("main.py", "print(1)\n")
         val fromContext = producer<ByRunFromFileProducer>()
             .createConfigurationFromContext(contextFor(file))
-        assertNull(fromContext, "by run producer should not fire on .py files")
+        assertNull(fromContext, "by run producer should not fire on a .py it does not own")
+    }
+
+    /**
+     * A `.py` the plugin *does* own is a module `by run` can start: `by run` transpiles only `.by`,
+     * so the interpreter imports this file from where it was written.
+     */
+    @Test
+    fun `by run producer builds a module name from an owned py file`() = asBasedPythonProject {
+        val file = fixture.addFileToProject("pkg/script.py", "print(1)\n")
+        val fromContext = producer<ByRunFromFileProducer>()
+            .createConfigurationFromContext(contextFor(file))
+        assertNotNull(fromContext, "by run producer should produce a configuration for an owned .py")
+        assertEquals("pkg.script", (fromContext!!.configuration as ByRunConfiguration).options.module)
+    }
+
+    /**
+     * `twin.by` and `twin.py` are one module name for two files, and `by run` resolves it to the
+     * transpiled one — its temp directory is `sys.path[0]`. A configuration produced from the `.py`
+     * would run the `.by` instead, so the `.py` declines and the `.by` keeps the name.
+     */
+    @Test
+    fun `a py shadowed by a by of the same name produces nothing`() = asBasedPythonProject {
+        fixture.addFileToProject("twin.by", "print(1)\n")
+        val shadowed = fixture.addFileToProject("twin.py", "print(2)\n")
+        assertNull(
+            producer<ByRunFromFileProducer>().createConfigurationFromContext(contextFor(shadowed)),
+            "the shadowed .py should not offer to run the .by beside it",
+        )
+        assertNotNull(
+            producer<ByRunFromFileProducer>()
+                .createConfigurationFromContext(contextFor(fixture.addFileToProject("other.by", "x = 1\n"))),
+            "the .by itself is unaffected",
+        )
     }
 
     // ------------------------------------------------------------------

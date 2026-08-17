@@ -7,6 +7,7 @@ import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.editor.Document
 import com.intellij.psi.PsiDocumentManager
 import com.intellij.psi.PsiElement
+import dev.basedpython.pycharm.lang.dialect.BasedPythonSources
 import dev.basedpython.pycharm.run.main.ByMainArgumentHistory
 import dev.basedpython.pycharm.run.main.ByMainArguments
 import dev.basedpython.pycharm.run.main.ByMainFunction
@@ -39,7 +40,7 @@ class ByRunLineMarkerContributor : RunLineMarkerContributor() {
         if (element.firstChild != null) return null
 
         val file = element.containingFile ?: return null
-        if (file.virtualFile?.extension != "by") return null
+        if (!BasedPythonSources.isOwnedSource(file.virtualFile)) return null
 
         val document: Document =
             PsiDocumentManager.getInstance(element.project).getDocument(file) ?: return null
@@ -50,7 +51,11 @@ class ByRunLineMarkerContributor : RunLineMarkerContributor() {
         val lineStart = document.getLineStartOffset(lineNumber)
         val lineText = document.lineTextAt(lineNumber)
 
-        val isDefinition = ByMainSignature.MAIN_DEF.containsMatchIn(lineText)
+        // A `def main(` line is an entry point only where basedpython generates the guard that calls
+        // it. In a plain `.py` the interpreter runs what is written, so an unguarded `main` is a
+        // function nothing calls — an icon there would offer to run a program that does nothing.
+        val isDefinition = BasedPythonSources.hasGeneratedEntryPoint(file.virtualFile) &&
+            ByMainSignature.MAIN_DEF.containsMatchIn(lineText)
         if (!isDefinition && !ByMainSignature.MAIN_GUARD.matches(lineText)) return null
 
         // Only the first non-whitespace leaf of the line gets the icon.

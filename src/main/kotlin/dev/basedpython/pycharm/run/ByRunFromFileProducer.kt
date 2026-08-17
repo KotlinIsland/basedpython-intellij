@@ -13,9 +13,10 @@ import com.intellij.openapi.util.Ref
 import com.intellij.openapi.vfs.VfsUtilCore
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiElement
+import dev.basedpython.pycharm.lang.dialect.BasedPythonSources
 import dev.basedpython.pycharm.run.main.ByMainArgumentHistory
 
-/** Right-click a `.by` file → produce a `by run <module>` configuration. */
+/** Right-click a basedpython source file → produce a `by run <module>` configuration. */
 class ByRunFromFileProducer : LazyRunConfigurationProducer<ByRunConfiguration>() {
 
     override fun getConfigurationFactory(): ConfigurationFactory =
@@ -35,7 +36,7 @@ class ByRunFromFileProducer : LazyRunConfigurationProducer<ByRunConfiguration>()
         sourceElement: Ref<PsiElement>,
     ): Boolean {
         val file = context.location?.virtualFile ?: contextFile(context) ?: return false
-        if (file.extension != "by") return false
+        if (!BasedPythonSources.isOwnedSource(file)) return false
         val module = moduleNameFor(context, file) ?: return false
         configuration.options.module = module
         // Named for what is being run, not for the command that runs it — the configuration
@@ -60,7 +61,7 @@ class ByRunFromFileProducer : LazyRunConfigurationProducer<ByRunConfiguration>()
         context: ConfigurationContext,
     ): Boolean {
         val file = context.location?.virtualFile ?: contextFile(context) ?: return false
-        if (file.extension != "by") return false
+        if (!BasedPythonSources.isOwnedSource(file)) return false
         val module = moduleNameFor(context, file) ?: return false
         return configuration.options.module == module
     }
@@ -87,8 +88,17 @@ class ByRunFromFileProducer : LazyRunConfigurationProducer<ByRunConfiguration>()
 internal fun moduleNameFor(context: ConfigurationContext, file: VirtualFile): String? =
     moduleNameFor(context.project, file)
 
-/** The module name `by run` would be given for [file], or null when it sits under no root. */
+/**
+ * The module name `by run` would be given for [file], or null when it sits under no root — or when
+ * a sibling would win the name.
+ *
+ * Both `.by` and `.py` are modules `by run` can start, and `main.by` beside `main.py` is one module
+ * name for two files: `by run` transpiles the `.by` into its temp directory and makes that directory
+ * `sys.path[0]`, so the generated module shadows the plain one. Offering to run the shadowed file
+ * would be offering to run the other one, so the `.py` is declined and the `.by` keeps the name.
+ */
 internal fun moduleNameFor(project: Project, file: VirtualFile): String? {
+    if (isShadowedByGeneratedModule(file)) return null
     val index = ProjectFileIndex.getInstance(project)
     val root = index.getSourceRootForFile(file)
         ?: index.getContentRootForFile(file)
@@ -99,7 +109,12 @@ internal fun moduleNameFor(project: Project, file: VirtualFile): String? {
         ?: project.basePath?.let { com.intellij.openapi.vfs.LocalFileSystem.getInstance().findFileByPath(it) }
         ?: return null
     val rel = VfsUtilCore.getRelativePath(file, root, '/') ?: return null
-    val noExt = rel.removeSuffix(".by")
+    val noExt = BasedPythonSources.withoutModuleExtension(rel) ?: return null
     if (noExt.isBlank()) return null
     return noExt.replace('/', '.')
 }
+
+/** True when [file] is a `.py` with a `.by` of the same module name beside it. */
+private fun isShadowedByGeneratedModule(file: VirtualFile): Boolean =
+    file.extension.equals(BasedPythonSources.PY, ignoreCase = true) &&
+        file.parent?.findChild("${file.nameWithoutExtension}.${BasedPythonSources.BY}") != null

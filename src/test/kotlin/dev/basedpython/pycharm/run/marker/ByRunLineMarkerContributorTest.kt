@@ -4,13 +4,18 @@ import com.intellij.execution.lineMarker.RunLineMarkerContributor
 import com.intellij.psi.PsiElement
 import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
+import dev.basedpython.pycharm.lang.dialect.PyFileHandling
 import dev.basedpython.pycharm.run.main.ByRunWithArgumentsAction
+import dev.basedpython.pycharm.settings.BasedPythonSettings
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import java.nio.file.Files
+import java.nio.file.Paths
 
 /**
  * What the gutter offers on a `def main`, which depends entirely on what that `main` takes.
@@ -93,5 +98,61 @@ class ByRunLineMarkerContributorTest {
         assertNotNull(marker.info)
         assertFalse(marker.offersArguments)
         assertEquals("Run with by", marker.tooltip)
+    }
+
+    /**
+     * A plain `.py` is run by the interpreter exactly as written, so a bare `def main(…)` is a
+     * function nothing calls — basedpython's generated guard and argument parser are a `.by` thing.
+     * Marking it would offer to run a program that does nothing.
+     */
+    @Test
+    fun `a bare def main in an owned py file gets no icon`() = asBasedPythonProject {
+        assertNull(pyMarkerFor("def main(a: int):\n    print(a)\n").info)
+    }
+
+    /** The guard is Python's own entry point, so it is marked in a `.py` exactly as in a `.by`. */
+    @Test
+    fun `a guard in an owned py file is still an entry point`() = asBasedPythonProject {
+        val marker = pyMarkerFor("if __name__ == \"__main__\":\n    main()\n")
+        assertNotNull(marker.info, "the __main__ guard is an entry point in a .py too")
+        assertFalse(marker.offersArguments)
+    }
+
+    /** A `.py` this plugin does not own belongs to the Python plugin, icons included. */
+    @Test
+    fun `an unowned py file gets no icon at all`() {
+        assertNull(pyMarkerFor("if __name__ == \"__main__\":\n    main()\n").info)
+    }
+
+    /** [markerFor]'s `.py` twin. */
+    private fun pyMarkerFor(source: String): Marker {
+        val file = fixture.addFileToProject("pkg/plain${index++}.py", source)
+        val element = requireNotNull(file.findElementAt(0)) { "no leaf at the start of $source" }
+        return Marker(ByRunLineMarkerContributor().getInfo(element), element)
+    }
+
+    /**
+     * Runs [body] with the project marked basedpython and `.py` pinned to this plugin, then puts
+     * both back. Pinned rather than left on AUTO so the outcome does not depend on whether the IDE
+     * running the tests happens to provide the Python language.
+     */
+    private fun asBasedPythonProject(body: () -> Unit) {
+        val settings = BasedPythonSettings.getInstance(fixture.project)
+        val handling = settings.pyFileHandling
+        val enabled = settings.byEnabled
+        val marker = Paths.get(fixture.project.basePath!!)
+            .also { Files.createDirectories(it) }
+            .resolve("api.lock")
+        val created = !Files.exists(marker)
+        if (created) Files.createFile(marker)
+        settings.byEnabled = true
+        settings.pyFileHandling = PyFileHandling.ALWAYS
+        try {
+            body()
+        } finally {
+            settings.pyFileHandling = handling
+            settings.byEnabled = enabled
+            if (created) Files.deleteIfExists(marker)
+        }
     }
 }
