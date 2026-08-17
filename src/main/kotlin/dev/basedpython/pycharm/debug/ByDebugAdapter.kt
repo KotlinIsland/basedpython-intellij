@@ -28,6 +28,7 @@ import com.intellij.platform.dap.connection.DebugAdapterSocketConnection
 import com.intellij.platform.dap.xdebugger.DapXDebugProcess
 import com.intellij.xdebugger.XDebugSession
 import com.intellij.xdebugger.breakpoints.XBreakpointHandler
+import com.intellij.xdebugger.frame.XDropFrameHandler
 import dev.basedpython.pycharm.actions.ByCli
 import dev.basedpython.pycharm.debug.bpd.ByBpdConnection
 import dev.basedpython.pycharm.debug.bpd.ByBpdWrapper
@@ -35,6 +36,8 @@ import dev.basedpython.pycharm.debug.bpd.ByDebugBackend
 import dev.basedpython.pycharm.run.ByCommandLineState
 import dev.basedpython.pycharm.util.BasedPythonBundle
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
+import org.eclipse.lsp4j.debug.Capabilities
 import org.eclipse.lsp4j.debug.OutputEventArguments
 import org.eclipse.lsp4j.debug.services.IDebugProtocolServer
 import kotlin.time.Duration.Companion.milliseconds
@@ -328,9 +331,41 @@ private class ByDapXDebugProcess(
     startRequestType,
     startRequestArguments,
 ) {
+    /**
+     * The last capabilities the adapter announced.
+     *
+     * Kept rather than asked for, because the questions that need it are synchronous — the platform
+     * asks whether an action is enabled while it is building a toolbar — and `capabilities` is a
+     * `Flow`. Volatile because the collector and the questions are on different threads; null until
+     * `initialize` has been answered, which every reader has to treat as "not yet", never as "no".
+     */
+    @Volatile
+    private var capabilities: Capabilities? = null
+
+    init {
+        xDebugProcessScope.launch {
+            dapDebugSession.capabilities.collect { capabilities = it }
+        }
+    }
+
     override fun doGetProcessHandler(): ProcessHandler? = result?.processHandler ?: super.doGetProcessHandler()
 
     override fun createConsole(): ExecutionConsole = result?.executionConsole ?: super.createConsole()
+
+    /**
+     * *Reset Frame*, which the platform's DAP client does not wire up to `restartFrame` — see
+     * [ByRestartFrameHandler], including why the action does something narrower here than its name
+     * promises.
+     *
+     * One handler for the life of the process: [com.intellij.xdebugger.frame.XDropFrameHandler] is
+     * asked about a frame at a time and holds nothing itself, and a fresh instance per call would
+     * make identical questions look like different ones.
+     */
+    private val restartFrameHandler: XDropFrameHandler by lazy {
+        ByRestartFrameHandler(session.project) { capabilities?.supportsRestartFrame }
+    }
+
+    override fun getDropFrameHandler(): XDropFrameHandler = restartFrameHandler
 
     /**
      * Prints an adapter `output` event, when it is the program's only voice — and files it by what

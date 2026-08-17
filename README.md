@@ -65,6 +65,11 @@ support, run configurations, CLI actions, and editor tooling.
   the editor gutter's right-click menu, under *Appearance*, not in the Settings dialog —
   since without it the gutter has no row between two lines to click. See
   [docs/debugging.md](docs/debugging.md#log-points).
+- **Reset Frame** under bpd — runs the stopped frame again from its first line. Note it is
+  not the JVM's: Python cannot pop a frame, so the body re-runs over the locals as they
+  stand rather than with the arguments the call was made with, and only the frame the
+  thread is executing can be restarted. Grey under debugpy, which does not offer the
+  request.
 - Breakpoint expression fields (*Condition*, *Evaluate and log*) are basedpython editors,
   not plain text boxes.
 - **Debug .by (pdb)** remains as a fallback that needs no extra package: builds, then runs
