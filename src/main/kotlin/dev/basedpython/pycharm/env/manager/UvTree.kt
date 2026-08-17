@@ -70,13 +70,10 @@ object UvTree {
     }
 
     /**
-     * The main list is kept even when it is empty; every other group is dropped when it is.
+     * The main list and `dev` are kept even when empty; every other group is dropped when it is.
      *
-     * An empty group heading is noise — a project that declares no `docs` group should not have a
-     * `docs` row — but the main list is different in kind. It is where dependencies go by default,
-     * so a project with none has an empty main list rather than no main list, and the row is the
-     * thing that says so and the thing you select before pressing *Add*. Hiding it leaves a project
-     * whose only dependencies are dev ones looking like it has no main list at all.
+     * See [ALWAYS_SHOWN]. An empty `docs` heading is noise; an empty `dependencies` or `dev` is a
+     * place the project has and you can add to.
      */
     private fun parseOrThrow(stdout: String): List<EnvDependencyGroup> {
         val root = JsonParser.parseString(stdout.trim().ifEmpty { "{}" })
@@ -94,9 +91,22 @@ object UvTree {
             .orEmpty()
 
         val groups = rootIds.mapNotNull { id -> group(id, entries, rootIds.toSet()) }
-        return groups.filter { it.target == EnvDependencyTarget.Main || it.roots.isNotEmpty() }
+        return groups.filter { it.target in ALWAYS_SHOWN || it.roots.isNotEmpty() }
             .sortedWith(GROUP_ORDER)
     }
+
+    /**
+     * Groups worth a heading even with nothing in them.
+     *
+     * The main list because it is where dependencies go by default, and `dev` because it is where
+     * development ones go — both are places a project *has* rather than lists it happens to have
+     * filled. Removing the last entry from either should leave an empty heading you can add to, not
+     * make the group disappear and have to be conjured back by typing its name into a dialog.
+     *
+     * Every other group is dropped when empty: a `docs` heading with nothing under it is noise, and
+     * unlike these two it is not somewhere a person expects to find.
+     */
+    private val ALWAYS_SHOWN = setOf(EnvDependencyTarget.Main, EnvDependencyTarget.DEV)
 
     /** One root's group, or null when the root is not something the view shows. */
     private fun group(

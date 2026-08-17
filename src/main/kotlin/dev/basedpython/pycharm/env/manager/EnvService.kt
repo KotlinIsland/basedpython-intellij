@@ -84,6 +84,35 @@ internal class EnvService(
     /** Guards against a second refresh while one is in flight. */
     private val refreshing = AtomicBoolean(false)
 
+    /**
+     * What each package is doing while an operation runs.
+     *
+     * Replaced wholesale rather than mutated, so the view — which paints on the EDT while the output
+     * arrives on a process thread — always reads a coherent picture.
+     */
+    @Volatile
+    var progress: EnvProgress = EnvProgress()
+        private set
+
+    /** Applies one line of a running operation's output to [progress]. */
+    fun onOperationOutput(line: String) {
+        val event = EnvProgressLine.parse(line) ?: return
+        progress = progress.with(event)
+        fire()
+    }
+
+    /** Marks [names] busy before the tool has said anything — see [EnvProgress.starting]. */
+    fun markStarting(names: Collection<String>, what: EnvPackageActivity) {
+        progress = progress.starting(names, what)
+        fire()
+    }
+
+    /** Clears the progress, for when an operation ends however it ended. */
+    fun clearProgress() {
+        progress = progress.cleared()
+        fire()
+    }
+
     /** True once something has refreshed, so the view can tell "nothing here" from "not looked yet". */
     @Volatile
     var scanned: Boolean = false

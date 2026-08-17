@@ -143,6 +143,10 @@ class BasedPythonBundleTest {
             // action's own progress reporting, back when each spawned uv itself. Both go through
             // env.manager.EnvOperations now, which reports under the `env.*` keys below.
             "env.summary.scanning",
+            "env.summary.working",
+            "env.activity.downloading",
+            "env.activity.preparing",
+            "env.activity.removing",
             "env.summary.unmanaged",
             "env.summary.wouldBe",
             "env.summary.ready",

@@ -71,6 +71,8 @@ internal object EnvRunner {
         backend: EnvBackend,
         command: EnvCommand,
         workDir: Path,
+        /** Called with each output line as it arrives, for live per-package progress. */
+        onLine: (String) -> Unit = {},
     ): EnvResult {
         val exe = EnvTools.find(backend)
             ?: return EnvResult.failedToStart("${backend.executableName} is not installed")
@@ -79,7 +81,7 @@ internal object EnvRunner {
             .withParameters(command.args)
             .withWorkingDirectory(workDir)
             .withCharset(Charsets.UTF_8)
-        return if (command.isQuery) capture(cmd, command, exe) else stream(project, cmd, command, exe)
+        return if (command.isQuery) capture(cmd, command, exe) else stream(project, cmd, command, exe, onLine)
     }
 
     /** Runs captured, with a timeout, printing nothing. */
@@ -106,6 +108,7 @@ internal object EnvRunner {
         cmd: GeneralCommandLine,
         command: EnvCommand,
         exe: Path,
+        onLine: (String) -> Unit,
     ): EnvResult {
         val log = BasedPythonLog.getInstance(project)
         log.info("env: ${command.describe(exe.toString())}")
@@ -121,6 +124,9 @@ internal object EnvRunner {
                     // chunk would double-space everything uv prints.
                     event.text.trimEnd('\n', '\r').takeIf { it.isNotEmpty() }?.let {
                         log.serverOutput(exe.fileName.toString(), it, isError)
+                        // Progress is read from the same lines the log shows, so what the user sees
+                        // spinning and what the log says can never disagree.
+                        onLine(it)
                     }
                 }
             })

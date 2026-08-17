@@ -192,6 +192,8 @@ internal object EnvOperations {
                     // still edited `pyproject.toml` — and the editor must not be left showing the
                     // file as it was before.
                     if (backend != null && root != null) EnvFiles.refreshAfterOperation(backend, root)
+                    // However the gesture ended, nothing is still installing.
+                    service.clearProgress()
                 }
             }
 
@@ -218,7 +220,11 @@ internal object EnvOperations {
     private fun runBlockingOp(project: Project, backend: EnvBackend, op: EnvOp): Boolean {
         val root = EnvService.getInstance(project).status.projectRoot ?: return false
         val command = backend.command(op) ?: return false
-        val result = EnvRunner.run(project, backend, command, root)
+        val service = EnvService.getInstance(project)
+        // Removals are announced only in the trailing `-` block, so the rows would sit still until
+        // they vanished; naming them up front is what makes Remove show anything at all.
+        if (op is EnvOp.Remove) service.markStarting(op.packages, EnvPackageActivity.REMOVING)
+        val result = EnvRunner.run(project, backend, command, root, service::onOperationOutput)
         if (!result.isSuccess) {
             notify(
                 project,

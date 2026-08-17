@@ -156,6 +156,18 @@
   they disagree, the row says so: a package the environment does not have is greyed, one
   installed at a version other than the lock's is called out. That is drift shown on the row it
   happens on, rather than only asserted in a banner.
+- The environment window shows what is happening while it happens. Adding, syncing, upgrading or
+  removing puts a spinner on each package as it is worked on, with what it is doing beside it —
+  *downloading…*, *installing…*, *removing…* — and the header names the package currently being
+  fetched and how big it is. The state is read from the tool's own output, which reports each
+  download as it starts and again as it finishes even when piped rather than attached to a terminal,
+  so several concurrent downloads each spin on their own row. A package already in the cache is
+  never downloaded and so never spins, which is honest: it really is instantaneous. Removals are
+  marked before the command runs, since the tool says nothing per package while uninstalling.
+- The `dev` group is shown even when it is empty, as the main list already was. Both are places a
+  project *has* rather than lists it happens to have filled, so removing the last entry should leave
+  a heading to add to rather than making the group vanish and need conjuring back by typing its name
+  into a dialog. Every other group is still dropped when empty, where an empty heading is only noise.
 - Pre-releases are visible in *Add Package* rather than implied. A package index reports its newest
   *stable* release as "latest", so a project whose real work happens in alphas — `basedpython`
   itself, whose only stable is an ancient `0.0.0` beneath eight `0.0.1aN` — was described as if none
