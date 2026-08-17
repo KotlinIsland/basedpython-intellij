@@ -108,7 +108,7 @@ fun gatingModules(slug: String): List<String> = bundledPlatformModules[slug]
 // A separate task rather than a `doLast` on prepareSandbox: the marker is an *input file* to the
 // sandbox copy, and generating it inside the copy task would write into a directory Sync has
 // already synchronised.
-val writeBundledPlatformMarker by tasks.registering {
+val writeBundledPlatformMarker = tasks.register("writeBundledPlatformMarker") {
   description = "Records the platform slug the bundled by/buff binaries were built for."
   val marker = layout.buildDirectory.file("bundled/platform.txt")
   val slug = bundledPlatform
@@ -294,7 +294,7 @@ val PYCHARM_VERSION = "2026.2.1"
 //
 // `-PpycharmPath=/Applications/PyCharm.app` launches a PyCharm already installed — a nightly, say —
 // instead of downloading one. `-PpycharmVersion=2026.3` picks a different published build.
-val runPyCharm by intellijPlatformTesting.runIde.registering {
+intellijPlatformTesting.runIde.register("runPyCharm") {
   val installed = providers.gradleProperty("pycharmPath")
   if (installed.isPresent) {
     localPath = file(installed.get())
