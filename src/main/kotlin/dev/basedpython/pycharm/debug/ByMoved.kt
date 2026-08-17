@@ -36,7 +36,22 @@ internal data class ByMoved(
     val function: String?,
     /** Null when the move was refused; the line it came from when it happened. */
     val from: Int?,
-    /** cpython's own refusal, or null when it moved. */
+    /**
+     * Whether cpython refused the move, read from the tag bpd's `Jump` serialises with.
+     *
+     * The tag rather than the presence of a field: `#[serde(tag = "jumped")]` is what bpd states the
+     * case with, and inferring it from whether some other key parsed is how a shape change becomes a
+     * silent wrong answer instead of a missing one.
+     */
+    val refused: Boolean,
+    /**
+     * cpython's own refusal, as `kind: message` — `ValueError: can't jump into the body of a for
+     * loop`.
+     *
+     * bpd sends its `PythonError` **whole**: an object of `kind`, `message` and `traceback`, not a
+     * string. Reading it as a string yields null, which turns a refusal into a move that disturbed
+     * nothing and reports it as nothing at all — see [ByMovedTest].
+     */
     val refusal: String?,
     /** The line that was asked for, when it was refused. */
     val wanted: Int?,
@@ -55,44 +70,78 @@ internal data class ByMoved(
      */
     val unannounced: List<Int>,
 ) {
-    /** True when the frame did not move. */
-    val refused: Boolean get() = refusal != null
-
     companion object {
 
         /** The event name, which is also what [ByDebugProtocolServer.understands] names back. */
         const val EVENT: String = "bpd/moved"
 
+        /** The value of `Jump`'s serde tag when cpython refused the move. */
+        private const val REFUSED = "refused"
+
+        /**
+         * Read an event body, or null when it is not one this can use.
+         *
+         * Total over any JSON: every accessor below checks the *kind* of what it found, not merely
+         * that something was there, so a field of an unexpected type is absent rather than an
+         * exception. Gson's `asLong` on a string throws, and a debug session must not end because a
+         * newer bpd changed a shape.
+         */
         fun parse(body: JsonObject?): ByMoved? {
-            val stop = body?.get("stop")?.takeIf { it.isJsonPrimitive }?.asLong ?: return null
-            val jumped = body.getAsJsonObject("jumped") ?: return null
-            val at = jumped.getAsJsonObject("at")
-            val outcome = jumped.getAsJsonObject("outcome")
+            val stop = body?.long("stop") ?: return null
+            val jumped = body.obj("jumped") ?: return null
+            val at = jumped.obj("at")
+            val outcome = jumped.obj("outcome")
             return ByMoved(
                 stop = stop,
                 file = at?.string("file"),
                 line = at?.int("line"),
                 function = at?.string("function"),
                 from = outcome?.int("from"),
-                refusal = outcome?.string("error"),
+                refused = outcome?.string("jumped") == REFUSED,
+                refusal = outcome?.obj("error")?.let(::describe),
                 wanted = outcome?.int("wanted"),
                 boundToNone = outcome?.strings("bound_to_none").orEmpty(),
                 unannounced = outcome?.ints("unannounced").orEmpty(),
             )
         }
 
-        private fun JsonObject.string(name: String): String? =
-            get(name)?.takeIf { it.isJsonPrimitive }?.asString
+        /**
+         * A `PythonError` as a person reads it, which is how bpd's own `Display` writes it: the
+         * exception's kind, and its `str()` after a colon when there is one.
+         *
+         * The traceback it also carries is dropped. cpython's refusals are raised at the point of
+         * the assignment to `f_lineno`, so the frames are bpd's own and say nothing about the
+         * program.
+         */
+        private fun describe(error: JsonObject): String? {
+            val kind = error.string("kind")
+            val message = error.string("message")
+            return when {
+                kind == null -> message
+                message.isNullOrEmpty() -> kind
+                else -> "$kind: $message"
+            }
+        }
 
-        private fun JsonObject.int(name: String): Int? =
-            get(name)?.takeIf { it.isJsonPrimitive }?.asInt
+        private fun JsonObject.primitive(name: String) =
+            get(name)?.takeIf { it.isJsonPrimitive }?.asJsonPrimitive
+
+        private fun JsonObject.obj(name: String) = get(name)?.takeIf { it.isJsonObject }?.asJsonObject
+
+        private fun JsonObject.string(name: String) = primitive(name)?.takeIf { it.isString }?.asString
+
+        private fun JsonObject.int(name: String) = primitive(name)?.takeIf { it.isNumber }?.asInt
+
+        private fun JsonObject.long(name: String) = primitive(name)?.takeIf { it.isNumber }?.asLong
+
+        private fun JsonObject.array(name: String) = get(name)?.takeIf { it.isJsonArray }?.asJsonArray
 
         private fun JsonObject.strings(name: String): List<String> =
-            getAsJsonArray(name)?.mapNotNull { it.takeIf { e -> e.isJsonPrimitive }?.asString }
+            array(name)?.mapNotNull { it.takeIf { e -> e.isJsonPrimitive && e.asJsonPrimitive.isString }?.asString }
                 .orEmpty()
 
         private fun JsonObject.ints(name: String): List<Int> =
-            getAsJsonArray(name)?.mapNotNull { it.takeIf { e -> e.isJsonPrimitive }?.asInt }
+            array(name)?.mapNotNull { it.takeIf { e -> e.isJsonPrimitive && e.asJsonPrimitive.isNumber }?.asInt }
                 .orEmpty()
     }
 }
@@ -109,7 +158,8 @@ internal data class ByMoved(
 internal fun ByMoved.report(): String? = when {
     refused -> "the frame did not move" +
         (wanted?.let { " to line $it" } ?: "") +
-        ": ${refusal}. it is still at ${where()}"
+        (refusal?.let { ": $it" } ?: "") +
+        ". it is still at ${where()}"
 
     boundToNone.isEmpty() && unannounced.isEmpty() -> null
 

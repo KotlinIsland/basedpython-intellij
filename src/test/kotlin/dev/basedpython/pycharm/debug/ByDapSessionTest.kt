@@ -42,9 +42,13 @@ class ByDapSessionTest {
     }
 
     /**
-     * Suspended with nothing identifiable on screen: show it. There is no view to protect, and the
-     * failure that matters here is a stop nobody is ever told about — the queue is only drained by a
-     * Resume, so a suspension held back with nothing to resume from would be held for ever.
+     * Suspended with no *identifiable* thread on screen: show it.
+     *
+     * `XDebugSessionImpl.isSuspended` is `isPaused && suspendContext != null`, and every context
+     * this process builds is a `DapXSuspendContext`, so in practice this pairing does not arise —
+     * it is reachable only if the platform ever suspends a session on a context of another kind.
+     * Kept because the answer still has to be the safe one: the queue is drained only by a Resume,
+     * so a suspension held back with nothing to resume from would be held for ever.
      */
     @Test
     fun `a suspension with no displayed thread is shown`() {

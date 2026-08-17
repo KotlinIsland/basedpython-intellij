@@ -463,10 +463,11 @@ matches. DAP's own wording for the request implies discarding the frames above t
 there is no mechanism for that, so bpd refuses instead of approximating. The action is therefore
 offered on the top frame only.
 
-bpd narrates each move on the console — which lines were skipped, that a breakpoint on the
-destination line will not fire for this pass, which unbound locals now hold `None`. Those are
-adapter `output` events, so they arrive in the run console only because they are forwarded now (see
-above).
+What a restart really did reaches the console as data rather than prose — see below. That includes
+the one outcome this action's own error handling cannot see: **cpython refusing the move**. A refusal
+is not a failed request, so bpd answers `restartFrame` with `success: true` and reports the refusal
+on `bpd/moved`; captured from a real session, `{"jumped": "refused", "wanted": 4, "error":
+{"kind": "ValueError", "message": "can't jump into the body of a for loop"}}`.
 
 ### the bridge
 
