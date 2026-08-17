@@ -40,7 +40,23 @@ interface ByDebugProtocolServer : IDebugProtocolServer {
      */
     @JsonRequest("bpd/facts")
     fun facts(args: dev.basedpython.pycharm.debug.dfa.ByFactsArguments): CompletableFuture<Any?>
+
+    /**
+     * Which of bpd's own events this client reads.
+     *
+     * bpd narrates what it noticed on the console — the locals a jump bound to `None`, the
+     * breakpoints the destination line will not fire for this pass — because for most clients that
+     * is the only channel those facts have. It sends the same facts as data on `bpd/moved`, and a
+     * client that reads both shows everything twice. Naming an event here turns its narration off.
+     *
+     * Sent once per session, beside the source maps; see [BySourceMapPublisher].
+     */
+    @JsonRequest("bpd/understands")
+    fun understands(args: ByUnderstandsArguments): CompletableFuture<Any?>
 }
+
+/** @see ByDebugProtocolServer.understands */
+data class ByUnderstandsArguments(val events: List<String>)
 
 /**
  * pydevd reads [pydevdSourceMaps] entries as raw dictionaries (`source_map["line"]`,
