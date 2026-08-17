@@ -394,6 +394,49 @@ everything, and a `KeyError` from a dict lookup compiles happily and dies at run
 breakpoint stops on the right `.by` line. So the PyCharm default carries over: **On termination**
 on, **On raise** off.
 
+## Reset Frame
+
+*Reset Frame* runs the stopped frame again from its first line. It is enabled under **bpd** and grey
+under debugpy.
+
+**It is not the JVM's Reset Frame, and the difference matters.** There, resetting *pops* the frame:
+the thread returns to the caller, the call can be made again, and the parameters are the ones it was
+originally given. Python has no such operation. bpd's `restartFrame` moves the executing frame's
+instruction pointer back to its first line and runs the body again **over the locals as they
+stand** — its capability comment says so directly, "with what its parameters hold *now*". Measured:
+stopped inside `work(n)` where `n` arrived as `1` and the body had made it `101`, a restart
+re-entered at the `def` line with `n` still `101`. Nothing is unwound and nothing is restored.
+
+Only the frame its thread is executing can be restarted; a caller is refused. That limit is
+CPython's rather than bpd's — a frame below the top is suspended inside a call, and assigning to its
+`f_lineno` is *accepted* while leaving the frame running on against a value stack that no longer
+matches. DAP's own wording for the request implies discarding the frames above the named one, and
+there is no mechanism for that, so bpd refuses instead of approximating. The action is therefore
+offered on the top frame only.
+
+bpd narrates each move on the console — which lines were skipped, that a breakpoint on the
+destination line will not fire for this pass, which unbound locals now hold `None`. Those are
+adapter `output` events, so they arrive in the run console only because they are forwarded now (see
+above).
+
+### the bridge
+
+`restartFrame` is a DAP request and `supportsRestartFrame` a DAP capability; bpd implements both.
+The platform's DAP client implements neither half of the connection to the IDE action —
+`intellij.platform.dap` contains no reference to `restartFrame` or to `XDropFrameHandler` — so the
+action stays grey however much an adapter advertises. `ByRestartFrameHandler` is the missing bridge,
+through `XDebugProcess.getDropFrameHandler`, which is an ordinary supported override rather than a
+way around anything.
+
+Whether to offer it is asked of the **adapter's advertised capability**, not of
+`ByDebugBackend`: debugpy is the reason it matters (pydevd reports `supportsRestartFrame` as false)
+but the wire carries the answer here, and believing what the adapter says beats remembering what we
+think it is. The capabilities arrive after `initialize`, so the handler is always returned and the
+question is asked live — deciding at process construction would answer "not yet" forever. A
+capability that has not arrived declines: an action that is briefly grey beats one that is briefly
+wrong, because a refused request's message is discarded by the platform and a wrong "yes" would look
+like a button that does nothing.
+
 ## Log points
 
 A log point is a breakpoint that logs an expression and does not stop. Nothing on the runtime side
