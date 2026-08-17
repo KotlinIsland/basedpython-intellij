@@ -2,6 +2,7 @@ package dev.basedpython.pycharm.debug.logpoint
 
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.actionSystem.CommonShortcuts
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.editor.Inlay
 import com.intellij.openapi.editor.ex.EditorEx
 import com.intellij.openapi.editor.impl.EditorEmbeddedComponentManager
@@ -77,10 +78,21 @@ class ByLogpointField private constructor(
         breakpoint.logExpressionObject = if (typed.isEmpty()) null else expressionOf(typed)
     }
 
-    /** Puts back what the log point actually says, discarding an edit in progress. */
+    /**
+     * Puts back what the log point actually says, discarding an edit in progress.
+     *
+     * Under a write-intent read action, which is not ceremony: setting the expression makes the
+     * editor build a fresh document, and building one resolves a context element out of the file
+     * the breakpoint sits in. Being on the EDT is not access to the model on its own — a focus
+     * event carries no lock — and this is reached from one, by way of [commit] telling the
+     * breakpoint manager and the manager telling every listener back.
+     */
     fun revert() {
         if (closed) return
-        expressionEditor.expression = expressionOf(breakpoint.logExpressionObject?.expression.orEmpty())
+        val expression = expressionOf(breakpoint.logExpressionObject?.expression.orEmpty())
+        ApplicationManager.getApplication().runWriteIntentReadAction<Unit, RuntimeException> {
+            expressionEditor.expression = expression
+        }
     }
 
     /** Called when the log point goes; the box goes with it. */
