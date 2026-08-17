@@ -287,11 +287,23 @@ internal class BuffLspServerDescriptor(
     override val documentColorCustomizer = LspDocumentColorDisabled
     override val documentLinkCustomizer = LspDocumentLinkDisabled
 
-    // User-gated buff capabilities:
-    override val formattingCustomizer
-      get() = if (s.buffFormatting) super.formattingCustomizer else LspFormattingDisabled
-    override val optimizeImportsCustomizer
-      get() = if (s.buffFormatting) super.optimizeImportsCustomizer else LspOptimizeImportsDisabled
+    /**
+     * Always off, and that is not formatting being switched off.
+     *
+     * The platform's LSP formatting sends `textDocument/formatting`, which is the formatter and
+     * nothing else, and it claims a file ahead of any formatting service this plugin registers. So
+     * *Reformat Code* laid the file out and left the imports where it found them.
+     * [dev.basedpython.pycharm.editor.format.BuffFormattingService] owns the action instead, and
+     * asks for the pass that sorts as well — it is gated on `buffFormatting` in its own `canFormat`.
+     */
+    override val formattingCustomizer = LspFormattingDisabled
+
+    /**
+     * Likewise: the platform's LSP optimize-imports sends `source.organizeImports`, which only
+     * sorts, and *Optimize Imports* means sort **and** drop the unused.
+     * [dev.basedpython.pycharm.format.BuffImportOptimizer] asks for the pass that does both.
+     */
+    override val optimizeImportsCustomizer = LspOptimizeImportsDisabled
     override val codeActionsCustomizer
       get() = if (s.buffCodeActions) super.codeActionsCustomizer else LspCodeActionsDisabled
     override val hoverCustomizer

@@ -14,7 +14,7 @@ import org.eclipse.lsp4j.VersionedTextDocumentIdentifier
 import org.eclipse.lsp4j.WorkspaceEdit
 import org.eclipse.lsp4j.jsonrpc.messages.Either
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Test
 
 /** `buff`'s edits are LSP ranges; these check where they land on a real document. */
@@ -103,6 +103,78 @@ class ByCleanupTest {
   }
 }
 
+/**
+ * The same edits against a plain string, which is the shape *Reformat Code* wants: the platform
+ * hands [com.intellij.formatting.service.AsyncDocumentFormattingService] the text and asks for the
+ * text back. Every case here is one the [Document] overload above is checked on, because the two
+ * disagreeing about where a position falls would show up as a file reformatted into nonsense.
+ */
+class ByCleanupTextEditTest {
+
+  private fun edit(
+    startLine: Int,
+    startChar: Int,
+    endLine: Int,
+    endChar: Int,
+    newText: String,
+  ) = TextEdit(Range(Position(startLine, startChar), Position(endLine, endChar)), newText)
+
+  private fun applied(text: String, vararg edits: TextEdit): String =
+    ByCleanup.applyEditsTo(text, edits.toList())
+
+  @Test
+  fun `replaces a run of whole lines`() {
+    assertEquals(
+      "import abc\nimport sys\n\nprint(sys.argv)\n",
+      applied(
+        "import sys\nimport os\nimport abc\n\nprint(sys.argv)\n",
+        edit(0, 0, 3, 0, "import abc\nimport sys\n"),
+      ),
+    )
+  }
+
+  @Test
+  fun `an end one line past the last means end of file`() {
+    assertEquals("x = 1\n", applied("x = 1\ny = 2\n", edit(1, 0, 2, 0, "")))
+  }
+
+  @Test
+  fun `deletes a single line`() {
+    assertEquals(
+      "import sys\n\nprint(sys.argv)\n",
+      applied("import sys\nimport os\n\nprint(sys.argv)\n", edit(1, 0, 2, 0, "")),
+    )
+  }
+
+  @Test
+  fun `applies several edits without shifting each other`() {
+    assertEquals(
+      "AAA\nb\nCCC\n",
+      applied("a\nb\nc\n", edit(0, 0, 0, 1, "AAA"), edit(2, 0, 2, 1, "CCC")),
+    )
+  }
+
+  @Test
+  fun `replaces within a line`() {
+    assertEquals(
+      "x = {\"a\": 1}\n",
+      applied("x = {  'a' : 1 }\n", edit(0, 4, 0, 16, "{\"a\": 1}")),
+    )
+  }
+
+  /** Nothing to do is the common answer once a file is already laid out; the text comes back as is. */
+  @Test
+  fun `no edits leaves the text alone`() {
+    assertEquals("x = 1\n", applied("x = 1\n"))
+  }
+
+  /** A file with no trailing newline still has a last line to resolve a position against. */
+  @Test
+  fun `handles text that does not end in a newline`() {
+    assertEquals("x = 2", applied("x = 1", edit(0, 4, 0, 5, "2")))
+  }
+}
+
 /** Each pass names the code action kind the server answers to. */
 class ByCleanupOpKindTest {
 
@@ -110,6 +182,22 @@ class ByCleanupOpKindTest {
   fun `passes map to the server's source action kinds`() {
     assertEquals("source.fixAll.ruff", ByCleanupOp.FixAll.kind)
     assertEquals("source.optimizeImports.ruff", ByCleanupOp.OptimizeImports.kind)
+    assertEquals(
+      "source.formatAndOrganizeImports.ruff",
+      ByCleanupOp.FormatAndOrganizeImports.kind,
+    )
+  }
+
+  /**
+   * Reformatting sorts, optimizing prunes. Naming the same kind for both would quietly make
+   * *Reformat Code* delete imports, which is the whole distinction these three passes draw.
+   */
+  @Test
+  fun `reformatting and optimizing imports are different passes`() {
+    assertNotEquals(
+      ByCleanupOp.FormatAndOrganizeImports.kind,
+      ByCleanupOp.OptimizeImports.kind,
+    )
   }
 }
 
