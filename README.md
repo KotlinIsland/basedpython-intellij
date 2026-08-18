@@ -296,7 +296,7 @@ support, run configurations, CLI actions, and editor tooling.
 
 ## Building
 ```bash
-./gradlew buildPlugin   # -> build/distributions/basedpython-pycharm-*.zip
+./gradlew buildPlugin   # -> build/distributions/basedpython-intellij-*.zip
 ```
 
 To check UI work in a live IDE rather than by eye, add `-PideAgent` to `runIde`. It puts

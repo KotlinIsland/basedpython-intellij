@@ -1,6 +1,6 @@
 import org.jetbrains.intellij.platform.gradle.extensions.intellijPlatform
 
-rootProject.name = "basedpython-pycharm"
+rootProject.name = "basedpython-intellij"
 
 pluginManagement {
   plugins {

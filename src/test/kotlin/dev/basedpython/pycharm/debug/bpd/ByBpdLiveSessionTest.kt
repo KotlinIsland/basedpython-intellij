@@ -99,7 +99,7 @@ class ByBpdLiveSessionTest {
                 // a real DAP `initialize`, framed the way a client frames one. bpd checks the
                 // token before it acts on this, so a reply at all means the handshake was accepted
                 val request = """{"seq":1,"type":"request","command":"initialize",""" +
-                    """"arguments":{"adapterID":"bpd","clientID":"basedpython-pycharm"}}"""
+                    """"arguments":{"adapterID":"bpd","clientID":"basedpython-intellij"}}"""
                 val body = request.toByteArray(StandardCharsets.UTF_8)
                 connection.output.write(
                     "Content-Length: ${body.size}\r\n\r\n".toByteArray(StandardCharsets.US_ASCII),

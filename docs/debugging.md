@@ -263,7 +263,7 @@ debugger built on PEP 669. **This plugin can now drive it, and it is the default
 *Settings | basedpython | Debugger*, and debugpy stays reachable there.
 
 The agreement between the two plugins is
-[bpd and the basedpython pycharm plugin](https://github.com/KotlinIsland/basedpythondebugger/blob/main/docs/development/basedpython-pycharm.md),
+[bpd and the basedpython pycharm plugin](https://github.com/KotlinIsland/basedpythondebugger/blob/main/docs/development/basedpython-intellij.md),
 which said the switch was this plugin's to make. It has been made.
 
 **Why bpd is the default.** It is PEP 669 native — a line with no breakpoint on it is `DISABLE`d
