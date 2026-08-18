@@ -118,14 +118,61 @@ class ByDataFlowFactsTest {
         assertEquals("RED", observations[0].member)
     }
 
+    /**
+     * A float crosses as `float.__repr__`'s own text.
+     *
+     * Not parsed here and not sent as a json number: `inf` and `nan` have no json spelling, and
+     * which floats can be narrowed to what is `by`'s judgement rather than this one's.
+     */
+    @Test
+    fun `a float crosses as the text python wrote`() {
+        val observations = ByDataFlowFacts.observationsOf(
+            facts(permanent("ratio", """{"observed":"is_float","text":"0.25"}""")),
+        )
+        assertEquals(1, observations.size)
+        assertEquals("ratio", observations[0].name)
+        assertEquals("isFloat", observations[0].observed)
+        assertEquals("0.25", observations[0].text)
+    }
+
+    /** The values a json number would have destroyed. Captured shapes: bpd sends python's repr. */
+    @Test
+    fun `the floats json has no number for cross intact`() {
+        for (text in listOf("inf", "-inf", "nan", "-0.0")) {
+            val observations = ByDataFlowFacts.observationsOf(
+                facts(permanent("ratio", """{"observed":"is_float","text":"$text"}""")),
+            )
+            assertEquals(text, observations.single().text, "`$text` should survive verbatim")
+        }
+    }
+
+    /**
+     * The exact value beats the class, which is the pairing bpd really sends: it proves
+     * `is_exactly float` *and* `is_float` for the same name, and only the second decides anything.
+     * Captured from a live stop on a `ratio = measure(qty)`.
+     */
+    @Test
+    fun `an exact float beats the class bpd proves alongside it`() {
+        val observations = ByDataFlowFacts.observationsOf(
+            facts(
+                permanent(
+                    "ratio",
+                    """{"observed":"is_exactly","class":{"module":"builtins","qualname":"float"}}""",
+                ),
+                permanent("ratio", """{"observed":"is_float","text":"0.25"}"""),
+            ),
+        )
+        assertEquals("isFloat", observations.single().observed)
+    }
+
     @Test
     fun `a fact bpd can prove and by cannot use is dropped without complaint`() {
         val observations = ByDataFlowFacts.observationsOf(
-            facts(permanent("ratio", """{"observed":"is_float","text":"1.5"}""")),
+            facts(permanent("raw", """{"observed":"is_bytes","hex":"6869"}""")),
         )
         assertTrue(
             observations.isEmpty(),
-            "a float is proved and unusable, which is not an error: $observations",
+            "a raw byte string is proved and unusable, which is not an error: $observations",
         )
     }
 
