@@ -35,4 +35,16 @@ object ByDataFlowColors {
     @JvmField
     val DECIDED_CONDITION: TextAttributesKey =
         TextAttributesKey.createTextAttributesKey("BASEDPYTHON_DATA_FLOW_DECIDED")
+
+    /**
+     * A read whose value is settled.
+     *
+     * No attributes either, for the same reason: the `discount = 0.0` beside the line is the
+     * information. It is a key of its own rather than a reuse of [DECIDED_CONDITION] because a
+     * scheme should be able to say something about a value without saying it about a branch — the
+     * two are drawn alike today, and that is a default rather than a rule.
+     */
+    @JvmField
+    val DECIDED_VALUE: TextAttributesKey =
+        TextAttributesKey.createTextAttributesKey("BASEDPYTHON_DATA_FLOW_DECIDED_VALUE")
 }

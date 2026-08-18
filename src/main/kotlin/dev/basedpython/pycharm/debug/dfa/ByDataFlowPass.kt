@@ -25,10 +25,11 @@ import dev.basedpython.pycharm.settings.BasedPythonSettings
  *
  * ## What is drawn, and what deliberately is not
  *
- * A decided condition gets a `= true` / `= false` in the margin past its line, and code that will
- * not run is greyed. Nothing else — in particular an *undecided* condition gets nothing at all. Ambiguous is
- * what an unseeded reading says about nearly every condition, and a hint on each of them would
- * be a screen full of marks that say nothing.
+ * A decided condition gets a `= true` / `= false` in the margin past its line, code that will not
+ * run is greyed, and a read whose value follows from those gets a `discount = 0.0`. Nothing else —
+ * in particular an *undecided* condition gets nothing at all. Ambiguous is what an unseeded reading
+ * says about nearly every condition, and a hint on each of them would be a screen full of marks
+ * that say nothing.
  */
 class ByDataFlowPassFactory : TextEditorHighlightingPassFactory, TextEditorHighlightingPassFactoryRegistrar {
 
@@ -111,14 +112,19 @@ private class ByDataFlowPass(
                     HighlighterTargetArea.EXACT_RANGE,
                 )
 
-                "condition" -> markup.addRangeHighlighter(
-                    ByDataFlowColors.DECIDED_CONDITION,
+                // A settled branch and a settled value are drawn the same way and for the same
+                // reason: the label in the margin is the information, and the code it is about is
+                // still code somebody is reading. They differ only in the key, so that a scheme
+                // can tell them apart even though nothing here does
+                "condition", "value" -> markup.addRangeHighlighter(
+                    if (finding.kind == "value") ByDataFlowColors.DECIDED_VALUE
+                    else ByDataFlowColors.DECIDED_CONDITION,
                     range.first,
                     range.second,
                     OVER_SEMANTIC_TOKENS,
                     HighlighterTargetArea.EXACT_RANGE,
                 ).also { highlighter ->
-                    // The verdict itself, drawn after the condition rather than as a tooltip: the
+                    // The verdict itself, drawn after the line rather than as a tooltip: the
                     // point of the feature is that it is readable without hovering
                     val line = editor.document.getLineNumber(range.second)
                     val gap = taken.getOrDefault(line, 0)
