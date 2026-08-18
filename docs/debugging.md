@@ -487,6 +487,129 @@ capability that has not arrived declines: an action that is briefly grey beats o
 wrong, because a refused request's message is discarded by the platform and a wrong "yes" would look
 like a button that does nothing.
 
+## Hot reload
+
+You edit a file while the program is stopped, and the code in the process is not the code on your
+screen. cpython says nothing about that — a traceback is rendered by `linecache` reading the file
+**now**, so an edited file is shown with current text against old line numbers: correct numbers,
+wrong text, total confidence. bpd already refuses to be part of it (it compiles a frame's file and
+requires the frame's own code object to be in what comes out, or the answer is `not_the_same_code`
+rather than a line), and hot reload is that comparison inverted: a mismatch is what makes a
+replacement worth offering.
+
+### the platform owns everything visible
+
+`com.intellij.xdebugger.hotswap` is the platform's generic hot swap, added for the JVM and left
+IDE-agnostic. It owns the whole UI — the floating toolbar that fades in over the editor the moment a
+tracked file stops matching what is running, the button on it, the spinner, the tick, the success
+balloon, the `XDebugger.Hotswap.Modified.Files` action and its shortcut. A plugin supplies two
+things and no more: **what to watch**, and **what the button does**. That is the entirety of
+`debug.hotswap`, and nothing in it draws anything.
+
+The way in is `com.intellij.xdebugger.hotSwapInDebugSessionEnabler`, which the platform asks at
+`processStarted` and which decides per session whether hot reload exists at all. PyCharm registers
+no implementation of it — only IDEA's Java debugger and Rider do, and neither is here — so ours is
+the only one in the IDE and the platform's defaults are what the user sees. It is gated behind
+`debugger.hotswap.floating.toolbar`, which is on.
+
+Offered for **bpd sessions only**. `bpd/replaceCode` is bpd's own request and debugpy has nothing
+like it, so a debugpy session would raise a button whose only possible answer is that the adapter
+does not know what it was asked. Decided from the backend rather than from an advertised capability,
+for the reason [Reset Frame](#reset-frame) decides the opposite way: `restartFrame` is a DAP
+capability an adapter announces in `initialize`, and there is no capability flag for a custom
+request — nothing is on the wire to believe, so the thing that chose the backend is what says which
+one it is.
+
+### what the button does
+
+One `bpd/replaceCode` per changed file. DAP has no request of its own for this and could not: its
+`restart` throws the process away and starts another, and the whole point here is that the process
+stays.
+
+A replacement is a set of assignments to `function.__code__` and nothing else. The top level is
+never re-run, no name is bound or unbound, and no object is created — so every reference the program
+already holds is the one it held before, and it now runs different code. That is also why a class
+needs no machinery: a method **is** a function object in the class dictionary, so rebinding its code
+is seen by every instance that already exists.
+
+What is found is every function object in the **process**, through a walk of the heap, rather than
+every name in the module's namespace — which is the difference between reloading a module and
+rebinding the names in its dictionary. Captured live against a real session: editing a `helper.py`
+whose factory had already handed out a closure came back with `factory.<locals>.inner`, one object,
+rebound beside `slow`. A namespace walk would have missed it and left a live closure running code
+from the file it used to be.
+
+bpd applies it exactly when **every difference between the two trees is inside the body of a
+function that exists in both and takes the same arguments**, and nothing is ever applied partially —
+a process half way between two versions of a file produces evidence about neither. A replacement
+that cannot be made whole changes nothing at all and comes back naming *everything* that stood in
+the way rather than the first thing, because a client fixing them one at a time is a client asking
+this seventeen times.
+
+### the refusals are bpd's to explain, and it explains them
+
+bpd's DAP adapter writes each reason to the `output` stream under category `important`, which is the
+category this plugin already puts where a person cannot miss it (see `ByAdapterOutput`). So nothing
+in the plugin re-renders them, for the same reason `bpd/understands` exists for events: a client
+that reads a fact and shows it, beside an adapter that narrates the same fact, shows everything
+twice. `ByReplaced` therefore reads *that* a replacement was refused and how many reasons there
+were, and leaves the eleven-variant vocabulary of `Unreplaceable` where it is authored.
+
+What the plugin does print is the other half, which nothing else says: what an **applied**
+replacement changed about the process — the functions whose code moved and where to, how many
+function objects held each, and which breakpoints had to bind again. That last one matters and is
+easy to miss: binding walks down from the file's registered root code object, so after a replacement
+the old root describes code nothing will execute; bpd swaps the root and resolves the whole
+breakpoint set again, and a breakpoint on what was a `return` can come back bound to the `def` above
+it, because a breakpoint is a *line of a file* and the edit moved what that line is.
+
+"Nothing needed replacing" is printed too, and is deliberately not rendered as "nothing could be
+replaced". They are different facts about the process and bpd distinguishes them.
+
+### the frame you are stopped in
+
+bpd refuses a replacement while any frame of the process is running code the replacement would
+change — on a thread, or suspended inside a generator, a coroutine or an async generator waiting to
+be sent into. That covers the case people most want this in: stopped at a breakpoint *inside* the
+function just edited. The refusal names the frame and says to let it return first.
+
+It is a design decision rather than a safety one, and bpd is explicit that it must never be
+described as one: assigning `function.__code__` under a live frame is *accepted* on 3.13 through
+3.15, the frame runs the old code to completion, and the next call gets the new one. What is refused
+is what it leaves behind — until that frame returns the process runs two versions of one function,
+and a stack whose frames behave two different ways is evidence about neither. bpd will do it for a
+caller that asks by name (`evenUnderALiveFrame`, with every still-old frame reported back); nothing
+here asks, and the option is one line away in `ByReplaceCodeArguments` if it should.
+
+One consequence worth knowing, measured rather than reasoned: a program stopped anywhere has its
+**own script's module frame** live for the whole run, so editing the file the interpreter was
+started on is always refused. That is not the shape a session here has — `by run` starts
+`_by_runner.py`, and everything the user wrote is an imported module whose body has already returned
+— but it is what you will see if you try this against a bare `bpd launch script.py`.
+
+### `.by` is watched, and refused
+
+A `.by` file cannot be reloaded, and the reason is not the debugger's. The code the interpreter
+compiled is never the `.by` — it is the python `by run` transpiled it to, in a temp directory it
+deletes when the program ends — so handing bpd a `.by` would be asking it to replace code no
+interpreter has ever seen. Nor is producing the replacement bpd's to do: giving the running build
+the edit means transpiling that one file again **into the tree the program is running from**, with
+its line table and its digests, and `by transpile` emits the python and no line table. Written
+without the map, the `_by_sourcemap.py` beside the generated file would describe the file it used to
+be — bpd verifies it against a digest of both artefacts and would then, correctly, refuse to show
+any of that file's source. A silently wrong line is the one outcome this whole feature exists to
+prevent, so the map is not optional and the plugin cannot invent it.
+
+bpd names the same gap from its own side: `replaceCode` is named as generated python "rather than
+accepting a `.by` and doing something adjacent to what was asked". The missing piece is a `by` that
+can transpile one file with its line table into a chosen directory; when it exists, the refusal in
+`ByHotSwap.refuse` becomes a transpile and a `bpd/replaceCode` on the generated path.
+
+Until then a `.by` edit is refused with that reason and a session restart is the way to run it. It
+is still **watched**, deliberately: the first half of this feature is knowing that the source on
+screen is not the code that is running, and that is exactly as true of the file the whole project is
+written in.
+
 ## Log points
 
 A log point is a breakpoint that logs an expression and does not stop. Nothing on the runtime side

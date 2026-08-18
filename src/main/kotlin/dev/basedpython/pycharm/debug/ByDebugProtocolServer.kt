@@ -62,6 +62,28 @@ interface ByDebugProtocolServer : IDebugProtocolServer {
      */
     @JsonRequest("bpd/understands")
     fun understands(args: ByUnderstandsArguments): CompletableFuture<Any?>
+
+    /**
+     * Replace the code the running process holds for one file with the code that is on disk.
+     *
+     * `bpd`'s alone, and an extension for a reason DAP itself states: DAP's `restart` throws the
+     * process away and starts another, and the whole point of this is that the process stays. So
+     * there is no base-protocol request to use and bpd exposes its own, which a client sends the
+     * way it sends every other custom one.
+     *
+     * A refusal is **not** an error response. bpd answers `success` and puts the whole account in
+     * the body — a client given only "no" cannot show which of the user's edits to undo — so
+     * nothing here throws for a replacement that could not be made. See
+     * [dev.basedpython.pycharm.debug.hotswap.ByReplaced].
+     *
+     * [com.google.gson.JsonObject] rather than `Any?`, for the reason [facts] is: a declared
+     * `Object` is what Gson answers with a `LinkedTreeMap`, and a caller that then asks for a
+     * `JsonObject` gets nothing at all.
+     */
+    @JsonRequest("bpd/replaceCode")
+    fun replaceCode(
+        args: dev.basedpython.pycharm.debug.hotswap.ByReplaceCodeArguments,
+    ): CompletableFuture<JsonObject?>
 }
 
 /** @see ByDebugProtocolServer.understands */
