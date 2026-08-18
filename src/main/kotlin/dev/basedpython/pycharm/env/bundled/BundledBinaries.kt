@@ -34,7 +34,7 @@ object BundledBinaries {
     private val LOG = Logger.getInstance(BundledBinaries::class.java)
 
     /** Must match `<id>` in plugin.xml — the plugin looking itself up to find its own directory. */
-    const val PLUGIN_ID: String = "basedpython-pycharm"
+    const val PLUGIN_ID: String = "dev.basedpython.intellij"
 
     /** Directory inside the plugin distribution holding the binaries. */
     const val BIN_DIR: String = "bin"

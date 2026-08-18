@@ -1,0 +1,102 @@
+# The check that runs on every change: compile, test, and run the plugin verifier.
+#
+# Shaped after JetBrains' intellij-platform-plugin-template build.yml, with two deliberate
+# departures: JDK 25 rather than the template's 21 (this build sets no toolchain and ships Java 25
+# bytecode to match the 2026.2 platform's runtime, same as bundled-distributions.yml), and no
+# release-draft job — releases here are cut by hand and bundled-distributions.yml takes over from
+# the `release` event.
+#
+# This builds the *unbundled* plugin. The by/buff binaries are packaging, not compilation, so
+# nothing here needs them; bundled-distributions.yml covers that path.
+
+name: Build
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+
+      # Also validates the wrapper jar's checksum, which is why there is no separate
+      # gradle/actions/wrapper-validation step.
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build plugin
+        run: ./gradlew buildPlugin
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: plugin-distribution
+          path: build/distributions/*.zip
+          if-no-files-found: error
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # `check`, not `test`: it also runs whatever verification tasks the plugin contributes.
+      - name: Run tests
+        run: ./gradlew check
+
+      - name: Collect test results
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: tests-result
+          path: build/reports/tests
+
+  verify:
+    name: Verify plugin
+    runs-on: ubuntu-latest
+    steps:
+      # The verifier downloads a full IDE per entry in `ides { recommended() }`, which does not fit
+      # beside the preinstalled toolchains on a stock runner.
+      - name: Maximize build space
+        uses: jlumbroso/free-disk-space@v1.3.1
+        with:
+          tool-cache: false
+          large-packages: false
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # Failure levels are configured in build.gradle.kts, not here.
+      - name: Run plugin verification
+        run: ./gradlew verifyPlugin
+
+      - name: Collect verifier report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: pluginVerifier-result
+          path: build/reports/pluginVerifier

@@ -11,11 +11,25 @@
 # carries a `-{os}-{arch}` version suffix and `<depends>` on the matching
 # `com.intellij.modules.os.*` / `com.intellij.modules.arch.*` (see build.gradle.kts), and
 # Marketplace serves each IDE the one it can run. So these are one plugin with six versions, not
-# six downloads, and `publish: true` uploads all of them.
+# six downloads, and a release uploads all of them.
 #
 # That mechanism is undocumented and self-described as experimental (MP-1896 is still open) and the
 # IntelliJ Platform Gradle Plugin has no support for it, which is why the gating is patched in by
-# hand and why the artifacts are checked for it below before anything is uploaded.
+# hand and why the artifacts are checked for it before anything is uploaded.
+#
+# Releasing: create a GitHub release whose tag is `v<version>` — publishing it runs this workflow,
+# which builds the six bundles, attaches them to the release, publishes them to Marketplace, and
+# rolls the changelog's Unreleased section over to that version. The tag is the version: `v1.2.3`
+# builds plugin 1.2.3 and bundles the basedpython toolchain release of the same name. A manual
+# dispatch builds artifacts only, unless `publish` is ticked.
+#
+# Marketplace secrets, all read from the environment by the IntelliJ Platform Gradle Plugin:
+#   PUBLISH_TOKEN         — Marketplace personal access token (required to publish)
+#   CERTIFICATE_CHAIN     — signing certificate chain (optional; unsigned installs warn the user)
+#   PRIVATE_KEY           — signing private key
+#   PRIVATE_KEY_PASSWORD  — its password
+# signPlugin runs automatically before publishPlugin when the three signing variables are set, and
+# is skipped when they are not, so nothing here has to branch on whether signing is configured.
 
 name: Bundled distributions
 
@@ -25,6 +39,11 @@ on:
       basedpython-version:
         description: 'basedpython release to bundle (bare x.y.z, no leading v)'
         required: true
+        type: string
+      plugin-version:
+        description: 'Plugin version to stamp (bare x.y.z; defaults to the one in gradle.properties)'
+        required: false
+        default: ''
         type: string
       basedpython-repo:
         description: 'GitHub repo holding the by/buff release assets'
@@ -36,12 +55,11 @@ on:
         required: false
         default: false
         type: boolean
-  push:
-    tags:
-      - 'v*'
+  release:
+    types: [ prereleased, released ]
 
 concurrency:
-  group: bundled-${{ github.ref }}
+  group: bundled-${{ github.event.release.tag_name || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -49,7 +67,7 @@ jobs:
     name: ${{ matrix.platform }}
     runs-on: ubuntu-latest
     permissions:
-      # Write only for the final "attach to the release" step, which a manual run never reaches.
+      # Write only for the "attach to the release" step, which a manual run never reaches.
       contents: write
     strategy:
       fail-fast: false
@@ -60,6 +78,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          # A release event's default checkout is the tag's commit already, but naming it means a
+          # release cut from an older commit builds that commit rather than whatever master is now.
+          ref: ${{ github.event.release.tag_name || github.ref }}
 
       # JDK 25: the build sets no toolchain, so it compiles against whatever JVM Gradle runs on,
       # and the plugin currently ships Java 25 bytecode to match the 2026.2 platform's runtime.
@@ -70,23 +92,41 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      - name: Resolve the basedpython version
+      # The tag is the source of truth for a release, gradle.properties only for a dispatch that
+      # names no version. Marketplace keys updates by version string and rejects one it has already
+      # seen, so a release that stamped the development version would be unpublishable a second
+      # time — hence resolving it here rather than relying on the checked-in default.
+      - name: Resolve the versions
         id: version
         env:
-          INPUT_VERSION: ${{ inputs.basedpython-version }}
+          TAG: ${{ github.event.release.tag_name }}
+          INPUT_BASEDPYTHON: ${{ inputs.basedpython-version }}
+          INPUT_PLUGIN: ${{ inputs.plugin-version }}
         run: |
           set -euo pipefail
-          version="$INPUT_VERSION"
-          # A tag push bundles the toolchain release of the same name: v1.2.3 -> 1.2.3.
-          if [ -z "$version" ]; then
-            version="${GITHUB_REF_NAME#v}"
+          tag="${TAG#v}"
+
+          # A tag bundles the toolchain release of the same name: v1.2.3 -> 1.2.3.
+          basedpython="${INPUT_BASEDPYTHON:-$tag}"
+          if [ -z "$basedpython" ]; then
+            echo "No basedpython version: not a release, and none given" >&2
+            exit 1
           fi
-          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "basedpython=$basedpython" >> "$GITHUB_OUTPUT"
+
+          # Empty means "leave gradle.properties alone", which is only reachable from a dispatch.
+          plugin="${INPUT_PLUGIN:-$tag}"
+          if [ -n "$plugin" ]; then
+            echo "plugin-arg=-Pversion=$plugin" >> "$GITHUB_OUTPUT"
+          else
+            echo "plugin-arg=" >> "$GITHUB_OUTPUT"
+          fi
+          echo "bundling basedpython $basedpython as plugin version ${plugin:-<gradle.properties>}"
 
       - name: Download by/buff for ${{ matrix.platform }}
         env:
           REPO: ${{ inputs.basedpython-repo || 'basedpython/basedpython' }}
-          VERSION: ${{ steps.version.outputs.version }}
+          VERSION: ${{ steps.version.outputs.basedpython }}
           PLATFORM: ${{ matrix.platform }}
         run: |
           set -euo pipefail
@@ -107,6 +147,7 @@ jobs:
       - name: Build the bundled distribution
         run: >
           ./gradlew buildPlugin
+          ${{ steps.version.outputs.plugin-arg }}
           -PbundledBinariesDir=build/bundled-binaries
           -PbundledPlatform=${{ matrix.platform }}
 
@@ -156,26 +197,66 @@ jobs:
           path: build/distributions/*-${{ matrix.platform }}.zip
           if-no-files-found: error
 
-      # Tag pushes publish; a manual run only produces artifacts, so a bundle can be built and
-      # checked without touching a release. Expects the release for the tag to exist already —
-      # this attaches assets to it, it does not create it.
+      # Releases publish; a manual run only produces artifacts, so a bundle can be built and checked
+      # without touching a release.
       - name: Attach to the release
-        if: startsWith(github.ref, 'refs/tags/')
+        if: github.event_name == 'release'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event.release.tag_name }}
           PLATFORM: ${{ matrix.platform }}
-        run: gh release upload "$GITHUB_REF_NAME" build/distributions/*-"$PLATFORM".zip --clobber
+        run: gh release upload "$TAG" build/distributions/*-"$PLATFORM".zip --clobber
 
-      # Opt-in per run. Each matrix job uploads its own version, so one dispatch with publish: true
-      # puts all six on Marketplace; a job that failed its checks above never gets here, which is
-      # the point of ordering it last. Every upload is a separate review-able version, and
-      # Marketplace rejects a version string it has already seen — so re-running a published version
-      # needs the plugin version bumped, not a retry.
+      # Each matrix job uploads its own version, so one release puts all six on Marketplace; a job
+      # that failed its checks above never gets here, which is the point of ordering it last. Every
+      # upload is a separate review-able version, and Marketplace rejects a version string it has
+      # already seen — so re-running a published version needs the plugin version bumped, not a
+      # retry.
       - name: Publish to JetBrains Marketplace
-        if: inputs.publish
+        if: github.event_name == 'release' || inputs.publish
         env:
           PUBLISH_TOKEN: ${{ secrets.PUBLISH_TOKEN }}
+          CERTIFICATE_CHAIN: ${{ secrets.CERTIFICATE_CHAIN }}
+          PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+          PRIVATE_KEY_PASSWORD: ${{ secrets.PRIVATE_KEY_PASSWORD }}
         run: >
           ./gradlew publishPlugin
+          ${{ steps.version.outputs.plugin-arg }}
           -PbundledBinariesDir=build/bundled-binaries
           -PbundledPlatform=${{ matrix.platform }}
+
+  # Roll CHANGELOG.md's Unreleased section over to the version that just shipped, once, after all
+  # six uploads succeeded. Once, because patchChangelog rewrites a file in the repository and six
+  # matrix jobs doing it in parallel would each throw their copy away.
+  changelog:
+    name: Roll the changelog over
+    needs: bundle
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      # The tag's commit is not a branch, and the patched changelog has to land on one.
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Patch and commit
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          ./gradlew patchChangelog "-Pversion=${TAG#v}"
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          # Nothing to do when the release was cut from an already-patched changelog.
+          git diff --quiet CHANGELOG.md && { echo "changelog already current"; exit 0; }
+          git commit -m "Changelog update - $TAG" CHANGELOG.md
+          git push
