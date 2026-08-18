@@ -39,6 +39,7 @@ object ByDataFlowFacts {
     private const val IS_NONE = "isNone"
     private const val IS_BOOL = "isBool"
     private const val IS_INT = "isInt"
+    private const val IS_FLOAT = "isFloat"
     private const val IS_STR = "isStr"
     private const val IS_EXACTLY = "isExactly"
     private const val IS_ENUM_MEMBER = "isEnumMember"
@@ -104,6 +105,17 @@ object ByDataFlowFacts {
                 text = observed.get("text")?.asString ?: return null,
             )
 
+            // `float.__repr__`'s own text, forwarded rather than parsed. A json number would lose
+            // `inf` and `nan`, which json cannot spell — and deciding what a float can be narrowed
+            // to is `by`'s judgement, not this one's: it refuses a literal for `nan`, which is not
+            // equal to itself, and for `-0.0`, which is equal to `0.0` while being a distinct
+            // literal.
+            "is_float" -> ByObservation(
+                name,
+                IS_FLOAT,
+                text = observed.get("text")?.asString ?: return null,
+            )
+
             "is_str" -> ByObservation(
                 name,
                 IS_STR,
@@ -131,9 +143,9 @@ object ByDataFlowFacts {
                 )
             }
 
-            // `is_float`, `is_bytes`, `has_length`, `is_truthy` — proved, and nothing here can
-            // spend them. `by` has no observation for a float or a raw byte string, and the last
-            // two are properties of a value rather than sets of them
+            // `is_bytes`, `has_length`, `is_truthy` — proved, and nothing here can spend them.
+            // `by` has no observation for a raw byte string, and the last two are properties of a
+            // value rather than sets of them
             else -> null
         }
     }
@@ -144,7 +156,7 @@ object ByDataFlowFacts {
      * An exact value beats a class: `Literal[5]` decides `x > 3`, and `int` does not.
      */
     private fun specificity(observation: ByObservation): Int = when (observation.observed) {
-        IS_NONE, IS_BOOL, IS_INT, IS_STR -> 2
+        IS_NONE, IS_BOOL, IS_INT, IS_FLOAT, IS_STR -> 2
         IS_ENUM_MEMBER -> 1
         else -> 0
     }
