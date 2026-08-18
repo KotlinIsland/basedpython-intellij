@@ -1,0 +1,14 @@
+# Keeps the two things CI depends on from silently rotting: the actions the workflows pin and the
+# Gradle side of the build. Monthly rather than weekly — this is a two-workflow repository, and the
+# IntelliJ Platform dependency is pinned to an IDE release that is chosen by hand, not by a bot.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+
+  - package-ecosystem: gradle
+    directory: /
+    schedule:
+      interval: monthly

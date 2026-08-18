@@ -324,3 +324,22 @@ them.
 ```
 
 Both are also **Run IDE** and **Run PyCharm** in the IDE's own run-configuration dropdown.
+
+## Releasing
+
+The version is the tag. Create a GitHub release named `v1.2.3` and publishing it runs
+[`bundled-distributions.yml`](.github/workflows/bundled-distributions.yml): six per-platform bundles
+carrying the `by` / `buff` binaries from the basedpython release of the same name, each gated to its
+OS and CPU, attached to the release and uploaded to JetBrains Marketplace, followed by a changelog
+rollover commit. A `workflow_dispatch` run of the same workflow builds and checks the bundles
+without publishing anything.
+
+Publishing needs `PUBLISH_TOKEN` (a Marketplace personal access token) in the repository secrets.
+`CERTIFICATE_CHAIN`, `PRIVATE_KEY` and `PRIVATE_KEY_PASSWORD` are optional and enable
+[plugin signing](https://plugins.jetbrains.com/docs/intellij/plugin-signing.html); without them the
+IDE warns the user at install time. Every push and pull request runs
+[`build.yml`](.github/workflows/build.yml) — build, `check`, and the IntelliJ Plugin Verifier.
+
+## License
+
+[MIT](LICENSE).

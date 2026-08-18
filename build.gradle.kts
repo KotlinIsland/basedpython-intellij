@@ -135,6 +135,12 @@ intellijPlatform {
     token = providers.environmentVariable("PUBLISH_TOKEN")
   }
 
+  // No `signing { }` block on purpose: the plugin already defaults every signing property to the
+  // environment (`CERTIFICATE_CHAIN`, `PRIVATE_KEY`, `PRIVATE_KEY_PASSWORD`), and `signPlugin` runs
+  // itself before `publishPlugin` when they are set and skips when they are not. Restating that
+  // here would only be one more place for the two to disagree. Unsigned is publishable — the IDE
+  // shows the user a warning dialog on install, which is the reason to set the secrets.
+
   pluginVerification {
     // Fail on things that actually break at runtime. Deprecated/experimental/internal usages stay
     // informational: observing LSP server state needs `LspServerManagerListener`, which is marked
@@ -220,9 +226,11 @@ tasks {
     systemProperty("java.awt.headless", "true")
   }
 
-  publishPlugin {
-    dependsOn(patchChangelog)
-  }
+  // No `publishPlugin { dependsOn(patchChangelog) }`. It reads like housekeeping and is not: a
+  // release is six parallel `publishPlugin` runs, so it would rewrite CHANGELOG.md six times on six
+  // runners and discard all six, while `changeNotes` reads the *unpatched* file perfectly well
+  // (`getOrNull(version) ?: getUnreleased()`). The rollover happens once, after every upload has
+  // landed, in the changelog job of .github/workflows/bundled-distributions.yml.
 
   // Gate a bundled artifact to the OS/arch it actually holds binaries for. Marketplace reads these
   // to route; the IDE reads them too, so a `by` built for another machine cannot even be installed.
