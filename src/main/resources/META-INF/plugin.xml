@@ -76,6 +76,13 @@
             implementation="dev.basedpython.pycharm.debug.ByLineBreakpointType"/>
         <xdebugger.breakpointType
             implementation="dev.basedpython.pycharm.debug.ByExceptionBreakpointType"/>
+        <!-- Hot reload. The platform owns everything visible — the floating toolbar over the
+             editor, its button, the shortcut and the notifications; this supplies only what to
+             watch and what to do when it is pressed, which is `bpd/replaceCode`. PyCharm registers
+             no other implementation of this extension point, so this is the only one in the IDE.
+             See docs/debugging.md. -->
+        <xdebugger.hotSwapInDebugSessionEnabler
+            implementation="dev.basedpython.pycharm.debug.hotswap.ByHotSwapEnabler"/>
         <!-- The gutter-gap "Add Log" affordance. Note that `order` decides nothing here: the
              platform collects every provider's flow into a map keyed by id and takes the first
              entry available for the line, so two live providers is a coin flip. Which is why the

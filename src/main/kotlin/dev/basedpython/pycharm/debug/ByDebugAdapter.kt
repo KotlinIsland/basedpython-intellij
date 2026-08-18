@@ -242,11 +242,12 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
         executionResult,
         startRequestType,
         startRequestArguments,
-        // The setup is gone by now under the debugpy backend — `configureProfileState` consumes it
-        // — but it is this descriptor's own field and lives as long as the session. A session with
-        // no setup at all never reached `launchDebugAdapter`, so the value is moot; false is the
-        // safe way to be wrong, since it can only cost a duplicate of output the console has.
-        forwardsAdapterOutput = setup?.backend?.ownsDebuggeeOutput == true,
+        // The run profile's copy is gone by now — `configureProfileState` consumes it — but this is
+        // the descriptor's own field and lives as long as the session. A session with no setup at
+        // all never reached `launchDebugAdapter`, so the value is moot, and null is the safe way to
+        // be wrong: it costs at most a duplicate of output the console already has, and a hot
+        // reload button for a session nothing could have been reloaded in.
+        backend = setup?.backend,
     )
 
     /**
@@ -338,11 +339,15 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
  * the right process.
  *
  * What that console must *also* carry is the program's own output, and where that comes from is not
- * the same for both backends — see [forwardsAdapterOutput] and [ByDebugBackend.ownsDebuggeeOutput].
+ * the same for both backends — see [backend] and [ByDebugBackend.ownsDebuggeeOutput].
  *
- * @param forwardsAdapterOutput whether the adapter's `output` events are the program's only voice
+ * Internal rather than private because [dev.basedpython.pycharm.debug.hotswap.ByHotSwapEnabler] has
+ * to recognise one: the platform hands its extension point a bare `XDebugProcess`, and which
+ * debugger is behind it is a fact only this class holds.
+ *
+ * @param backend which debugger drives this session, or null for one that never started
  */
-private class ByDapXDebugProcess(
+internal class ByDapXDebugProcess(
     session: XDebugSession,
     dapDebugSession: DapDebugSession,
     private val xDebugProcessScope: CoroutineScope,
@@ -352,7 +357,7 @@ private class ByDapXDebugProcess(
     private val result: ExecutionResult?,
     private val startRequestType: DapStartRequest,
     private val startRequestArguments: Map<String, Any?>,
-    private val forwardsAdapterOutput: Boolean,
+    val backend: ByDebugBackend?,
 ) : DapXDebugProcess(
     session,
     dapDebugSession,
@@ -586,7 +591,7 @@ private class ByDapXDebugProcess(
      * `important` — the category bpd reserves for the messages that must not scroll past.
      */
     override fun formatAndPrintOutput(outEvent: OutputEventArguments) {
-        if (!forwardsAdapterOutput) return
+        if (backend?.ownsDebuggeeOutput != true) return
         val text = outEvent.output ?: return
         val contentType = when (ByAdapterOutput.registerFor(outEvent.category)) {
             ByOutputRegister.NORMAL -> ConsoleViewContentType.NORMAL_OUTPUT
