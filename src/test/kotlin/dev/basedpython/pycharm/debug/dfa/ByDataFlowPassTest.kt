@@ -80,11 +80,11 @@ class ByDataFlowPassTest {
         )
     }
 
-    private fun configure() {
+    private fun configure(text: String = source, found: List<ByDataFlowFinding> = findings()) {
         BasedPythonSettings.getInstance(fixture.project).debuggerDataFlow = true
-        fixture.configureByText("bain.by", source)
+        fixture.configureByText("bain.by", text)
         val file = fixture.file.virtualFile
-        ByDataFlowSession.getInstance(fixture.project).publish(file, findings())
+        ByDataFlowSession.getInstance(fixture.project).publish(file, found)
         PlatformTestUtil.dispatchAllInvocationEventsInIdeEventQueue()
         highlight()
     }
@@ -123,6 +123,94 @@ class ByDataFlowPassTest {
             "a warning or an error on a line that will not run is still the more urgent thing to " +
                 "see, and this must not grey it out: " +
                 drawn().map { it.textAttributesKey?.externalName to it.layer },
+        )
+    }
+
+    /**
+     * The function from the second report, and what a real stop on its first statement answered.
+     *
+     * The whole exchange was driven live — `by run` with `bpd` attached, breakpoint on line 2, the
+     * names [ByDataFlowNames] would collect, `bpd/facts` for them, [ByDataFlowFacts] over the
+     * reply, `by/dataFlowAt` with what came out — and this is the JSON that came back. Written out
+     * rather than shortened, because a fixture trimmed to what this test reads is a fixture that
+     * agrees with this test's own idea of the reply.
+     *
+     * Note what is *not* in it. `bpd` proved `discount` is a float `0.0` at the stop, and nothing
+     * sent it: `by` has no float observation, so the plugin drops the fact. The `0.0` below comes
+     * from the file's own `discount = 0.0` surviving two branches the seeds proved dead, which is
+     * the point — the value is derived, not echoed.
+     */
+    private val priceSource = """
+        def price(qty: int, member: bool):
+            discount = 0.0
+            if qty >= 10:
+                discount = 0.1
+            if member:
+                discount += 0.05
+            return discount
+    """.trimIndent() + "\n"
+
+    private fun priceFindings() = listOf(
+        ByDataFlowFinding(
+            range = Range(Position(2, 7), Position(2, 16)),
+            kind = "condition",
+            taken = false,
+            label = "= false",
+        ),
+        ByDataFlowFinding(
+            range = Range(Position(3, 8), Position(3, 22)),
+            kind = "unreachable",
+            label = "will not run",
+        ),
+        ByDataFlowFinding(
+            range = Range(Position(4, 7), Position(4, 13)),
+            kind = "condition",
+            taken = false,
+            label = "= false",
+        ),
+        ByDataFlowFinding(
+            range = Range(Position(5, 8), Position(5, 24)),
+            kind = "unreachable",
+            label = "will not run",
+        ),
+        ByDataFlowFinding(
+            range = Range(Position(6, 11), Position(6, 19)),
+            kind = "value",
+            value = "0.0",
+            label = "discount = 0.0",
+        ),
+    )
+
+    @Test
+    fun `a settled value is drawn over the read it is about, under its own key`() {
+        // the kind the pass grew for the second report. an unknown kind is dropped rather than
+        // guessed at, so a `value` the pass did not learn about would be silently absent — which
+        // looks exactly like `by` not having decided it
+        configure(priceSource, priceFindings())
+        val text = fixture.editor.document.immutableCharSequence
+        assertEquals(
+            listOf("BASEDPYTHON_DATA_FLOW_DECIDED_VALUE" to "discount"),
+            drawn()
+                .filter { it.textAttributesKey?.externalName == "BASEDPYTHON_DATA_FLOW_DECIDED_VALUE" }
+                .map {
+                    it.textAttributesKey!!.externalName to
+                        text.subSequence(it.startOffset, it.endOffset).toString()
+                },
+        )
+    }
+
+    @Test
+    fun `the value's label is the one drawn beside the line`() {
+        // the label is what the reader actually sees, and it is the server's string rather than
+        // anything assembled here — a plugin that rebuilt it would be a second place for the
+        // spelling to drift
+        configure(priceSource, priceFindings())
+        val renderer = drawn()
+            .single { it.textAttributesKey?.externalName == "BASEDPYTHON_DATA_FLOW_DECIDED_VALUE" }
+            .customRenderer
+        assertTrue(
+            renderer is ByDataFlowVerdictRenderer,
+            "a value with no renderer draws no label at all: $renderer",
         )
     }
 

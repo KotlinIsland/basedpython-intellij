@@ -24,7 +24,7 @@ import java.util.concurrent.CompletableFuture
  */
 interface ByDataFlowServer : LanguageServer, dev.basedpython.pycharm.lsp.ext.ByServerExtensions {
     /**
-     * What the program's own state settles about the code below the line it is stopped on.
+     * What the program's own state settles about the code at and below the line it is stopped on.
      *
      * A `null` answer means the server declined — language services are off, or the document is
      * not one it serves. An **empty** answer is the ordinary case and means something different:
@@ -72,10 +72,19 @@ data class ByObservation(
 /** One thing the state settles, ready to draw. */
 data class ByDataFlowFinding(
     val range: Range,
-    /** `condition` or `unreachable`. */
+    /** `condition`, `unreachable` or `value`. */
     val kind: String,
-    /** Which way a condition goes; absent for an unreachable range. */
+    /** Which way a condition goes; absent for anything else. */
     val taken: Boolean? = null,
+    /**
+     * What a decided read will find — `0.0`, `3`, `False`; absent for anything else.
+     *
+     * Nothing here draws it: [label] already spells it as `discount = 0.0`, which is what goes in
+     * the margin. It is carried because the server sends it, and a client that wanted to do
+     * anything but draw the label — colour by value, offer it for a copy — should not have to take
+     * a string written for a reader back apart.
+     */
+    val value: String? = null,
     /** What to draw beside the source. */
     val label: String,
 )
