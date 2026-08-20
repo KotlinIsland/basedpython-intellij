@@ -16,6 +16,7 @@ import com.intellij.xdebugger.XDebugSessionListener
 import com.intellij.xdebugger.XDebuggerManagerListener
 import dev.basedpython.pycharm.lang.BasedPythonFileType
 import dev.basedpython.pycharm.lsp.ByLspServerSupportProvider
+import dev.basedpython.pycharm.lsp.askBy
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import org.eclipse.lsp4j.TextDocumentIdentifier
 
@@ -140,14 +141,9 @@ class ByDataFlowListener : XDebuggerManagerListener {
                 line = line,
                 observations = observations,
             )
-            return try {
-                server.sendRequestSync(ANALYSIS_TIMEOUT_MS) {
-                    (it as ByDataFlowServer).dataFlowAt(params)
-                }.orEmpty()
-            } catch (e: Exception) {
-                LOG.warn("by/dataFlowAt failed", e)
-                emptyList()
-            }
+            return server.askBy("by/dataFlowAt", ANALYSIS_TIMEOUT_MS) {
+                (it as ByDataFlowServer).dataFlowAt(params)
+            }.value.orEmpty()
         }
     }
 

@@ -3,7 +3,6 @@ package dev.basedpython.pycharm.env.modules
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.WriteAction
 import com.intellij.openapi.command.CommandProcessor
-import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.LocalFileSystem
@@ -11,7 +10,9 @@ import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.platform.lsp.api.LspServer
 import com.intellij.platform.lsp.api.LspServerManager
 import dev.basedpython.pycharm.format.ByCleanup
+import dev.basedpython.pycharm.lsp.ByAnswer
 import dev.basedpython.pycharm.lsp.ByLspServerSupportProvider
+import dev.basedpython.pycharm.lsp.askBy
 import dev.basedpython.pycharm.util.BasedPythonBundle
 import org.eclipse.lsp4j.FileRename
 import org.eclipse.lsp4j.RenameFilesParams
@@ -42,8 +43,6 @@ import java.nio.file.Path
  * by a button that looked like it worked.
  */
 internal object ModuleImportEdits {
-
-    private val LOG = Logger.getInstance(ModuleImportEdits::class.java)
 
     /**
      * True when a `by` server is running for this project and can answer for a rename.
@@ -76,12 +75,15 @@ internal object ModuleImportEdits {
             moves.map { FileRename(uriOf(it.from), uriOf(it.to)) },
         )
 
-        val edit = try {
-            server.sendRequestSync(REQUEST_TIMEOUT_MS) { it.workspaceService.willRenameFiles(params) }
-        } catch (e: Exception) {
-            LOG.warn("by could not answer willRenameFiles", e)
-            return null
-        } ?: return 0 // The server answered "nothing to change", which is an ordinary answer.
+        val answer = server.askBy("workspace/willRenameFiles", REQUEST_TIMEOUT_MS) {
+            it.workspaceService.willRenameFiles(params)
+        }
+        val edit = when (answer) {
+            is ByAnswer.Answer -> answer.value
+            // The server answered "nothing to change", which is an ordinary answer.
+            ByAnswer.None -> return 0
+            ByAnswer.Failed -> return null
+        }
 
         return apply(project, edit)
     }

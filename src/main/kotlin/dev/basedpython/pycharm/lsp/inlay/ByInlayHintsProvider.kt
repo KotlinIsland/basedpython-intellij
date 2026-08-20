@@ -8,7 +8,6 @@ import com.intellij.codeInsight.hints.InlayHintsSink
 import com.intellij.codeInsight.hints.NoSettings
 import com.intellij.codeInsight.hints.SettingsKey
 import com.intellij.codeInsight.hints.presentation.PresentationFactory
-import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
@@ -22,6 +21,7 @@ import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
 import dev.basedpython.pycharm.lang.BasedPythonFile
 import dev.basedpython.pycharm.lsp.ByLspServerSupportProvider
+import dev.basedpython.pycharm.lsp.askBy
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import dev.basedpython.pycharm.util.BasedPythonBundle
 import org.eclipse.lsp4j.InlayHintParams
@@ -30,8 +30,6 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import javax.swing.JComponent
 import javax.swing.JPanel
-
-private val LOG = Logger.getInstance(ByInlayHintsProvider::class.java)
 
 /**
  * basedpython's inlay hints: the `by` server's `textDocument/inlayHint` reply, drawn in the editor's
@@ -141,12 +139,9 @@ private class ByInlayHintsCollector(
             server.getDocumentIdentifier(virtualFile),
             getLsp4jRange(document, 0, document.textLength),
         )
-        val hints = try {
-            server.sendRequestSync(INLAY_HINT_TIMEOUT_MS) { it.textDocumentService.inlayHint(params) }
-        } catch (e: Exception) {
-            LOG.warn("inlayHint request to `by` failed", e)
-            return true
-        } ?: return true
+        val hints = server.askBy("textDocument/inlayHint", INLAY_HINT_TIMEOUT_MS) {
+            it.textDocumentService.inlayHint(params)
+        }.value ?: return true
 
         val factory = PresentationFactory(editor)
         val thread = Thread.currentThread().name
