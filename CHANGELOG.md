@@ -489,3 +489,70 @@
 
 - Extended IDE compatibility range to `262.*` (sinceBuild `261`). Verified Compatible
   against both IU-261.25134.67 and IU-262.6653.22.
+
+- Docstrings render in the editor. With *Render documentation comments* on, a `.by` docstring is
+  drawn as formatted prose in place of its source, with the gutter control to fold it back — what
+  Java and Kotlin have had for their doc comments, and what PyCharm has never done for a Python
+  docstring.
+
+  All of it is the server's answer. Which string literals are docstrings is read off
+  `textDocument/semanticTokens`, where `by` marks each one `string` + `documentation` as it walks
+  its own AST — so `async def`, decorated defs, overload implementations, `frozen data class`,
+  `enum class`, `protocol`, nested classes, and the docstring under a `let` or an annotated field
+  all arrive without one of them being named anywhere in the plugin. Which symbol a docstring
+  documents comes from `textDocument/documentSymbol`, whose `selectionRange` is the name. What it
+  says comes from `textDocument/hover` at that name, where the docstring has already been through
+  `ty_ide`'s `docstring.rs` — PEP 257 trimming, `Args:` and `:param:` into headed sections,
+  doctests fenced, bare `__dunder__` escaped — and only the last step, markdown into the IDE's
+  documentation HTML, happens here, through the same converter the platform's own LSP hover uses.
+  A file with no `by` server has no rendered docstrings rather than a guess at them.
+
+  What cannot come from the server is the doc-comment element itself: the rendering pass is driven
+  from PSI, the LSP client has no hook into it, and `.by` has a flat PSI with no doc-comment node —
+  a docstring is a string statement, not a comment. So these are fake `PsiDocCommentBase` elements
+  over the server's ranges, which is what `collectDocComments`' contract allows for exactly this
+  case. A multi-line docstring arrives as one token per line and is joined back into one range.
+
+  Asking the server means waiting for it, and the rendering pass does not. `by` answers no document
+  request for a file it has not been sent `textDocument/didOpen` for — *"Document … is not open in
+  the session"* — and the client sends that asynchronously, off the event that opened the file,
+  while the pass runs the moment the editor appears. The first look therefore finds nothing, and on
+  its own that would be permanent: `DocRenderPassFactory` skips the pass entirely while the PSI
+  modification count is unchanged, so an empty answer computed a moment too early is what the file
+  keeps until an edit — and a stub in a library is never edited. A `LspClientManagerListener` now
+  asks the platform to run the pass again the instant the client tells the server about the file,
+  which is exactly when that answer became wrong.
+
+  Finding a docstring again by its range — which is what pressing the gutter control does — asks the
+  question afresh rather than trusting that the pass already did, and what it remembers is kept
+  against the file rather than against a `PsiFile` the platform is free to drop and rebuild. An item
+  can outlive the answer that produced it, and a docstring whose control does nothing when pressed
+  is the shape that takes.
+
+  The one docstring the protocol cannot answer for is a module's: it documents the file, and hover
+  needs a name. That one is rendered as text — escaped, paragraphs kept, nothing interpreted —
+  because a raw docstring is not markdown, and reading one as markdown does not degrade so much as
+  invent: `>>> int('0b100', base=0)` is three levels of blockquote to a markdown parser, and comes
+  out as nested vertical rules with the `>>>` eaten.
+
+- Docstrings render in `by`'s own stubs too, which needed the IDE's LSP client to be worked around
+  rather than configured. `by` answers no document request for a file it has not been sent
+  `textDocument/didOpen` for, and the platform's client declines to send one for anything outside a
+  module content root — `LspClientImpl.isSupportedFile` asks `ProjectFileIndex.isInContent`, which
+  is *content*, not *project*. A typeshed stub is a library file: `isInLibrary` is true, which is
+  what Reader Mode asks, and `isInContent` is false, which is what the client asks. So every request
+  about a stub came back empty, no docstrings were found in one, and goto-definition landed you
+  somewhere the server would say nothing about. The protocol has no such restriction and neither
+  does `by`, so the `didOpen` is now sent from here for exactly those files, once per file per
+  server. Measured in a running IDE: a stub that produced no rendered docstrings at all produces
+  thirty.
+
+- The stubs `by` navigates into are library files, and the IDE is now told so. `by` carries typeshed
+  inside its own binary and extracts it into its cache — `~/.cache/ty/vendored/typeshed` on macOS
+  and Linux, `%LOCALAPPDATA%\ty\cache` on Windows. That is outside every content root, so the files
+  are not project files, and they are ordinary writable files, so they are not read-only either:
+  Reader Mode's default — libraries and read-only files — passed them over, which is why a docstring
+  in typeshed sat there as source while the same docstring in a Kotlin library renders on sight.
+  Registering the root as a library fixes that where it was actually wrong, and the rest follows —
+  the stubs appear under External Libraries, join the "Project and Libraries" scope, and turn up in
+  Navigate | File. Editing one is meaningless anyway; the extractor rewrites it from the binary.

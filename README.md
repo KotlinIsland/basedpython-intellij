@@ -172,6 +172,18 @@ support, run configurations, CLI actions, and editor tooling.
   edited, and the window appears by itself when a project grows its first one.
 
 ### Docs & help
+- **Rendered docstrings** — with *Render documentation comments* on, a docstring is drawn as
+  formatted prose in place of its source, with the gutter control to fold it back. Which literals
+  are docstrings, which symbol each one documents, and what it says are all `by`'s answers (semantic
+  tokens, document symbols, hover), so every shape `by` recognises renders — `async def`, decorated
+  defs, overloads, `data class`, `enum class`, `protocol`, and the docstring under a `let` or an
+  annotated field — and a rendered docstring says exactly what the hover popup says. Without a
+  running `by` there are no rendered docstrings, rather than a guess at them. A module docstring is
+  the one hover has no name to answer for, and renders as plain text.
+- Rendering applies to `by`'s bundled stubs by default, like a Kotlin or Java library: the typeshed
+  `by` extracts into its cache is registered as a library root, so Reader Mode treats it as one, and
+  the plugin tells `by` about those files itself — the IDE's LSP client only syncs files under a
+  content root, so without that the server has nothing to say about a stub.
 - Quick Documentation (Ctrl+Q) for basedpython keywords, modifiers, and the `?.` / `??`
   operators; External Documentation (Ctrl+Shift+I) opens the basedpython docs.
 - **basedpython Syntax Quick Reference** action with a bundled cheat-sheet.

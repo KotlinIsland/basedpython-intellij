@@ -257,6 +257,17 @@
                     icon="/icons/basedpythonTests.svg"
                     factoryClass="dev.basedpython.pycharm.run.test.node.ByTestNodeToolWindowFactory"/>
 
+        <!-- The stubs `by` extracts from its own binary and navigates into: library files the
+             IDE would otherwise see as loose writable files outside the project, so Reader Mode
+             passed them over and their docstrings never rendered. -->
+        <additionalLibraryRootsProvider
+            implementation="dev.basedpython.pycharm.project.ByTypeshedLibraryProvider"/>
+
+        <!-- Rendered docstrings are the server's answer, and the pass that asks runs before the
+             client has told `by` the file exists. This asks again once it has. -->
+        <postStartupActivity
+            implementation="dev.basedpython.pycharm.docs.render.ByRenderedDocsRefresher"/>
+
         <!-- ===== Stream U: docs & help ===== -->
         <lang.documentationProvider
             language="basedpython"
