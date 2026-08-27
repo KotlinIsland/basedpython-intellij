@@ -556,3 +556,13 @@
   Registering the root as a library fixes that where it was actually wrong, and the rest follows —
   the stubs appear under External Libraries, join the "Project and Libraries" scope, and turn up in
   Navigate | File. Editing one is meaningless anyway; the extractor rewrites it from the binary.
+
+- Pressing OK in *Settings | basedpython* no longer throws when the `.py` handling has changed, and
+  no longer discards the settings below it. Telling the platform that file types changed fires a
+  roots change, and `ProjectRootManagerImpl.fireBeforeRootsChanged` asserts write access — but a
+  settings dialog applies under a write-*intent* read action, which is a weaker lock and not the
+  same thing (`SettingsNonModalDialog.applyWithWriteIntent`). The assertion threw out of `apply()`
+  half way down, so every setting written after that line — the per-capability `by` and `buff`
+  toggles, the inlay redraw, the language-server reload — was silently skipped, and the one change
+  that triggered it was not applied either. It now goes through a write action, the way the roots
+  rescan beside it already did.
