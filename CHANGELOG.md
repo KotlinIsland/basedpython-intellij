@@ -447,6 +447,13 @@
 - Running tests no longer executes the suite twice. The console was built by calling
   `startProcess()` a second time, which spawned a second `by run pytest`; every test showed
   up twice in the tree and Stop killed only one of the two processes.
+- Postfix templates no longer offer themselves part way through an ellipsis. Typing the third
+  dot of `...` put `print`, `len`, `if` and the rest in the completion popup, and accepting one
+  produced `print(bool()..)`. `PostfixLiveTemplate` deletes the dot that triggered it before asking
+  whether a template applies, so what it asked about was `bool()..` — and the backwards scan for the
+  expression walks over dots, so it read that as the expression `bool()..` and every template said
+  yes. No basedpython expression ends in a dot, so a dot still in front of the caret now means there
+  is nothing there to apply a template to.
 
 ### Changed
 
