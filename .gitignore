@@ -44,3 +44,7 @@ bin/
 .DS_Store
 # IntelliJ Platform Gradle plugin sandbox/caches
 .intellijPlatform/
+
+### Claude Code ###
+.claude/settings.local.json
+.claude/worktrees/
