@@ -321,9 +321,7 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
         s.debugBackend = debugBackendCombo.selectedItem as? ByDebugBackend ?: ByDebugBackend.BPD
         s.debuggerDataFlow = debuggerDataFlow.isSelected
         // File types are cached per file; without this, open .py editors keep the old one.
-        if (handlingChanged) FileTypeManagerEx.getInstanceEx().makeFileTypesChange(
-            "basedpython .py handling changed",
-        ) {}
+        if (handlingChanged) fireFileTypesChange()
 
         s.byCompletion = byCompletion.isSelected
         s.byGoToDefinition = byGoToDefinition.isSelected
@@ -354,6 +352,26 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
     private fun redrawInlayHints() {
         InlayHintsPassFactoryInternal.forceHintsUpdateOnNextPass()
         DaemonCodeAnalyzer.getInstance(project).restart()
+    }
+
+    /**
+     * Tells the platform the answer to "what type is this file" has changed.
+     *
+     * In a write action, and not inline. A file-type change fires a roots change, and
+     * `ProjectRootManagerImpl.fireBeforeRootsChanged` asserts write access — while [apply] runs
+     * under a write-*intent* read action, which is a weaker lock and not the same thing:
+     * `SettingsNonModalDialog.applyWithWriteIntent` is what calls us. Pressing OK with the `.py`
+     * handling changed therefore threw, and the settings after that point were never applied.
+     *
+     * Same shape as [fireRootsRescan], for the same reason.
+     */
+    private fun fireFileTypesChange() {
+        com.intellij.openapi.application.ApplicationManager.getApplication().invokeLater {
+            if (project.isDisposed) return@invokeLater
+            com.intellij.openapi.application.WriteAction.run<RuntimeException> {
+                FileTypeManagerEx.getInstanceEx().makeFileTypesChange("basedpython .py handling changed") {}
+            }
+        }
     }
 
     /**
