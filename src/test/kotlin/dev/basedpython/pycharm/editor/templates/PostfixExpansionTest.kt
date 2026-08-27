@@ -94,6 +94,20 @@ class PostfixExpansionTest {
     }
 
     @Test
+    fun `a dot before the caret yields no expansion`() {
+        // `bool()...` — the platform deletes the third dot before asking, so what it asks about is
+        // `bool()..`. The user is typing an ellipsis, not an attribute, and the templates that used
+        // to be offered here expanded `bool()..` into `print(bool()..)`.
+        assertNull(postfixExpansion("if bool()..", 11) { "print($it)" })
+        assertNull(postfixExpansion("value.", 6) { "print($it)" })
+    }
+
+    @Test
+    fun `an ellipsis on its own yields no expansion`() {
+        assertNull(postfixExpansion("..", 2) { "print($it)" })
+    }
+
+    @Test
     fun `an unbalanced closing bracket yields no expansion`() {
         assertNull(postfixExpansion("a, b)", 5) { "print($it)" })
     }

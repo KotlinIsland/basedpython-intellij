@@ -41,6 +41,11 @@ const val CARET_MARKER: String = "\u0000"
  */
 fun postfixExpansion(text: CharSequence, caretOffset: Int, body: (String) -> String): PostfixExpansion? {
     if (caretOffset <= 0 || caretOffset > text.length) return null
+    // The platform has already deleted the dot that triggered the template, so another dot right
+    // before the caret means the dot it deleted was not an attribute access on a finished
+    // expression: the user is mid-way through `...`, or through a `..` typo. No expression in
+    // basedpython ends in a dot, so there is nothing here a template could apply to.
+    if (text[caretOffset - 1] == '.') return null
     val start = expressionStart(text, caretOffset)
     if (start == null || start >= caretOffset) return null
 
