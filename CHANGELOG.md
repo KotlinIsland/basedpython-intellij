@@ -119,13 +119,16 @@
   `PYTHONPATH`. That last one fixes a plain run too: `by run` makes its temp tree
   `sys.path[0]`, so a project mixing `helper.py` with `main.by` used to die on
   `ImportError: No module named 'helper'` while `by` type-checked the same import happily.
-- **Reset Frame** works under the bpd backend. `restartFrame` is a DAP request bpd implements
-  and advertises, and the platform's DAP client never wires it to the IDE action, so it was
-  grey no matter what; `ByRestartFrameHandler` bridges the two. It is narrower than the
-  JVM action of the same name — Python cannot pop a frame, so the body re-runs over the
-  locals as they stand rather than with the arguments the call was made with, and only the
-  executing frame can be restarted. Offered on what the adapter advertises, so it is grey
-  under debugpy, which does not implement the request.
+- **Reset Frame** works under the bpd backend, on **any** frame in the stack. `restartFrame`
+  is a DAP request bpd implements and advertises, and the platform's DAP client never wires
+  it to the IDE action, so it was grey no matter what; `ByRestartFrameHandler` bridges the
+  two. It is not the JVM action of the same name — Python cannot pop a frame, so bpd either
+  runs the frame again where it stands, with the locals a fresh call would not have bound
+  put back to unbound, or forces it to return and runs the caller's line again so the
+  interpreter builds a frame that has never run. A frame below the top is reached by forcing
+  the frames above it out, innermost first; they are gone rather than suspended. Which of
+  those a request gets, and every refusal, is bpd's to decide and to report. Offered on what
+  the adapter advertises, so it is grey under debugpy, which does not implement the request.
 - Exception breakpoints for `.by` programs (*Breakpoints | basedpython Exceptions*), with
   On raise / On termination.
 - *basedpython Tests* tool window: the project's tests as `by run pytest --collect-only`
