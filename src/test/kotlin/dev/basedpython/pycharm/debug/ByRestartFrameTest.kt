@@ -10,18 +10,23 @@ import org.junit.jupiter.api.Test
  *
  * The action exists here at all because the platform's DAP client never wires `restartFrame` to
  * [com.intellij.xdebugger.frame.XDropFrameHandler] — bpd implements the request and advertises the
- * capability, and nothing asks. What is under test is the two ways this must still decline, since
- * an enabled action that fails is worse than a grey one: the platform swallows a failed request's
+ * capability, and nothing asks. What is under test is the one way this must still decline, since an
+ * enabled action that fails is worse than a grey one: the platform swallows a failed request's
  * message, so a wrong "yes" here looks like a button that does nothing.
  */
 class ByRestartFrameTest {
 
-    private fun decline(advertised: Boolean? = true, executing: Boolean = true) =
-        ByRestartFrame.decline(advertised, executing)
-
+    /**
+     * And it is asked nothing about the frame, which is the point rather than an omission. bpd
+     * reaches a frame below the top by forcing the frames above it out, so a caller is as
+     * restartable as the executing frame — every refusal past this one is bpd's, decided off the
+     * bytecode of the frames involved and reported as a refused request. A copy of that list here
+     * would be a second, slower, wrong one, and while a copy of the *old* limit lived here it kept
+     * the action grey on every frame but the top long after bpd had lifted it.
+     */
     @Test
-    fun `an executing frame on an adapter that offers the request can be restarted`() {
-        assertNull(decline())
+    fun `an adapter that offers the request can restart any frame`() {
+        assertNull(ByRestartFrame.decline(advertised = true))
     }
 
     /**
@@ -30,7 +35,7 @@ class ByRestartFrameTest {
      */
     @Test
     fun `an adapter that does not offer the request declines`() {
-        val why = decline(advertised = false)
+        val why = ByRestartFrame.decline(advertised = false)
         assertNotNull(why)
         assertTrue(why!!.contains("restartFrame"), why)
     }
@@ -42,25 +47,6 @@ class ByRestartFrameTest {
      */
     @Test
     fun `an adapter that has not answered yet declines`() {
-        assertNotNull(decline(advertised = null))
-    }
-
-    /**
-     * bpd refuses any frame but the executing one, and the reason is CPython's: a frame below the
-     * top is suspended inside a call, and assigning to its `f_lineno` is *accepted* while leaving it
-     * running on with a value stack that no longer matches. Confirmed against bpd, which answers a
-     * caller's frame id with exactly that explanation.
-     */
-    @Test
-    fun `a caller's frame declines`() {
-        val why = decline(executing = false)
-        assertNotNull(why)
-        assertTrue(why!!.contains("executing"), why)
-    }
-
-    /** Both wrong is still one refusal, and the adapter's own limitation is the one worth saying. */
-    @Test
-    fun `an unsupported adapter is the reason given even for a caller's frame`() {
-        assertTrue(decline(advertised = false, executing = false)!!.contains("restartFrame"))
+        assertNotNull(ByRestartFrame.decline(advertised = null))
     }
 }

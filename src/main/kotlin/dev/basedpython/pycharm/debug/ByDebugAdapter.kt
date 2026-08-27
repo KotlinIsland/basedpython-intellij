@@ -558,8 +558,8 @@ internal class ByDapXDebugProcess(
 
     /**
      * *Reset Frame*, which the platform's DAP client does not wire up to `restartFrame` — see
-     * [ByRestartFrameHandler], including why the action does something narrower here than its name
-     * promises.
+     * [ByRestartFrameHandler], including which of the two things bpd can do the action turns out to
+     * be, and what neither of them undoes.
      *
      * One handler for the life of the process: [com.intellij.xdebugger.frame.XDropFrameHandler] is
      * asked about a frame at a time and holds nothing itself, and a fresh instance per call would

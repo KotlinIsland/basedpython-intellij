@@ -445,29 +445,42 @@ client — which is what makes it something to delete when the platform fixes it
 
 ## Reset Frame
 
-*Reset Frame* runs the stopped frame again from its first line. It is enabled under **bpd** and grey
-under debugpy.
+*Reset Frame* runs a stopped frame again from its first line. It is enabled under **bpd** and grey
+under debugpy, whose pydevd reports `supportsRestartFrame: false`.
 
-**It is not the JVM's Reset Frame, and the difference matters.** There, resetting *pops* the frame:
-the thread returns to the caller, the call can be made again, and the parameters are the ones it was
-originally given. Python has no such operation. bpd's `restartFrame` moves the executing frame's
-instruction pointer back to its first line and runs the body again **over the locals as they
-stand** — its capability comment says so directly, "with what its parameters hold *now*". Measured:
-stopped inside `work(n)` where `n` arrived as `1` and the body had made it `101`, a restart
-re-entered at the `def` line with `n` still `101`. Nothing is unwound and nothing is restored.
+**It is not the JVM's Reset Frame.** There, resetting *pops* the frame: the thread returns to the
+caller, the call can be made again, and the parameters are the ones it was originally given. CPython
+has no such operation. bpd builds the nearest honest thing out of jumps, two ways, and picks between
+them itself:
 
-Only the frame its thread is executing can be restarted; a caller is refused. That limit is
-CPython's rather than bpd's — a frame below the top is suspended inside a call, and assigning to its
-`f_lineno` is *accepted* while leaving the frame running on against a value stack that no longer
-matches. DAP's own wording for the request implies discarding the frames above the named one, and
-there is no mechanism for that, so bpd refuses instead of approximating. The action is therefore
-offered on the top frame only.
+- **reset in place** — the frame's instruction pointer goes back to its first line, and the locals a
+  fresh call would not have bound are put back to *unbound* rather than to `None`. The frame object
+  is the one the program already had, and the caller is never touched, so nothing else on the
+  caller's line runs a second time
+- **rewind through the caller** — the frame is forced to return and the caller's line runs again, so
+  the interpreter builds a frame that has never run. This is what serves a frame that has written
+  over one of its own parameters: those slots are the only place what the call passed still exists
 
-What a restart really did reaches the console as data rather than prose — see below. That includes
-the one outcome this action's own error handling cannot see: **cpython refusing the move**. A refusal
-is not a failed request, so bpd answers `restartFrame` with `success: true` and reports the refusal
-on `bpd/moved`; captured from a real session, `{"jumped": "refused", "wanted": 4, "error":
-{"kind": "ValueError", "message": "can't jump into the body of a for loop"}}`.
+Measured: stopped inside `work(n)` where `n` arrived as `1` and the body had made it `101`, the
+reset is refused because the frame rebinds a parameter, bpd falls back to the rewind, and the call is
+made again with `n` back to `1`. What is never undone is a side effect the old frame already
+performed, and no block cleanup runs — a `with` the frame was inside gets no `__exit__`.
+
+**Any frame, not only the top one.** A frame below the top is reached by forcing the frames above it
+out, innermost first, each made to return the way the rewind forces its own frame out — they are
+gone rather than suspended. The plugin therefore asks nothing about *which* frame it is: every
+refusal past "does the adapter offer the request" is bpd's, decided off the bytecode of the frames
+involved before any of them is touched, and answered as a refused request this action reports.
+
+This used to read "only the frame its thread is executing", which was true of bpd once — CPython
+crashes rather than refuses when a frame that is not executing is moved. When bpd gained the unwind,
+the plugin's own copy of that limit is what went on greying the action out on a caller.
+
+Refusals are the request's own error response, which is why `ByRestartFrameHandler` catches and
+shows them: the platform drops a failed request's message on the floor, and a refusal a person asked
+for would otherwise look like a button that did nothing. What a restart really *did* — which locals
+were emptied, which frames were discarded, whether any held a block open — comes back from bpd on
+the console, in one place rather than two.
 
 ### the bridge
 
