@@ -280,6 +280,9 @@ lexical colour only. Don't reintroduce guessed semantic colour; fix the LSP path
   - *All files* is a persisted project preference, defaulted on: a hook run from a tool window with nothing staged inspects nothing and reports success
 
 ## 17. Documentation / help
+- [x] Rendered docstrings in the editor (docs.render.* — ranges from `by`'s semantic tokens (`string` + `documentation`), owners from its document symbols, text from its hover; handed to the platform as fake `PsiDocCommentBase`, HTML via `DocMarkdownToHtmlConverter`)
+- [x] `by`'s extracted typeshed registered as a library root (project.ByTypeshedLibrary), so Reader Mode renders stub docstrings automatically
+- [x] Stub files opened with the server directly (lsp.ByServerDocuments) — the platform's LSP client syncs only files under a content root, so `by` answers nothing about a library file until we send `didOpen` ourselves
 - [x] External docs links (Ctrl+Shift+I → basedpython docs)
 - [x] Plugin settings help buttons → docs (docs.help.BasedPythonWebHelpProvider + getHelpTopic)
 - [x] Bundled quick-reference of basedpython syntax

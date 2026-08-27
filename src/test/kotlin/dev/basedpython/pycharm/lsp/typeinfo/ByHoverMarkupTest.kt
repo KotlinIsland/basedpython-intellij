@@ -92,4 +92,103 @@ class ByHoverMarkupTest {
         assertNull(ByHoverMarkup.typeHtml("```python\n\n```"))
         assertNull(ByHoverMarkup.fullHtml("   \n  "))
     }
+
+    // -------------------------------------------------------------------------
+    // docstringMarkdown — the cut rendered documentation takes
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `the docstring is what follows the type block and the rule`() {
+        val markup = """
+            ```python
+            def greet(name: str) -> None
+            ```
+            ---
+            Say hello.
+
+            Longer prose.
+        """.trimIndent()
+        assertEquals("Say hello.\n\nLonger prose.", ByHoverMarkup.docstringMarkdown(markup))
+    }
+
+    /** The whole point of cutting rather than parsing: what `by` wrote reaches the converter intact. */
+    @Test
+    fun `the docstring keeps its own markdown, fences and lists and rules included`() {
+        val markup = """
+            ```python
+            def run() -> None
+            ```
+            ---
+            Runs it.
+
+            * first
+            * second
+
+            ```python
+            run()
+            ```
+        """.trimIndent()
+        assertEquals(
+            "Runs it.\n\n* first\n* second\n\n```python\nrun()\n```",
+            ByHoverMarkup.docstringMarkdown(markup),
+        )
+    }
+
+    @Test
+    fun `a docstring's own underline stays in the docstring`() {
+        val markup = "```python\nint\n```\n---\nTitle\n---\nBody"
+        assertEquals("Title\n---\nBody", ByHoverMarkup.docstringMarkdown(markup))
+    }
+
+    @Test
+    fun `a plain-text payload is cut at its dashed rule`() {
+        val markup = "def greet(name: str) -> None\n----------------\nSay hello."
+        assertEquals("Say hello.", ByHoverMarkup.docstringMarkdown(markup))
+    }
+
+    @Test
+    fun `a longer fence is closed by a longer fence`() {
+        val markup = "`````python\ndef f() -> None\n`````\n---\nDocs about ``` fences."
+        assertEquals("Docs about ``` fences.", ByHoverMarkup.docstringMarkdown(markup))
+    }
+
+    /** A type with no docstring is not the same as an empty one: the caller falls back rather than blanking. */
+    @Test
+    fun `a payload with nothing after the type has no docstring`() {
+        assertNull(ByHoverMarkup.docstringMarkdown("```python\nint\n```"))
+        assertNull(ByHoverMarkup.docstringMarkdown("```python\nint\n```\n---\n"))
+        assertNull(ByHoverMarkup.docstringMarkdown("```python\nint"))
+        assertNull(ByHoverMarkup.docstringMarkdown(""))
+    }
+
+    /**
+     * Captured from `by server` (ruff/0.16.2+452) hovering the name in `def greet(name: str) -> None:`
+     * over a Google-style docstring. Two things here are the reason the text comes from the server
+     * at all: `Args:` has become a `## Arguments` section, and the doctest has been fenced — with
+     * eleven backticks, which is `render_markdown`'s way of making sure a docstring cannot break
+     * out of its own fence. Neither survives a local markdown pass, and neither is reimplemented
+     * here, so this payload is the contract.
+     */
+    @Test
+    fun `a real Google-style docstring payload keeps its sections and its doctest fence`() {
+        val markup = "```python\ndef greet(name: str)\n```\n---\nSay hello to *name*.\n\n" +
+            "## Arguments\n**name**  \nwho to greet.\n\nExample:  \n" +
+            "```````````python\n    >>> greet(\"world\")\n```````````"
+        assertEquals(
+            "Say hello to *name*.\n\n## Arguments\n**name**  \nwho to greet.\n\nExample:  \n" +
+                "```````````python\n    >>> greet(\"world\")\n```````````",
+            ByHoverMarkup.docstringMarkdown(markup),
+        )
+    }
+
+    /** A class hover leads with an `xml` fence, not a `python` one — the cut is by fence, not by language. */
+    @Test
+    fun `a real class payload is cut the same way`() {
+        val markup = "```xml\n<class 'Greeter'>\n```\n---\nGreets people.\n\n" +
+            "## Parameters\n**loud**  \nwhether to shout."
+        assertEquals(
+            "Greets people.\n\n## Parameters\n**loud**  \nwhether to shout.",
+            ByHoverMarkup.docstringMarkdown(markup),
+        )
+    }
 }

@@ -1,21 +1,13 @@
 package dev.basedpython.pycharm.lsp.typeinfo
 
 import com.intellij.lang.ExpressionTypeProvider
-import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.util.text.StringUtil
-import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.platform.lsp.api.LspServer
-import com.intellij.platform.lsp.api.LspServerManager
-import com.intellij.platform.lsp.api.LspServerState
-import com.intellij.platform.lsp.util.getLsp4jPosition
 import com.intellij.psi.PsiElement
 import dev.basedpython.pycharm.lang.BasedPythonFile
 import dev.basedpython.pycharm.lang.BasedPythonTokenTypes
-import dev.basedpython.pycharm.lsp.ByLspServerSupportProvider
+import dev.basedpython.pycharm.lsp.ByHover
+import dev.basedpython.pycharm.lsp.ByHoverRequest
 import dev.basedpython.pycharm.util.BasedPythonBundle
-import org.eclipse.lsp4j.HoverParams
-
-private val LOG = Logger.getInstance(ByTypeInfoProvider::class.java)
 
 /**
  * Type Info (Ctrl+Shift+P) for `.by` files, answered by the `by` language server.
@@ -30,9 +22,8 @@ private val LOG = Logger.getInstance(ByTypeInfoProvider::class.java)
  * Ctrl+Shift+P asks for "advanced information" and gets the whole hover, docstring included.
  *
  * Threading: the platform computes the hint inside `ReadAction.nonBlocking` on a background thread,
- * so blocking on the server here is allowed. [LspServer.sendRequestSync] polls
- * `ProgressManager.checkCanceled` while it waits, so a write action cancels the wait rather than
- * queueing behind it, and [HOVER_TIMEOUT_MS] bounds a server that has stopped answering.
+ * so blocking on the server here is allowed — see [ByHoverRequest] for what that costs and what
+ * bounds it.
  */
 class ByTypeInfoProvider : ExpressionTypeProvider<PsiElement>() {
 
@@ -67,9 +58,9 @@ class ByTypeInfoProvider : ExpressionTypeProvider<PsiElement>() {
 
     private fun hint(element: PsiElement, advanced: Boolean): String {
         val markup = when (val hover = hoverAt(element)) {
-            is Hover.Markup -> hover.text
-            Hover.NoServer -> return plain("typeInfo.serverUnavailable")
-            Hover.Nothing -> return plain("typeInfo.noType")
+            is ByHover.Markup -> hover.text
+            ByHover.NoServer -> return plain("typeInfo.serverUnavailable")
+            ByHover.Nothing -> return plain("typeInfo.noType")
         }
         val html = if (advanced) ByHoverMarkup.fullHtml(markup) else ByHoverMarkup.typeHtml(markup)
         return html ?: plain("typeInfo.noType")
@@ -78,55 +69,10 @@ class ByTypeInfoProvider : ExpressionTypeProvider<PsiElement>() {
     /** Bundle messages are plain text; the hint they land in is HTML. */
     private fun plain(key: String): String = StringUtil.escapeXmlEntities(BasedPythonBundle.message(key))
 
-    private fun hoverAt(element: PsiElement): Hover {
-        val file = element.containingFile ?: return Hover.NoServer
-        val virtualFile = file.originalFile.virtualFile ?: return Hover.NoServer
-        val document = file.viewProvider.document ?: return Hover.NoServer
-        val server = runningByServer(element, virtualFile) ?: return Hover.NoServer
-
-        val params = HoverParams(
-            server.getDocumentIdentifier(virtualFile),
-            getLsp4jPosition(document, element.textRange.startOffset),
-        )
-        val hover = try {
-            server.sendRequestSync(HOVER_TIMEOUT_MS) { it.textDocumentService.hover(params) }
-        } catch (e: Exception) {
-            LOG.warn("hover request to `by` failed", e)
-            return Hover.NoServer
-        } ?: return Hover.Nothing
-
-        // `by` always replies with MarkupContent; the List form is the deprecated MarkedString shape.
-        val text = hover.contents?.let { contents ->
-            when {
-                contents.isRight -> contents.right?.value
-                contents.isLeft -> contents.left.orEmpty().joinToString("\n") {
-                    if (it.isLeft) it.left else it.right?.value.orEmpty()
-                }
-
-                else -> null
-            }
-        }
-        return if (text.isNullOrBlank()) Hover.Nothing else Hover.Markup(text)
-    }
-
-    /**
-     * The `by` server serving this file, or `null` when there is none — switched off in settings,
-     * still starting, or dead.
-     */
-    private fun runningByServer(element: PsiElement, virtualFile: VirtualFile): LspServer? =
-        LspServerManager.getInstance(element.project)
-            .getServersForProvider(ByLspServerSupportProvider::class.java)
-            .firstOrNull { it.state == LspServerState.Running && it.descriptor.isSupportedFile(virtualFile) }
-
-    private sealed interface Hover {
-        /** The server answered with something to show. */
-        data class Markup(val text: String) : Hover
-
-        /** The server answered, and has nothing to say about this token. */
-        data object Nothing : Hover
-
-        /** No server answered: not running, or the request failed. */
-        data object NoServer : Hover
+    /** The server's payload for the leaf under the caret. */
+    private fun hoverAt(element: PsiElement): ByHover {
+        val file = element.containingFile ?: return ByHover.NoServer
+        return ByHoverRequest.at(file, element.textRange.startOffset, HOVER_TIMEOUT_MS)
     }
 
     private companion object {

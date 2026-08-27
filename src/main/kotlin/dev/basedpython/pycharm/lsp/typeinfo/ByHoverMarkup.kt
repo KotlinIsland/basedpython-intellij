@@ -85,6 +85,45 @@ object ByHoverMarkup {
     }
 
     /**
+     * The docstring half of a hover payload, still markdown.
+     *
+     * [parse] answers what the Type Info hint needs — the payload as flat blocks, fences and rules
+     * spent. Rendered documentation needs the opposite: the docstring exactly as `by` wrote it,
+     * lists, fences, tables and all, to hand to the platform's markdown converter. So this cuts the
+     * payload rather than parsing it, and returns the tail untouched.
+     *
+     * The cut is after the leading type or signature block:
+     *  - markdown — the type is the first fenced block, and the docstring follows a `---` rule
+     *  - plain text — there is no fence, and the rule is a long run of dashes
+     *
+     * `null` when the payload has no such cut, which means the server answered with a type and no
+     * docstring at all. That is worth distinguishing from an empty docstring: a caller looking at a
+     * docstring it can see in the file has learnt the server did not recognise the symbol, and can
+     * fall back rather than render nothing.
+     */
+    fun docstringMarkdown(markup: String): String? {
+        val lines = markup.lines()
+        val first = lines.indexOfFirst { it.isNotBlank() }
+        if (first < 0) return null
+
+        val opening = lines[first].trim()
+        val afterType = if (FENCE.containsMatchIn(opening)) {
+            val ticks = opening.takeWhile { it == '`' }.length
+            val closing = Regex("""^`{$ticks,}\s*$""")
+            val close = (first + 1 until lines.size).firstOrNull { closing.matches(lines[it].trim()) }
+                ?: return null
+            close + 1
+        } else {
+            val rule = (first until lines.size).firstOrNull { RULE.matches(lines[it].trim()) } ?: return null
+            rule + 1
+        }
+
+        val rest = lines.drop(afterType).dropWhile { it.isBlank() }
+        val docs = if (rest.firstOrNull()?.let { RULE.matches(it.trim()) } == true) rest.drop(1) else rest
+        return docs.joinToString("\n").trim('\n').ifBlank { null }
+    }
+
+    /**
      * A block as HTML for a hint label, escaped and keeping its shape — `by` renders types
      * multi-line (its display settings ask for it), and a long union collapsed onto one line is
      * unreadable.
