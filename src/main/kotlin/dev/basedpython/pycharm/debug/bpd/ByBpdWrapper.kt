@@ -6,14 +6,22 @@ package dev.basedpython.pycharm.debug.bpd
  * ## Why there is a wrapper at all
  *
  * `by run` transpiles the project into a temp directory, writes `_by_sourcemap.py` beside the
- * generated python, and then runs `$PYTHON _by_runner.py <module>` **with that directory as the
- * working directory** — tearing the whole tree down when that process ends. So the map exists for
- * exactly as long as the program does, and the only way for a debugger to be in the picture is to
- * *be* the interpreter `by run` starts.
+ * generated python, and then runs `$PYTHON _by_runner.py <module>` — tearing the whole tree down
+ * when that process ends. So the map exists for exactly as long as the program does, and the only
+ * way for a debugger to be in the picture is to *be* the interpreter `by run` starts.
  *
- * The IDE controls the environment of `by run` and nothing else, which leaves `PYTHON`. The
- * debugpy backend reaches its interpreter the same way, through `PYTHONPATH` and a
- * `sitecustomize.py`, for the same reason.
+ * ## How the IDE gets in
+ *
+ * By naming this script on `by run`'s own command line, as `--python`. That used to be the
+ * `PYTHON` environment variable instead, and it is worth writing down why it moved: `by` now
+ * resolves the project's environment first and reads `$PYTHON` only *below* that discovery, so in
+ * any project with a `.venv` beside its `pyproject.toml` — which is every project this is for —
+ * the variable was never consulted and the wrapper never ran. The program then ran to completion
+ * with no adapter behind it and no breakpoint ever bound. `--python` is the one rung above
+ * discovery. The variable is still set, for a `by` old enough to prefer it.
+ *
+ * The debugpy backend reaches its interpreter differently, through `PYTHONPATH` and a
+ * `sitecustomize.py`, because it runs *inside* an interpreter rather than in place of one.
  *
  * ## Why it cannot simply `exec bpd`
  *
@@ -97,8 +105,16 @@ object ByBpdWrapper {
             ;;
         esac
 
-        # Anything else is the program. Record it: the IDE cannot know the temp directory `by run`
-        # chose, and it sends these back as the `launch` request.
+        # Anything else is the program. Stand where the runner is before anything else: bpd
+        # inherits this directory and the `launch` request names the program relative to it. `by
+        # run` used to start the program *in* the tree it transpiled into and name the runner
+        # relative to that; it now runs from the project root and names it absolutely, which put
+        # the program somewhere `_by_runner.py` no longer resolved. `dirname` of a bare
+        # `_by_runner.py` is `.`, so this is the same tree under either `by`.
+        cd "$(dirname "$1")"
+
+        # Record it: the IDE cannot know the temp directory `by run` chose, and it sends these
+        # back as the `launch` request.
         {
           printf '@CWD@ %s\n' "${'$'}PWD"
           for arg in "$@"; do

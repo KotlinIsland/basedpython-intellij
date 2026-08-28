@@ -102,6 +102,44 @@ class ByBpdWrapperExecutionTest {
     }
 
     @Test
+    fun `an absolutely named runner puts bpd in the tree the runner is in`(@TempDir dir: Path) {
+        // `by run` no longer chdirs into the tree it transpiled into — it runs from the project
+        // root and names the shim absolutely. bpd inherits this process's directory and the launch
+        // request names the program relative to it, so the wrapper has to go and stand there. It
+        // did not, and the session died on `can't open file '<project>/_by_runner.py'`.
+        val script = wrapper(dir)
+        val tree = Files.createDirectory(dir.resolve("transpiled"))
+        Files.writeString(tree.resolve("_by_runner.py"), "")
+        stub(dir, "python", """echo "PYTHON SHOULD NOT RUN"""")
+        // says where it was started *and* announces, because the record has to stay readable —
+        // the point of the test is the directory, but an unparseable record would hide it
+        stub(
+            dir,
+            "bpd",
+            """printf 'PWD %s\n' "${'$'}PWD"""" + "\n" +
+                """echo '{"listening":{"host":"127.0.0.1","port":51234,""" +
+                """"header":"x-bpd-token","token":"tok"}}'""",
+        )
+        val record = dir.resolve("record")
+
+        run(dir, script, record, tree.resolve("_by_runner.py").toString(), "demo")
+
+        val written = Files.readString(record)
+        val ready = assertInstanceOf(ByBpdRecord.Ready::class.java, ByBpdRecord.parse(written)) {
+            "record was:\n$written"
+        }
+        assertEquals(
+            tree.toRealPath().toString(),
+            Path.of(ready.cwd).toRealPath().toString(),
+            "the wrapper recorded a directory that is not the runner's: $written",
+        )
+        assertTrue(
+            written.contains("PWD ${ready.cwd}"),
+            "bpd was started somewhere other than the directory recorded for it: $written",
+        )
+    }
+
+    @Test
     fun `bpd is given the port the IDE reserved`(@TempDir dir: Path) {
         // the IDE picks the port so it knows where to connect before anything starts. a wrapper
         // that dropped it would leave bpd on a port nobody is dialling

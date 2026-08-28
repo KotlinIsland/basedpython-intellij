@@ -126,10 +126,17 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
                 commandLine.pythonPathPrefix += setup.bootstrapDir.toString()
             }
 
-            // bpd is reached through `PYTHON` rather than `PYTHONPATH`, because it does not run
-            // *inside* the interpreter — it **is** the interpreter `by run` starts. See
+            // bpd is reached by *being* the interpreter `by run` starts rather than by running
+            // inside it, so the wrapper goes where `by` looks for an interpreter. See
             // `ByBpdWrapper` for why that is the only place a debugger fits.
             ByDebugBackend.BPD -> {
+                // `--python` rather than `$PYTHON`, and this is the difference between a session
+                // that stops and one that does not: `by run` resolves the project's own
+                // environment ahead of the variable, so in a project with a `.venv` the variable
+                // was never read, the wrapper never ran, and the program ran to completion with
+                // no adapter behind it. The variable stays for a `by` old enough to prefer it —
+                // where both are understood, the flag is the one that wins.
+                commandLine.infrastructureArgs += listOf(BY_PYTHON_FLAG, setup.wrapper.toString())
                 commandLine.infrastructureEnv[ENV_PYTHON] = setup.wrapper.toString()
                 commandLine.infrastructureEnv[ByBpdWrapper.ENV_PYTHON] =
                     setup.python ?: DEFAULT_PYTHON
@@ -316,8 +323,11 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
 
         private const val LOCALHOST = "127.0.0.1"
 
-        /** What `by run` reads the interpreter out of. */
+        /** What `by run` reads the interpreter out of, below its own environment discovery. */
         private const val ENV_PYTHON = "PYTHON"
+
+        /** What `by run` reads the interpreter out of *above* its environment discovery. */
+        private const val BY_PYTHON_FLAG = "--python"
 
         /** What `by run` falls back to when `PYTHON` names nothing. */
         private const val DEFAULT_PYTHON = "python3"

@@ -11,6 +11,7 @@ import com.intellij.execution.ExecutionException
 import dev.basedpython.pycharm.debug.bpd.ByBpdExecutable
 import dev.basedpython.pycharm.debug.bpd.ByDebugBackend
 import dev.basedpython.pycharm.env.ByEnvironments
+import dev.basedpython.pycharm.env.ByLaunch
 import dev.basedpython.pycharm.run.ByRunConfiguration
 import dev.basedpython.pycharm.run.runSubcommandArgs
 import dev.basedpython.pycharm.run.test.ByPytest
@@ -56,8 +57,9 @@ class ByDapLaunchArgumentsProvider : DapLaunchArgumentsProvider {
 
             // bpd is a debug adapter that starts programs, so this is a real launch. The program is
             // `_by_runner.py` **relative to bpd's own working directory**, which is the temp tree
-            // `by run` transpiled into — bpd inherits it from the wrapper and the debuggee inherits
-            // it from bpd. That is what lets the IDE name a program it cannot know the path of.
+            // `by run` transpiled into — the wrapper stands in that tree before it starts bpd, bpd
+            // inherits the directory and the debuggee inherits it from bpd. That is what lets the
+            // IDE name a program it cannot know the path of.
             //
             // Every key here is one `bpd_dap::Configuration` reads
             ByDebugBackend.BPD -> LaunchRequestArguments(
@@ -91,9 +93,32 @@ class ByDapLaunchArgumentsProvider : DapLaunchArgumentsProvider {
                 val launch = ByEnvironments.resolve(project, BY_BINARY)
                 val bpd = ByBpdExecutable.resolve(launch)
                     ?: throw ExecutionException(BasedPythonBundle.message("debug.bpd.error.notFound"))
-                ByDebugSetup.forBpd(bpd, launch?.env?.get("PYTHON") ?: DEFAULT_PYTHON)
+                ByDebugSetup.forBpd(bpd, interpreterOf(launch))
             }
         }
+    }
+
+    /**
+     * The interpreter the debuggee runs on: the one the project's environment holds.
+     *
+     * The wrapper passes `by run`'s version probe through to this, and bpd starts the program with
+     * it, so getting it wrong is not cosmetic — bpd needs PEP 669 and refuses anything below 3.13.
+     *
+     * It used to read `PYTHON` off the launch and fall back to `python3`, and that fallback was
+     * always the answer: [dev.basedpython.pycharm.env.ByEnvironments.activationEnv] sets
+     * `VIRTUAL_ENV`, `PATH` and `PYTHONHOME` and has never set `PYTHON`. It worked only because
+     * the venv's `bin` is first on the `PATH` it does set, so the bare name happened to resolve
+     * inside the venv — and where it did not, the session got the machine's `python3`, which is
+     * routinely a 3.9 that bpd cannot debug at all. Naming the venv's own interpreter is the same
+     * answer without the coincidence.
+     *
+     * `PYTHON` is still read first, so an explicitly configured interpreter still wins, and
+     * `python3` remains the last resort for a launch backed by no venv at all.
+     */
+    private fun interpreterOf(launch: ByLaunch?): String {
+        launch?.env?.get("PYTHON")?.takeIf { it.isNotBlank() }?.let { return it }
+        launch?.venvRoot?.let { return ByEnvironments.venvBinary(it, PYTHON_BINARY).toString() }
+        return DEFAULT_PYTHON
     }
 
     /**
@@ -116,8 +141,11 @@ class ByDapLaunchArgumentsProvider : DapLaunchArgumentsProvider {
         /** The shim `by run` writes into its build directory and starts the program through. */
         private const val BY_RUNNER = "_by_runner.py"
 
-        /** What `by run` falls back to when `PYTHON` names nothing. */
+        /** The last resort, for a launch backed by no environment to name one from. */
         private const val DEFAULT_PYTHON = "python3"
+
+        /** The interpreter's name inside a venv's `bin` / `Scripts`. */
+        private const val PYTHON_BINARY = "python"
 
         /** The binary whose directory a sibling `bpd` is looked for in. */
         private const val BY_BINARY = "by"
