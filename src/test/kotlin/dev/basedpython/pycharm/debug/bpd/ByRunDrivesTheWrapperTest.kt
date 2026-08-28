@@ -63,12 +63,22 @@ class ByRunDrivesTheWrapperTest {
         return script
     }
 
-    /** A stand-in `bpd dap --listen` that announces and exits, so `by run` finishes. */
-    private fun announcer(dir: Path): Path {
+    /**
+     * A stand-in `bpd dap --listen` that announces and exits, so `by run` finishes.
+     *
+     * It first writes down what it can see from where it was started, into [saw]. That has to
+     * happen here rather than in the assertions: `by run` deletes the transpiled tree as soon as
+     * the program ends, and the program is this script — so by the time the test looks, the
+     * directory the real bpd would be sitting in no longer exists.
+     */
+    private fun announcer(dir: Path, saw: Path): Path {
         val script = dir.resolve("bpd")
         Files.writeString(
             script,
             "#!/bin/sh\n" +
+                """printf 'pwd %s\n' "${'$'}PWD" > "$saw"""" + "\n" +
+                """if [ -f _by_runner.py ]; then echo 'runner yes' >> "$saw";""" +
+                """ else echo 'runner no' >> "$saw"; fi""" + "\n" +
                 """echo '{"listening":{"host":"127.0.0.1","port":51234,""" +
                 """"header":"x-bpd-token","token":"tok"}}'""" + "\n",
         )
@@ -94,14 +104,18 @@ class ByRunDrivesTheWrapperTest {
 
         val probes = dir.resolve("probes")
         val record = dir.resolve("record")
-        val process = ProcessBuilder(by.toString(), "run", "demo")
+        val saw = dir.resolve("bpd-saw")
+        // `--python`, not the `PYTHON` variable: `by run` resolves the project's own environment
+        // first and reads the variable only below that, so in any project with a `.venv` the
+        // variable is never consulted. The variable is set as well, exactly as the plugin sets
+        // both, so this also pins that the two together never fight.
+        val process = ProcessBuilder(by.toString(), "run", "--python", wrapper.toString(), "demo")
             .directory(dir.toFile())
             .redirectErrorStream(true)
             .apply {
-                // the one variable `by run` reads its interpreter out of
                 environment()["PYTHON"] = wrapper.toString()
                 environment()[ByBpdWrapper.ENV_PYTHON] = passthrough(dir, probes).toString()
-                environment()[ByBpdWrapper.ENV_BPD] = announcer(dir).toString()
+                environment()[ByBpdWrapper.ENV_BPD] = announcer(dir, saw).toString()
                 environment()[ByBpdWrapper.ENV_PORT] = "51234"
                 environment()[ByBpdWrapper.ENV_RECORD] = record.toString()
             }
@@ -126,19 +140,40 @@ class ByRunDrivesTheWrapperTest {
             ByBpdRecord.parse(Files.readString(record)),
         ) { "the record was:\n${Files.readString(record)}\n`by run` said:\n$output" }
 
+        // by name rather than by whole path: `by run` used to name the shim relative to the tree
+        // it had chdir'd into and now names it absolutely, and either is fine — the wrapper stands
+        // where the shim is, so the launch request's relative `_by_runner.py` resolves either way
         assertEquals(
             "_by_runner.py",
-            ready.argv.firstOrNull(),
+            ready.argv.firstOrNull()?.let { Path.of(it).fileName.toString() },
             "`by run` no longer starts the program through the runner shim: ${ready.argv}",
         )
         assertTrue(
             ready.argv.contains("demo"),
             "the module is what `by run` forwards after the shim: ${ready.argv}",
         )
-        // the map lives in that directory, and it is why bpd has to be started from inside it
+
+        // 3. the heart of it: bpd was started *in* the transpiled tree, not in the project. The
+        //    source map lives in that tree and the launch request names the program relative to
+        //    it, so a bpd started anywhere else launches nothing at all. `by run` used to put the
+        //    program there itself and now runs from the project root, so the wrapper is what
+        //    guarantees this — which is exactly why it is worth a test that drives the real `by`
+        val seen = if (Files.exists(saw)) Files.readString(saw) else ""
+        assertTrue(
+            seen.contains("runner yes"),
+            "bpd could not see `_by_runner.py` from where it was started, so the launch " +
+                "request's relative program name resolves to nothing. it saw:\n$seen",
+        )
+        // and the directory the wrapper recorded is the one bpd really stood in — the record is
+        // what the IDE reads, so a record naming somewhere else would be a lie it acts on
+        assertTrue(
+            seen.contains("pwd ${ready.cwd}\n"),
+            "the record says bpd was started in ${ready.cwd}, but it saw:\n$seen",
+        )
         assertTrue(
             Path.of(ready.cwd) != dir,
-            "`by run` used to transpile into a temp directory of its own; it ran in ${ready.cwd}",
+            "bpd was started in the project directory rather than the tree `by run` transpiled " +
+                "into: ${ready.cwd}",
         )
     }
 }

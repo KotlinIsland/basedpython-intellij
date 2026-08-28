@@ -53,6 +53,31 @@ class ByArgumentsTest {
     }
 
     @Test
+    fun `the debugger's flags come before the module, never after it`() {
+        // `by run` forwards everything after the module to the program, so a `--python` behind it
+        // would reach the debuggee as an argument instead of `by` as an option — and the wrapper
+        // would never be started at all.
+        val args = byArguments(
+            subcommand = "run",
+            pythonVersionFlag = "--min-version",
+            pythonVersion = "3.14",
+            subcommandArgs = listOf("main", "--user-flag"),
+            extraArgs = "",
+            infrastructureArgs = listOf("--python", "/tmp/bpd-python"),
+        )
+        assertEquals(
+            listOf("run", "--min-version", "3.14", "--python", "/tmp/bpd-python", "main", "--user-flag"),
+            args,
+        )
+    }
+
+    @Test
+    fun `a run with no debugger attached carries no extra flags`() {
+        val args = byArguments("run", "--min-version", "3.14", listOf("main"), "")
+        assertEquals(listOf("run", "--min-version", "3.14", "main"), args)
+    }
+
+    @Test
     fun `extra args come last and are split like a shell`() {
         val args = byArguments("run", "--min-version", "3.14", listOf("main"), "--soundness none")
         assertEquals(listOf("run", "--min-version", "3.14", "main", "--soundness", "none"), args)

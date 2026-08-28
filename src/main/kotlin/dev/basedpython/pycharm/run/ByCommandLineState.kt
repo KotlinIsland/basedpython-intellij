@@ -57,6 +57,21 @@ abstract class ByCommandLineState(
      */
     val infrastructureEnv: MutableMap<String, String> = linkedMapOf()
 
+    /**
+     * Flags the infrastructure adds to the subcommand, written by the same hook and for the same
+     * reason as [infrastructureEnv].
+     *
+     * A command line rather than more environment because the environment is no longer enough:
+     * `by run` resolves the project's interpreter from the project itself and reads `$PYTHON` only
+     * below that, so the bpd backend names its wrapper here as `--python` — the one place that
+     * outranks discovery. See [dev.basedpython.pycharm.debug.bpd.ByBpdWrapper].
+     *
+     * These land *before* the positionals, which is load-bearing: `by run` forwards everything
+     * after the module to the program, so a flag placed after it would be the program's argument
+     * rather than `by`'s.
+     */
+    val infrastructureArgs: MutableList<String> = mutableListOf()
+
     /** Directories to put in front of `PYTHONPATH`; see [composePythonPath]. */
     val pythonPathPrefix: MutableList<String> = mutableListOf()
 
@@ -135,6 +150,7 @@ abstract class ByCommandLineState(
         pythonVersion = options.pythonVersion,
         subcommandArgs = buildSubcommandArgs(),
         extraArgs = options.extraArgs,
+        infrastructureArgs = infrastructureArgs,
     )
 
     /**
@@ -204,6 +220,10 @@ internal fun composePythonPath(prefixes: List<String>, existing: String?): Strin
  *
  * A blank [pythonVersion], or a null [pythonVersionFlag] for a subcommand that takes no such flag,
  * emits nothing.
+ *
+ * [infrastructureArgs] are the debugger's own flags. They go with the version flag, ahead of the
+ * positionals, because `by run` forwards everything after the module to the program — a
+ * `--python` behind it would reach the debuggee as an argument instead of `by` as an option.
  */
 internal fun byArguments(
     subcommand: String,
@@ -211,6 +231,7 @@ internal fun byArguments(
     pythonVersion: String,
     subcommandArgs: List<String>,
     extraArgs: String,
+    infrastructureArgs: List<String> = emptyList(),
 ): List<String> = buildList {
     add(subcommand)
     val version = pythonVersion.trim()
@@ -218,6 +239,7 @@ internal fun byArguments(
         add(pythonVersionFlag)
         add(version)
     }
+    addAll(infrastructureArgs)
     addAll(subcommandArgs)
     if (extraArgs.isNotBlank()) addAll(ParametersListUtil.parse(extraArgs))
 }
