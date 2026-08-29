@@ -1,6 +1,10 @@
 <!-- Plugin Configuration File. Read more: https://plugins.jetbrains.com/docs/intellij/plugin-configuration-file.html -->
 <idea-plugin>
-    <id>dev.basedpython.intellij</id>
+    <!-- Fixed forever once published: Marketplace keys the plugin on this and never lets it change.
+         Not `.pycharm` and not `.intellij`, however well either would read — the plugin structure
+         verifier splits the ID on `.` and rejects any component that is a JetBrains product name
+         (PluginIdVerifier.PRODUCT_ID_RESTRICTED_WORDS), so both are upload errors. -->
+    <id>dev.basedpython.ide</id>
     <name>basedpython</name>
     <vendor url="https://basedpython.dev">basedpython</vendor>
 
