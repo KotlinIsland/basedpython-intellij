@@ -600,28 +600,62 @@ started on is always refused. That is not the shape a session here has — `by r
 `_by_runner.py`, and everything the user wrote is an imported module whose body has already returned
 — but it is what you will see if you try this against a bare `bpd launch script.py`.
 
-### `.by` is watched, and refused
+### nothing you edit is the file that is running
 
-A `.by` file cannot be reloaded, and the reason is not the debugger's. The code the interpreter
-compiled is never the `.by` — it is the python `by run` transpiled it to, in a temp directory it
-deletes when the program ends — so handing bpd a `.by` would be asking it to replace code no
-interpreter has ever seen. Nor is producing the replacement bpd's to do: giving the running build
-the edit means transpiling that one file again **into the tree the program is running from**, with
-its line table and its digests, and `by transpile` emits the python and no line table. Written
-without the map, the `_by_sourcemap.py` beside the generated file would describe the file it used to
-be — bpd verifies it against a digest of both artefacts and would then, correctly, refuse to show
-any of that file's source. A silently wrong line is the one outcome this whole feature exists to
-prevent, so the map is not optional and the plugin cannot invent it.
+Under `by run` the program runs out of a tree in a temp directory, and every module in it arrived
+there from the project: a `.by` because it was **transpiled**, a hand-written `.py` because it was
+**copied**. `sys.path[0]` is that tree. Measured rather than argued — a project with a `helper.py`
+beside its `main.by` reports both `__file__`s inside `/var/folders/.../T/.tmpXXXX/`.
 
-bpd names the same gap from its own side: `replaceCode` is named as generated python "rather than
-accepting a `.by` and doing something adjacent to what was asked". The missing piece is a `by` that
-can transpile one file with its line table into a chosen directory; when it exists, the refusal in
-`ByHotSwap.refuse` becomes a transpile and a `bpd/replaceCode` on the generated path.
+So both kinds of file take the same route. That was not always what this said. A `.by` used to be
+refused, with a long and correct explanation of why the debugger could not transpile it; what was
+wrong was the other half of the argument, which held that a plain `.py` needed none of that because
+`by run` "copies nothing else". It copies everything else — `stage_verbatim` walks the project root
+— so the `.py` path had quietly stopped working too, answering `NotLoaded` about a file that was
+plainly running. The refusal was the only part anybody could see.
 
-Until then a `.by` edit is refused with that reason and a session restart is the way to run it. It
-is still **watched**, deliberately: the first half of this feature is knowing that the source on
-screen is not the code that is running, and that is exactly as true of the file the whole project is
-written in.
+### the route a press of the button takes
+
+1. **Save.** The platform's collector tracks *documents*; what gets transpiled and what bpd compiles
+   are files. Nothing in the platform saves in between, so without this an unsaved edit asked bpd to
+   replace the file with the content it already had — and got back `applied`, with nothing changed,
+   which the toolbar then reported as a successful reload. The user was told the process matched
+   their screen when it did not, which is the one outcome this feature exists to prevent.
+2. **Ask `by` what the tree should now hold**, through the language server, one file at a time —
+   `by/transpileForBuild`, carrying the build directory the wrapper recorded. It answers with the
+   generated python, the whole rewritten `_by_sourcemap.py`, and both digests. It **writes nothing**.
+3. **Write it into the tree**, remembering every byte replaced.
+4. **One `bpd/replaceCode`** over everything written, with `remap` set.
+5. **On any refusal, put the tree back.** A tree holding code the process is not running is a tree
+   that lies: bpd reads the map out of it to say which `.by` line a frame is on, and reads the
+   generated python to prove a frame's code object is still in it. bpd is honest about the mismatch
+   rather than silent — `not_the_same_code` — but it would be a session degraded by a write the
+   *plugin* chose to make, on a file the user only edited in the editor.
+
+### why the server and not `by` on the command line
+
+Measured on a 97-file project at `by` HEAD: a full `by build` is 24.9 seconds, of which `by check`
+is 8.5. A subprocess would pay project discovery and that whole check on every press of the button.
+The language server has already paid both — it is holding the project database, warm, because it has
+been answering diagnostics for this project all along — so what is left is one file's emit, about
+165ms.
+
+It is also the same binary: the server is started as `by server` from the configured `by`. Where it
+is *not* the same — a user pointing the two at different builds — `_by_build.json` in the tree
+records which `by` wrote it and the server refuses rather than emitting bytes the build would not
+have. That record is also why the configuration cannot drift: `by run` takes its target version from
+the interpreter it probed while `by build` takes it from the project, so a re-stage that re-derived
+the configuration would emit different code in exactly the case that matters.
+
+### why the map moves in the same message
+
+Re-staging rewrites `_by_sourcemap.py` beside the generated python, so every `.by` breakpoint is
+armed on a generated line that came out of the table it replaced. Both have to land before any
+`__code__` is assigned — and the agent holds the GIL for the whole of one message and no longer, so
+a debugger that sent the tables, the breakpoints and the replacement as three messages would leave
+two windows in which another thread's logpoint is mapped through a table describing code it is not
+running. One message has no window in it. bpd owns that ordering rather than the client.
+
 
 ## Log points
 

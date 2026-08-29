@@ -1,6 +1,7 @@
 package dev.basedpython.pycharm.debug.bpd
 
 import com.google.gson.JsonParser
+import com.intellij.openapi.diagnostic.Logger
 
 /**
  * What [ByBpdWrapper] and `bpd` between them wrote to the record file.
@@ -39,6 +40,34 @@ sealed interface ByBpdRecord {
     data class Incomplete(val why: String) : ByBpdRecord
 
     companion object {
+
+        private val LOG = Logger.getInstance(ByBpdRecord::class.java)
+
+        /**
+         * The tree `by run` chose, out of a record file that may still be half written.
+         *
+         * The wrapper writes its lines before `bpd` appends its announcement, so the directory is
+         * readable from the moment the program starts — earlier than a whole [Ready] is. That
+         * matters because this is asked long after the launch, when nothing is waiting for
+         * anything: a session that is running has a complete record, and one that never started has
+         * no directory to give.
+         *
+         * Null rather than an exception for every way it can be absent. A missing directory costs
+         * the hot reload button; it must never cost the session that asked.
+         */
+        fun buildDirectoryOf(record: java.nio.file.Path): String? =
+            try {
+                record.takeIf { java.nio.file.Files.isReadable(it) }
+                    ?.let { java.nio.file.Files.readString(it) }
+                    ?.lineSequence()
+                    ?.firstOrNull { it.startsWith(ByBpdWrapper.CWD_PREFIX) }
+                    ?.removePrefix(ByBpdWrapper.CWD_PREFIX)
+                    ?.takeIf { it.isNotBlank() }
+            } catch (e: java.io.IOException) {
+                LOG.info("could not read the bpd record at $record", e)
+                null
+            }
+
         /**
          * Read a record, or say what is missing from it.
          *

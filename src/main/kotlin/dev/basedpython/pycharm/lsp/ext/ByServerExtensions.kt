@@ -48,7 +48,79 @@ interface ByServerExtensions {
     fun explainTranspilation(
         args: ByExplainTranspilationParams,
     ): CompletableFuture<List<ByTranspilationNote>?>
+
+    /**
+     * What one file's slot in a running build's tree should now contain.
+     *
+     * Asked of the server rather than of `by` on the command line, and the reason is measured: a
+     * full build of a 97-file project takes 24.9 seconds, of which `by check` is 8.5. A subprocess
+     * would pay project discovery and that whole check on every press of a button. The server has
+     * already paid both — it holds the project database, warm — so what is left is one file's emit.
+     *
+     * It **writes nothing**. The answer is the bytes and where they go, and the caller writes them,
+     * because the caller is the only one that can undo that write together with the debugger
+     * request that follows it.
+     *
+     * A `null` answer means the server declined — language services are off, or the document has no
+     * file behind it. A response carrying [ByRestaged.refused] means it looked and would not: a tree
+     * built by a different `by`, a `--compiled` build whose modules are native extensions with no
+     * `__code__` to assign, or a file that does not check.
+     */
+    @JsonRequest("by/transpileForBuild")
+    fun transpileForBuild(args: ByTranspileForBuildParams): CompletableFuture<ByRestaged?>
 }
+
+/**
+ * Which file was edited, and which tree is running.
+ *
+ * Field names are the wire format and must match `ty_server`'s `TranspileForBuildParams`, which is
+ * `deny_unknown_fields`.
+ */
+data class ByTranspileForBuildParams(
+    val textDocument: TextDocumentIdentifier,
+    /**
+     * The build tree the program is running out of.
+     *
+     * The IDE knows this and the server cannot: `by run` chooses a temp directory, and the only
+     * thing that sees the name is the process that started the program.
+     */
+    val buildDirectory: String,
+)
+
+/**
+ * One file's slot in the tree, or why it will not be recomputed.
+ *
+ * One type for both answers because the server sends one untagged shape: [refused] is set on a
+ * refusal and [generated] on a success, and exactly one of them is.
+ */
+data class ByRestaged(
+    /** Where the bytes go: absolute, inside the build directory. */
+    val generated: String? = null,
+    /** The full text to write there. */
+    val content: String? = null,
+    /**
+     * The full new text of `_by_sourcemap.py`, or null when nothing about the map changed.
+     *
+     * Null for every file the build copied rather than transpiled — a hand-written `.py` has no
+     * entry in the map, because nothing generated it.
+     */
+    val sourcemap: String? = null,
+    /** sha-256 of the source this was produced from. */
+    val byDigest: String? = null,
+    /** sha-256 of [content]. */
+    val pyDigest: String? = null,
+    /**
+     * Whether these bytes differ from what the tree already holds.
+     *
+     * False is the file already being what the process is running, which is a different fact from
+     * nothing being replaceable and must not be shown as one.
+     */
+    val changed: Boolean = false,
+    /** Why it will not be recomputed, written for a user. Null when it was. */
+    val refused: String? = null,
+    /** What the checker said, when that is why. */
+    val diagnostics: List<String> = emptyList(),
+)
 
 /** The document to look through. */
 data class ByExplainTranspilationParams(val textDocument: TextDocumentIdentifier)
