@@ -37,6 +37,7 @@ import com.intellij.xdebugger.frame.XDropFrameHandler
 import com.intellij.xdebugger.frame.XSuspendContext
 import dev.basedpython.pycharm.actions.ByCli
 import dev.basedpython.pycharm.debug.bpd.ByBpdConnection
+import dev.basedpython.pycharm.debug.bpd.ByBpdRecord
 import dev.basedpython.pycharm.debug.bpd.ByBpdWrapper
 import dev.basedpython.pycharm.debug.bpd.ByDebugBackend
 import dev.basedpython.pycharm.run.ByCommandLineState
@@ -255,6 +256,11 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
         // be wrong: it costs at most a duplicate of output the console already has, and a hot
         // reload button for a session nothing could have been reloaded in.
         backend = setup?.backend,
+        // Read here rather than threaded down from `ByBpdConnection`, which already had it: the
+        // record file outlives the connection and is the only durable record of the temp directory
+        // `by run` chose. A session that never got that far has none, and hot reload is offered for
+        // bpd sessions only — so null here is a session that could not have reloaded anything.
+        buildDirectory = setup?.let { ByBpdRecord.buildDirectoryOf(it.infoFile) },
     )
 
     /**
@@ -368,6 +374,15 @@ internal class ByDapXDebugProcess(
     private val startRequestType: DapStartRequest,
     private val startRequestArguments: Map<String, Any?>,
     val backend: ByDebugBackend?,
+    /**
+     * The tree `by run` transpiled into and is running the program out of.
+     *
+     * The one thing about a bpd session the IDE cannot work out for itself — the directory is
+     * chosen inside `by run` — and the thing hot reload cannot work without: it is where a
+     * re-staged file has to be written for the interpreter to be given it. Null for a session that
+     * is not one of `by run`'s.
+     */
+    val buildDirectory: String?,
 ) : DapXDebugProcess(
     session,
     dapDebugSession,

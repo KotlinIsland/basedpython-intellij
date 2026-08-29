@@ -10,8 +10,26 @@ import com.google.gson.JsonObject
  * understand.
  */
 data class ByReplaceCodeArguments(
-    /** The file whose code to replace, on the debuggee's own filesystem. */
-    val file: String,
+    /**
+     * The files whose code to replace, on the debuggee's own filesystem.
+     *
+     * A list, and bpd applies it at once or not at all: every refusal of every file is collected
+     * before anything is written. That is the rule one file already had — a process half way between
+     * two versions produces evidence about neither — one level up, and it is what re-staging a
+     * basedpython build needs, because one edit can change the python emitted for several modules.
+     */
+    val files: List<String>,
+    /**
+     * Whether `_by_sourcemap.py` was rewritten beside the code being replaced.
+     *
+     * Set for every re-stage, which is every hot reload of a `by run` session: the map moved, so the
+     * generated lines every `.by` breakpoint is armed on came out of a table that no longer
+     * describes the tree. bpd reads it again, installs it and translates the whole breakpoint set
+     * through it **in this same message**, before any `__code__` is assigned — the agent holds the
+     * GIL for the whole of one message and no longer, so anything split across two would leave a
+     * window in which another thread's logpoint is mapped through the old table.
+     */
+    val remap: Boolean = false,
     /**
      * Whether to apply the replacement even where a frame is running the code being replaced.
      *
@@ -46,43 +64,33 @@ data class ByReplaceCodeArguments(
  * were, which is what tells a caller whether the console is about to explain itself.
  */
 internal data class ByReplaced(
-    /** The file that was asked about, as it was named. */
-    val file: String?,
+    /** What became of each file that was named, in the order bpd answered about them. */
+    val files: List<ByReplacedFile>,
+    /** What the map reload installed, when one was asked for and happened. */
+    val remapped: ByRemapped?,
     /**
-     * Whether every function object in the process now runs the code on disk.
+     * The lines breakpoints are bound to now, for every breakpoint the replacement rebound.
      *
-     * Read from the tag bpd's `Replacement` serialises with, rather than inferred from whether some
-     * other key parsed — that is how a shape change becomes a silent wrong answer instead of a
-     * missing one.
-     */
-    val applied: Boolean,
-    /**
-     * The code objects that moved, one entry each.
+     * Of the whole build rather than of one file, which is what it became when a replacement could
+     * carry several: binding walks down from each file's registered root code object, so a
+     * replacement that swapped several roots resolved every breakpoint of the build again.
      *
-     * Empty on an applied replacement means the file on disk already **was** what the process is
-     * running: nothing needed replacing, which is a different fact from nothing being replaceable
-     * and must not be shown as one.
-     */
-    val changed: List<ByRebound>,
-    /** `co_qualname` of the file's functions whose code is unchanged. */
-    val unchanged: List<String>,
-    /**
-     * The lines breakpoints of this file are bound to now, for every breakpoint the replacement
-     * rebound.
-     *
-     * Binding walks down from the file's registered root code object, so after a replacement the
-     * old root describes code nothing will execute — bpd swaps it and resolves the whole set again.
-     * A breakpoint is a *line of a file*, so an edit above it means the same request now names a
-     * different statement, and where it ended up is worth saying rather than leaving to be
-     * discovered.
+     * A breakpoint is a *line of a file*, so an edit above one means the same request now names a
+     * different statement, and where it ended up is worth saying rather than leaving to be found.
      *
      * The line only, not bpd's `Resolved` whole: the id on it is the one bpd's own breakpoint set
      * uses, which is not the identity the IDE's gutter knows a breakpoint by.
      */
     val rebound: List<Int>,
-    /** How many things stood in the way, when it was refused. */
-    val refusals: Int,
 ) {
+    /**
+     * Whether the process now runs the code on disk for **every** file that was named.
+     *
+     * All of them, because bpd applies the set that way: one refusal anywhere leaves the process
+     * untouched, so a partial reading of this would be a claim no state of the process matches.
+     */
+    val applied: Boolean get() = files.isNotEmpty() && files.all { it.applied }
+
     companion object {
 
         /** The value of `Replacement`'s serde tag when the replacement was made. */
@@ -97,17 +105,68 @@ internal data class ByReplaced(
          * newer bpd changed a shape.
          */
         fun parse(body: JsonObject?): ByReplaced? {
-            val outcome = body?.obj("outcome") ?: return null
-            val applied = outcome.string("replaced") == APPLIED
+            val answered = body?.array("files") ?: return null
             return ByReplaced(
-                file = body.string("file"),
-                applied = applied,
-                changed = outcome.array("changed")?.mapNotNull { ByRebound.parse(it) }.orEmpty(),
-                unchanged = outcome.strings("unchanged"),
-                rebound = outcome.array("rebound")
-                    ?.mapNotNull { it.obj()?.obj("binding")?.int("line") }.orEmpty(),
-                refusals = outcome.array("because")?.size() ?: 0,
+                files = answered.mapNotNull { ByReplacedFile.parse(it) },
+                remapped = body.obj("remapped")?.let { ByRemapped.parse(it) },
+                rebound = body.array("rebound")
+                    ?.mapNotNull { it.obj()?.obj("binding")?.int("line") }
+                    .orEmpty(),
             )
+        }
+
+        /** The tag test, shared by the one place that reads it. */
+        internal fun wasApplied(outcome: JsonObject?): Boolean =
+            outcome?.string("replaced") == APPLIED
+    }
+}
+
+/** What became of one file of a replacement. */
+internal data class ByReplacedFile(
+    /** The file that was asked about, as it was named. */
+    val file: String?,
+    /** Whether every function object in the process now runs the code on disk for it. */
+    val applied: Boolean,
+    /**
+     * The code objects that moved, one entry each.
+     *
+     * Empty on an applied replacement means the file on disk already **was** what the process is
+     * running: nothing needed replacing, which is a different fact from nothing being replaceable
+     * and must not be shown as one.
+     */
+    val changed: List<ByRebound>,
+    /** `co_qualname` of the file's functions whose code is unchanged. */
+    val unchanged: List<String>,
+    /** How many things stood in the way, when it was refused. */
+    val refusals: Int,
+) {
+    companion object {
+        fun parse(element: com.google.gson.JsonElement): ByReplacedFile? {
+            val entry = element.obj() ?: return null
+            val outcome = entry.obj("outcome")
+            return ByReplacedFile(
+                file = entry.string("file"),
+                applied = ByReplaced.wasApplied(outcome),
+                changed = outcome?.array("changed")?.mapNotNull { ByRebound.parse(it) }.orEmpty(),
+                unchanged = outcome?.strings("unchanged").orEmpty(),
+                refusals = outcome?.array("because")?.size() ?: 0,
+            )
+        }
+    }
+}
+
+/**
+ * What reading the build's map again installed.
+ *
+ * Worth reporting because nothing else says it and because it is the half a user cannot see: the
+ * tables moved under every `.by` line of the build a moment before any code was replaced.
+ */
+internal data class ByRemapped(val files: Int, val breakpoints: Int) {
+    companion object {
+        fun parse(entry: JsonObject): ByRemapped? {
+            val files = entry.int("files") ?: return null
+            val breakpoints = entry.int("breakpoints") ?: return null
+            return ByRemapped(files, breakpoints)
         }
     }
 }
@@ -156,6 +215,27 @@ internal data class ByRebound(
  */
 internal fun ByReplaced.report(): String? {
     if (!applied) return null
+    return buildString {
+        remapped?.let {
+            append(
+                "read the build's source map again — ${it.files} file(s) in it, " +
+                    "${it.breakpoints} breakpoint(s) translated through it",
+            )
+            append('\n')
+        }
+        files.joinTo(this, "\n") { it.report() }
+        if (rebound.isNotEmpty()) {
+            append(
+                "\n${rebound.size} ${if (rebound.size == 1) "breakpoint" else "breakpoints"} of " +
+                    "the build bound again, now at line ${rebound.sorted().joinToString(", ")} — " +
+                    "an edit above a breakpoint means the same request names a different statement",
+            )
+        }
+    }
+}
+
+/** What one file's replacement changed, as a person reads it. */
+private fun ByReplacedFile.report(): String {
     val what = file?.substringAfterLast('/') ?: "the file"
     if (changed.isEmpty()) {
         return "$what already was the code the process is running; nothing needed replacing"
@@ -165,13 +245,9 @@ internal fun ByReplaced.report(): String? {
         append(changed.joinToString(", ") { it.describe() })
         append(" in $what")
         if (unchanged.isNotEmpty()) {
-            append("; ${unchanged.size} other ${if (unchanged.size == 1) "function" else "functions"} of it did not move")
-        }
-        if (rebound.isNotEmpty()) {
             append(
-                "; ${rebound.size} ${if (rebound.size == 1) "breakpoint" else "breakpoints"} of it " +
-                    "bound again, now at line ${rebound.sorted().joinToString(", ")} — an edit " +
-                    "above a breakpoint means the same request names a different statement",
+                "; ${unchanged.size} other ${if (unchanged.size == 1) "function" else "functions"} " +
+                    "of it did not move",
             )
         }
     }
