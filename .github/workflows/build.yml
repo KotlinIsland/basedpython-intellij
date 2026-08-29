@@ -90,6 +90,21 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      # verifyPluginStructure reports Marketplace's descriptor complaints and then lets the build
+      # pass, because the profile it runs under grades most of them as warnings. The upload API
+      # grades several of the same things as errors — a JetBrains product name anywhere in the
+      # plugin ID, for one — so a green build is not evidence the zip is uploadable unless the
+      # complaints are turned into a failure here. Cheap, and it runs without downloading an IDE.
+      - name: Verify plugin structure
+        run: |
+          set -o pipefail
+          ./gradlew verifyPluginStructure --console=plain | tee structure.log
+          if grep -q "Invalid plugin descriptor" structure.log; then
+            echo "::error::Marketplace would reject this descriptor:" >&2
+            grep "Invalid plugin descriptor" structure.log >&2
+            exit 1
+          fi
+
       # Failure levels are configured in build.gradle.kts, not here.
       - name: Run plugin verification
         run: ./gradlew verifyPlugin
