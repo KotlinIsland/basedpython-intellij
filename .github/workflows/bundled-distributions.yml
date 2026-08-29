@@ -191,7 +191,7 @@ jobs:
           done
           grep -o "<version>[^<]*</version>" /tmp/plugin.xml | head -1
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: basedpython-plugin-${{ matrix.platform }}
           path: build/distributions/*-${{ matrix.platform }}.zip
