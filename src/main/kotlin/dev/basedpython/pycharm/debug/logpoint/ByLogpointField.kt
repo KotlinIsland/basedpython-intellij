@@ -3,13 +3,14 @@ package dev.basedpython.pycharm.debug.logpoint
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.actionSystem.CommonShortcuts
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.components.Service
+import com.intellij.openapi.components.service
 import com.intellij.openapi.editor.Inlay
 import com.intellij.openapi.editor.ex.EditorEx
 import com.intellij.openapi.editor.impl.EditorEmbeddedComponentManager
 import com.intellij.openapi.project.DumbAwareAction
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
-import com.intellij.openapi.util.Key
 import com.intellij.ui.EditorTextField
 import com.intellij.ui.JBColor
 import com.intellij.ui.ShadowJava2DBorder
@@ -33,6 +34,8 @@ import javax.swing.JComponent
 import kotlin.math.ceil
 import java.awt.event.FocusAdapter
 import java.awt.event.FocusEvent
+import java.util.Collections
+import java.util.WeakHashMap
 
 /**
  * The `Log:` box a log point shows in its gap, holding the expression it logs.
@@ -161,20 +164,22 @@ class ByLogpointField private constructor(
         /**
          * The boxes open in [editor], keyed by their log point.
          *
-         * Held on the editor rather than on the breakpoint, which is what a closed and reopened tab
-         * used to trip over: a breakpoint outlives every editor showing it, so a field parked on the
+         * Kept per editor rather than per breakpoint, which is what a closed and reopened tab used
+         * to trip over: a breakpoint outlives every editor showing it, so a field parked on the
          * breakpoint was still there — disposed with the old editor — when the new one asked, and the
          * new editor got nothing but the gutter icon. It is also simply the truth, since one log
          * point in a split view is two boxes.
+         *
+         * In [ByLogpointFieldRegistry] rather than on the editor's own user data, where this lived:
+         * an `Editor` is the platform's and outlives a plugin unload, so a box left on one keeps
+         * this plugin's classloader alive and disabling the plugin reports *"didn't unload fully"*.
          */
         private fun fieldsIn(editor: EditorEx): MutableMap<XLineBreakpoint<*>, ByLogpointField> =
-            editor.getUserData(FIELDS) ?: mutableMapOf<XLineBreakpoint<*>, ByLogpointField>()
-                .also { editor.putUserData(FIELDS, it) }
+            editor.project?.service<ByLogpointFieldRegistry>()?.fieldsIn(editor) ?: mutableMapOf()
 
         private fun expressionOf(text: String) = XDebuggerUtil.getInstance()
             .createExpression(text, BasedPythonLanguage, null, EvaluationMode.EXPRESSION)
 
-        private val FIELDS = Key.create<MutableMap<XLineBreakpoint<*>, ByLogpointField>>("basedpython.logpoint.fields")
         private const val HISTORY_ID = "basedpython-logpoint"
 
         /** IntelliJ IDEA's own `LogpointEditorColors`, so the two do not look like different features. */
@@ -366,5 +371,33 @@ class ByLogpointField private constructor(
             val captionSize = caption.preferredSize
             caption.setBounds(insets.left + JBUI.scale(CAPTION_INDENT), 0, captionSize.width, captionSize.height)
         }
+    }
+}
+
+/**
+ * Every [ByLogpointField] open in this project, by the editor showing it.
+ *
+ * Two jobs, both of which the editor's own user data could not do. It holds the boxes somewhere
+ * that dies with the plugin, so disabling basedpython does not leave an `Editor` — which is the
+ * platform's, and survives — pointing at a component whose class has been unloaded. And disposing
+ * it closes the boxes still on screen, which is the honest thing to do: a `Log:` box is this
+ * plugin's, and without the plugin it is a text field that commits to nothing.
+ *
+ * Editors are held weakly, so a closed tab takes its entry with it exactly as before.
+ */
+@Service(Service.Level.PROJECT)
+internal class ByLogpointFieldRegistry : Disposable {
+
+    private val byEditor: MutableMap<EditorEx, MutableMap<XLineBreakpoint<*>, ByLogpointField>> =
+        Collections.synchronizedMap(WeakHashMap())
+
+    fun fieldsIn(editor: EditorEx): MutableMap<XLineBreakpoint<*>, ByLogpointField> =
+        synchronized(byEditor) { byEditor.getOrPut(editor) { mutableMapOf() } }
+
+    override fun dispose() {
+        // Copied out first: closing a box removes it from the map it was found in.
+        val open = synchronized(byEditor) { byEditor.values.flatMap { it.values.toList() } }
+        open.forEach { it.close() }
+        synchronized(byEditor) { byEditor.clear() }
     }
 }

@@ -1,7 +1,9 @@
 package dev.basedpython.pycharm.docs.render
 
-import com.intellij.openapi.util.Key
+import com.intellij.openapi.components.Service
+import com.intellij.openapi.components.service
 import com.intellij.openapi.util.TextRange
+import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiFile
 import dev.basedpython.pycharm.lsp.ByServerDocuments
 import dev.basedpython.pycharm.lsp.askBy
@@ -11,6 +13,8 @@ import org.eclipse.lsp4j.DocumentSymbolParams
 import org.eclipse.lsp4j.SemanticTokensParams
 import org.eclipse.lsp4j.SymbolInformation
 import org.eclipse.lsp4j.jsonrpc.messages.Either
+import java.util.Collections
+import java.util.WeakHashMap
 
 /**
  * Where a file's docstrings are, according to `by`.
@@ -44,7 +48,7 @@ import org.eclipse.lsp4j.jsonrpc.messages.Either
  *
  * ## Caching and threading
  *
- * A successful result is kept on the [PsiFile] against the document's modification stamp. The
+ * A successful result is kept in [ByDocstringSpanCache] against the document's modification stamp. The
  * rendering pass runs on every PSI change and would otherwise ask twice per keystroke; with the
  * stamp it asks once per edit.
  *
@@ -61,14 +65,6 @@ internal object ByDocstringSpans {
      */
     private const val TIMEOUT_MS = 3_000
 
-    /**
-     * Kept on the [com.intellij.openapi.vfs.VirtualFile] rather than the [PsiFile]: a `PsiFile` is a
-     * view that the platform is free to drop and rebuild, and an answer that disappears with it is
-     * an answer the gutter control cannot find when it goes looking.
-     */
-    private val CACHE = Key.create<Cached>("basedpython.docstring.spans")
-
-    private class Cached(val stamp: Long, val spans: List<ByDocstring>)
 
     /**
      * The file's docstrings, asking the server when the cached answer is stale or missing.
@@ -80,12 +76,13 @@ internal object ByDocstringSpans {
         val document = file.viewProvider.document ?: return emptyList()
         val virtualFile = file.originalFile.virtualFile ?: return emptyList()
         val stamp = document.modificationStamp
-        virtualFile.getUserData(CACHE)?.takeIf { it.stamp == stamp }?.let { return it.spans }
+        val cache = file.project.service<ByDocstringSpanCache>()
+        cache.spans(virtualFile, stamp)?.let { return it }
 
         // A failure is never stored: it means the server could not answer yet, and
         // `ByRenderedDocsRefresher` will have the pass ask again once it can.
         val spans = query(file) ?: return emptyList()
-        virtualFile.putUserData(CACHE, Cached(stamp, spans))
+        cache.remember(virtualFile, stamp, spans)
         return spans
     }
 
@@ -93,7 +90,7 @@ internal object ByDocstringSpans {
     fun cached(file: PsiFile): List<ByDocstring> {
         val stamp = file.viewProvider.document?.modificationStamp ?: return emptyList()
         val virtualFile = file.originalFile.virtualFile ?: return emptyList()
-        return virtualFile.getUserData(CACHE)?.takeIf { it.stamp == stamp }?.spans.orEmpty()
+        return file.project.service<ByDocstringSpanCache>().spans(virtualFile, stamp).orEmpty()
     }
 
     /** `null` when the server could not answer, which is not the same as a file with no docstrings. */
@@ -169,5 +166,35 @@ internal object ByDocstringSpans {
             }
         }
         return flat
+    }
+}
+
+/**
+ * What [ByDocstringSpans] last worked out, per file.
+ *
+ * Keyed weakly by [VirtualFile] rather than by [PsiFile]: a `PsiFile` is a view that the platform is
+ * free to drop and rebuild, and an answer that disappears with it is an answer the gutter control
+ * cannot find when it goes looking. Weakly, so an entry lasts exactly as long as the file it
+ * describes.
+ *
+ * A project service rather than the file's own user data, which is where this lived: user data set
+ * on a `VirtualFile` is never cleared when a plugin unloads, so a value of this plugin's own class
+ * left there keeps the plugin's classloader alive, and disabling the plugin reports *"didn't unload
+ * fully"*. A service is disposed with the plugin.
+ */
+@Service(Service.Level.PROJECT)
+internal class ByDocstringSpanCache {
+
+    private class Cached(val stamp: Long, val spans: List<ByDocstring>)
+
+    private val byFile: MutableMap<VirtualFile, Cached> =
+        Collections.synchronizedMap(WeakHashMap())
+
+    /** What was worked out for [file], if it was worked out at [stamp]. */
+    fun spans(file: VirtualFile, stamp: Long): List<ByDocstring>? =
+        byFile[file]?.takeIf { it.stamp == stamp }?.spans
+
+    fun remember(file: VirtualFile, stamp: Long, spans: List<ByDocstring>) {
+        byFile[file] = Cached(stamp, spans)
     }
 }

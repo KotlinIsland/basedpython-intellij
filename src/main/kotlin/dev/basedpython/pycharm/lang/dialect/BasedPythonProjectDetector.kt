@@ -1,7 +1,8 @@
 package dev.basedpython.pycharm.lang.dialect
 
+import com.intellij.openapi.components.Service
+import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.util.Key
 import com.intellij.openapi.vfs.VirtualFileManager
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import java.nio.file.Files
@@ -86,10 +87,6 @@ object BasedPythonProjectDetector {
      */
     fun isPythonProject(project: Project): Boolean = kind(project) != ProjectKind.OTHER
 
-    /** Project user data key holding the last scan and the VFS state it was taken at. */
-    private val CACHE = Key.create<Cached>("basedpython.projectKind")
-
-    private class Cached(val stamp: Long, val kind: ProjectKind)
 
     /**
      * The cached verdict for [project], rescanned when the VFS structure changes.
@@ -100,9 +97,11 @@ object BasedPythonProjectDetector {
      */
     fun kind(project: Project): ProjectKind {
         val stamp = VirtualFileManager.VFS_STRUCTURE_MODIFICATIONS.modificationCount
-        project.getUserData(CACHE)?.let { if (it.stamp == stamp) return it.kind }
+        // A disposed project has no services; the scan still answers, it just answers uncached.
+        val cache = if (project.isDisposed) null else project.service<BasedPythonProjectKindCache>()
+        cache?.kind(stamp)?.let { return it }
         val kind = scan(project)
-        project.putUserData(CACHE, Cached(stamp, kind))
+        cache?.remember(stamp, kind)
         return kind
     }
 
@@ -175,4 +174,29 @@ object BasedPythonProjectDetector {
         } catch (_: Exception) {
             null
         }
+}
+
+/**
+ * The last verdict [BasedPythonProjectDetector.kind] reached, and the VFS state it was taken at.
+ *
+ * A project service rather than `Project.putUserData`, which is where this lived: user data set on
+ * a `Project` is never cleared when a plugin unloads, so a value of this plugin's own class left
+ * there keeps the plugin's classloader alive, and disabling the plugin reports *"didn't unload
+ * fully"*. A service is disposed with the plugin — and a cache of where `by` might live is
+ * worthless across a reload anyway.
+ */
+@Service(Service.Level.PROJECT)
+internal class BasedPythonProjectKindCache {
+
+    @Volatile
+    private var cached: Cached? = null
+
+    private class Cached(val stamp: Long, val kind: ProjectKind)
+
+    /** The remembered verdict, if it was taken at [stamp]. */
+    fun kind(stamp: Long): ProjectKind? = cached?.takeIf { it.stamp == stamp }?.kind
+
+    fun remember(stamp: Long, kind: ProjectKind) {
+        cached = Cached(stamp, kind)
+    }
 }
