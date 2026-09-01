@@ -7,17 +7,20 @@ import com.intellij.xdebugger.XDebuggerManager
 import com.intellij.xdebugger.XDebuggerUtil
 import com.intellij.xdebugger.breakpoints.SuspendPolicy
 import com.intellij.xdebugger.breakpoints.XLineBreakpoint
-import com.intellij.xdebugger.breakpoints.XLineBreakpointAdditionalInfo
 import com.intellij.xdebugger.breakpoints.XLineBreakpointVerticalPlacement
 import com.intellij.xdebugger.evaluation.EvaluationMode
 import dev.basedpython.pycharm.debug.ByLineBreakpointType
 import dev.basedpython.pycharm.lang.BasedPythonLanguage
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import dev.basedpython.pycharm.testFramework.letContentHashingFinish
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import com.intellij.openapi.command.WriteCommandAction
+import javax.swing.JComponent
 
 /**
  * The `Log:` box, which is how a log point looks rather than a prompt that opens once.
@@ -39,13 +42,17 @@ class ByLogpointFieldTest {
 
     private fun logpointAt(line: Int, expression: String? = null): XLineBreakpoint<*> {
         fixture.configureByText("main.by", "def f(x):\n    return x\n")
-        val info = XLineBreakpointAdditionalInfo.Builder()
-            .setVerticalPlacement(XLineBreakpointVerticalPlacement.INTER_LINE)
-            .setSuspendPolicy(SuspendPolicy.NONE)
-            .apply { expression?.let { setLogExpressionIfEnabled(it) } }
-            .build()
+        val info = PlatformLogpointInfo.of(
+            XLineBreakpointVerticalPlacement.INTER_LINE,
+            SuspendPolicy.NONE,
+            expression?.let { ByLogpoints.expressionOf(it) },
+        )
         return breakpoints.addLineBreakpoint(type, fixture.file.virtualFile.url, line, null, info)
     }
+
+    /** See [letContentHashingFinish]: the re-indent test edits a document, and the platform notices. */
+    @AfterEach
+    fun letTheEditSettle() = letContentHashingFinish()
 
     private fun editor() = fixture.editor as EditorEx
 
@@ -143,5 +150,57 @@ class ByLogpointFieldTest {
     fun `a line the document does not have gets no box`() {
         val logpoint = logpointAt(99)
         assertNull(ByLogpointField.show(fixture.project, editor(), logpoint))
+    }
+
+    @Test
+    fun `the box starts where the code it logs starts`() {
+        // A block inlay is drawn at the left edge of the text whatever offset it is anchored to, so
+        // the box on an indented statement used to sit under the `def` of the line above it.
+        val logpoint = logpointAt(1, expression = "x")
+        val field = ByLogpointField.show(fixture.project, editor(), logpoint)!!
+
+        layOut(field.indented)
+
+        val code = editor().offsetToXY(editor().document.text.indexOf("return")).x
+        assertTrue(code > 0, "this fixture's `return` is indented, so it cannot start at the gutter")
+        assertEquals(code, field.component.x, "the box has to line up with the statement it logs")
+    }
+
+    @Test
+    fun `a box on an unindented line starts at the gutter`() {
+        val logpoint = logpointAt(0, expression = "x")
+        val field = ByLogpointField.show(fixture.project, editor(), logpoint)!!
+
+        layOut(field.indented)
+
+        assertEquals(0, field.component.x, "there is nothing to indent past on the first line")
+    }
+
+    @Test
+    fun `re-indenting the line takes the box with it`() {
+        // The indentation is measured at layout, not remembered from when the box was made — which
+        // is what the document listener that asks for that layout is for.
+        val logpoint = logpointAt(1, expression = "x")
+        val field = ByLogpointField.show(fixture.project, editor(), logpoint)!!
+        layOut(field.indented)
+        val before = field.component.x
+
+        val document = editor().document
+        WriteCommandAction.runWriteCommandAction(fixture.project) {
+            document.insertString(document.getLineStartOffset(1), "    ")
+        }
+        layOut(field.indented)
+
+        assertTrue(
+            field.component.x > before,
+            "the box was left at column ${'$'}before while the statement moved to ${'$'}{field.component.x}",
+        )
+    }
+
+    /** Lays out a holder that was never added to a window, which is what `validate` needs a peer for. */
+    private fun layOut(component: JComponent) {
+        val size = component.preferredSize
+        component.setBounds(0, 0, size.width, size.height)
+        component.doLayout()
     }
 }

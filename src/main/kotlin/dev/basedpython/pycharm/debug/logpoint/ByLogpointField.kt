@@ -6,6 +6,8 @@ import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
 import com.intellij.openapi.editor.Inlay
+import com.intellij.openapi.editor.event.DocumentEvent
+import com.intellij.openapi.editor.event.DocumentListener
 import com.intellij.openapi.editor.ex.EditorEx
 import com.intellij.openapi.editor.impl.EditorEmbeddedComponentManager
 import com.intellij.openapi.project.DumbAwareAction
@@ -15,15 +17,13 @@ import com.intellij.ui.EditorTextField
 import com.intellij.ui.JBColor
 import com.intellij.ui.ShadowJava2DBorder
 import com.intellij.ui.components.JBLabel
+import com.intellij.util.text.CharArrayUtil
 import com.intellij.util.ui.JBFont
 import com.intellij.util.ui.JBUI
 import com.intellij.util.ui.components.BorderLayoutPanel
-import com.intellij.xdebugger.XDebuggerUtil
 import com.intellij.xdebugger.breakpoints.XLineBreakpoint
-import com.intellij.xdebugger.evaluation.EvaluationMode
 import com.intellij.xdebugger.impl.ui.XDebuggerExpressionEditor
 import dev.basedpython.pycharm.debug.ByDebuggerEditorsProvider
-import dev.basedpython.pycharm.lang.BasedPythonLanguage
 import java.awt.Color
 import com.intellij.ui.components.JBLayeredPane
 import java.awt.Dimension
@@ -31,6 +31,7 @@ import java.awt.Graphics
 import java.awt.Graphics2D
 import java.awt.RenderingHints
 import javax.swing.JComponent
+import javax.swing.JPanel
 import kotlin.math.ceil
 import java.awt.event.FocusAdapter
 import java.awt.event.FocusEvent
@@ -63,6 +64,10 @@ class ByLogpointField private constructor(
 
     /** The whole box, label included. Exposed so it can be laid out and painted in a test. */
     internal lateinit var component: JComponent
+        private set
+
+    /** What the inlay holds: [component], held at the indentation of the line it logs. */
+    internal lateinit var indented: JComponent
         private set
 
     private var inlay: Inlay<*>? = null
@@ -108,6 +113,21 @@ class ByLogpointField private constructor(
 
     private fun typedExpression(): String = expressionEditor.expression?.expression?.trim().orEmpty()
 
+    /**
+     * The line the box is drawn above, as the document numbers it *now*.
+     *
+     * Taken from the inlay rather than from the breakpoint, because the inlay is what is on screen:
+     * its offset moves with every edit above it, so the line it reports is the one the box is
+     * actually sitting over. The breakpoint's own line is the fallback for the moment before the
+     * inlay exists, which is when this is first asked — the holder measures itself while it is being
+     * built.
+     */
+    private fun anchorLine(): Int {
+        val document = hostEditor.document
+        val offset = inlay?.takeIf { it.isValid }?.offset
+        return if (offset != null && offset <= document.textLength) document.getLineNumber(offset) else breakpoint.line
+    }
+
     companion object {
 
         /**
@@ -137,6 +157,8 @@ class ByLogpointField private constructor(
             val field = ByLogpointField(breakpoint, expressionEditor, editor)
             val panel = field.buildPanel()
             field.component = panel
+            val indented = IndentedToCode(editor, panel) { field.anchorLine() }
+            field.indented = indented
 
             // showAbove: the gap a log point lives in is the one above the line it is anchored to.
             val properties = EditorEmbeddedComponentManager.Properties(
@@ -149,12 +171,27 @@ class ByLogpointField private constructor(
                 /* priority = */ 0,
                 document.getLineStartOffset(breakpoint.line),
             )
-            val inlay = EditorEmbeddedComponentManager.getInstance().addComponent(editor, panel, properties)
+            val inlay = EditorEmbeddedComponentManager.getInstance().addComponent(editor, indented, properties)
                 ?: return null
 
             field.inlay = inlay
             open[breakpoint] = field
             Disposer.register(inlay) { field.close() }
+
+            // The indentation is read when the box is laid out, and only a document change moves it.
+            // Nothing else asks for that layout: the inlay's renderer re-reads its own bounds as the
+            // document shifts, but re-indenting the logged line changes neither the renderer's
+            // position nor its size, so without this the box stays at the column the line used to
+            // start in.
+            document.addDocumentListener(
+                object : DocumentListener {
+                    override fun documentChanged(event: DocumentEvent) {
+                        indented.revalidate()
+                        indented.repaint()
+                    }
+                },
+                field,
+            )
             return field
         }
 
@@ -177,8 +214,7 @@ class ByLogpointField private constructor(
         private fun fieldsIn(editor: EditorEx): MutableMap<XLineBreakpoint<*>, ByLogpointField> =
             editor.project?.service<ByLogpointFieldRegistry>()?.fieldsIn(editor) ?: mutableMapOf()
 
-        private fun expressionOf(text: String) = XDebuggerUtil.getInstance()
-            .createExpression(text, BasedPythonLanguage, null, EvaluationMode.EXPRESSION)
+        private fun expressionOf(text: String) = ByLogpoints.expressionOf(text)
 
         private const val HISTORY_ID = "basedpython-logpoint"
 
@@ -188,6 +224,9 @@ class ByLogpointField private constructor(
 
         private const val ARC = 8
         private const val FIELD_WIDTH = 320
+
+        /** How narrow the box may get where the indentation leaves it no room. IntelliJ IDEA's number. */
+        private const val MIN_FIELD_WIDTH = 200
 
         /** Room above and below one line of text, so the box is a box rather than a rule. */
         private const val FIELD_VERTICAL_PADDING = 8
@@ -370,6 +409,56 @@ class ByLogpointField private constructor(
             val insets = box.border?.getBorderInsets(box) ?: JBUI.emptyInsets()
             val captionSize = caption.preferredSize
             caption.setBounds(insets.left + JBUI.scale(CAPTION_INDENT), 0, captionSize.width, captionSize.height)
+        }
+    }
+
+    /**
+     * Holds the box at the indentation of the line it logs, rather than against the gutter.
+     *
+     * A block inlay is drawn at the left edge of the text — `BlockInlayImpl.getPosition` returns the
+     * content component's left inset whatever offset the inlay is anchored to — so a box handed
+     * straight to the inlay starts under the `d` of `def` however deep the line it belongs to is
+     * indented, and reads as belonging to the wrong statement.
+     *
+     * The geometry is IntelliJ IDEA's own `XLogpointInlayLayoutManager`: the content sits at
+     * `offsetToXY(firstNonWhitespace).x` of the anchored line, measured every time this is laid out
+     * so a re-indent, a font change or a zoom is followed rather than remembered. A line that is
+     * entirely whitespace indents to its end, which is where a statement typed on it would start.
+     */
+    private class IndentedToCode(
+        private val hostEditor: EditorEx,
+        private val box: JComponent,
+        private val line: () -> Int,
+    ) : JPanel(null) {
+
+        init {
+            isOpaque = false
+            add(box)
+        }
+
+        /** Where the code on the logged line starts, in this holder's own coordinates. */
+        private fun indent(): Int {
+            val document = hostEditor.document
+            val line = line()
+            if (line !in 0 until document.lineCount) return 0
+            val start = document.getLineStartOffset(line)
+            val end = document.getLineEndOffset(line)
+            val code = CharArrayUtil.shiftForward(document.immutableCharSequence, start, end, " \t")
+            return hostEditor.offsetToXY(code).x
+        }
+
+        override fun getPreferredSize(): Dimension = box.preferredSize.let {
+            Dimension(indent() + it.width, it.height)
+        }
+
+        override fun getMinimumSize(): Dimension = preferredSize
+
+        override fun doLayout() {
+            val indent = indent()
+            // The floor is IDEA's, and it is why the box overflows a narrow editor rather than
+            // shrinking into it: an expression field a deep indent has squeezed to a few pixels is
+            // worse than one that runs past the edge of a window the editor can scroll.
+            box.setBounds(indent, 0, (width - indent).coerceAtLeast(JBUI.scale(MIN_FIELD_WIDTH)), height)
         }
     }
 }
