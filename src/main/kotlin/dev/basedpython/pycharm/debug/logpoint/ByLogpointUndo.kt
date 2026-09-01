@@ -9,7 +9,6 @@ import com.intellij.xdebugger.XDebuggerManager
 import com.intellij.xdebugger.XDebuggerUtil
 import com.intellij.xdebugger.breakpoints.SuspendPolicy
 import com.intellij.xdebugger.breakpoints.XLineBreakpoint
-import com.intellij.xdebugger.breakpoints.XLineBreakpointAdditionalInfo
 import com.intellij.xdebugger.breakpoints.XLineBreakpointVerticalPlacement
 import com.intellij.openapi.vfs.VirtualFile
 import dev.basedpython.pycharm.debug.ByLineBreakpointType
@@ -74,13 +73,16 @@ object ByLogpointUndo {
 
         fun add(project: Project) {
             val type = type() ?: return
-            val info = XLineBreakpointAdditionalInfo.Builder()
-                .setVerticalPlacement(placement)
-                .setSuspendPolicy(suspendPolicy)
-                .apply { expression?.let { setLogExpressionIfEnabled(it) } }
-                .build()
-            XDebuggerManager.getInstance(project).breakpointManager
+            val logged = expression?.let { ByLogpoints.expressionOf(it) }
+            val info = PlatformLogpointInfo.of(placement, suspendPolicy, logged)
+            val breakpoint = XDebuggerManager.getInstance(project).breakpointManager
                 .addLineBreakpoint(type, file.url, line, null, info)
+            // Restated on the breakpoint, because what the info carries is not always what comes
+            // back out of it: on 262 the platform takes the expression as text and rebuilds it as a
+            // plain-text one, and redo would quietly hand back a log point that no longer edits as
+            // basedpython. It is also what puts the expression there at all on a build whose builder
+            // this plugin cannot fill in — see PlatformLogpointInfo.
+            logged?.let { breakpoint.logExpressionObject = it }
         }
 
         private fun type() = XDebuggerUtil.getInstance().findBreakpointType(ByLineBreakpointType::class.java)

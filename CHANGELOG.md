@@ -437,6 +437,19 @@
 
 ### Fixed
 
+- The `print` quick fix leaves a log point on 2026.3 instead of eating the line. Taking it there
+  deleted the call and then threw `NoSuchMethodError:
+  'XLineBreakpointAdditionalInfo$Builder.setLogExpressionIfEnabled(java.lang.String)'` out of
+  `ReplaceWithLogpointFix.applyFix` — the document edit already done, no log point, and an
+  *Unhandled exception in EDT* dialog. The builder's one interesting setter changed parameter type
+  between the two builds this plugin declares: `String` on 262, which the platform rebuilds as a
+  plain-text expression, and `XExpression` on 263, which it keeps. Both read off
+  `intellij.platform.debugger.jar` in each IDE rather than guessed. It is asked for by parameter
+  type at runtime now, and the expression is passed the way that build wants it — measured by
+  running the compiled shim against PY-262.10717's and IU-263.4302's own jars, which take the
+  `String` and the `XExpression` respectively. A test asks the class file the same question, so the
+  next such change is a failing build rather than a quick fix that swallows a line of code.
+
 - The bundled live templates expand. All nineteen of them — `dcl`, `cdef`, `main` and the rest —
   loaded, appeared in *Settings | Editor | Live Templates*, and expanded nowhere. A template's
   `<context>` names the context by the id the `liveTemplateContext` extension point declares, which

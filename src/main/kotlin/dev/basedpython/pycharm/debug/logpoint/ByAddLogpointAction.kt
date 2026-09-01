@@ -11,7 +11,6 @@ import com.intellij.xdebugger.XDebuggerManager
 import com.intellij.xdebugger.XDebuggerUtil
 import com.intellij.xdebugger.breakpoints.SuspendPolicy
 import com.intellij.xdebugger.breakpoints.XLineBreakpoint
-import com.intellij.xdebugger.breakpoints.XLineBreakpointAdditionalInfo
 import com.intellij.xdebugger.breakpoints.XLineBreakpointVerticalPlacement
 import dev.basedpython.pycharm.lang.dialect.BasedPythonSources
 import dev.basedpython.pycharm.debug.ByLineBreakpointType
@@ -61,10 +60,7 @@ class ByAddLogpointAction : DumbAwareAction() {
             .firstOrNull()
 
     private fun create(project: Project, file: VirtualFile, line: Int): XLineBreakpoint<*> {
-        val info = XLineBreakpointAdditionalInfo.Builder()
-            .setVerticalPlacement(XLineBreakpointVerticalPlacement.INTER_LINE)
-            .setSuspendPolicy(SuspendPolicy.NONE)
-            .build()
+        val info = PlatformLogpointInfo.of(XLineBreakpointVerticalPlacement.INTER_LINE, SuspendPolicy.NONE)
         return XDebuggerManager.getInstance(project).breakpointManager
             .addLineBreakpoint(type(), file.url, line, null, info)
     }
