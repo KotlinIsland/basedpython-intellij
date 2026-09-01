@@ -460,6 +460,19 @@
 
 ### Changed
 
+- The minimum IDE is 2026.2 (`sinceBuild` 262), where it said 261. Log points are built on
+  the platform's inter-line breakpoint API — `XLineBreakpointVerticalPlacement`,
+  `XLineBreakpointAdditionalInfo`, `InterLineShiftAnimator`, `InterLineBreakpointConfiguration`
+  and the rest, plus `XBreakpointManager.addLineBreakpoint` / `findBreakpointsAtLine` and DAP's
+  `applySuspendContext` — and every one of those arrived in 2026.2. They are compile-time
+  references across eight files, so on 2026.1 the debugger and every gutter log point were a
+  `NoClassDefFoundError` waiting to be touched. Marketplace's verifier reported all 28 of them
+  against IU-261.27258.48; the range had been verified against 2026.1 before the log point work
+  landed, and nothing re-checked it afterwards. Also fixed there: two `BasedPythonBundle` keys
+  the Python version picker asks for and the bundle never had
+  (`env.python.recreate.onProject`, `.onVersion`) — the only two binary incompatibilities the
+  verifier found against 2026.2 itself.
+
 - Inlay hints are drawn in the editor's own font, at the editor's own size, on the
   code's own baseline — faded onto a faint tint rather than boxed, the way VS Code draws
   them. The platform renders every LSP hint as UI-font small text inside a rounded grey
@@ -496,9 +509,6 @@
 - A `by run` configuration created from a `.by` file is named after the module (`pkg.main`)
   rather than after the command (`by run pkg.main`), and basedpython run configurations use
   the basedpython icon.
-
-- Extended IDE compatibility range to `262.*` (sinceBuild `261`). Verified Compatible
-  against both IU-261.25134.67 and IU-262.6653.22.
 
 - Docstrings render in the editor. With *Render documentation comments* on, a `.by` docstring is
   drawn as formatted prose in place of its source, with the gutter control to fold it back — what

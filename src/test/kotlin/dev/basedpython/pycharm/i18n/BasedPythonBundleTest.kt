@@ -239,6 +239,8 @@ class BasedPythonBundleTest {
             "env.python.download",
             "env.python.recreate.title",
             "env.python.recreate.message",
+            "env.python.recreate.onVersion",
+            "env.python.recreate.onProject",
             "download.title",
             "download.unsupportedPlatform",
             "download.confirm.message",
