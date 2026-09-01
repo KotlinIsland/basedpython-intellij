@@ -23,9 +23,9 @@
   module and seeded into the next context configuration, and stored as the run configuration's
   *Program arguments*. **Run with Arguments…** in the gutter opens the same form to change them,
   and a run that fails on the argparse error anyway gets a console link to it.
-- Tools menu group with seven `by`/`buff` actions: Transpile, Reverse Transpile,
-  Generate api.lock, Format with buff (`Ctrl+Alt+Shift+L`), Check Project, Clean Caches,
-  Explain Rule. Transpile actions also in editor and project-view popups.
+- Tools menu group with six `by`/`buff` actions: Transpile, Reverse Transpile,
+  Generate api.lock, Check Project, Clean Caches, Explain Rule. Transpile actions also in
+  editor and project-view popups.
 - Settings page (*Languages & Frameworks → basedpython*) and an optional status bar
   widget surfacing real-time `by` / `buff` LSP state.
 - Color settings page; file templates (Empty, Class, Data Class, Protocol) under
@@ -34,10 +34,14 @@
 - Semantic highlighting annotator (no LSP needed): built-in names, `self`/`cls`,
   decorators, type names, declarations, parameters, keyword args, string escapes,
   f-string interpolation.
-- Structure view, breadcrumbs, and code folding via an indentation scanner.
+- Structure view, breadcrumbs, and code folding, from the server rather than from the
+  plugin: the platform's LSP client builds all three out of `textDocument/documentSymbol`
+  and `textDocument/foldingRange`, which the `by` descriptor leaves enabled.
 - Surround-with descriptors and postfix templates (`.if`, `.for`, `.while`, `.not`,
   `.return`/`.ret`, `.print`, `.len`, `.var`, `.none`, `.notnone`, `.else`); added live
-  templates for main guard, async def, match/case, enum, and pytest fixture.
+  templates for the main guard (`main`), async def (`adef`), match/case (`match`), enum
+  (`enum`), pytest test and fixture (`test`, `fix`), property (`prop`), data-class field
+  (`field`), try/except (`try`), with (`with`), and comprehension (`compr`).
 - Inspections: mutable default argument, binary-not-configured (quick-fix to settings);
   spellchecking for comments/strings/identifiers; TODO/FIXME indexing.
 - Log points for `.by` files. Hover the gutter between two line numbers and click — or press
@@ -69,8 +73,8 @@
   down: the hints are already fetched and drawn as the key comes into it, not requested
   from `by` on the press.
 - Intentions: add return type, convert to/from `data class`, wrap null-safe, explain
-  anonymous named tuple.
-- `buff` format-on-save (settings toggle) and import optimizer; code style settings page
+  anonymous named tuple, explain rule.
+- `buff` format-on-save and import optimizer; code style settings page
   (line length, quote style).
 - Transpilation views: side-by-side `.py` diff, go-to-generated, api.lock diff, in-place
   `.by` ↔ `.py` conversion.
@@ -78,14 +82,14 @@
   completion; `out/` excluded from indexing.
 - i18n message bundle, unit tests (lexer, file type), and `sinceBuild`/`untilBuild`
   compatibility range.
-- Go to Symbol / Go to Class for `.by` files and Go to Related between `.by` and its
-  generated `.py` in `out/`.
+- Go to Symbol for `.by` files, which is the platform's LSP client asking `by` for
+  `workspace/symbol`, and Go to Related between `.by` and its generated `.py` in `out/`,
+  which is this plugin's.
 - Gutter run icons on `if __name__ == "__main__":` / top-level `main()`, and a `by test`
   run configuration.
 - Quick Documentation (Ctrl+Q) and External Documentation for basedpython keywords,
   modifiers, and `?.` / `??`; **basedpython Syntax Quick Reference** action.
-- Settings: format-on-save toggle, per-kind inlay-hint modes, and LSP trace level
-  (off/messages/verbose).
+- Settings: per-kind inlay-hint modes and LSP trace level (off/messages/verbose).
 - Smart editing: Enter auto-indents after `:` block headers; Backspace dedents by a full
   indent step in leading whitespace.
 - Environment UX: editor banner when `by` is missing (Install with uv / Configure), and a
@@ -93,14 +97,73 @@
 - Run ergonomics: clickable `.by`/`out/*.py` paths in run consoles, a before-run
   `by build` task, and run-config path-macro expansion.
 - Move Statement Up/Down (Ctrl+Shift+Up/Down) that respects indentation blocks.
+- Local refactorings for `.by`, driven from the selection and computed here rather than asked of
+  the server: **Extract Variable**, **Introduce Constant**, **Inline Variable**, and **Extract
+  Method** — the last inserting into the nearest enclosing `def`, de-indenting the body and
+  re-indenting it at its new depth.
+- **Open basedpython REPL** (*Tools | basedpython*): an interactive console running
+  `by repl`, falling back to `by run` where that subcommand is not there.
+- **Download prebuilt binaries**: fetches the `by` and `buff` for this OS and CPU into
+  `~/.basedpython/bin` and points the settings at them, for a machine with no toolchain and no
+  wish to build one.
+- **Explain Transpilation** on a `.by` file or selection: what the transpiler did to it and why,
+  answered by the server over `by/explainTranspilation`.
+- **Toggle basedpython Watch Mode** (*Tools | basedpython*): a debounced background `by build`
+  after each `.by` is saved, per project, so rapid saves coalesce into one build.
+- **Export / Import Settings**: the project's `BasedPythonSettings` written to a `.xml` and read
+  back, so a working configuration can move between machines and projects.
 - **Debug .by (pdb)** action: builds, then runs the generated `.py` under `python -m pdb`
   in an interactive console (frames are clickable).
 - Source-mapped debugging for `by run` configurations: breakpoints in `.by` files, stepping,
   frames and variables reported against `.by` sources. Built on the platform's Debug Adapter
-  Protocol client and `debugpy`; `by run`'s own `_by_sourcemap.py` is handed to pydevd with
-  `setPydevdSourceMap`, so the line translation happens in the debuggee. Requires `debugpy`
-  in the interpreter `by run` uses (`uv add --dev debugpy`). See
+  Protocol client, with two backends behind one setting — see the `bpd` entry below for the
+  default. Under the `debugpy` backend, `by run`'s own `_by_sourcemap.py` is handed to pydevd
+  with `setPydevdSourceMap`, so the line translation happens in the debuggee, and `debugpy`
+  has to be in the interpreter `by run` uses (`uv add --dev debugpy`). See
   [docs/debugging.md](docs/debugging.md).
+- **`bpd` drives a `.by` debug session by default**, with `debugpy` kept as the other choice in
+  *Settings | basedpython*. `bpd` is PEP 669 native — a line with no breakpoint on it is
+  `DISABLE`d the first time it is seen — it reads `_by_sourcemap.py` itself and substitutes
+  locations inside its own agent rather than through pydevd's generated-code support, and it
+  verifies the digest of both files before mapping anything, where the `debugpy` path maps a line
+  whether or not the pair still matches. It is also the only backend that answers `bpd/facts`,
+  which is what the data-flow analysis is seeded from. `debugpy` stays reachable because it needs
+  no extra binary and because a bug in one backend should not leave `.by` undebuggable.
+  The two are not the same shape underneath: `debugpy`'s adapter lives inside the debuggee and the
+  IDE dials in, so that is an `attach`; `bpd` *is* the interpreter `by run` starts, so that is a
+  real `launch` of `_by_runner.py` relative to bpd's own working directory — the temp tree
+  `by run` transpiled into, which the IDE cannot name because it never chose it. A missing `bpd`
+  is refused while the launch arguments are built, and does not silently fall back to `debugpy`.
+  The backend is stored as a string rather than as the enum, so a settings file written by a newer
+  plugin falls back to the default instead of failing to load.
+- Custom `bpd` events reach the IDE: `ByDapClient` declares `@JsonNotification` handlers, which
+  lsp4j binds by reflecting over the client's runtime class, so an event body arrives as a
+  `JsonObject` with nothing discarded for want of a field. `debugpy` answers `unknown command`
+  and is unaffected. Two lifecycle steps are taken back from the platform along the same seam: a
+  refused start now reports what the adapter said instead of escaping a coroutine into the log as
+  an unhandled exception, and a `stopped` event for the thread already on screen is applied rather
+  than queued — which is what DAP prescribes after `restartFrame` and `goto`, and what left the
+  highlight where the code no longer was.
+- Data-flow inlays over a stopped program: with a session suspended, `by` decides which branches
+  the stop settles and what value a name will hold below it, seeded from the readings `bpd` proves
+  for the names in scope (`bpd/facts` in, `by/dataFlowAt` out). A decided condition and a decided
+  value are drawn in the margin under their own attributes keys, so a scheme can tell one from the
+  other. A kind the pass does not know is dropped rather than guessed at, so an older plugin
+  against a newer server draws what it understands and skips the rest.
+- **Hot reload** replaces a `.by` — and a plain `.py` — in the running program without restarting
+  it, through the platform's own hot-swap toolbar and button. `by` re-stages the file into the tree
+  the program runs out of and `bpd` takes the list with the source map moving in the same message,
+  so the debugger never has to transpile anything. Offered on `bpd` sessions only: `bpd/replaceCode`
+  is bpd's own request, there is no capability flag on the wire to believe for a custom request, and
+  a `debugpy` session would otherwise raise a button whose only possible answer is that the adapter
+  does not know it. Both kinds of file take one route, because `by run` copies every module into that
+  temp tree, a `.by` transpiled and a `.py` copied — a `.py` is as much *not* the file on disk as a
+  `.by` is. Changed documents are saved first: the platform's collector tracks documents and a
+  replacement is made from files, so without that, pressing the button with an unsaved editor asked
+  for a replacement with the content already there, got back `applied`, and told the user the
+  process matched their screen when it did not. Refusals are a balloon tracked through
+  `HotSwapStatusNotificationManager`, so the next hot swap clears them; the console keeps the
+  account of what an applied replacement actually changed.
 - Test tree nodes navigate to their `.by` source, and a test class is its own node in the
   tree rather than being flattened into the file.
 - Test configurations can be debugged, with breakpoints in `.by` test files.
@@ -327,9 +390,10 @@
 - Type Info (`Ctrl+Shift+P`) works in `.by` files. The caret's name gets the type `by` infers for
   it, pressed again the full hover — the signature and docstring. The action is driven by whichever
   `ExpressionTypeProvider` is registered for the caret's language, and with none for basedpython it
-  was simply dead. `by` has no dedicated "provide type" request — its LSP surface is the standard
-  one, its only custom entries being the `ty.printDebugInformation` / `ty.runManageCommand` commands
-  — so the answer comes from `textDocument/hover`, whose payload the server builds type-first.
+  was simply dead. `by` has no dedicated "provide type" request — nothing in its custom surface
+  (`by/transpile`, `by/transpileForBuild`, `by/explainRule`, `by/explainTranspilation`,
+  `by/dataFlowAt`, and the `ty.printDebugInformation` / `ty.runManageCommand` commands) answers
+  one — so the answer comes from `textDocument/hover`, whose payload the server builds type-first.
 - Multiline strings show their trim margin. basedpython strips the indentation a triple-quoted
   string's lines share, the way Java strips a text block's, and a vertical line now marks the
   column it strips to — so the content of the literal is something you can read off the screen
@@ -427,7 +491,8 @@
   lines now resolve to the `.by` file they were transpiled from, too.
 - "Explain Rule" works for `by`'s own rules. It invoked `by explain <code>`, but `explain`
   is a command group, so every checker-owned rule (as opposed to a `buff` lint code) failed
-  with `unrecognized subcommand` and reported "no explanation".
+  with `unrecognized subcommand` and reported "no explanation". It has since stopped spawning
+  the CLI at all and asks the running server over `by/explainRule` / `buff/explainRule`.
 - Breakpoints land on the statement rather than on the transpiler's prologue for it. A
   `.by` line that becomes several generated lines now pins to the last, not the first, so
   a breakpoint in a function with a mutable default argument stops with the argument bound
@@ -502,9 +567,9 @@
   both bundled schemes; a scheme that says nothing about it gets both derived from its
   own text and background, so hints read the same under any theme. Zoom, presentation
   mode and distraction-free mode carry the hints with them, which the platform's
-  rendering cannot do — its font is one global checkbox for every language. The three
-  toggles (parameters, types, return types) stay where they were, in *Settings |
-  basedpython | Inlay hints*.
+  rendering cannot do — its font is one global checkbox for every language. The hint
+  settings stay where they were, in *Settings | basedpython | Inlay hints*, since
+  grown into one mode per kind — see the push-to-hint entry above.
 
 - A hint takes exactly the room the same text takes as code, so a line that leaves an
   annotation to the hints lands character for character on one that writes it out — `a =
@@ -516,6 +581,21 @@
   is no single integer that is 'the width as source' — rounding up looks right at
   whichever column it was measured at and pads every hint in the same direction
   everywhere else, which is how three hints on one line drifted against two on the next.
+
+- Reformat and Optimize Imports on save and on commit actually apply their edits, and there is
+  one row for it rather than three. A workspace edit carries its edits in `documentChanges` or in
+  `changes`, and the server picks by what the client claimed to understand — the platform sets
+  `WorkspaceEditCapabilities.documentChanges`, so `buff` always answered in `documentChanges`
+  while this read only `changes`: always null, always an empty edit list, always a silent no-op.
+  Both shapes are read now, which fixes Optimize Imports (`Ctrl+Alt+O`) along the same path.
+  The plugin's own "reformat and optimize imports" row is gone from both surfaces, because
+  *Reformat code* and *Optimize imports* already sit at the top of Actions on Save and among the
+  commit options and both reach `buff` for the files this plugin owns. What is left is named for
+  what it does rather than for the binary that does it, and is no longer restricted to `.by` —
+  which files the fixes apply to is the formatter's own answer, and it serves `.py` and `.pyi`
+  too. Those two settings also had checkboxes on the plugin's own settings page, so whichever
+  page was applied last quietly turned the other's tick back off; Actions on Save is now the only
+  place they live.
 
 - A `by run` configuration created from a `.by` file is named after the module (`pkg.main`)
   rather than after the command (`by run pkg.main`), and basedpython run configurations use
