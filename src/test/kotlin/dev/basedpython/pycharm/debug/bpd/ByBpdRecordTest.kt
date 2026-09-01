@@ -4,6 +4,9 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertInstanceOf
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.io.TempDir
+import java.nio.file.Files
+import java.nio.file.Path
 
 /**
  * The handshake between three processes that cannot talk to each other directly.
@@ -67,6 +70,60 @@ class ByBpdRecordTest {
         val ready = assertInstanceOf(ByBpdRecord.Ready::class.java, record)
         assertEquals("/tmp/a b/c", ready.cwd)
         assertEquals(listOf("_by_runner.py", "my module"), ready.argv)
+    }
+
+    /**
+     * The directory `by run` chose, which hot reload cannot work without.
+     *
+     * Read out of the record on demand rather than held as a value, and this is why: the wrapper
+     * writes it only once `by run` has picked a temp directory, which is **after** the IDE has
+     * built the debug process. A value captured at construction is a read of a file that does not
+     * exist, and the first real session did exactly that — every reload answered that the build
+     * directory was not known.
+     */
+    @Test
+    fun `the build directory is read out of a finished record`(@TempDir dir: Path) {
+        val record = dir.resolve("bpd-record")
+        Files.writeString(
+            record,
+            "cwd /var/folders/x/T/.tmpAbC123\narg _by_runner.py\narg main\n$announcement\n",
+        )
+
+        assertEquals("/var/folders/x/T/.tmpAbC123", ByBpdRecord.buildDirectoryOf(record))
+    }
+
+    /**
+     * The wrapper's own lines land before `bpd` appends its announcement, so the directory is
+     * readable earlier than a whole [ByBpdRecord.Ready] is — which is the point of reading it on its
+     * own rather than waiting for the record to be complete.
+     */
+    @Test
+    fun `the build directory is readable before bpd has announced itself`(@TempDir dir: Path) {
+        val record = dir.resolve("bpd-record")
+        Files.writeString(record, "cwd /var/folders/x/T/.tmpHalf\narg _by_runner.py\n")
+
+        assertEquals("/var/folders/x/T/.tmpHalf", ByBpdRecord.buildDirectoryOf(record))
+        assertInstanceOf(ByBpdRecord.Incomplete::class.java, ByBpdRecord.parse(Files.readString(record)))
+    }
+
+    /**
+     * Null rather than an exception for every way it can be absent — a missing directory costs the
+     * reload button and must never cost the session that asked.
+     */
+    @Test
+    fun `a record that is not there or has no directory yet is null`(@TempDir dir: Path) {
+        assertEquals(null, ByBpdRecord.buildDirectoryOf(dir.resolve("never-written")))
+
+        val empty = dir.resolve("empty").also { Files.writeString(it, "") }
+        assertEquals(null, ByBpdRecord.buildDirectoryOf(empty))
+
+        // the wrapper has started writing but the `cwd` line is not there yet
+        val partial = dir.resolve("partial").also { Files.writeString(it, "arg _by_runner.py\n") }
+        assertEquals(null, ByBpdRecord.buildDirectoryOf(partial))
+
+        // and a `cwd` with nothing after it is not a directory
+        val blank = dir.resolve("blank").also { Files.writeString(it, "cwd \n") }
+        assertEquals(null, ByBpdRecord.buildDirectoryOf(blank))
     }
 }
 
