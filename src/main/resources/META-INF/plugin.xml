@@ -230,7 +230,11 @@
             implementationClass="dev.basedpython.pycharm.editor.templates.BasedPythonSurroundDescriptor"/>
 
         <!-- ===== Stream O: project scaffolding + config awareness ===== -->
-        <generatorNewProjectWizard
+        <!-- The EP is `newProjectWizard.generator`; the *interface* is GeneratorNewProjectWizard.
+             Named after the interface, the entry binds to an extension point that does not exist,
+             and the platform neither fails the build nor logs an error at load — the wizard entry
+             is simply absent, and the plugin silently loses the ability to be unloaded. -->
+        <newProjectWizard.generator
             implementation="dev.basedpython.pycharm.project.BasedPythonProjectGenerator"/>
         <completion.contributor
             language="TEXT"
