@@ -450,6 +450,16 @@
   `String` and the `XExpression` respectively. A test asks the class file the same question, so the
   next such change is a failing build rather than a quick fix that swallows a line of code.
 
+- The `Log:` box lines up with the code it logs. It was drawn against the gutter whatever the
+  indentation of the statement below it, so a log point inside a function sat under the `def` of the
+  line above and read as belonging to it. A block inlay is painted at the left edge of the text
+  whatever offset it is anchored to — `BlockInlayImpl.getPosition` returns the content component's
+  left inset — so the box now sits in a holder that puts it at `offsetToXY(firstNonWhitespace).x` of
+  the line it logs, which is the geometry IntelliJ IDEA's own `XLogpointInlayLayoutManager` uses,
+  including its 200px floor for the case where the indentation leaves no room. The indentation is
+  measured every time the box is laid out rather than remembered, so re-indenting the line takes the
+  box with it.
+
 - The bundled live templates expand. All nineteen of them — `dcl`, `cdef`, `main` and the rest —
   loaded, appeared in *Settings | Editor | Live Templates*, and expanded nowhere. A template's
   `<context>` names the context by the id the `liveTemplateContext` extension point declares, which
