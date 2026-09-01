@@ -7,7 +7,7 @@
         <variable name="NAME" expression="" defaultValue="&quot;MyClass&quot;" alwaysStopAt="true"/>
         <context>
             <option name="OTHER" value="false"/>
-            <option name="basedpython" value="true"/>
+            <option name="BASED_PYTHON" value="true"/>
         </context>
     </template>
     <template name="dcl"
@@ -18,7 +18,7 @@
         <variable name="NAME" expression="" defaultValue="&quot;MyData&quot;" alwaysStopAt="true"/>
         <context>
             <option name="OTHER" value="false"/>
-            <option name="basedpython" value="true"/>
+            <option name="BASED_PYTHON" value="true"/>
         </context>
     </template>
     <template name="fdcl"
@@ -29,7 +29,7 @@
         <variable name="NAME" expression="" defaultValue="&quot;MyFrozen&quot;" alwaysStopAt="true"/>
         <context>
             <option name="OTHER" value="false"/>
-            <option name="basedpython" value="true"/>
+            <option name="BASED_PYTHON" value="true"/>
         </context>
     </template>
     <template name="ecl"
@@ -40,7 +40,7 @@
         <variable name="NAME" expression="" defaultValue="&quot;MyEnum&quot;" alwaysStopAt="true"/>
         <context>
             <option name="OTHER" value="false"/>
-            <option name="basedpython" value="true"/>
+            <option name="BASED_PYTHON" value="true"/>
         </context>
     </template>
     <template name="proto"
@@ -51,7 +51,7 @@
         <variable name="NAME" expression="" defaultValue="&quot;MyProtocol&quot;" alwaysStopAt="true"/>
         <context>
             <option name="OTHER" value="false"/>
-            <option name="basedpython" value="true"/>
+            <option name="BASED_PYTHON" value="true"/>
         </context>
     </template>
     <template name="ovr"
@@ -64,7 +64,7 @@
         <variable name="TYPE" expression="" defaultValue="&quot;None&quot;" alwaysStopAt="true"/>
         <context>
             <option name="OTHER" value="false"/>
-            <option name="basedpython" value="true"/>
+            <option name="BASED_PYTHON" value="true"/>
         </context>
     </template>
     <template name="nt"
@@ -76,7 +76,7 @@
         <variable name="TYPE" expression="" defaultValue="&quot;int&quot;" alwaysStopAt="true"/>
         <context>
             <option name="OTHER" value="false"/>
-            <option name="basedpython" value="true"/>
+            <option name="BASED_PYTHON" value="true"/>
         </context>
     </template>
     <template name="let"
@@ -89,7 +89,7 @@
         <variable name="VALUE" expression="" defaultValue="&quot;0&quot;" alwaysStopAt="true"/>
         <context>
             <option name="OTHER" value="false"/>
-            <option name="basedpython" value="true"/>
+            <option name="BASED_PYTHON" value="true"/>
         </context>
     </template>
 </templateSet>
