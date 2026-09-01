@@ -302,8 +302,9 @@ support, run configurations, CLI actions, and editor tooling.
   guard, async def, match/case, enum, and pytest fixture.
 
 ## Requirements
-- IntelliJ Platform 2026.1.1+ (IntelliJ IDEA or PyCharm, any edition — the LSP API is
-  available in the free Community editions).
+- IntelliJ Platform 2026.2+ (IntelliJ IDEA Ultimate or PyCharm Professional). Not the
+  Community editions: `com.intellij.modules.lsp` is a paid-IDE module, which is why
+  Marketplace lists IntelliJ IDEA Community and PyCharm Community as unsupported products.
 - A project with basedpython installed (`uv add --dev basedpython`), exposing `by` and
   `buff` in `.venv/` or on `PATH`.
 

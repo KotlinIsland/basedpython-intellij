@@ -5,8 +5,10 @@
   OutputToGeneralTestEventsConverter, SMTestLocator, …) left the core platform in 2026.2 for the
   bundled `intellij.testRunner.plugin`, so without this the test configuration's classes do not
   resolve there — 19 NoSuchClassError risks, which is exactly what the plugin verifier reported.
-  Optional because 2026.1 still has those classes in the platform and has no such plugin to depend
-  on; a hard dependency, in either the v1 or the v2 form, stops the plugin loading there at all.
+  Still optional now that the floor is 2026.2, where the plugin is always bundled — but optional
+  costs nothing and a required dependency is not free: it is a load-time condition, so any product
+  in the supported range that ships without this plugin would stop loading basedpython entirely
+  rather than lose its test tree. Nothing here needs to run where the interface does not exist.
 
   The listener below belongs here for the same reason: it implements an SM runner interface, so it
   may only be instantiated where that interface exists.

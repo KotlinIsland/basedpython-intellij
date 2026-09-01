@@ -147,12 +147,12 @@ intellijPlatform {
     // internal but has no public equivalent, and both the reloader and the status widget need it.
     //
     // MISSING_DEPENDENCIES is deliberately *not* here. The plugin depends optionally on
-    // `intellij.testRunner.plugin`, which exists in 2026.2 and not in 2026.1 — and being absent on
-    // one of two supported IDEs is the entire meaning of an optional dependency, not a defect. The
-    // verifier counts it all the same, and the level cannot distinguish optional from required.
-    // Little is lost: a missing *required* dependency takes its classes with it, so it still fails
-    // the build as COMPATIBILITY_PROBLEMS — that is exactly how the undeclared test runner showed
-    // up on 2026.2, as 19 unresolved classes rather than as a dependency note.
+    // `org.intellij.plugins.markdown`, which several of the IDEs this is verified against do not
+    // bundle — an optional dependency being absent somewhere is the entire meaning of the word,
+    // not a defect, and the level cannot distinguish optional from required. Little is lost: a
+    // missing *required* dependency takes its classes with it, so it still fails the build as
+    // COMPATIBILITY_PROBLEMS — that is exactly how the undeclared test runner showed up on 2026.2,
+    // as 19 unresolved classes rather than as a dependency note.
     failureLevel = listOf(
       VerifyPluginTask.FailureLevel.COMPATIBILITY_PROBLEMS,
       VerifyPluginTask.FailureLevel.INVALID_PLUGIN,
@@ -172,7 +172,15 @@ intellijPlatform {
     }
 
     ideaVersion {
-      sinceBuild = "261"
+      // 262, not 261. The log point feature is built on the platform's inter-line breakpoint API —
+      // XLineBreakpointVerticalPlacement, XLineBreakpointAdditionalInfo, InterLineShiftAnimator,
+      // InterLineBreakpointConfiguration and the rest — which arrived in 2026.2, along with
+      // XBreakpointManager.addLineBreakpoint/findBreakpointsAtLine and DAP's applySuspendContext.
+      // Those are compile-time references across eight files, so on 2026.1 they are a
+      // NoClassDefFoundError the moment the debugger or a gutter log point is touched. The floor
+      // said 261 until Marketplace's verifier reported all 28 of them against IU-261.27258.48; a
+      // claimed 2026.1 that breaks on use is worse than an honest 2026.2.
+      sinceBuild = "262"
       untilBuild = "263.*"
     }
 
