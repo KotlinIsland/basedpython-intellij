@@ -20,7 +20,6 @@ import com.intellij.xdebugger.hotswap.SourceFileChangesCollector
 import com.intellij.xdebugger.hotswap.SourceFileChangesListener
 import com.intellij.xdebugger.impl.hotswap.HotSwapStatusNotificationManager
 import com.intellij.xdebugger.impl.hotswap.SourceFileChangeFilter
-import com.intellij.xdebugger.impl.hotswap.SourceFileChangesCollectorImpl
 import dev.basedpython.pycharm.debug.ByDebugProtocolServer
 import dev.basedpython.pycharm.debug.bpd.ByBpdRecord
 import dev.basedpython.pycharm.lang.dialect.BasedPythonSources
@@ -102,6 +101,9 @@ internal class ByHotSwapProvider(
      * from `site-packages` is not code the user is working on, and the transpiled tree `by run`
      * runs from is not in the project at all, so neither should raise the toolbar.
      *
+     * Built through [PlatformChangesCollector] rather than by naming that collector's constructor,
+     * because which constructor it has depends on the IDE this is running in.
+     *
      * `.by` is watched even though it cannot be reloaded — see [ByHotSwap.refuse]. Knowing the
      * source on screen is not the code that is running is most of what this feature is for, and
      * that is exactly as true of the file the whole project is written in.
@@ -110,15 +112,18 @@ internal class ByHotSwapProvider(
         session: HotSwapSession<VirtualFile>,
         coroutineScope: CoroutineScope,
         listener: SourceFileChangesListener,
-    ): SourceFileChangesCollector<VirtualFile> = SourceFileChangesCollectorImpl(
+    ): SourceFileChangesCollector<VirtualFile> = PlatformChangesCollector.over(
+        project,
         coroutineScope,
         listener,
-        SourceFileChangeFilter { file ->
-            file.extension?.lowercase() in BasedPythonSources.MODULE_EXTENSIONS
-        },
-        SourceFileChangeFilter { file ->
-            readAction { ProjectFileIndex.getInstance(project).isInContent(file) }
-        },
+        listOf(
+            SourceFileChangeFilter { file ->
+                file.extension?.lowercase() in BasedPythonSources.MODULE_EXTENSIONS
+            },
+            SourceFileChangeFilter { file ->
+                readAction { ProjectFileIndex.getInstance(project).isInContent(file) }
+            },
+        ),
     )
 
     /**
