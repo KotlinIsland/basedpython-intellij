@@ -2,10 +2,14 @@ package dev.basedpython.pycharm.debug.logpoint
 
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.util.registry.Registry
+import com.intellij.xdebugger.XDebuggerUtil
+import com.intellij.xdebugger.XExpression
 import com.intellij.xdebugger.breakpoints.XBreakpoint
 import com.intellij.xdebugger.breakpoints.XLineBreakpoint
 import com.intellij.xdebugger.breakpoints.XLineBreakpointVerticalPlacement
+import com.intellij.xdebugger.evaluation.EvaluationMode
 import dev.basedpython.pycharm.debug.ByLineBreakpointType
+import dev.basedpython.pycharm.lang.BasedPythonLanguage
 
 /**
  * What counts as a log point here, and whose job it is to draw one.
@@ -69,6 +73,17 @@ object ByLogpoints {
         if (line.placement != XLineBreakpointVerticalPlacement.INTER_LINE) return null
         return line
     }
+
+    /**
+     * [text] as the expression a `.by` log point logs.
+     *
+     * With the language attached, which is not decoration: it is what makes the expression edit as
+     * basedpython in the box and in the breakpoint dialog rather than as plain text, and what the
+     * platform loses on 262, where the builder that creates a log point takes the expression as a
+     * `String` and makes a plain-text expression of it (see [PlatformLogpointInfo]).
+     */
+    fun expressionOf(text: String): XExpression = XDebuggerUtil.getInstance()
+        .createExpression(text, BasedPythonLanguage, null, EvaluationMode.EXPRESSION)
 
     /** A log point with nothing to log — freshly created by a click in the gutter gap, and useless until typed into. */
     fun isUnfilled(breakpoint: XLineBreakpoint<*>): Boolean =

@@ -12,13 +12,12 @@ import com.intellij.psi.PsiFile
 import com.intellij.xdebugger.XDebuggerManager
 import com.intellij.xdebugger.XDebuggerUtil
 import com.intellij.xdebugger.breakpoints.SuspendPolicy
-import com.intellij.xdebugger.breakpoints.XLineBreakpointAdditionalInfo
 import com.intellij.xdebugger.breakpoints.XLineBreakpointVerticalPlacement
-import com.intellij.xdebugger.evaluation.EvaluationMode
 import dev.basedpython.pycharm.debug.ByLineBreakpointType
 import dev.basedpython.pycharm.debug.logpoint.ByLogpointUndo
+import dev.basedpython.pycharm.debug.logpoint.ByLogpoints
+import dev.basedpython.pycharm.debug.logpoint.PlatformLogpointInfo
 import dev.basedpython.pycharm.lang.BasedPythonFile
-import dev.basedpython.pycharm.lang.BasedPythonLanguage
 
 /**
  * Offers to swap a debug `print(...)` for a log point, the way Kotlin offers it for `println`.
@@ -94,20 +93,20 @@ private class ReplaceWithLogpointFix : LocalQuickFix {
         // on the follower is painted exactly where the deleted call was — the same place Kotlin's
         // leaves one. The line it binds to is the follower either way, which is why the follower has
         // to be in the same block for this to be offered at all (see PrintToLogpoint).
-        val info = XLineBreakpointAdditionalInfo.Builder()
-            .setVerticalPlacement(XLineBreakpointVerticalPlacement.INTER_LINE)
-            .setSuspendPolicy(SuspendPolicy.NONE)
-            .setLogExpressionIfEnabled(candidate.expression)
-            .build()
+        val expression = ByLogpoints.expressionOf(candidate.expression)
+        val info = PlatformLogpointInfo.of(
+            XLineBreakpointVerticalPlacement.INTER_LINE,
+            SuspendPolicy.NONE,
+            expression,
+        )
         val breakpoint = breakpoints.addLineBreakpoint(type, virtualFile.url, candidate.logpointLine, null, info)
 
         // Re-stated with a language attached, so the expression edits as basedpython in the
-        // breakpoint dialog rather than as plain text. Only when the builder did enable logging —
-        // otherwise this would turn a log expression on behind the builder's back.
-        if (breakpoint.logExpressionObject != null) {
-            breakpoint.logExpressionObject = XDebuggerUtil.getInstance()
-                .createExpression(candidate.expression, BasedPythonLanguage, null, EvaluationMode.EXPRESSION)
-        }
+        // breakpoint dialog rather than as plain text — which is what the info loses on 262, where
+        // it carries the expression as a `String`. Unconditional, because the log point and the
+        // deleted `print` are the same edit: one that ended up without its expression would be a
+        // silent deletion, which is the one outcome this fix must not produce.
+        breakpoint.logExpressionObject = expression
 
         // Undo has to take both halves or neither. Without this the deleted line came back and the
         // log point stayed, so the value was logged twice — the one outcome nobody asked for.
