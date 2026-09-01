@@ -10,6 +10,7 @@ import com.intellij.platform.dap.LaunchRequestArguments
 import com.intellij.execution.ExecutionException
 import dev.basedpython.pycharm.debug.bpd.ByBpdExecutable
 import dev.basedpython.pycharm.debug.bpd.ByDebugBackend
+import dev.basedpython.pycharm.env.ByEnvironmentKind
 import dev.basedpython.pycharm.env.ByEnvironments
 import dev.basedpython.pycharm.env.ByLaunch
 import dev.basedpython.pycharm.run.ByRunConfiguration
@@ -18,6 +19,9 @@ import dev.basedpython.pycharm.run.test.ByPytest
 import dev.basedpython.pycharm.run.test.ByTestConfiguration
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import dev.basedpython.pycharm.util.BasedPythonBundle
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.Paths
 
 /**
  * Declares which run configurations can be debugged, and prepares the session while doing it.
@@ -93,7 +97,7 @@ class ByDapLaunchArgumentsProvider : DapLaunchArgumentsProvider {
                 val launch = ByEnvironments.resolve(project, BY_BINARY)
                 val bpd = ByBpdExecutable.resolve(launch)
                     ?: throw ExecutionException(BasedPythonBundle.message("debug.bpd.error.notFound"))
-                ByDebugSetup.forBpd(bpd, interpreterOf(launch))
+                ByDebugSetup.forBpd(bpd, interpreterOf(project, launch))
             }
         }
     }
@@ -115,10 +119,41 @@ class ByDapLaunchArgumentsProvider : DapLaunchArgumentsProvider {
      * `PYTHON` is still read first, so an explicitly configured interpreter still wins, and
      * `python3` remains the last resort for a launch backed by no venv at all.
      */
-    private fun interpreterOf(launch: ByLaunch?): String {
+    private fun interpreterOf(project: Project, launch: ByLaunch?): String {
         launch?.env?.get("PYTHON")?.takeIf { it.isNotBlank() }?.let { return it }
         launch?.venvRoot?.let { return ByEnvironments.venvBinary(it, PYTHON_BINARY).toString() }
+        if (launch?.kind == ByEnvironmentKind.UV) {
+            uvInterpreter(project)?.let { return it.toString() }
+        }
         return DEFAULT_PYTHON
+    }
+
+    /**
+     * The interpreter uv runs this project's code on.
+     *
+     * **A uv launch names no venv**, and that is deliberate rather than an omission: it runs
+     * everything through `uv run`, which establishes the environment itself, so
+     * [ByLaunch.venvRoot] is null and [ByLaunch.env] is empty on purpose — see
+     * [dev.basedpython.pycharm.env.ByEnvironments.resolve]. Every other consumer wants exactly
+     * that. This one cannot use it: the wrapper `by run` probes has to `exec` a real interpreter,
+     * and there is no path in a launch that is a command line.
+     *
+     * So the environment is named the way uv names it — `UV_PROJECT_ENVIRONMENT` when it is set,
+     * and `.venv` beside the project otherwise, which is uv's default. Only returned when the
+     * interpreter is really there; a guess that is not would put the session back on
+     * [DEFAULT_PYTHON] by a longer route.
+     *
+     * Without this a uv-backed project — which is what a basedpython project normally is — reached
+     * [DEFAULT_PYTHON], and `by run` was handed a wrapper that answered its version probe with
+     * whatever `python3` means on the machine. That is a 3.9 here, which `by run` refuses outright;
+     * on a machine where `python3` is new enough it would have been worse, because the program
+     * would have *run*, on an interpreter nobody chose.
+     */
+    private fun uvInterpreter(project: Project): Path? {
+        val base = project.basePath?.let { runCatching { Paths.get(it) }.getOrNull() } ?: return null
+        val configured = System.getenv("UV_PROJECT_ENVIRONMENT")?.takeIf { it.isNotBlank() }
+        val root = configured?.let { base.resolve(it) } ?: base.resolve(UV_DEFAULT_ENVIRONMENT)
+        return ByEnvironments.venvBinary(root, PYTHON_BINARY).takeIf { Files.isExecutable(it) }
     }
 
     /**
@@ -146,6 +181,9 @@ class ByDapLaunchArgumentsProvider : DapLaunchArgumentsProvider {
 
         /** The interpreter's name inside a venv's `bin` / `Scripts`. */
         private const val PYTHON_BINARY = "python"
+
+        /** Where uv puts a project's environment when nothing says otherwise. */
+        private const val UV_DEFAULT_ENVIRONMENT = ".venv"
 
         /** The binary whose directory a sibling `bpd` is looked for in. */
         private const val BY_BINARY = "by"

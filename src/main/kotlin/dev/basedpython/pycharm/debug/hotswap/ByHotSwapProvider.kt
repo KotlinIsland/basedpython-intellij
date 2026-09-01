@@ -22,6 +22,7 @@ import com.intellij.xdebugger.impl.hotswap.HotSwapStatusNotificationManager
 import com.intellij.xdebugger.impl.hotswap.SourceFileChangeFilter
 import com.intellij.xdebugger.impl.hotswap.SourceFileChangesCollectorImpl
 import dev.basedpython.pycharm.debug.ByDebugProtocolServer
+import dev.basedpython.pycharm.debug.bpd.ByBpdRecord
 import dev.basedpython.pycharm.lang.dialect.BasedPythonSources
 import dev.basedpython.pycharm.lsp.ext.ByRestaged
 import dev.basedpython.pycharm.util.BasedPythonBundle
@@ -77,13 +78,15 @@ internal class ByHotSwapProvider(
     private val project: Project,
     private val commandProcessor: DapCommandProcessor,
     /**
-     * The tree `by run` transpiled into and is running the program out of.
+     * The file the wrapper writes the directory `by run` chose into.
      *
-     * Where a re-staged file has to be written for the interpreter to be given it, and the one
-     * thing about this session the IDE could not have worked out for itself — `by run` chooses a
-     * temp directory, and only the process that started the program ever sees the name.
+     * Read when the button is pressed rather than held as a value, because it is not knowable
+     * before then: `by run` chooses its temp directory after the IDE has built this, so a value
+     * captured at construction is a read of a file that does not exist yet. That was the first
+     * thing this feature got wrong in a real session — every reload answered that the build
+     * directory was not known.
      */
-    private val buildDirectory: String?,
+    private val recordFile: java.nio.file.Path?,
 ) : HotSwapProvider<VirtualFile> {
 
     /**
@@ -170,12 +173,18 @@ internal class ByHotSwapProvider(
         // reload is a notification, and four of them are spam.
         val notReloaded = mutableListOf<String>()
 
-        val directory = buildDirectory
+        val directory = recordFile?.let { ByBpdRecord.buildDirectoryOf(it) }
         if (directory == null) {
             // The enabler offers this for bpd sessions only, and a bpd session is one `by run`
-            // started — so this is a session whose record could not be read rather than one of a
-            // shape that was never meant to work.
-            tell(listOf("nothing was reloaded: the build directory this program runs out of is not known"))
+            // started — so this is a record that could not be read rather than a session of a shape
+            // that was never meant to work. The path is named because without it there is nothing
+            // to look at.
+            tell(
+                listOf(
+                    "nothing was reloaded: the directory `by run` is running this program out of " +
+                        "is not known — nothing readable in ${recordFile ?: "the session's record"}",
+                ),
+            )
             listener.onFailure()
             return
         }

@@ -31,7 +31,7 @@ internal class ByHotSwapEnabler : HotSwapInDebugSessionEnabler {
             process = dap,
             project = dap.session.project,
             commandProcessor = dap.dapDebugSession.commandProcessor,
-            buildDirectory = dap.buildDirectory,
+            recordFile = dap.recordFile,
         )
     }
 }
