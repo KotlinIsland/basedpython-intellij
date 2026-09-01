@@ -373,6 +373,17 @@
 
 ### Fixed
 
+- The bundled live templates expand. All nineteen of them — `dcl`, `cdef`, `main` and the rest —
+  loaded, appeared in *Settings | Editor | Live Templates*, and expanded nowhere. A template's
+  `<context>` names the context by the id the `liveTemplateContext` extension point declares, which
+  is `BASED_PYTHON`; every template instead named `basedpython`, which is the string passed to the
+  context type's constructor and which the platform reads as the *presentable name*, not the id. So
+  `TemplateContext.isEnabled` found no own value for `BASED_PYTHON`, fell through to the base
+  context, and read the `OTHER` the same block sets to `false` — enabled in no context at all. It
+  looked healthy from every direction except the editor, which is why it went unnoticed: the
+  templates are listed, tickable, and editable in settings whichever id they carry. A test now
+  expands every bundled template in a `.by` file, and asserts one does not expand in a `.txt`.
+
 - Inlay hints are no longer sometimes drawn twice (`def f() → 1 → 1:`). The inlay pass flattens the
   file and pushes every element through *one* collector with
   `JobLauncher.invokeConcurrentlyUnderProgress` — a chunk per pool thread — so the flag saying "the

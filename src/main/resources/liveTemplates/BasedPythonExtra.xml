@@ -6,7 +6,7 @@
               toShortenFQNames="true">
         <context>
             <option name="OTHER" value="false"/>
-            <option name="basedpython" value="true"/>
+            <option name="BASED_PYTHON" value="true"/>
         </context>
     </template>
     <template name="adef"
@@ -19,7 +19,7 @@
         <variable name="RETURN" expression="" defaultValue="&quot;None&quot;" alwaysStopAt="true"/>
         <context>
             <option name="OTHER" value="false"/>
-            <option name="basedpython" value="true"/>
+            <option name="BASED_PYTHON" value="true"/>
         </context>
     </template>
     <template name="match"
@@ -31,7 +31,7 @@
         <variable name="PATTERN" expression="" defaultValue="&quot;_&quot;" alwaysStopAt="true"/>
         <context>
             <option name="OTHER" value="false"/>
-            <option name="basedpython" value="true"/>
+            <option name="BASED_PYTHON" value="true"/>
         </context>
     </template>
     <template name="enum"
@@ -44,7 +44,7 @@
         <variable name="VALUE" expression="" defaultValue="&quot;1&quot;" alwaysStopAt="true"/>
         <context>
             <option name="OTHER" value="false"/>
-            <option name="basedpython" value="true"/>
+            <option name="BASED_PYTHON" value="true"/>
         </context>
     </template>
     <template name="test"
@@ -55,7 +55,7 @@
         <variable name="NAME" expression="" defaultValue="&quot;something&quot;" alwaysStopAt="true"/>
         <context>
             <option name="OTHER" value="false"/>
-            <option name="basedpython" value="true"/>
+            <option name="BASED_PYTHON" value="true"/>
         </context>
     </template>
     <template name="fix"
@@ -67,7 +67,7 @@
         <variable name="PARAMS" expression="" defaultValue="&quot;&quot;" alwaysStopAt="true"/>
         <context>
             <option name="OTHER" value="false"/>
-            <option name="basedpython" value="true"/>
+            <option name="BASED_PYTHON" value="true"/>
         </context>
     </template>
     <template name="prop"
@@ -79,7 +79,7 @@
         <variable name="TYPE" expression="" defaultValue="&quot;int&quot;" alwaysStopAt="true"/>
         <context>
             <option name="OTHER" value="false"/>
-            <option name="basedpython" value="true"/>
+            <option name="BASED_PYTHON" value="true"/>
         </context>
     </template>
     <template name="field"
@@ -92,7 +92,7 @@
         <variable name="DEFAULT" expression="" defaultValue="&quot;0&quot;" alwaysStopAt="true"/>
         <context>
             <option name="OTHER" value="false"/>
-            <option name="basedpython" value="true"/>
+            <option name="BASED_PYTHON" value="true"/>
         </context>
     </template>
     <template name="try"
@@ -105,7 +105,7 @@
         <variable name="VAR" expression="" defaultValue="&quot;e&quot;" alwaysStopAt="true"/>
         <context>
             <option name="OTHER" value="false"/>
-            <option name="basedpython" value="true"/>
+            <option name="BASED_PYTHON" value="true"/>
         </context>
     </template>
     <template name="with"
@@ -117,7 +117,7 @@
         <variable name="VAR" expression="" defaultValue="&quot;ctx&quot;" alwaysStopAt="true"/>
         <context>
             <option name="OTHER" value="false"/>
-            <option name="basedpython" value="true"/>
+            <option name="BASED_PYTHON" value="true"/>
         </context>
     </template>
     <template name="compr"
@@ -130,7 +130,7 @@
         <variable name="ITER" expression="" defaultValue="&quot;items&quot;" alwaysStopAt="true"/>
         <context>
             <option name="OTHER" value="false"/>
-            <option name="basedpython" value="true"/>
+            <option name="BASED_PYTHON" value="true"/>
         </context>
     </template>
 </templateSet>
