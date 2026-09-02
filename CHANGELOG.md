@@ -574,6 +574,19 @@
 
 ### Changed
 
+- `verifyPlugin` checks both ends of the declared range instead of only the bottom.
+  `recommended()` asks Marketplace's release feed what to verify against, and that feed listed no
+  263 build at all, so a plugin claiming 262 through 263.* was verified against IU-262.10315.69 and
+  nothing else — which is how the lsp4j swap above reached a running IDE rather than a red build.
+  The 263 half now comes from the snapshot repository that `defaultRepositories()` already declares
+  (`263.+`, `useInstaller = false`, dynamic so that pinning cannot freeze the check at a platform
+  that has moved on), and `-PverifyIde=<path>` adds a local installation on top: the public
+  snapshots trail the internal nightlies by weeks — 263.3889.65-EAP-CANDIDATE still had the old
+  `String getMessage()` when 263.4388 had already swapped it — so the build a 2026.3 user is
+  running is often one no repository can hand a CI job. Measured both ways against PY-263.4388:
+  the reverted one-liner is reported as *Invocation of unresolved method
+  org.eclipse.lsp4j.Diagnostic.getMessage() : String*, the fix as compatible.
+
 - The minimum IDE is 2026.2 (`sinceBuild` 262), where it said 261. Log points are built on
   the platform's inter-line breakpoint API — `XLineBreakpointVerticalPlacement`,
   `XLineBreakpointAdditionalInfo`, `InterLineShiftAnimator`, `InterLineBreakpointConfiguration`

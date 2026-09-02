@@ -339,6 +339,17 @@ them.
 
 Both are also **Run IDE** and **Run PyCharm** in the IDE's own run-configuration dropdown.
 
+`./gradlew verifyPlugin` checks the built zip against both ends of the range the manifest claims:
+the recommended 2026.2 release, and the newest 2026.3 build in JetBrains' snapshot repository. The
+public 2026.3 snapshots run some weeks behind the internal nightlies, so a platform change can be
+live in the IDE you use before any repository can hand it to CI — point the verifier at that build
+directly to see what it says.
+
+```bash
+./gradlew verifyPlugin
+./gradlew verifyPlugin -PverifyIde=~/Applications/nightly.app   # plus a local installation
+```
+
 ## Releasing
 
 The version is the tag. Create a GitHub release named `v1.2.3` and publishing it runs

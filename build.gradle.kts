@@ -157,8 +157,28 @@ intellijPlatform {
       VerifyPluginTask.FailureLevel.COMPATIBILITY_PROBLEMS,
       VerifyPluginTask.FailureLevel.INVALID_PLUGIN,
     )
+    // Both ends of the declared range, not just the bottom. `recommended()` asks Marketplace's
+    // release feed what to verify against, and on 2026-09-03 that feed listed no 263 build at all —
+    // so a plugin claiming 262 through 263.* was verified against IU-262.10315.69 and nothing else.
+    // That is how 2026.3's lsp4j swap — `Diagnostic.getMessage()` returning
+    // `Either<String, MarkupContent>` where 262 returned `String` — reached a running IDE as a
+    // NoSuchMethodError on every diagnostic rather than a red build here.
+    //
+    // So the 263 half comes from the snapshot repository, which `defaultRepositories()` already
+    // declares, instead of the release feed. `useInstaller = false` because those are Maven
+    // artifacts rather than installers, and the verifier wants an unpacked distribution, which is
+    // what the artifact is. The version is dynamic on purpose: pinning an EAP build freezes this at
+    // whatever platform existed the day it was pinned, which is the hole being closed. It does mean
+    // a JetBrains change can turn this red without a change here — that is the signal, not noise.
     ides {
       recommended()
+      create(IntelliJPlatformType.IntellijIdea, "263.+") { useInstaller = false }
+
+      // `-PverifyIde=<path to an IDE>` verifies against one more, a local installation. The public
+      // 263 snapshots trail the internal nightlies by some weeks — 263.3889.65-EAP-CANDIDATE still
+      // had the old `String getMessage()` when 263.4388 had already swapped it — so the build a
+      // 2026.3 user is actually running is often one no repository can hand a CI job.
+      providers.gradleProperty("verifyIde").orNull?.let { local(it) }
     }
   }
 
