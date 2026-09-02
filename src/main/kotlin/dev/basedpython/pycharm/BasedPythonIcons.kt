@@ -1,6 +1,7 @@
 package dev.basedpython.pycharm
 
 import com.intellij.openapi.util.IconLoader
+import dev.basedpython.pycharm.project.PyprojectIconProvider
 import javax.swing.Icon
 
 /**
@@ -24,4 +25,16 @@ object BasedPythonIcons {
      */
     @JvmField
     val Tasks: Icon = IconLoader.getIcon("/icons/basedpythonTasks.svg", BasedPythonIcons::class.java)
+
+    /**
+     * The TOML icon with the Python logo in its notched bottom-right corner, which
+     * [PyprojectIconProvider] hands to `pyproject.toml`.
+     *
+     * Drawn whole rather than layered at runtime, the way the platform draws its own composites,
+     * and carrying JetBrains' own Python mark rather than a drawing of one — see the file for why,
+     * and for what the copied geometry costs.
+     */
+    @JvmField
+    val PyprojectToml: Icon =
+        IconLoader.getIcon("/icons/pyprojectToml.svg", BasedPythonIcons::class.java)
 }

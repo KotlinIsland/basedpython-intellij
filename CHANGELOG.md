@@ -80,6 +80,9 @@
   `.by` ↔ `.py` conversion.
 - **New Project → basedpython** wizard; `pyproject.toml` `[tool.ruff]`/buff config
   completion; `out/` excluded from indexing.
+- `pyproject.toml` is given its own icon: the TOML icon with the Python logo in a notched
+  bottom-right corner, so a project's manifest is not one of four identical blue T's beside
+  `ruff.toml`, `uv.toml` and `.pyprojectx.toml`.
 - i18n message bundle, unit tests (lexer, file type), and `sinceBuild`/`untilBuild`
   compatibility range.
 - Go to Symbol for `.by` files, which is the platform's LSP client asking `by` for
