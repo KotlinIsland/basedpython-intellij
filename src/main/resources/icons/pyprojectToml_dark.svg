@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Dark-theme variant of pyprojectToml.svg: identical geometry, each half taking the dark colours
+  JetBrains give it — the frame from expui/fileTypes/toml_dark.svg, the Python mark from the Python
+  plugin's expui/model/pyProjectModule_dark.svg (both Apache 2.0).
+
+  The frame's stroke and the mark's blue are the same #548AF7 here, as they are in the platform's
+  own pair. The notch is what keeps them apart: a row of background between the two.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
+  <path d="M4 2.5H12A1.5 1.5 0 0 1 13.5 4V8H12C10.8954 8 10 8.89543 10 10C8.89543 10 8 10.8954 8 12V13.5H4A1.5 1.5 0 0 1 2.5 12V4A1.5 1.5 0 0 1 4 2.5z"
+        fill="#25324D" stroke="#548AF7"/>
+  <path d="M5.21826 4.5H10.7783V5.645H8.61826V10.2H7.38826V5.645H5.21826V4.5Z" fill="#548AF7"/>
+  <path fill-rule="evenodd" clip-rule="evenodd"
+        d="M14 11.5V11H15C15.5523 11 16 11.4477 16 12V13C16 13.5523 15.5523 14 15 14H14V15C14 15.5523 13.5523 16 13 16H12C11.4477 16 11 15.5523 11 15V13.5C11 12.9477 11.4477 12.5 12 12.5H13C13.5523 12.5 14 12.0523 14 11.5ZM12.5 15C12.7761 15 13 14.7761 13 14.5C13 14.2239 12.7761 14 12.5 14C12.2239 14 12 14.2239 12 14.5C12 14.7761 12.2239 15 12.5 15Z"
+        fill="#F2C55C"/>
+  <path fill-rule="evenodd" clip-rule="evenodd"
+        d="M11 13.5V14H10C9.44772 14 9 13.5523 9 13V12C9 11.4477 9.44772 11 10 11H11V10C11 9.44772 11.4477 9 12 9H13C13.5523 9 14 9.44772 14 10V11.5C14 12.0523 13.5523 12.5 13 12.5H12C11.4477 12.5 11 12.9477 11 13.5ZM12.5 11C12.7761 11 13 10.7761 13 10.5C13 10.2239 12.7761 10 12.5 10C12.2239 10 12 10.2239 12 10.5C12 10.7761 12.2239 11 12.5 11Z"
+        fill="#548AF7"/>
+</svg>

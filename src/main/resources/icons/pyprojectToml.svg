@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The file icon for `pyproject.toml`: the TOML icon with the Python logo in its bottom-right corner.
+  A project's manifest is the file its owner opens most, and beside `ruff.toml`, `uv.toml` and
+  `.pyprojectx.toml` it is otherwise the fourth identical blue T. PyCharm does not do this itself —
+  its only claim on the name is `<fileType name="TOML" fileNames="pyproject.toml"/>`, registered so
+  the plugin advertiser stops promoting third-party TOML plugins (PY-90131).
+
+  One drawn icon rather than a badge layered over the platform's TOML icon at runtime, which is how
+  the platform draws the same idea: expui/nodes/module.svg and the Python plugin's own
+  expui/model/pyProjectModule.svg are each a single file whose *base shape is notched* to seat the
+  badge. The platform layers at runtime only where the base cannot be known ahead of time (any file
+  type can sit under the source-root badge, so those combinations cannot be drawn); a
+  `pyproject.toml` is always TOML, so the base is known and the bite can be cut here instead. With a
+  hole in the frame the mark needs neither a background-coloured plate behind it — which becomes a
+  visible white square on a selected tree row — nor a rim to hold it off the frame's border.
+
+  The mark and the notch are lifted verbatim from pyProjectModule.svg, the icon PyCharm puts on a
+  module defined by a pyproject.toml, rather than drawn here. Two reasons. It is the same mark the
+  user already reads as "Python" everywhere else in the IDE, so it should be the same pixels. And a
+  first attempt at drawing it — two colour fields split by the logo's S — proved that the logo does
+  not survive being simplified: what makes it read at this size is not the two-tone split but the
+  two chunky bodies offset along the diagonal, each with a 1px eye dot, and the eye is most of it.
+
+  Note the colours are JetBrains' Python palette (#4682FA / #FFAF0F), not the official #3776AB /
+  #FFD43B. Theirs is brighter and carries at 7px and on a dark background; the official blue is
+  nearly the value of a dark tool window.
+
+  Geometry from JetBrains, Apache 2.0 (Copyright 2000-2024 JetBrains s.r.o. and contributors):
+  the frame and T from expui/fileTypes/toml.svg, the Python mark and the stepped notch from the
+  Python plugin's expui/model/pyProjectModule.svg. The T's stem is shortened from 11.5 to 10.2 to
+  clear the notch — the frame keeps its original bounds instead, so a `pyproject.toml` still lines
+  up with the plain `.toml` files above and below it in the tree.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
+  <!-- The TOML frame. `V8 H12 C… C… 8 12` is the notch: two radius-2 quarter arcs stepping
+       down-left, tracking the diagonal the Python mark's two bodies lie along. -->
+  <path d="M4 2.5H12A1.5 1.5 0 0 1 13.5 4V8H12C10.8954 8 10 8.89543 10 10C8.89543 10 8 10.8954 8 12V13.5H4A1.5 1.5 0 0 1 2.5 12V4A1.5 1.5 0 0 1 4 2.5z"
+        fill="#F5F8FE" stroke="#3574F0"/>
+  <path d="M5.21826 4.5H10.7783V5.645H8.61826V10.2H7.38826V5.645H5.21826V4.5Z" fill="#3574F0"/>
+  <!-- Each body is two rounded blocks offset along the diagonal and filleted together; the
+       trailing sub-path in each is the eye, punched out by the even-odd fill rule. -->
+  <path fill-rule="evenodd" clip-rule="evenodd"
+        d="M14 11.5V11H15C15.5523 11 16 11.4477 16 12V13C16 13.5523 15.5523 14 15 14H14V15C14 15.5523 13.5523 16 13 16H12C11.4477 16 11 15.5523 11 15V13.5C11 12.9477 11.4477 12.5 12 12.5H13C13.5523 12.5 14 12.0523 14 11.5ZM12.5 15C12.7761 15 13 14.7761 13 14.5C13 14.2239 12.7761 14 12.5 14C12.2239 14 12 14.2239 12 14.5C12 14.7761 12.2239 15 12.5 15Z"
+        fill="#FFAF0F"/>
+  <path fill-rule="evenodd" clip-rule="evenodd"
+        d="M11 13.5V14H10C9.44772 14 9 13.5523 9 13V12C9 11.4477 9.44772 11 10 11H11V10C11 9.44772 11.4477 9 12 9H13C13.5523 9 14 9.44772 14 10V11.5C14 12.0523 13.5523 12.5 13 12.5H12C11.4477 12.5 11 12.9477 11 13.5ZM12.5 11C12.7761 11 13 10.7761 13 10.5C13 10.2239 12.7761 10 12.5 10C12.2239 10 12 10.2239 12 10.5C12 10.7761 12.2239 11 12.5 11Z"
+        fill="#4682FA"/>
+</svg>

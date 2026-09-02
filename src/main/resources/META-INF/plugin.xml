@@ -244,6 +244,12 @@
             implementationClass="dev.basedpython.pycharm.project.PyprojectCompletionContributor"/>
         <directoryIndexExcludePolicy
             implementation="dev.basedpython.pycharm.project.OutDirExcludePolicy"/>
+        <!-- The TOML icon with the Python logo on it, for `pyproject.toml`. `fileIconProvider`
+             covers both the VirtualFile path (editor tabs, Search Everywhere) and the PSI path
+             (project view); the two other icon EPs, `iconProvider` and `iconLayerProvider`, are
+             asked about a PsiElement/Iconable and so cover only the second. -->
+        <fileIconProvider
+            implementation="dev.basedpython.pycharm.project.PyprojectIconProvider"/>
 
         <!-- ===== Stream R: navigation & search =====
              Goto Symbol / Goto Class come from the server's workspace symbols: the platform
