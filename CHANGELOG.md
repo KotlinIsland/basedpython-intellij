@@ -440,6 +440,18 @@
 
 ### Fixed
 
+- Diagnostics appear at all on 2026.3, where every one of them threw `NoSuchMethodError:
+  'java.lang.String org.eclipse.lsp4j.Diagnostic.getMessage()'` out of
+  `ByDiagnosticsSupport.getTooltip` and left the file unannotated. LSP 3.18 lets a diagnostic
+  message be a `MarkupContent` and lsp4j followed: `Diagnostic.getMessage()` returns
+  `Either<String, MarkupContent>` on 263 where 262 returned `String`, read off
+  `intellij.libraries.eclipse.lsp4j.jar` and `eclipse.lsp4j.jar` in each IDE rather than guessed.
+  The tooltip is built from `LspDiagnosticsSupport.getMessage` now, which keeps its `String`
+  signature on both builds and is where the platform absorbs the change — on 263 by way of
+  `Lsp4jUtilKt.getMessageIfStringOrEmpty`, and `by` sends plain strings, so nothing is lost to the
+  markup side. Every other lsp4j and platform reference the plugin compiles, 75 and 1290 of them,
+  resolves identically against both builds: this was the only one.
+
 - The `print` quick fix leaves a log point on 2026.3 instead of eating the line. Taking it there
   deleted the call and then threw `NoSuchMethodError:
   'XLineBreakpointAdditionalInfo$Builder.setLogExpressionIfEnabled(java.lang.String)'` out of
