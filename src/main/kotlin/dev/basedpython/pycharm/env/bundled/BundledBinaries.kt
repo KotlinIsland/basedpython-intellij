@@ -1,6 +1,5 @@
 package dev.basedpython.pycharm.env.bundled
 
-import com.intellij.ide.plugins.PluginManagerCore
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.extensions.PluginId
 import com.intellij.openapi.util.SystemInfo
@@ -9,6 +8,7 @@ import dev.basedpython.pycharm.env.download.ByBinaryDownloadPlan
 import dev.basedpython.pycharm.env.download.ByBinaryDownloadPlan.Platform
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.Paths
 
 /**
  * `by` / `buff` shipped inside the plugin itself, at `<plugin>/bin/`.
@@ -67,13 +67,33 @@ object BundledBinaries {
     // --- Runtime lookup -----------------------------------------------------
 
     /**
-     * The installed plugin's own directory, or `null` when the descriptor is unavailable (which is
-     * the case in plain unit tests — there is no plugin installation to find).
+     * The installed plugin's own directory, or `null` when it cannot be worked out (which is the
+     * case in plain unit tests — there is no plugin installation to find).
+     *
+     * Derived from where this class was loaded from rather than asked of the platform: every
+     * plugin-descriptor lookup there is `@ApiStatus.Internal` — `PluginManagerCore.getPlugin`,
+     * `PluginManager.getPlugin`, `getPluginByClass`, `findEnabledPlugin` — and the one public
+     * method, `getPluginByClassName`, returns a bare `PluginId` with no path on it. See
+     * docs/internal-api.md.
+     *
+     * An installed plugin is laid out as `<plugin>/lib/<jar>`, so the root is the jar's
+     * grandparent. Anything else — a directory on the classpath in a test, an unexpected layout —
+     * fails the `lib` check and returns null, which is the same answer the descriptor lookup gave
+     * when there was no installation. A wrong directory would be worse than none: it is where
+     * bundled `by` and `buff` binaries are looked for.
      */
     fun pluginRoot(): Path? =
         try {
-            PluginManagerCore.getPlugin(PluginId.getId(PLUGIN_ID))?.pluginPath
+            val source = javaClass.protectionDomain?.codeSource?.location?.toURI()?.let(Paths::get)
+            source?.takeIf { it.fileName.toString().endsWith(".jar") }
+                ?.parent?.takeIf { it.fileName.toString() == "lib" }
+                ?.parent
         } catch (ex: Exception) {
+            LOG.debug("Could not locate the plugin directory", ex)
+            null
+        } catch (ex: LinkageError) {
+            // A security manager or an exotic classloader can refuse the protection domain. Same
+            // outcome as no installation rather than a failure on a path nothing else depends on.
             LOG.debug("Could not locate the plugin directory", ex)
             null
         }
