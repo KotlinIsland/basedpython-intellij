@@ -12,7 +12,6 @@ import com.intellij.psi.PsiFile
 import com.intellij.xdebugger.XDebuggerManager
 import com.intellij.xdebugger.XDebuggerUtil
 import com.intellij.xdebugger.breakpoints.SuspendPolicy
-import com.intellij.xdebugger.breakpoints.XLineBreakpointVerticalPlacement
 import dev.basedpython.pycharm.debug.ByLineBreakpointType
 import dev.basedpython.pycharm.debug.logpoint.ByLogpointUndo
 import dev.basedpython.pycharm.debug.logpoint.ByLogpoints
@@ -88,18 +87,19 @@ private class ReplaceWithLogpointFix : LocalQuickFix {
         document.deleteString(candidate.lineStart, candidate.lineEndWithSeparator)
         documentManager.commitDocument(document)
 
-        // INTER_LINE is what makes this read as a swap rather than a move. The platform anchors an
-        // inter-line breakpoint to the line *below* the gap and draws it in the gap, so a log point
-        // on the follower is painted exactly where the deleted call was — the same place Kotlin's
-        // leaves one. The line it binds to is the follower either way, which is why the follower has
-        // to be in the same block for this to be offered at all (see PrintToLogpoint).
+        // The log point goes on the follower line, which is what makes this read as a swap rather
+        // than a move: its field is drawn above that line, where the deleted call was — the same
+        // place Kotlin's leaves one. The follower is also the line it binds to, which is why the
+        // follower has to be in the same block for this to be offered at all (see PrintToLogpoint).
         val expression = ByLogpoints.expressionOf(candidate.expression)
-        val info = PlatformLogpointInfo.of(
-            XLineBreakpointVerticalPlacement.INTER_LINE,
-            SuspendPolicy.NONE,
-            expression,
+        val info = PlatformLogpointInfo.of(SuspendPolicy.NONE, expression)
+        val breakpoint = breakpoints.addLineBreakpoint(
+            type,
+            virtualFile.url,
+            candidate.logpointLine,
+            ByLogpoints.logpointProperties(),
+            info,
         )
-        val breakpoint = breakpoints.addLineBreakpoint(type, virtualFile.url, candidate.logpointLine, null, info)
 
         // Re-stated with a language attached, so the expression edits as basedpython in the
         // breakpoint dialog rather than as plain text — which is what the info loses on 262, where

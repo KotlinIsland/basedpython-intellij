@@ -7,7 +7,6 @@ import com.intellij.xdebugger.XDebuggerManager
 import com.intellij.xdebugger.XDebuggerUtil
 import com.intellij.xdebugger.breakpoints.SuspendPolicy
 import com.intellij.xdebugger.breakpoints.XLineBreakpoint
-import com.intellij.xdebugger.breakpoints.XLineBreakpointVerticalPlacement
 import com.intellij.xdebugger.evaluation.EvaluationMode
 import dev.basedpython.pycharm.debug.ByLineBreakpointType
 import dev.basedpython.pycharm.lang.BasedPythonLanguage
@@ -43,7 +42,6 @@ class ByLogpointFieldTest {
     private fun logpointAt(line: Int, expression: String? = null): XLineBreakpoint<*> {
         fixture.configureByText("main.by", "def f(x):\n    return x\n")
         val info = PlatformLogpointInfo.of(
-            XLineBreakpointVerticalPlacement.INTER_LINE,
             SuspendPolicy.NONE,
             expression?.let { ByLogpoints.expressionOf(it) },
         )

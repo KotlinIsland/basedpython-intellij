@@ -12,7 +12,7 @@ import com.intellij.xdebugger.XDebuggerManager
 import com.intellij.xdebugger.XDebuggerUtil
 import com.intellij.xdebugger.breakpoints.SuspendPolicy
 import com.intellij.xdebugger.breakpoints.XLineBreakpoint
-import com.intellij.xdebugger.breakpoints.XLineBreakpointVerticalPlacement
+import dev.basedpython.pycharm.debug.logpoint.ByLogpoints
 import dev.basedpython.pycharm.debug.ByLineBreakpointType
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
 import dev.basedpython.pycharm.testFramework.letContentHashingFinish
@@ -63,12 +63,14 @@ class PrintToLogpointFixTest {
     fun letTheEditSettle() = letContentHashingFinish()
 
     @Test
-    fun `the call is gone and the log point sits between the lines it left`() {
+    fun `the call is gone and what replaces it is a log point`() {
         val breakpoint = applyFix("def f(x):\n    print(x)\n    return x * 2\n")
 
         assertEquals("def f(x):\n    return x * 2\n", fixture.editor.document.text)
-        assertEquals(XLineBreakpointVerticalPlacement.INTER_LINE, breakpoint.placement)
-        // Line 1 is `return x * 2`; the gap above it is where the print was.
+        // The mark that makes it a log point rather than an ordinary breakpoint. Was the
+        // platform's INTER_LINE placement, which is @ApiStatus.Internal — see docs/internal-api.md.
+        assertNotNull(ByLogpoints.asLogpoint(breakpoint), "the fix left an ordinary breakpoint")
+        // Line 1 is `return x * 2`; the log point is drawn above it, where the print was.
         assertEquals(1, breakpoint.line)
     }
 

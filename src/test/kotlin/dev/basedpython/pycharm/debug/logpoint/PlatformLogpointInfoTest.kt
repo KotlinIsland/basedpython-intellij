@@ -3,7 +3,6 @@ package dev.basedpython.pycharm.debug.logpoint
 import com.intellij.xdebugger.XExpression
 import com.intellij.xdebugger.breakpoints.SuspendPolicy
 import com.intellij.xdebugger.breakpoints.XLineBreakpointAdditionalInfo
-import com.intellij.xdebugger.breakpoints.XLineBreakpointVerticalPlacement
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
@@ -42,12 +41,10 @@ class PlatformLogpointInfoTest {
     @Test
     fun `the expression reaches the info this IDE builds`() {
         val info = PlatformLogpointInfo.of(
-            XLineBreakpointVerticalPlacement.INTER_LINE,
             SuspendPolicy.NONE,
             ByLogpoints.expressionOf("x * 2"),
         )
 
-        assertEquals(XLineBreakpointVerticalPlacement.INTER_LINE, info.verticalPlacement)
         assertEquals(SuspendPolicy.NONE, info.suspendPolicy)
         // `logExpressionIfEnabled` is a `String` on 262 and an `XExpression` on 263, which is the
         // whole reason this object exists; what both builds have to agree on is that it says `x * 2`.
@@ -57,9 +54,9 @@ class PlatformLogpointInfoTest {
 
     @Test
     fun `a log point with nothing to log yet carries no expression`() {
-        val info = PlatformLogpointInfo.of(XLineBreakpointVerticalPlacement.INTER_LINE, SuspendPolicy.NONE)
+        val info = PlatformLogpointInfo.of(SuspendPolicy.NONE)
 
-        assertNull(info.logExpressionIfEnabled, "a click in the gutter gap makes an empty log point")
+        assertNull(info.logExpressionIfEnabled, "Add Log Point makes an empty log point")
     }
 
     private fun Class<*>.has(vararg types: Class<*>) =
