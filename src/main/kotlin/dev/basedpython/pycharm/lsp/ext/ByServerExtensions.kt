@@ -1,5 +1,7 @@
 package dev.basedpython.pycharm.lsp.ext
 
+import org.eclipse.lsp4j.Position
+import org.eclipse.lsp4j.Range
 import org.eclipse.lsp4j.TextDocumentIdentifier
 import org.eclipse.lsp4j.jsonrpc.services.JsonRequest
 import java.util.concurrent.CompletableFuture
@@ -68,7 +70,61 @@ interface ByServerExtensions {
      */
     @JsonRequest("by/transpileForBuild")
     fun transpileForBuild(args: ByTranspileForBuildParams): CompletableFuture<ByRestaged?>
+
+    /**
+     * Which assignments the author lined up, so that drawing inlay hints does not take the column
+     * apart — see [dev.basedpython.pycharm.lsp.inlay.ByAlignment].
+     *
+     * **Why not `textDocument/inlayHint`.** That request can only answer *about hints*, and the
+     * lines that matter most here are the ones with no hint at all: in
+     *
+     * ```
+     * a     = [1, 2]
+     * basdf = 1
+     * ```
+     *
+     * it is `basdf` that has to move, and `basdf` gets no hint, because `by` suppresses the type of
+     * a bare literal. There is nowhere in an inlay hint reply to hang a line that has no hint.
+     *
+     * **Why the server at all.** Whether a run of assignments is a block the author aligned is a
+     * question about the source — which statements are siblings, where a suite ends, what is an
+     * assignment and what merely looks like one — and the server is holding the parse. Recovering
+     * that from the document text means a regex, and a regex cannot tell an `=` in code from one in
+     * a string. What the server deliberately does *not* decide is how wide anything ends up: only
+     * the client knows which hints are on screen this instant.
+     *
+     * A `null` answer means the server declined — language services or every hint kind are off.
+     */
+    @JsonRequest("by/alignmentGroups")
+    fun alignmentGroups(args: ByAlignmentGroupsParams): CompletableFuture<List<ByAlignmentGroup>?>
 }
+
+/**
+ * The document to look through, and how much of it.
+ *
+ * Field names are the wire format and must match `ty_server`'s `AlignmentGroupsParams`, which is
+ * `deny_unknown_fields`. [range] mirrors the one sent to `textDocument/inlayHint` so that both
+ * questions are asked about the same span; a group that only partly overlaps it comes back whole,
+ * since a column is a property of every member at once.
+ */
+data class ByAlignmentGroupsParams(
+    val textDocument: TextDocumentIdentifier,
+    val range: Range,
+)
+
+/** Assignments sharing one `=` column, which therefore have to be laid out together. */
+data class ByAlignmentGroup(val members: List<ByAlignmentMember> = emptyList())
+
+/** One assignment's contribution to the column. */
+data class ByAlignmentMember(
+    /**
+     * The end of the target: where the padding starts, and where a variable's type hint for this
+     * line is positioned. Hints are matched to members by this position.
+     */
+    val gapStart: Position,
+    /** The `=`. */
+    val gapEnd: Position,
+)
 
 /**
  * Which file was edited, and which tree is running.
