@@ -15,7 +15,6 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
 import com.intellij.ui.EditorTextField
 import com.intellij.ui.JBColor
-import com.intellij.ui.ShadowJava2DBorder
 import com.intellij.ui.components.JBLabel
 import com.intellij.util.text.CharArrayUtil
 import com.intellij.util.ui.JBFont
@@ -37,6 +36,9 @@ import java.awt.event.FocusAdapter
 import java.awt.event.FocusEvent
 import java.util.Collections
 import java.util.WeakHashMap
+import java.awt.Component
+import java.awt.Insets
+import javax.swing.border.Border
 
 /**
  * The `Log:` box a log point shows in its gap, holding the expression it logs.
@@ -295,7 +297,7 @@ class ByLogpointField private constructor(
 
         val box = BorderLayoutPanel()
         box.isOpaque = false
-        box.border = ShadowJava2DBorder(JBUI.scale(ARC), FIELD_BACKGROUND, FIELD_BORDER)
+        box.border = ByLogpointBoxBorder(JBUI.scale(ARC), FIELD_BACKGROUND, FIELD_BORDER)
         box.addToCenter(expressionEditor.editorComponent)
 
         val editorComponent = expressionEditor.editorComponent
@@ -488,5 +490,77 @@ internal class ByLogpointFieldRegistry : Disposable {
         val open = synchronized(byEditor) { byEditor.values.flatMap { it.values.toList() } }
         open.forEach { it.close() }
         synchronized(byEditor) { byEditor.clear() }
+    }
+}
+
+/**
+ * The rounded, softly shadowed box the `Log:` field sits in.
+ *
+ * A border of our own rather than the platform's `ShadowJava2DBorder`, which is
+ * `@ApiStatus.Internal` — see docs/internal-api.md. It is a small enough thing to draw that
+ * reproducing it costs less than the dependency did: a filled round rectangle, a one-pixel outline,
+ * and a few translucent passes underneath for the shadow.
+ *
+ * The shadow is drawn as [SHADOW_LAYERS] progressively larger, progressively fainter rounded
+ * rectangles rather than with a blur: a Gaussian over the whole component is a temporary image and a
+ * convolution on every repaint, and this box repaints on every keystroke in it. The insets reserve
+ * room for the spread so the shadow is not clipped by the component's own bounds.
+ */
+internal class ByLogpointBoxBorder(
+    private val arc: Int,
+    private val fill: Color,
+    private val outline: Color,
+) : Border {
+
+    override fun isBorderOpaque(): Boolean = false
+
+    /** Room for the outline, plus the shadow's spread and its downward offset. */
+    override fun getBorderInsets(c: Component): Insets {
+        val spread = JBUI.scale(SHADOW_SPREAD)
+        return JBUI.insets(spread, spread, spread + JBUI.scale(SHADOW_Y), spread)
+    }
+
+    override fun paintBorder(c: Component, g: Graphics, x: Int, y: Int, width: Int, height: Int) {
+        val g2 = g.create() as? Graphics2D ?: return
+        try {
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+
+            val spread = JBUI.scale(SHADOW_SPREAD)
+            val offsetY = JBUI.scale(SHADOW_Y)
+            val boxX = x + spread
+            val boxY = y + spread
+            val boxW = width - 2 * spread
+            val boxH = height - 2 * spread - offsetY
+            if (boxW <= 0 || boxH <= 0) return
+
+            // Outermost and faintest first, so each layer darkens the ones already under it.
+            for (layer in SHADOW_LAYERS downTo 1) {
+                val grow = JBUI.scale(layer)
+                g2.color = Color(0, 0, 0, SHADOW_ALPHA)
+                g2.fillRoundRect(
+                    boxX - grow,
+                    boxY - grow + offsetY,
+                    boxW + 2 * grow,
+                    boxH + 2 * grow,
+                    arc + grow,
+                    arc + grow,
+                )
+            }
+
+            g2.color = fill
+            g2.fillRoundRect(boxX, boxY, boxW, boxH, arc, arc)
+            g2.color = outline
+            g2.drawRoundRect(boxX, boxY, boxW - 1, boxH - 1, arc, arc)
+        } finally {
+            g2.dispose()
+        }
+    }
+
+    private companion object {
+        const val SHADOW_LAYERS = 4
+        const val SHADOW_SPREAD = 5
+        const val SHADOW_Y = 1
+        /** Faint, because [SHADOW_LAYERS] of it accumulate. */
+        const val SHADOW_ALPHA = 10
     }
 }

@@ -20,7 +20,6 @@ import com.intellij.platform.dap.DapDebugSession
 import com.intellij.platform.dap.DapEventConsumer
 import com.intellij.platform.dap.DapExceptionBreakpoint
 import com.intellij.platform.dap.DapExceptionInfo
-import com.intellij.platform.dap.DapInitializationException
 import com.intellij.platform.dap.DapStartRequest
 import com.intellij.platform.dap.DapThreadState
 import com.intellij.platform.dap.DebugAdapterDescriptor
@@ -263,6 +262,18 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
     )
 
     /**
+     * Whether [fail] has already put the reason on screen.
+     *
+     * Read by [ByDapXDebugProcess.start], which otherwise cannot tell a failure the user has been
+     * told about from one they have not. The platform's answer to that — `DapInitializationException`
+     * and its `userVisible` flag — is `@ApiStatus.Internal`; see docs/internal-api.md. Volatile
+     * because it is written on whichever thread launches the adapter and read from a coroutine.
+     */
+    @Volatile
+    var hasReportedFailure: Boolean = false
+        private set
+
+    /**
      * Report why the session cannot start, then abort without the platform turning it into an
      * "Unhandled exception" box.
      *
@@ -279,6 +290,7 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
     private fun fail(message: String, python: String?, processHandler: ProcessHandler?): Nothing {
         processHandler?.destroyProcess()
         reportDebugStartFailure(project, message, ByDebugpyInstall.plan(project, python))
+        hasReportedFailure = true
         throw CantRunException.CustomProcessedCantRunException()
     }
 
@@ -428,6 +440,15 @@ internal class ByDapXDebugProcess(
     private var lastApplied: StoppedEventArguments? = null
 
     /**
+     * The descriptor this session was launched from, when it is one of ours — which is every
+     * session this class serves, the nullable cast being for the base type of the parameter only.
+     */
+    private val ownDescriptor = debugAdapterDescriptor as? ByDebugAdapterDescriptor
+
+    /** Whether the reason this session cannot start is already on screen. See [start]. */
+    private val reportedItself: Boolean get() = ownDescriptor?.hasReportedFailure == true
+
+    /**
      * Starts the session, and installs the four listeners `DapXDebugProcess` would have.
      *
      * **`super` is deliberately not called.** The base does exactly four things here — watch for the
@@ -476,19 +497,29 @@ internal class ByDapXDebugProcess(
             dapDebugSession.start(startRequestType, startRequestArguments)
             sessionState.value = DapXDebugSessionState.Running
             session.rebuildViews()
-        } catch (e: DapInitializationException) {
-            // The platform's own case, handled the platform's own way: it has already been through
-            // `launchDebugAdapter`, where this plugin reports what it can itself.
-            session.stop()
-            if (e.userVisible) e.message?.let(session::reportError)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            // The case the platform has no branch for. `message` is what the adapter wrote for a
-            // person — DAP puts it in the error response for exactly this — so it is shown as-is
-            // rather than wrapped in a sentence of ours that would say less.
+            // One branch for every failure, because the platform's own distinction is not askable
+            // any more. It used to be two: a `DapInitializationException` — which the platform
+            // wraps `launchDebugAdapter` failures in — was reported only when its `userVisible`
+            // flag was set, and everything else always. Both that class and the flag are
+            // `@ApiStatus.Internal` (see docs/internal-api.md).
+            //
+            // Nothing is lost, because `userVisible` only ever answered a question this plugin
+            // already knows the answer to: it is `e !is CustomProcessedCantRunException`, and the
+            // one thing that throws that here is `fail()`, which has *just* put the reason on
+            // screen as a notification. So the latch it sets is asked instead — and it is the more
+            // direct question, "has the user already been told", rather than a flag that happens
+            // to correlate with it.
+            //
+            // `message` is otherwise shown as-is: it is what the adapter wrote for a person, which
+            // DAP puts in the error response for exactly this, and wrapping it in a sentence of
+            // ours would say less.
             PROCESS_LOG.info("the debug adapter refused to start the session", e)
-            session.reportError(e.message ?: BasedPythonBundle.message("debug.error.startRefused"))
+            if (!reportedItself) {
+                session.reportError(e.message ?: BasedPythonBundle.message("debug.error.startRefused"))
+            }
             session.stop()
         }
     }
