@@ -72,6 +72,18 @@
   the push hints appear; let go and they are gone. They appear the instant the key goes
   down: the hints are already fetched and drawn as the key comes into it, not requested
   from `by` on the press.
+- Assignments you lined up by hand stay lined up once hints are drawn in them. A hint costs
+  exactly what its text would cost as source, which is right everywhere except in a block
+  somebody aligned: `a = [1, 2]` infers `list[int]`, so eleven columns of hint go into five
+  of padding and the `=` column is gone. Narrowing the hint into the padding cannot get it
+  back — five columns of room against eleven of hint is still six out, and the line that
+  would have to move (`basdf = 1`) has no hint to narrow. So the whole block moves together:
+  the hint gives back the room it can, and the lines without one are padded out to meet it.
+  `by` says which lines are a block — siblings in one suite, no blank line between them,
+  already sharing an `=` column, and at least one of them padded, so ordinary code is left
+  alone — and the plugin decides the widths, because only it knows which hints are on screen.
+  Nothing to configure: with no hints drawn the block reads exactly as written, so letting
+  the push key up puts your source back rather than leaving it padded for hints that are gone.
 - Intentions: add return type, convert to/from `data class`, wrap null-safe, explain
   anonymous named tuple, explain rule.
 - `buff` format-on-save and import optimizer; code style settings page
@@ -573,6 +585,32 @@
   is nothing there to apply a template to.
 
 ### Changed
+
+- Log points are added by `Ctrl+Alt+F8`, the gutter menu or the `print` quick fix, and no longer
+  by hovering between two line numbers. JetBrains Marketplace declined this plugin's first
+  submission for using internal API, and the gutter gap was the largest single piece of it: the
+  hover affordance was not this plugin's code but the platform's own inter-line breakpoint
+  machinery, every part of which — `InterLineBreakpointConfigurationProvider`,
+  `InterLineShiftAnimator`, `XLineBreakpointVerticalPlacement`, `XLineBreakpoint.getPlacement`,
+  `supportsInterLinePlacement` — is marked `@ApiStatus.Internal`. Only the way a log point is
+  *created* changed. The `Log:` field, editing, undo, persistence and debugging are untouched,
+  because the field was always an ordinary block inlay through `EditorEmbeddedComponentManager`,
+  which is not internal. What a log point *is* moved with it: it used to be a breakpoint the
+  platform had placed between two lines, and is now one carrying this plugin's own
+  `ByBreakpointProperties.isLogpoint`, which is both public and the more honest place for it —
+  whether a breakpoint logs instead of stopping is a fact about the breakpoint, not about where it
+  is drawn. The hover gesture is wanted back and the route to rebuilding it on public API is
+  written down in `docs/internal-api.md`; nothing about it was a bad idea, it was only ever built
+  on a door the platform has since closed.
+- The LSP status widget and crash recovery listen through the plugin's own project topic
+  (`lsp.ByLspLifecycle`) rather than the platform's `LspServerManagerListener`, which is also
+  internal — and which was 62 of the 116 internal usages on its own, because the verifier counts
+  every method of an interface you implement. The public replacement is `LspServerListener`,
+  handed to the platform by the descriptor itself through `LspClientDescriptor.lspServerListener`;
+  `serverStopped(shutdownNormally = false)` is exactly the `ShutdownUnexpectedly` state the crash
+  notification used to watch for. The one visible difference is that the status light now turns
+  green as a server becomes ready rather than as it begins starting, the two states having always
+  been drawn the same.
 
 - `verifyPlugin` checks both ends of the declared range instead of only the bottom.
   `recommended()` asks Marketplace's release feed what to verify against, and that feed listed no

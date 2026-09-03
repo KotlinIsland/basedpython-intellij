@@ -75,11 +75,24 @@ class ByInlayHintPresentation(
     }
 
     /**
-     * Exactly what the same characters would measure as source, and **not a pixel more**.
+     * The seat this hint has in a block of lined-up assignments, or null — which is nearly always.
      *
-     * This is the property the whole rendering rests on, and it is checkable: writing an annotation
-     * out by hand and letting the hint stand for it have to leave the rest of the line in the same
-     * place.
+     * Set once by the collector, after the hint is built and before its inlay exists, because which
+     * block a hint belongs to is `by`'s answer and arrives alongside the hints rather than in them.
+     *
+     * Volatile for the same reason [shown] is: written on the daemon's background thread and read
+     * while measuring on the EDT.
+     */
+    @Volatile
+    internal var seat: ByAlignedColumn.Seat? = null
+
+    /**
+     * Exactly what the same characters would measure as source, and **not a pixel more** — except
+     * where a hint is holding a column together, which is the one thing worth more than that rule.
+     *
+     * The rule first, because it is what the rendering rests on, and it is checkable: writing an
+     * annotation out by hand and letting the hint stand for it have to leave the rest of the line in
+     * the same place.
      *
      * ```
      * a = A(1)          ->  a: A[int] = A[int](t=1)
@@ -92,13 +105,48 @@ class ByInlayHintPresentation(
      * nothing in the file lines up any more. So the tint takes its room from the text rather than
      * the other way round: it is drawn to this width, and gets its breathing space vertically, where
      * there is room going spare.
+     *
+     * **The exception.** In a block the author lined up by hand, that same rule is what pulls the
+     * block apart, and for a reason the rule cannot see: writing the annotation out *would* have
+     * broken the alignment too, so costing what the source costs is faithful to a line and unfaithful
+     * to the paragraph it is in. A hint with a [seat] therefore reports what its *line* needs — often
+     * less than its text, drawing its glyphs over padding the author already left, and sometimes more
+     * on the line that has to give the rest of the block room. What it *draws* is unchanged either
+     * way; nothing is clipped to this width (`EditorPainter` hands the renderer the shared
+     * `Graphics2D` with a translate and no clip, and queues the rest of the line's text after it), so
+     * the glyphs simply sit on blanks.
+     *
+     * A seat's width is asked for whole rather than as this width plus a correction, and that is not
+     * tidiness: two separately rounded measurements do not add up to the one the editor makes — see
+     * [ByAlignment.column].
+     *
+     * Never below [HIDDEN_WIDTH]: the editor refuses a zero-width inline element, and a hint that has
+     * given back all of its own room is exactly the case that would ask for one.
      */
     override val width: Int
         get() {
-            if (!shown) return HIDDEN_WIDTH
-            val metrics = metrics(font())
-            return leftPadding(metrics) + textWidth(metrics) + rightPadding(metrics)
+            val natural = naturalWidth()
+            return (seat?.widthFor(this, natural) ?: natural).coerceAtLeast(HIDDEN_WIDTH)
         }
+
+    /** What this hint costs as source, which is what it reports when it is not holding a column. */
+    internal fun naturalWidth(): Int {
+        if (!shown) return 0
+        val metrics = metrics(font())
+        return leftPadding(metrics) + textWidth(metrics) + rightPadding(metrics)
+    }
+
+    /**
+     * The room this hint takes on its line right now, in columns, as [ByAlignment] counts it.
+     *
+     * Nought while it is not drawn, which is what makes releasing the push key put a block back
+     * exactly as the author wrote it rather than leaving it padded for hints that are not there.
+     */
+    internal val shownColumns: Int
+        get() = if (!shown) 0 else text.length + (if (padLeft) 1 else 0) + (if (padRight) 1 else 0)
+
+    /** Whether this hint's visibility can change under a keypress, and so needs watching for. */
+    internal val watchesPush: Boolean get() = mode == ByHintMode.ON_PUSH
 
     /**
      * The text's true advance, rounded to the nearest pixel — **not** `stringWidth`, and not the
@@ -221,13 +269,42 @@ class ByInlayHintPresentation(
      * only way a width that has already been measured gets measured again.
      */
     override fun pushStateChanged() {
-        val next = mode.isShown(ByHintPush.getInstance().isHeld(pushKey))
-        if (next == shown) return
         val before = Dimension(width, height)
-        shown = next
+        if (!refreshShown()) return
         val after = Dimension(width, height)
         fireSizeChanged(before, after)
         fireContentChanged(Rectangle(0, 0, after.width, after.height))
+    }
+
+    /**
+     * Re-reads whether this hint is drawn, and says whether that changed.
+     *
+     * Split from [revalidate] because a hint in a [ByAlignedColumn] cannot be measured until every
+     * hint in its block has been asked this — a seat's width depends on what its *siblings* are
+     * showing, so settling one visibility at a time and measuring as you go lays the block out
+     * against a state that never existed. The column does all the asking first, then all the
+     * measuring. See [ByAlignedColumn.pushStateChanged].
+     */
+    internal fun refreshShown(): Boolean {
+        val next = mode.isShown(ByHintPush.getInstance().isHeld(pushKey))
+        if (next == shown) return false
+        shown = next
+        return true
+    }
+
+    /**
+     * Tells the platform to measure this hint again.
+     *
+     * The dimensions are a signal rather than data: the listener the inlay pass installs
+     * (`InlayHintsPass` → `InlayContentListener`) reads neither and calls `Inlay.update()`, which is
+     * the only thing that makes a width that has already been measured be measured again. Passing
+     * the current size twice is therefore honest about what this call means — *something moved* —
+     * rather than pretending to know what it was before.
+     */
+    internal fun revalidate() {
+        val size = Dimension(width, height)
+        fireSizeChanged(size, size)
+        fireContentChanged(Rectangle(0, 0, size.width, size.height))
     }
 
     /**
@@ -237,6 +314,12 @@ class ByInlayHintPresentation(
      * [mode] counts as part of that text: a hint that has just been moved between "always" and "on
      * push" is the same string drawn under a different rule, and reusing the old presentation would
      * keep the old rule until the next edit.
+     *
+     * So does the share of the column, and that one is not optional. `RecursivelyUpdatingRootPresentation`
+     * swaps this presentation in for the old one whichever way this answers, but it only fires the
+     * size change — and so only makes the platform ask for the width again — when the answer is
+     * true. A hint whose own text is unchanged but whose block has just grown around it would
+     * otherwise keep the width it was measured at, and stop following the block.
      */
     override fun updateState(previousPresentation: InlayPresentation): Boolean {
         val previous = previousPresentation as? ByInlayHintPresentation ?: return true
@@ -244,22 +327,23 @@ class ByInlayHintPresentation(
             previous.padLeft != padLeft ||
             previous.padRight != padRight ||
             previous.mode != mode ||
-            previous.pushKey != pushKey
+            previous.pushKey != pushKey ||
+            previous.seat?.deltaColumns != seat?.deltaColumns
     }
 
     override fun toString(): String = text
 
-    private companion object {
+    internal companion object {
         /**
          * How far the tint reaches above and below the text box.
          *
          * Vertical only. There is no horizontal counterpart on purpose: horizontal room is the
          * code's column, and a hint may not spend any of it — see [width].
          */
-        val VERTICAL_INSET: Int = JBUIScale.scale(1)
+        private val VERTICAL_INSET: Int = JBUIScale.scale(1)
 
         /** Just enough to take the corners off. Anything more reads as a capsule. */
-        val ARC: Int = JBUIScale.scale(2)
+        private val ARC: Int = JBUIScale.scale(2)
 
         /**
          * What a hidden hint measures.
