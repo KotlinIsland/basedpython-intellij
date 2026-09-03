@@ -9,13 +9,11 @@ import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
-import com.intellij.platform.lsp.api.LspServer
 import com.intellij.platform.lsp.api.LspServerManager
-import com.intellij.platform.lsp.api.LspServerManagerListener
-import com.intellij.platform.lsp.api.LspServerState
 import com.intellij.platform.lsp.api.LspServerSupportProvider
 import com.intellij.util.Alarm
 import dev.basedpython.pycharm.lsp.BuffLspServerSupportProvider
+import dev.basedpython.pycharm.lsp.ByLspLifecycleListener
 import dev.basedpython.pycharm.lsp.ByLspServerSupportProvider
 import dev.basedpython.pycharm.util.BasedPythonBundle
 import java.util.concurrent.ConcurrentHashMap
@@ -27,9 +25,9 @@ import java.util.concurrent.atomic.AtomicBoolean
  *  1. **Restart-on-settings-change** — [onSettingsChanged] debounces (~1s) and then
  *     restarts both servers via the same [LspServerManager.stopAndRestartIfNeeded] call
  *     used by the manual "Restart basedpython LSP Servers" action.
- *  2. **Crash recovery** — subscribes to [LspServerManagerListener] and, when a server
- *     reaches [LspServerState.ShutdownUnexpectedly], posts a `basedpython.Actions`
- *     notification with a one-click "Restart" action.
+ *  2. **Crash recovery** — subscribes to [ByLspLifecycleListener] and, when a server stops
+ *     without having been asked to, posts a `basedpython.Actions` notification with a
+ *     one-click "Restart" action.
  *
  * Created via [getInstance]; lifecycle activation (listener registration) is performed by
  * [BasedPythonLspReloadActivity] on project open.
@@ -71,39 +69,34 @@ internal class BasedPythonLspReloader(private val project: Project) : Disposable
   }
 
   /**
-   * Registers the crash-recovery listener on the project's [LspServerManager]. Idempotent.
-   * Called once on project open by [BasedPythonLspReloadActivity].
+   * Subscribes to [ByLspLifecycleListener] for crash recovery. Idempotent. Called once on project
+   * open by [BasedPythonLspReloadActivity].
+   *
+   * Was `LspServerManager.addLspServerManagerListener`, which is `@ApiStatus.Internal` — see
+   * [ByLspLifecycleListener] for the public route this takes instead. Only servers this plugin
+   * owns publish on that topic, so the provider-class filter the manager listener needed is gone.
    */
   fun ensureListenerRegistered() {
     if (project.isDisposed) return
     if (!listenerRegistered.compareAndSet(false, true)) return
-    val mgr = LspServerManager.getInstance(project)
-    mgr.addLspServerManagerListener(CrashListener(), this, /* sendOldStateOnAdd = */ true)
+    project.messageBus.connect(this).subscribe(ByLspLifecycleListener.TOPIC, CrashListener())
   }
 
-  private fun ownsServer(server: LspServer): Boolean = providers.any { it == server.providerClass }
+  private inner class CrashListener : ByLspLifecycleListener {
+    override fun serverStopped(serverName: String, shutdownNormally: Boolean) {
+      // `shutdownNormally == false` is the platform's LspServerState.ShutdownUnexpectedly.
+      if (shutdownNormally) return
+      if (notifiedCrash.add(serverName)) notifyCrash(serverName)
+    }
 
-  private fun serverKey(server: LspServer): String =
-    "${server.providerClass.name}@${System.identityHashCode(server)}"
-
-  private inner class CrashListener : LspServerManagerListener {
-    override fun serverStateChanged(lspServer: LspServer) {
-      if (!ownsServer(lspServer)) return
-      val key = serverKey(lspServer)
-      when (lspServer.state) {
-        LspServerState.ShutdownUnexpectedly -> {
-          if (notifiedCrash.add(key)) notifyCrash(lspServer)
-        }
-        // A fresh start clears the de-dupe latch so a future crash notifies again.
-        LspServerState.Initializing, LspServerState.Running -> notifiedCrash.remove(key)
-        else -> {}
-      }
+    /** A fresh start clears the de-dupe latch so a future crash notifies again. */
+    override fun serverInitialized(serverName: String) {
+      notifiedCrash.remove(serverName)
     }
   }
 
-  private fun notifyCrash(server: LspServer) {
+  private fun notifyCrash(name: String) {
     if (project.isDisposed) return
-    val name = serverDisplayName(server)
     ApplicationManager.getApplication().invokeLater(
       {
         if (project.isDisposed) return@invokeLater
@@ -124,13 +117,6 @@ internal class BasedPythonLspReloader(private val project: Project) : Disposable
       },
       project.disposed,
     )
-  }
-
-  /** Human-readable server name derived from the provider class. */
-  private fun serverDisplayName(server: LspServer): String = when (server.providerClass) {
-    ByLspServerSupportProvider::class.java -> "by"
-    BuffLspServerSupportProvider::class.java -> "buff"
-    else -> server.providerClass.simpleName
   }
 
   override fun dispose() {

@@ -11,11 +11,10 @@ import com.intellij.openapi.ui.popup.JBPopupFactory
 import com.intellij.openapi.wm.StatusBar
 import com.intellij.openapi.wm.StatusBarWidget
 import com.intellij.openapi.wm.StatusBarWidget.WidgetPresentation
-import com.intellij.platform.lsp.api.LspServer
 import com.intellij.platform.lsp.api.LspServerManager
-import com.intellij.platform.lsp.api.LspServerManagerListener
 import com.intellij.util.Consumer
 import dev.basedpython.pycharm.lsp.BuffLspServerSupportProvider
+import dev.basedpython.pycharm.lsp.ByLspLifecycleListener
 import dev.basedpython.pycharm.lsp.ByLspServerSupportProvider
 import dev.basedpython.pycharm.settings.ui.BasedPythonConfigurable
 import java.awt.event.MouseEvent
@@ -119,19 +118,27 @@ internal class BasedPythonStatusBarWidget(private val project: Project) :
     }
 
     /**
-     * Repaint whenever any server changes state. The widget reads live state from
+     * Repaint when a server starts or stops. The widget reads live state from
      * [LspServerStateService] on each paint, so this only needs to trigger the repaint — there is
      * no state to mirror here.
+     *
+     * Was the platform's `LspServerManagerListener`, which is `@ApiStatus.Internal`; see
+     * [ByLspLifecycleListener]. That one fired on every state change, this one only on the two
+     * ends, and the light is the same either way — [LspServerStateService] maps `Initializing` and
+     * `Running` to the same `ServerLight.RUNNING`, so the only transition that changes what is
+     * drawn is stopped to running, which both of these cover. The one difference is when: the
+     * light now turns green as the server becomes ready rather than as it begins starting.
      */
     private fun subscribeToLspEvents() {
-        LspServerManager.getInstance(project).addLspServerManagerListener(
-            object : LspServerManagerListener {
-                override fun serverStateChanged(lspServer: LspServer) {
+        project.messageBus.connect(this).subscribe(
+            ByLspLifecycleListener.TOPIC,
+            object : ByLspLifecycleListener {
+                override fun serverInitialized(serverName: String) = repaint()
+                override fun serverStopped(serverName: String, shutdownNormally: Boolean) = repaint()
+                private fun repaint() {
                     ApplicationManager.getApplication().invokeLater { update() }
                 }
             },
-            this,
-            false,
         )
     }
 
