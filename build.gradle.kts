@@ -123,6 +123,67 @@ val writeBundledPlatformMarker = tasks.register("writeBundledPlatformMarker") {
   }
 }
 
+// --- The descriptor's 65535-character ceiling ---------------------------------------------------
+//
+// `<change-notes>` and `<description>` are capped at 65535 characters, by the plugin descriptor and
+// by Marketplace's upload validation alike, and going over is not a warning: the verifier rejects
+// the whole artifact as INVALID_PLUGIN — "The value of the '<change-notes>' parameter is too long"
+// — before it verifies a single class, and an upload is refused outright. So it fails at the last
+// step of a release, having built six platform artifacts first.
+//
+// It is reached by doing nothing wrong. Every entry ever written here lives under one `[Unreleased]`
+// heading, because nothing has been released to roll it over, and `changeNotes` renders that whole
+// section; markdown-to-HTML then inflates it by about 12%. 62 KB of CHANGELOG.md became 70,093
+// characters of HTML, 4,558 over.
+//
+// Trimming here rather than editing the changelog: the file is the record and should stay whole,
+// and a cap that lives in the build cannot be overrun again by writing another entry.
+val DESCRIPTOR_LIMIT = 65535
+
+/**
+ * [html] trimmed to fit [DESCRIPTOR_LIMIT], dropping whole `<li>` items off the end and closing the
+ * lists they leave open.
+ *
+ * On a `</li>` boundary because the alternative — cutting at the character the limit falls on —
+ * ships a descriptor ending mid-tag or mid-entity, which is worse than the overflow it fixes: it is
+ * malformed markup that renders as garbage rather than an error anyone can act on. The newest
+ * entries are at the top and survive; what goes is the oldest, which is also what a reader of a
+ * release's notes is least looking for. Nothing is silently lost either — the trim says it happened
+ * and links the full file.
+ */
+fun capToDescriptorLimit(html: String, repositoryUrl: String?): String {
+  if (html.length <= DESCRIPTOR_LIMIT) return html
+
+  val fullChangelog = repositoryUrl?.let { "$it/blob/main/CHANGELOG.md" }
+  val notice = buildString {
+    append("\n<p><em>Older entries trimmed to fit the plugin descriptor's ")
+    append(DESCRIPTOR_LIMIT)
+    append("-character limit.")
+    if (fullChangelog != null) append(" <a href=\"$fullChangelog\">Full changelog</a>.")
+    append("</em></p>\n")
+  }
+
+  // Every `</li>` that starts within budget; the last one is the deepest cut that still fits.
+  val budget = DESCRIPTOR_LIMIT - notice.length
+  val cut = html.lastIndexOf("</li>", startIndex = budget - "</li>".length)
+  if (cut < 0) {
+    // No list item fits at all, so there is no honest boundary to cut on and the shape of the
+    // rendered notes is not what this assumes. Better to stop the build than to guess.
+    throw GradleException(
+      "Change notes are ${html.length} characters, over the $DESCRIPTOR_LIMIT-character descriptor " +
+        "limit, and hold no <li> boundary within budget to trim at. Shorten the changelog's " +
+        "latest section by hand.",
+    )
+  }
+
+  val kept = html.substring(0, cut + "</li>".length)
+  // Close the lists the cut left open, innermost first. Counting rather than parsing is enough:
+  // the renderer emits only flat `<ul>`s, and a stray `</ul>` would be the visible failure of that
+  // assumption rather than a silent one.
+  val unclosed = Regex("<ul[ >]").findAll(kept).count() - Regex("</ul>").findAll(kept).count()
+  return kept + "</ul>".repeat(maxOf(unclosed, 0)) + notice
+}
+
 // Configure IntelliJ Platform Gradle Plugin - read more: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin-extension.html
 intellijPlatform {
   publishing {
@@ -218,6 +279,7 @@ intellijPlatform {
     }
 
     val changelog = project.changelog // local variable for configuration cache compatibility
+    val repositoryUrl = providers.gradleProperty("pluginRepositoryUrl")
     // Get the latest available change notes from the changelog file
     changeNotes = version.map { pluginVersion ->
       with(changelog) {
@@ -227,7 +289,7 @@ intellijPlatform {
             .withEmptySections(false),
           Changelog.OutputType.HTML,
         )
-      }
+      }.let { capToDescriptorLimit(it, repositoryUrl.orNull) }
     }
   }
 }
