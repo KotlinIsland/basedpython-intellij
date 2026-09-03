@@ -9,6 +9,7 @@ import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Key
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.platform.lsp.api.LspServerListener
 import com.intellij.platform.lsp.api.LspServerSupportProvider
 import com.intellij.platform.lsp.api.LspServerSupportProvider.LspServerStarter
 import com.intellij.platform.lsp.api.ProjectWideLspServerDescriptor
@@ -130,6 +131,9 @@ internal class ByLspServerDescriptor(
 
   override fun isSupportedFile(file: VirtualFile): Boolean = file.isByServerFile()
 
+  /** Start/stop for [dev.basedpython.pycharm.lsp.reload.BasedPythonLspReloader] and the status widget. */
+  override val lspServerListener: LspServerListener = ByLspLifecycleListener.Broadcaster(project, "by")
+
   override fun createCommandLine(): GeneralCommandLine =
     GeneralCommandLine(buildList(2 + launch.prependArgs.size + extraArgs.size) {
       add(launch.exe.toString())
@@ -245,6 +249,9 @@ internal class BuffLspServerDescriptor(
 ) : ProjectWideLspServerDescriptor(project, "buff") {
 
   override fun isSupportedFile(file: VirtualFile): Boolean = file.isBasedPythonSource()
+
+  /** Start/stop for [dev.basedpython.pycharm.lsp.reload.BasedPythonLspReloader] and the status widget. */
+  override val lspServerListener: LspServerListener = ByLspLifecycleListener.Broadcaster(project, "buff")
 
   override fun createCommandLine(): GeneralCommandLine =
     GeneralCommandLine(buildList(2 + launch.prependArgs.size + extraArgs.size) {
