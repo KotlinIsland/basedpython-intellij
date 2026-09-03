@@ -9,7 +9,6 @@ import com.intellij.xdebugger.XDebuggerManager
 import com.intellij.xdebugger.XDebuggerUtil
 import com.intellij.xdebugger.breakpoints.SuspendPolicy
 import com.intellij.xdebugger.breakpoints.XLineBreakpoint
-import com.intellij.xdebugger.breakpoints.XLineBreakpointVerticalPlacement
 import com.intellij.openapi.vfs.VirtualFile
 import dev.basedpython.pycharm.debug.ByLineBreakpointType
 
@@ -37,7 +36,6 @@ object ByLogpointUndo {
         val state = Recreate(
             file = file,
             line = breakpoint.line,
-            placement = breakpoint.placement,
             suspendPolicy = breakpoint.suspendPolicy,
             expression = breakpoint.logExpressionObject?.expression,
         )
@@ -59,24 +57,26 @@ object ByLogpointUndo {
     private class Recreate(
         val file: VirtualFile,
         val line: Int,
-        val placement: XLineBreakpointVerticalPlacement,
         val suspendPolicy: SuspendPolicy,
         val expression: String?,
     ) {
         fun remove(project: Project) {
             val manager = XDebuggerManager.getInstance(project).breakpointManager
             val type = type() ?: return
-            manager.findBreakpointsAtLine(type, file, line, placement)
-                .toList()
+            // The placement-filtered overload is @ApiStatus.Internal; filter on our own flag
+            // instead, so undo removes the log point it recorded and never a plain breakpoint
+            // somebody put on the same line.
+            manager.findBreakpointsAtLine(type, file, line)
+                .filter { ByLogpoints.asLogpoint(it) != null }
                 .forEach { manager.removeBreakpoint(it) }
         }
 
         fun add(project: Project) {
             val type = type() ?: return
             val logged = expression?.let { ByLogpoints.expressionOf(it) }
-            val info = PlatformLogpointInfo.of(placement, suspendPolicy, logged)
+            val info = PlatformLogpointInfo.of(suspendPolicy, logged)
             val breakpoint = XDebuggerManager.getInstance(project).breakpointManager
-                .addLineBreakpoint(type, file.url, line, null, info)
+                .addLineBreakpoint(type, file.url, line, ByLogpoints.logpointProperties(), info)
             // Restated on the breakpoint, because what the info carries is not always what comes
             // back out of it: on 262 the platform takes the expression as text and rebuilds it as a
             // plain-text one, and redo would quietly hand back a log point that no longer edits as

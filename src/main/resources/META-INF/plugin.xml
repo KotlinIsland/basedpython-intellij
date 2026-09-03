@@ -87,15 +87,14 @@
              See docs/debugging.md. -->
         <xdebugger.hotSwapInDebugSessionEnabler
             implementation="dev.basedpython.pycharm.debug.hotswap.ByHotSwapEnabler"/>
-        <!-- The gutter-gap "Add Log" affordance. Note that `order` decides nothing here: the
-             platform collects every provider's flow into a map keyed by id and takes the first
-             entry available for the line, so two live providers is a coin flip. Which is why the
-             plugin's own log point UI stands aside in IntelliJ IDEA rather than competing. -->
-        <editor.interLineBreakpointConfigurationProvider
-            implementation="dev.basedpython.pycharm.debug.logpoint.ByInterLineLogpointProvider"/>
+        <!-- No `editor.interLineBreakpointConfigurationProvider` here any more: that extension
+             point, and the whole gutter-gap machinery behind it, is @ApiStatus.Internal. A log
+             point is now added by Ctrl+Alt+F8, the gutter menu or the `print` quick fix, and drawn
+             by an inlay this plugin owns. Getting the hover-to-reveal gap back is wanted — see
+             docs/internal-api.md. -->
         <registryKey key="basedpython.logpoints.provider"
                      defaultValue="[auto*|ide]"
-                     description="Who provides basedpython log points — the gutter gap, the inline Log: field, and Add Log Point. auto uses the IDE's own where it has one (IntelliJ IDEA, whose logpoints modules are bundled with its Java plugin) and this plugin's where it does not (PyCharm). ide always gives way. There is no setting to force this plugin's on where the IDE has its own, because nothing can switch the IDE's off and the result is two of everything; use ./gradlew runPyCharm to see it."/>
+                     description="Who provides basedpython log points — the inline Log: field and Add Log Point. auto uses the IDE's own where it has one (IntelliJ IDEA, whose logpoints modules are bundled with its Java plugin) and this plugin's where it does not (PyCharm). ide always gives way. There is no setting to force this plugin's on where the IDE has its own, because nothing can switch the IDE's off and the result is two of everything; use ./gradlew runPyCharm to see it."/>
 
         <!-- ===== Stream D: action notification group ===== -->
         <notificationGroup id="basedpython.Actions" displayType="BALLOON"/>

@@ -6,8 +6,8 @@ import com.intellij.xdebugger.XDebuggerUtil
 import com.intellij.xdebugger.XExpression
 import com.intellij.xdebugger.breakpoints.XBreakpoint
 import com.intellij.xdebugger.breakpoints.XLineBreakpoint
-import com.intellij.xdebugger.breakpoints.XLineBreakpointVerticalPlacement
 import com.intellij.xdebugger.evaluation.EvaluationMode
+import dev.basedpython.pycharm.debug.ByBreakpointProperties
 import dev.basedpython.pycharm.debug.ByLineBreakpointType
 import dev.basedpython.pycharm.lang.BasedPythonLanguage
 
@@ -62,17 +62,23 @@ object ByLogpoints {
         runCatching { Registry.get(PROVIDER_KEY).selectedOption }.getOrNull() ?: "auto"
 
     /**
-     * A `.by` breakpoint that logs in a gap rather than stopping on a line.
+     * A `.by` breakpoint that logs rather than stopping on its line.
      *
-     * The vertical placement is part of the identity, not decoration: it is what the gutter drew and
-     * what the inline editor positions itself against.
+     * Asked of the breakpoint's own [ByBreakpointProperties]. It used to be asked of the platform —
+     * `placement == XLineBreakpointVerticalPlacement.INTER_LINE`, true of a breakpoint the gutter
+     * gap created — and both the getter and the enum are `@ApiStatus.Internal`. The flag is set
+     * wherever a log point is made and persisted with the breakpoint; see docs/internal-api.md.
      */
     fun asLogpoint(breakpoint: XBreakpoint<*>): XLineBreakpoint<*>? {
         val line = breakpoint as? XLineBreakpoint<*> ?: return null
         if (line.type !is ByLineBreakpointType) return null
-        if (line.placement != XLineBreakpointVerticalPlacement.INTER_LINE) return null
+        if ((line.properties as? ByBreakpointProperties)?.isLogpoint != true) return null
         return line
     }
+
+    /** The properties a newly created log point carries. */
+    fun logpointProperties(): ByBreakpointProperties =
+        ByBreakpointProperties().apply { isLogpoint = true }
 
     /**
      * [text] as the expression a `.by` log point logs.

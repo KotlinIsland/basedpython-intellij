@@ -11,7 +11,6 @@ import com.intellij.xdebugger.XDebuggerManager
 import com.intellij.xdebugger.XDebuggerUtil
 import com.intellij.xdebugger.breakpoints.SuspendPolicy
 import com.intellij.xdebugger.breakpoints.XLineBreakpoint
-import com.intellij.xdebugger.breakpoints.XLineBreakpointVerticalPlacement
 import dev.basedpython.pycharm.lang.dialect.BasedPythonSources
 import dev.basedpython.pycharm.debug.ByLineBreakpointType
 
@@ -54,15 +53,22 @@ class ByAddLogpointAction : DumbAwareAction() {
         return Target(project, editor, file, editor.caretModel.logicalPosition.line)
     }
 
+    /**
+     * The log point already on [line], if there is one.
+     *
+     * The placement-filtered `findBreakpointsAtLine` overload is `@ApiStatus.Internal`; the
+     * three-argument one is not, so the filtering that told log points from ordinary breakpoints
+     * happens here instead, against the same flag that defines one.
+     */
     private fun existing(project: Project, file: VirtualFile, line: Int): XLineBreakpoint<*>? =
         XDebuggerManager.getInstance(project).breakpointManager
-            .findBreakpointsAtLine(type(), file, line, XLineBreakpointVerticalPlacement.INTER_LINE)
-            .firstOrNull()
+            .findBreakpointsAtLine(type(), file, line)
+            .firstOrNull { ByLogpoints.asLogpoint(it) != null }
 
     private fun create(project: Project, file: VirtualFile, line: Int): XLineBreakpoint<*> {
-        val info = PlatformLogpointInfo.of(XLineBreakpointVerticalPlacement.INTER_LINE, SuspendPolicy.NONE)
+        val info = PlatformLogpointInfo.of(SuspendPolicy.NONE)
         return XDebuggerManager.getInstance(project).breakpointManager
-            .addLineBreakpoint(type(), file.url, line, null, info)
+            .addLineBreakpoint(type(), file.url, line, ByLogpoints.logpointProperties(), info)
     }
 
     private fun type() = XDebuggerUtil.getInstance().findBreakpointType(ByLineBreakpointType::class.java)!!
