@@ -612,6 +612,47 @@
   green as a server becomes ready rather than as it begins starting, the two states having always
   been drawn the same.
 
+- Hot reload watches for edits with a collector of this plugin's own. The platform ships one
+  implementation of the public `SourceFileChangesCollector` — `SourceFileChangesCollectorImpl`, in
+  an `impl` package, `@ApiStatus.Internal`, with no public factory — and borrowing it meant
+  borrowing its shape: its constructor changed between 262 and 263, so it had to be built by
+  reflective lookup or the plugin was a `NoSuchMethodError` on half its declared range, thrown out
+  of a call that runs while the debug session starts. The interface is three methods. Writing them
+  deleted more code than it added, is the same on every build, and cannot fail a session. A file
+  still stops counting as changed when its content returns to what it was, which is what the
+  platform's was wanted for — typing something and undoing it puts the toolbar away again.
+- A "not reloaded" balloon is taken down when the next hot reload starts, as before, but by
+  holding the last one rather than through `HotSwapStatusNotificationManager.trackNotification`,
+  which is internal. Narrower than the platform's, which also clears balloons raised elsewhere —
+  and this plugin only ever raises the one.
+- Rendered docstrings are refreshed off two public signals instead of one internal one.
+  `LspClientManagerListener.fileOpened` fired exactly when the client told the server about a
+  file, which is exactly when an earlier empty answer became wrong; it is internal, and the public
+  `LspServerListener` has no per-file callback. So the event is replaced by the two occasions it
+  mattered — a server becoming ready, and a bounded re-check shortly after a file opens — and the
+  pass is re-run with `FileContentUtilCore.reparseFiles` rather than
+  `DocRenderManager.resetEditorToDefaultState`, whose entire package is marked internal. The
+  reparse is also narrower: it leaves manually toggled blocks alone where the reset returned them
+  to their default.
+- A debug session that cannot start no longer asks the platform whether the user has been told.
+  `DapInitializationException` and its `userVisible` flag are internal, and the flag only ever
+  answered a question this plugin already knew — `userVisible` is false exactly for the
+  `CustomProcessedCantRunException` its own `fail()` throws, having just put the reason on screen.
+  That is now recorded directly, as `hasReportedFailure`.
+- The `Log:` box draws its own rounded, shadowed border, `ShadowJava2DBorder` being internal; and
+  the bundled-binaries directory is found from the plugin's own code source rather than from a
+  plugin descriptor, every descriptor lookup in the platform being internal too.
+- Markdown code fences no longer accept ```by```, ```byi```, ```bython``` or ```based-python``` as
+  aliases for basedpython; ```basedpython``` still works, the markdown plugin falling back to the
+  ID of every registered language. `AdditionalFenceLanguageSuggester` was the only way to register
+  an alias — `CodeFenceLanguageAliases` is read-only — and it is internal. The optional
+  `org.intellij.plugins.markdown` dependency went with it, this having been its only use. Wanted
+  back if that table is ever made writable; see `docs/internal-api.md`.
+- `verifyPlugin` now fails the build on internal API usage. The count is zero and this is what
+  keeps it there: the Plugin Verifier reports internal usage as informational and calls the plugin
+  *Compatible* regardless, so without this line the next convenient import is found by a
+  Marketplace moderator weeks later instead of by the build. See `docs/internal-api.md` for what
+  each usage became, and for the two features that went with them.
 - `verifyPlugin` checks both ends of the declared range instead of only the bottom.
   `recommended()` asks Marketplace's release feed what to verify against, and that feed listed no
   263 build at all, so a plugin claiming 262 through 263.* was verified against IU-262.10315.69 and

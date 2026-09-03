@@ -32,9 +32,6 @@ dependencies {
 
     // Bundled plugins used by features (present in IDEA/PyCharm 2026.1+)
     bundledPlugin("org.toml.lang")
-    // Optional at runtime (see the optional <depends> in plugin.xml); needed to compile the
-    // code-fence language suggester.
-    bundledPlugin("org.intellij.plugins.markdown")
     // The SM test runner (SMTRunnerConsoleProperties, TestConsoleProperties, …) left the core
     // platform in 2026.2 and now ships as this bundled plugin.
     bundledPlugin("intellij.testRunner.plugin")
@@ -203,20 +200,30 @@ intellijPlatform {
   // shows the user a warning dialog on install, which is the reason to set the secrets.
 
   pluginVerification {
-    // Fail on things that actually break at runtime. Deprecated/experimental/internal usages stay
-    // informational: observing LSP server state needs `LspServerManagerListener`, which is marked
-    // internal but has no public equivalent, and both the reloader and the status widget need it.
+    // Fail on things that actually break at runtime, and on internal API.
     //
-    // MISSING_DEPENDENCIES is deliberately *not* here. The plugin depends optionally on
-    // `org.intellij.plugins.markdown`, which several of the IDEs this is verified against do not
-    // bundle — an optional dependency being absent somewhere is the entire meaning of the word,
-    // not a defect, and the level cannot distinguish optional from required. Little is lost: a
-    // missing *required* dependency takes its classes with it, so it still fails the build as
-    // COMPATIBILITY_PROBLEMS — that is exactly how the undeclared test runner showed up on 2026.2,
-    // as 19 unresolved classes rather than as a dependency note.
+    // INTERNAL_API_USAGES is here because the count is zero and has to stay there. JetBrains
+    // Marketplace declined this plugin's first submission for internal API usage, and the Plugin
+    // Verifier never fails on it by itself — every report, theirs and ours, says *Compatible* while
+    // listing the usages — so nothing but this line stands between a single convenient import and
+    // finding out from a moderator weeks later. It is a build error here instead, at the keystroke
+    // that introduces it. When something genuinely has no public equivalent, the answer is an IJPL
+    // issue and an entry in docs/internal-api.md, not quietly relaxing this.
+    //
+    // Deprecated and experimental usages stay informational: the platform's LSP API is mid-rename
+    // (LspServerManager to LspClientManager and the rest), so a deprecation is a migration to
+    // schedule rather than a build to stop.
+    //
+    // MISSING_DEPENDENCIES is deliberately *not* here, though the optional dependency that used to
+    // be the reason — `org.intellij.plugins.markdown` — is gone with the fence suggester. The level
+    // cannot distinguish an optional dependency legitimately absent from an IDE from a required one
+    // that is missing, and little is lost by leaving it off: a missing *required* dependency takes
+    // its classes with it, so it still fails as COMPATIBILITY_PROBLEMS — which is exactly how the
+    // undeclared test runner showed up on 2026.2, as 19 unresolved classes rather than a note.
     failureLevel = listOf(
       VerifyPluginTask.FailureLevel.COMPATIBILITY_PROBLEMS,
       VerifyPluginTask.FailureLevel.INVALID_PLUGIN,
+      VerifyPluginTask.FailureLevel.INTERNAL_API_USAGES,
     )
     // Both ends of the declared range, not just the bottom. `recommended()` asks Marketplace's
     // release feed what to verify against, and on 2026-09-03 that feed listed no 263 build at all —
