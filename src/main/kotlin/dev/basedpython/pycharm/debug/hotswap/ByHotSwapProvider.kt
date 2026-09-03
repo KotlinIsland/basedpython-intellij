@@ -2,6 +2,7 @@ package dev.basedpython.pycharm.debug.hotswap
 
 import com.intellij.execution.ui.ConsoleView
 import com.intellij.execution.ui.ConsoleViewContentType
+import com.intellij.notification.Notification
 import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
 import com.intellij.openapi.application.ApplicationManager
@@ -18,8 +19,6 @@ import com.intellij.xdebugger.hotswap.HotSwapResultListener
 import com.intellij.xdebugger.hotswap.HotSwapSession
 import com.intellij.xdebugger.hotswap.SourceFileChangesCollector
 import com.intellij.xdebugger.hotswap.SourceFileChangesListener
-import com.intellij.xdebugger.impl.hotswap.HotSwapStatusNotificationManager
-import com.intellij.xdebugger.impl.hotswap.SourceFileChangeFilter
 import dev.basedpython.pycharm.debug.ByDebugProtocolServer
 import dev.basedpython.pycharm.debug.bpd.ByBpdRecord
 import dev.basedpython.pycharm.lang.dialect.BasedPythonSources
@@ -112,19 +111,14 @@ internal class ByHotSwapProvider(
         session: HotSwapSession<VirtualFile>,
         coroutineScope: CoroutineScope,
         listener: SourceFileChangesListener,
-    ): SourceFileChangesCollector<VirtualFile> = PlatformChangesCollector.over(
-        project,
-        coroutineScope,
-        listener,
-        listOf(
-            SourceFileChangeFilter { file ->
-                file.extension?.lowercase() in BasedPythonSources.MODULE_EXTENSIONS
-            },
-            SourceFileChangeFilter { file ->
-                readAction { ProjectFileIndex.getInstance(project).isInContent(file) }
-            },
-        ),
-    )
+    ): SourceFileChangesCollector<VirtualFile> = ByChangesCollector(listener) { file ->
+        // The platform's filters were `SourceFileChangeFilter`, an `impl` interface, and they were
+        // `suspend` — which is why project membership was asked inside a `readAction`. Ours is an
+        // ordinary predicate called from a document listener, so the index is asked directly; both
+        // reads are cheap and neither needs a read action on the EDT.
+        file.extension?.lowercase() in BasedPythonSources.MODULE_EXTENSIONS &&
+            ProjectFileIndex.getInstance(project).isInContent(file)
+    }
 
     /**
      * Give the running program everything the user has edited since it started.
@@ -168,6 +162,9 @@ internal class ByHotSwapProvider(
         // Before anything else: the platform's status goes to "in progress" here, and every path
         // out of this method has to end on one of the four calls this listener offers or the
         // toolbar spins forever.
+        // A "not reloaded" balloon from the previous attempt describes a state this one is about
+        // to replace, so it goes now rather than sitting beside the new result.
+        expireLastReport()
         val listener = session.startHotSwapListening()
         val changes = session.getChanges()
         // What the platform tracked are *documents*; what is transpiled and what bpd compiles are
@@ -371,12 +368,14 @@ internal class ByHotSwapProvider(
      * A balloon rather than the console, and specifically rather than the console's **error**
      * stream, which is where this used to go: a file the debugger would not reload is a thing that
      * happened to the user's *request*, not a line of the program's output, and the run console is
-     * the program's. The platform has the channel — [HotSwapStatusNotificationManager] is what its
-     * own success balloon goes through, and a tracked notification is expired the moment the next
-     * hot swap starts, so a stale "not reloaded" cannot sit on screen next to a session where it is
-     * no longer true.
+     * the program's.
      *
-     * Created, tracked, then shown, which is the order the platform's own does it in.
+     * A stale "not reloaded" must not sit on screen beside a session where it is no longer true,
+     * which used to be the platform's `HotSwapStatusNotificationManager.trackNotification` — an
+     * `@ApiStatus.Internal` call that expires a tracked balloon when the next hot swap starts. The
+     * last one is held and expired here instead, at the top of [performHotSwap] and before a new
+     * one is raised. Narrower than the platform's, which also clears balloons raised elsewhere,
+     * and this plugin only ever raises this one. See docs/internal-api.md.
      *
      * The *reasons* bpd gave stay on the console and are not repeated here — bpd writes each one to
      * the `output` stream under category `important`, and a balloon re-rendering that vocabulary is
@@ -391,9 +390,20 @@ internal class ByHotSwapProvider(
                 notReloaded.joinToString("\n"),
                 NotificationType.WARNING,
             )
-        HotSwapStatusNotificationManager.getInstance(project).trackNotification(notification)
+        expireLastReport()
+        lastReport = notification
         notification.notify(project)
     }
+
+    /** Takes down the previous "not reloaded" balloon, whose session has moved on. */
+    private fun expireLastReport() {
+        lastReport?.expire()
+        lastReport = null
+    }
+
+    /** The last balloon [tell] raised, so the next hot swap can take it down. */
+    @Volatile
+    private var lastReport: Notification? = null
 
     /**
      * The console, for what an applied replacement changed about the process.
