@@ -501,6 +501,39 @@
 
 ### Fixed
 
+- The `Log:` box has corners again. All four were square, because an `EditorTextField` paints its
+  background as a *rectangle* and the one inside the box covered the rounded fill corner for corner
+  — measured in a running PyCharm, not argued about. The expression editor now sits inside a padding
+  panel, IntelliJ IDEA's own `empty(8, 12, 8, 8)`, so the fill is never painted over; the corner is
+  IDEA's 12px rather than 8; and the box keeps `empty(4, 0)` between itself and the lines above and
+  below it, so its shadow is no longer flush against the next line of code.
+
+- The `Log:` caption turns yellow while the box has focus, `#ED820E` in a light theme and `#F2C55C`
+  in a dark one — IntelliJ IDEA's own `LogpointLabel.focusedForeground`, read off
+  `intellij.debugger.logpoints.frontend.jar`. It was grey in both states.
+
+- A file no longer shows two carets while its `Log:` box has the keyboard. `EditorImpl.focusGained`
+  activates the editor's caret and `focusLost` only stops the *blink* — it never passivates — so the
+  file went on painting a caret wherever it was left, beside the one in the box. The file does not
+  even count as unfocused: the box is a component inlay, so it lives inside the editor's own
+  component and `EditorImpl.isEditorOwningFocus` says yes for it. The box now hides the file's caret
+  while it holds focus and puts back exactly what it took.
+
+- **Add Logging Breakpoint…** from the gutter menu produces a log point with a `Log:` box. The
+  platform's own action adds an ordinary breakpoint and *then* turns logging on and suspending off,
+  setting no property of this plugin's, so what came out logged instead of stopping and showed
+  nothing at all. A `.by` breakpoint is now recognised as a log point either by this plugin's own
+  flag or by behaving like one — not suspending, logging, not temporary, whole-line — which is
+  IntelliJ IDEA's own `canBeLogpoint` rule restated in public API.
+
+- A log point added from the gutter can be taken back with <kbd>Ctrl+Z</kbd>, in every IDE. Nothing
+  on that route runs inside a command — neither the platform's *Add Logging Breakpoint…* nor
+  IntelliJ IDEA's click in the gutter gap — so there was no undo step to join and the log point
+  stayed. One is opened instead, named *Add Log Point*, and the two-step gutter gesture is joined
+  into it. Log points restored from `workspace.xml` at startup are still not undo steps, told apart
+  by whether the file's document is loaded at all — which also stops every `.by` file holding a
+  breakpoint being read into memory while the project opens.
+
 - Typing `main` in a `.by` file reaches `by`'s own completion again. The bundled `main` live
   template was offered in every basedpython file, and a live template whose key is exactly what has
   been typed is *preselected* over everything else whatever its relevance — so `main` + Enter took

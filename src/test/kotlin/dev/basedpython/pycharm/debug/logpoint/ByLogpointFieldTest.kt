@@ -14,11 +14,16 @@ import dev.basedpython.pycharm.testFramework.codeInsightFixture
 import dev.basedpython.pycharm.testFramework.letContentHashingFinish
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import com.intellij.openapi.command.WriteCommandAction
+import com.intellij.ui.EditorTextField
+import com.intellij.ui.components.JBLabel
+import java.awt.event.FocusEvent
 import javax.swing.JComponent
 
 /**
@@ -193,6 +198,65 @@ class ByLogpointFieldTest {
             field.component.x > before,
             "the box was left at column ${'$'}before while the statement moved to ${'$'}{field.component.x}",
         )
+    }
+
+    @Test
+    fun `the box takes the file's caret while it has focus, and gives it back`() {
+        // Two carets is what the file showed otherwise. EditorImpl.focusGained activates its caret
+        // and focusLost only stops the blink — it never passivates — and this box is a component
+        // inlay, so the editor does not even count itself unfocused while the box has the keyboard.
+        val logpoint = logpointAt(1, expression = "x")
+        val field = ByLogpointField.show(fixture.project, editor(), logpoint)!!
+        editor().setCaretVisible(true)
+
+        focus(field, gained = true)
+        assertFalse(editor().setCaretVisible(false), "the file's caret has to go while the box has one")
+        editor().setCaretVisible(false)
+
+        focus(field, gained = false)
+        assertTrue(editor().setCaretVisible(true), "the file gets its caret back when the box lets go")
+    }
+
+    @Test
+    fun `a file with no caret showing does not gain one from being logged`() {
+        val logpoint = logpointAt(1, expression = "x")
+        val field = ByLogpointField.show(fixture.project, editor(), logpoint)!!
+        editor().setCaretVisible(false)
+
+        focus(field, gained = true)
+        focus(field, gained = false)
+
+        assertFalse(editor().setCaretVisible(false), "there was no caret to put back")
+    }
+
+    @Test
+    fun `the caption is the log point's own colour while the box has focus`() {
+        val logpoint = logpointAt(1, expression = "x")
+        val field = ByLogpointField.show(fixture.project, editor(), logpoint)!!
+        val caption = field.component.components.first { it is JBLabel } as JBLabel
+        val resting = caption.foreground
+
+        focus(field, gained = true)
+        val active = caption.foreground
+        focus(field, gained = false)
+
+        assertNotEquals(resting.rgb, active.rgb, "a focused Log: caption is yellow, not grey")
+        assertEquals(resting.rgb, caption.foreground.rgb, "and grey again once the box lets go")
+    }
+
+    /**
+     * Runs the box's own focus handling, which is what a click into it reaches.
+     *
+     * Through `EditorTextField`'s own `focusGained`/`focusLost` rather than by dispatching a
+     * `FocusEvent`: dispatching one goes through the keyboard focus manager, which in a test with no
+     * window swallows it. These two are the same methods the field's inner editor calls when focus
+     * really moves — the field keeps its listeners in a list of its own rather than AWT's, which is
+     * why `getFocusListeners()` comes back empty here.
+     */
+    private fun focus(field: ByLogpointField, gained: Boolean) {
+        val component = field.expressionEditor.editorComponent as EditorTextField
+        val event = FocusEvent(component, if (gained) FocusEvent.FOCUS_GAINED else FocusEvent.FOCUS_LOST)
+        if (gained) component.focusGained(event) else component.focusLost(event)
     }
 
     /** Lays out a holder that was never added to a window, which is what `validate` needs a peer for. */

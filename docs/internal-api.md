@@ -67,18 +67,67 @@ area between lines with nothing there. So hover-to-reveal means a zero-height bl
 grown on hover, plus reimplementing the shift animation — i.e. redoing `EditorGutterComponentImpl`'s
 job inside the plugin. That is why it was not done at the time, not because it is impossible.
 
-Two things to check in a running IDE before starting (neither has been verified):
+Both of the open questions this entry used to carry have now been **answered in a running PyCharm**,
+and both answers are yes:
 
-1. whether `calcGutterIconRenderer` is honoured for **block** inlays specifically — it is declared
-   on the renderer interface shared with inline inlays;
-2. whether a block inlay can be placed *above* its line so the gap lands where the old one did.
+1. **A block inlay does get a gutter icon.** Not through `calcGutterIconRenderer` directly — the
+   renderer is the platform's `EditorEmbeddedComponentManager.MyRenderer`, which is internal — but
+   through the `rendererFactory` argument of `EditorEmbeddedComponentManager.Properties`, which is
+   public and is exactly the hook `MyRenderer.calcGutterIconRenderer` delegates to. The icon paints
+   in the **inlay's own row**, beside the box rather than beside the code. It needs one
+   `EditorGutterComponentEx.revalidateMarkup()` after the inlay is added, or the gutter keeps the
+   icon list it already had.
+2. **A block inlay can be placed above its line.** `showAbove` on the same `Properties`, which is
+   how the `Log:` box has always been positioned.
 
-`./gradlew runPyCharm` is the place to find out; this path is dead in IntelliJ IDEA, which has its
-own log points (see `ByLogpoints.pluginProvidesLogpointUi`).
+Hover tracking needs no gutter component either: `EditorEx.addEditorMouseMotionListener` reports
+`EditorMouseEvent.getArea() == LINE_NUMBERS_AREA` with the mouse position, which is enough to work
+out which line boundary the pointer is nearest. And the gap need not be an inlay per line — one
+inlay, added at the boundary under the pointer and removed when it leaves, is the same gesture for a
+fraction of the cost, with `Animator` growing its height if the shift should slide rather than jump.
+
+So the discovery gesture is buildable. **What it still could not do is put the log point's icon
+where the gap is** — see the next entry: the icon this plugin would add to the inlay is a *second*
+icon, and the platform's own would stay on the line below it.
 
 **Better outcome:** the platform makes the inter-line breakpoint API public, and
 `ByInterLineLogpointProvider` comes back roughly as it was. Worth asking for in IJPL before building
 the replacement.
+
+### The log point's gutter icon sits on the wrong line
+
+**What it should be.** A log point's yellow dot in the gutter, level with its `Log:` box, in the gap
+between the two lines — because that is where the log point *is*: it runs after the line above and
+before the line below.
+
+**What it is.** One line lower, level with the line the log point is anchored to, in **both** IDEs.
+
+**Why.** The platform draws a line breakpoint's icon at its line unless the breakpoint's
+`XLineBreakpointVerticalPlacement` is `INTER_LINE`, and the switch that lets a breakpoint have that
+placement at all is `XLineBreakpointType.supportsInterLinePlacement()` — `@ApiStatus.Internal`, one
+line, `override fun supportsInterLinePlacement() = true`. Both ends are shut:
+
+- **In PyCharm**, where this plugin draws the box, `Properties.rendererFactory` can put an icon in
+  the gap (verified, above) but nothing public can take away the one the platform draws on the line,
+  and two icons is worse than one in the wrong place. `XBreakpointUIUtil.calculateIcon` picks
+  `type.getSuspendNoneIcon()` for any breakpoint that does not suspend, and that is a property of the
+  *type*, not of the breakpoint — blanking it would make every suspend-none `.by` breakpoint
+  invisible, including one that is not a log point.
+- **In IntelliJ IDEA**, where the IDE draws the box, `XLogpointPromptObserver.ensureLogpointPlacement`
+  moves a log point into the gap only `if (breakpoint.type.supportsInterLinePlacement())`. Ours says
+  no, so IDEA shows the box (`shouldShowPrompt` asks only `canBeLogpoint`, which `.by` log points
+  satisfy) and leaves the icon on the line. The same switch also gates
+  `XBreakpointUIUtil.supportsPlacement`, which is what filters breakpoint types out of an
+  `INTER_LINE` toggle — so IDEA's own *Add Logpoint* (`Ctrl+Alt+F8`, `ToggleLogpointAction`) cannot
+  make a `.by` log point at all. Every `.by` log point in IDEA arrives by one of this plugin's routes
+  or by *Add Logging Breakpoint…*.
+
+**What it costs.** The icon reads as belonging to the statement below the box rather than to the box.
+And in IDEA, one of the two ways to add a log point is missing.
+
+**How to get it back.** There is no public equivalent to build; this one is an IJPL issue asking for
+`supportsInterLinePlacement` (and the placement enum with it) to be made public. Everything else
+about `.by` log points already works without it.
 
 ## Resolved
 
