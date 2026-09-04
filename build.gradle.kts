@@ -202,13 +202,14 @@ intellijPlatform {
   pluginVerification {
     // Fail on things that actually break at runtime, and on internal API.
     //
-    // INTERNAL_API_USAGES is here because the count is zero and has to stay there. JetBrains
-    // Marketplace declined this plugin's first submission for internal API usage, and the Plugin
-    // Verifier never fails on it by itself — every report, theirs and ours, says *Compatible* while
-    // listing the usages — so nothing but this line stands between a single convenient import and
-    // finding out from a moderator weeks later. It is a build error here instead, at the keystroke
-    // that introduces it. When something genuinely has no public equivalent, the answer is an IJPL
-    // issue and an entry in docs/internal-api.md, not quietly relaxing this.
+    // INTERNAL_API_USAGES is *not* here on this branch, and that is the whole reason the branch
+    // exists. `main` fails the build on a single internal import, because JetBrains Marketplace
+    // declined this plugin's first submission over exactly that and the Plugin Verifier never fails
+    // on it by itself — every report, theirs and ours, says *Compatible* while listing the usages.
+    // This branch reinstates the inter-line gutter gap and inter-line placement, both of which are
+    // `@ApiStatus.Internal` with no public equivalent, so it is a build to try log points with and
+    // never one to publish: uploading it risks the permanent ban JetBrains warns about. See
+    // docs/internal-api.md, and IJPL for the request to make these public.
     //
     // Deprecated and experimental usages stay informational: the platform's LSP API is mid-rename
     // (LspServerManager to LspClientManager and the rest), so a deprecation is a migration to
@@ -223,7 +224,6 @@ intellijPlatform {
     failureLevel = listOf(
       VerifyPluginTask.FailureLevel.COMPATIBILITY_PROBLEMS,
       VerifyPluginTask.FailureLevel.INVALID_PLUGIN,
-      VerifyPluginTask.FailureLevel.INTERNAL_API_USAGES,
     )
     // Both ends of the declared range, not just the bottom. `recommended()` asks Marketplace's
     // release feed what to verify against, and on 2026-09-03 that feed listed no 263 build at all —

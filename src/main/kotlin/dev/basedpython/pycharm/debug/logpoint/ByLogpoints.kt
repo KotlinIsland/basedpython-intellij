@@ -1,12 +1,16 @@
 package dev.basedpython.pycharm.debug.logpoint
 
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.registry.Registry
+import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.xdebugger.XDebuggerManager
 import com.intellij.xdebugger.XDebuggerUtil
 import com.intellij.xdebugger.XExpression
 import com.intellij.xdebugger.breakpoints.SuspendPolicy
 import com.intellij.xdebugger.breakpoints.XBreakpoint
 import com.intellij.xdebugger.breakpoints.XLineBreakpoint
+import com.intellij.xdebugger.breakpoints.XLineBreakpointVerticalPlacement
 import com.intellij.xdebugger.evaluation.EvaluationMode
 import dev.basedpython.pycharm.debug.ByBreakpointProperties
 import dev.basedpython.pycharm.debug.ByLineBreakpointType
@@ -65,17 +69,20 @@ object ByLogpoints {
     /**
      * A `.by` breakpoint that logs rather than stopping on its line.
      *
-     * Two ways to be one, because there are two ways to make one.
+     * Three ways to be one, because there are three ways to make one.
      *
-     * The first is this plugin's own [ByBreakpointProperties.isLogpoint], set wherever this plugin
+     * The first is where the platform put it: `placement == INTER_LINE`, true of a breakpoint
+     * created by a click in the gutter gap — the platform's own gesture, which knows nothing about
+     * this plugin's properties. `getPlacement` and the enum are both `@ApiStatus.Internal`; see
+     * docs/internal-api.md.
+     *
+     * The second is this plugin's own [ByBreakpointProperties.isLogpoint], set wherever this plugin
      * creates a log point — *Add Log Point*, the `print` quick fix — and persisted with the
-     * breakpoint. It used to be asked of the platform instead (`placement ==
-     * XLineBreakpointVerticalPlacement.INTER_LINE`, true of a breakpoint the gutter gap created),
-     * and both the getter and the enum are `@ApiStatus.Internal`; see docs/internal-api.md. It is
-     * also what carries a log point that has *nothing to log yet* — one freshly created by
-     * <kbd>Ctrl+Alt+F8</kbd>, which is a log point the moment it exists and not once it is typed in.
+     * breakpoint by ordinary state serialisation, which the placement is not. It is what carries a
+     * log point through a restart, and what marks one that has *nothing to log yet* — a log point
+     * the moment it exists and not once it is typed in.
      *
-     * The second is the breakpoint simply behaving like one: it does not suspend, it logs an
+     * The third is the breakpoint simply behaving like one: it does not suspend, it logs an
      * expression, it is not temporary, and it covers a whole line rather than part of one. That is
      * IntelliJ IDEA's own definition — `XLogpointUtilsKt.canBeLogpoint`, which is what decides
      * whether *it* draws a log point — restated in public API (`getLogExpressionObject` already
@@ -88,6 +95,7 @@ object ByLogpoints {
     fun asLogpoint(breakpoint: XBreakpoint<*>): XLineBreakpoint<*>? {
         val line = breakpoint as? XLineBreakpoint<*> ?: return null
         val type = line.type as? ByLineBreakpointType ?: return null
+        if (line.placement == XLineBreakpointVerticalPlacement.INTER_LINE) return line
         if ((line.properties as? ByBreakpointProperties)?.isLogpoint == true) return line
         return if (logsInsteadOfSuspending(type, line)) line else null
     }
@@ -102,6 +110,24 @@ object ByLogpoints {
         // is the rule, not a workaround.
         @Suppress("UNCHECKED_CAST")
         return type.getHighlightRange(breakpoint as XLineBreakpoint<ByBreakpointProperties>) == null
+    }
+
+    /**
+     * Every `.by` breakpoint anchored to [line], on either side of it.
+     *
+     * `findBreakpointsAtLine`'s three-argument overload is not "any placement": it delegates to the
+     * placement-filtered one with `ON_LINE`, so a log point sitting in the gap is simply absent from
+     * its answer — which is how undo came to restore the deleted `print` and leave the log point
+     * behind it. Both placements are asked for here, so a line's breakpoints are its breakpoints
+     * however they are drawn.
+     *
+     * The filtered overload is `@ApiStatus.Internal`; see docs/internal-api.md.
+     */
+    fun breakpointsAt(project: Project, file: VirtualFile, line: Int): List<XLineBreakpoint<*>> {
+        val type = XDebuggerUtil.getInstance().findBreakpointType(ByLineBreakpointType::class.java) ?: return emptyList()
+        val manager = XDebuggerManager.getInstance(project).breakpointManager
+        return XLineBreakpointVerticalPlacement.entries
+            .flatMap { manager.findBreakpointsAtLine(type, file, line, it) }
     }
 
     /** The properties a newly created log point carries. */

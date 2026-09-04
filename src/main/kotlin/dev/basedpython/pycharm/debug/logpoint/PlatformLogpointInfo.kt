@@ -4,6 +4,7 @@ import com.intellij.openapi.diagnostic.Logger
 import com.intellij.xdebugger.XExpression
 import com.intellij.xdebugger.breakpoints.SuspendPolicy
 import com.intellij.xdebugger.breakpoints.XLineBreakpointAdditionalInfo
+import com.intellij.xdebugger.breakpoints.XLineBreakpointVerticalPlacement
 import java.lang.reflect.Method
 
 /**
@@ -47,15 +48,18 @@ internal object PlatformLogpointInfo {
      * [expression] is null for a log point with nothing to log yet — the one *Add Log Point* makes,
      * which is filled in by typing in its box.
      *
-     * No `setVerticalPlacement` here any more. That setter, and the placement enum it takes, are
-     * `@ApiStatus.Internal`; a log point is now marked by [dev.basedpython.pycharm.debug.ByBreakpointProperties]
-     * instead, and drawn by an inlay this plugin owns. See docs/internal-api.md.
+     * Always `INTER_LINE`, because that is where a log point is: it runs after the line above and
+     * before the line below, and the platform draws its gutter icon in the gap only for a breakpoint
+     * that says so. The setter and the enum are both `@ApiStatus.Internal` — see
+     * docs/internal-api.md. [dev.basedpython.pycharm.debug.ByBreakpointProperties] carries the same
+     * fact in public API and is still set alongside, so a log point is one by either reading.
      */
     fun of(
         suspendPolicy: SuspendPolicy,
         expression: XExpression? = null,
     ): XLineBreakpointAdditionalInfo {
         val builder = XLineBreakpointAdditionalInfo.Builder()
+            .setVerticalPlacement(XLineBreakpointVerticalPlacement.INTER_LINE)
             .setSuspendPolicy(suspendPolicy)
         if (expression != null) builder.carry(expression)
         return builder.build()

@@ -48,6 +48,25 @@ class ByLineBreakpointType : XLineBreakpointType<ByBreakpointProperties>(
         "${breakpoint.shortFilePath}:${breakpoint.line + 1}"
 
     /**
+     * Lets a breakpoint of this type sit *between* two lines rather than on one, which is what a log
+     * point is.
+     *
+     * `@ApiStatus.Internal`, and the single line that makes log points come out right. Defaults to
+     * false, and while it is false the gutter gap does not exist for `.by` files no matter what else
+     * is in place: `XDebuggerLineChangeHandler` asks each line breakpoint type this question before
+     * it will treat a hover as an inter-line one, so with no type saying yes
+     * `BreakpointPromoterEditorListener` sets none of the gutter's hover properties — no icon, no
+     * tooltip, not even a cursor change — while an `InterLineBreakpointConfigurationProvider` goes
+     * on offering a perfectly good configuration that nothing ever asks for.
+     *
+     * It is also what puts the yellow dot in the gap rather than a line below it, in both IDEs, and
+     * what lets IntelliJ IDEA's own *Add Logpoint* make a `.by` log point at all —
+     * `XBreakpointUIUtil.supportsPlacement` filters types that say no out of any `INTER_LINE`
+     * toggle. See docs/internal-api.md.
+     */
+    override fun supportsInterLinePlacement(): Boolean = true
+
+    /**
      * Makes every expression field the IDE offers for one of these breakpoints a basedpython editor
      * rather than a plain text box — and is what lets the inter-line log point editor open at all.
      * See [ByDebuggerEditorsProvider].

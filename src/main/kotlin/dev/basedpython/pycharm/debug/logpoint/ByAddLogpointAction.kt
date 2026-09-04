@@ -53,17 +53,9 @@ class ByAddLogpointAction : DumbAwareAction() {
         return Target(project, editor, file, editor.caretModel.logicalPosition.line)
     }
 
-    /**
-     * The log point already on [line], if there is one.
-     *
-     * The placement-filtered `findBreakpointsAtLine` overload is `@ApiStatus.Internal`; the
-     * three-argument one is not, so the filtering that told log points from ordinary breakpoints
-     * happens here instead, against the same flag that defines one.
-     */
+    /** The log point already on [line], if there is one. */
     private fun existing(project: Project, file: VirtualFile, line: Int): XLineBreakpoint<*>? =
-        XDebuggerManager.getInstance(project).breakpointManager
-            .findBreakpointsAtLine(type(), file, line)
-            .firstOrNull { ByLogpoints.asLogpoint(it) != null }
+        ByLogpoints.breakpointsAt(project, file, line).firstOrNull { ByLogpoints.asLogpoint(it) != null }
 
     private fun create(project: Project, file: VirtualFile, line: Int): XLineBreakpoint<*> {
         val info = PlatformLogpointInfo.of(SuspendPolicy.NONE)

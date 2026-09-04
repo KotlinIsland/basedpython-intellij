@@ -81,11 +81,10 @@ object ByLogpointUndo {
     ) {
         fun remove(project: Project) {
             val manager = XDebuggerManager.getInstance(project).breakpointManager
-            val type = type() ?: return
-            // The placement-filtered overload is @ApiStatus.Internal; filter on our own flag
-            // instead, so undo removes the log point it recorded and never a plain breakpoint
-            // somebody put on the same line.
-            manager.findBreakpointsAtLine(type, file, line)
+            // Only the log points, so undo never takes away a plain breakpoint somebody put on the
+            // same line — and both placements, since a log point lives in the gap and the public
+            // three-argument lookup answers for the line only. See [ByLogpoints.breakpointsAt].
+            ByLogpoints.breakpointsAt(project, file, line)
                 .filter { ByLogpoints.asLogpoint(it) != null }
                 .forEach { manager.removeBreakpoint(it) }
         }

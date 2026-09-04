@@ -1,5 +1,23 @@
 # Internal API — what was given up, and what we want back
 
+> **You are on `internal-api-logpoints`.** This branch deliberately puts the internal API back, to
+> see what log points look like when nothing is missing: the gutter gap, and the yellow dot in the
+> gap rather than a line below it. It is a build to *try*, never one to publish — uploading it to
+> Marketplace risks the permanent ban JetBrains warns about below, and `verifyPlugin`'s
+> `INTERNAL_API_USAGES` failure level is switched off here, so nothing will stop you. `main` is the
+> shippable one, and everything under "Wanted back" describes what `main` is missing.
+>
+> What this branch adds back, and nothing else:
+>
+> | | |
+> | --- | --- |
+> | `XLineBreakpointType.supportsInterLinePlacement()` | one line on `ByLineBreakpointType`; the yellow dot moves into the gap, in both IDEs, and IntelliJ IDEA's own *Add Logpoint* can make a `.by` log point |
+> | `XLineBreakpointAdditionalInfo.Builder.setVerticalPlacement` + `XLineBreakpointVerticalPlacement` | every log point is created `INTER_LINE`, which is where it runs |
+> | `XLineBreakpoint.getPlacement` | a breakpoint the platform put in the gap is recognised as a log point |
+> | the placement-filtered `findBreakpointsAtLine` | `ByLogpoints.breakpointsAt` — the public three-argument overload silently means `ON_LINE`, so undo could not find a log point to take back |
+> | `InterLineBreakpointConfigurationProvider` and friends | `ByInterLineLogpointProvider` and `ByInterLineShift`, restored as they were |
+
+
 JetBrains Marketplace declined this plugin's first submission (0.0.1, uploaded 1 Sep 2026) for using
 `@ApiStatus.Internal` platform API:
 
