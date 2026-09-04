@@ -449,6 +449,13 @@
   only once per set of findings; the action dumps the whole record — findings, everything collected,
   everything drawn — to the log and the clipboard whether or not anything is wrong, which is how a
   doubling that is on screen *now* gets written down before the next keystroke repairs it.
+- Three more kinds of inlay hint, for the ones a newer `by` computes about basedpython-ui: the
+  observables a composable reads while composing (` reads count, items`), a parameter the runtime
+  cannot compare and so has to recompose on (`unstable `), and what a `derived(...)` depends on
+  (` depends on name, email`). Each is its own row under *Settings | basedpython | Inlay hints*,
+  never / always / on the push key like the fourteen before them, and *never* still goes out as an
+  `initializationOptions.inlayHints.*` switch, so a hint nobody will draw is one `by` does not
+  infer. A `by` that does not send them costs nothing: the settings are three rows nothing fills.
 
 ### Fixed
 
