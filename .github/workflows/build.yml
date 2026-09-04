@@ -34,7 +34,7 @@ jobs:
 
       # Also validates the wrapper jar's checksum, which is why there is no separate
       # gradle/actions/wrapper-validation step.
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
 
       - name: Build plugin
         run: ./gradlew buildPlugin
@@ -56,7 +56,7 @@ jobs:
           distribution: temurin
           java-version: 25
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
 
       # `check`, not `test`: it also runs whatever verification tasks the plugin contributes.
       - name: Run tests
@@ -89,7 +89,7 @@ jobs:
           distribution: temurin
           java-version: 25
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
 
       # verifyPluginStructure reports Marketplace's descriptor complaints and then lets the build
       # pass, because the profile it runs under grades most of them as warnings. The upload API

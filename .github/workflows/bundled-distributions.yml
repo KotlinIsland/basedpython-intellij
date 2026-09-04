@@ -90,7 +90,7 @@ jobs:
           distribution: temurin
           java-version: 25
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
 
       # The tag is the source of truth for a release, gradle.properties only for a dispatch that
       # names no version. Marketplace keys updates by version string and rejects one it has already
@@ -246,7 +246,7 @@ jobs:
           distribution: temurin
           java-version: 25
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
 
       - name: Patch and commit
         env:
