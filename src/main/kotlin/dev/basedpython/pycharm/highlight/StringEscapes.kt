@@ -1,5 +1,7 @@
 package dev.basedpython.pycharm.highlight
 
+import dev.basedpython.pycharm.lang.StringLiteralShape
+
 /** A half-open `[start, end)` range within a string literal's raw token text. */
 data class EscapeRange(val startOffset: Int, val endOffset: Int)
 
@@ -15,7 +17,7 @@ data class EscapeRange(val startOffset: Int, val endOffset: Int)
  * @return ranges relative to the start of [raw]; empty for raw strings and malformed literals
  */
 fun stringEscapeRanges(raw: String): List<EscapeRange> {
-    val literal = parseLiteral(raw) ?: return emptyList()
+    val literal = StringLiteralShape.of(raw) ?: return emptyList()
     if (literal.isRaw) return emptyList()
 
     val ranges = mutableListOf<EscapeRange>()
@@ -62,45 +64,6 @@ fun stringEscapeRanges(raw: String): List<EscapeRange> {
         i++
     }
     return ranges
-}
-
-/** The quoted content of a string literal, with its prefix flags. */
-private class Literal(
-    val contentStart: Int,
-    val contentEnd: Int,
-    val isRaw: Boolean,
-    val isFString: Boolean,
-)
-
-/** Splits [raw] into prefix, quotes and content, or null when it is not a string literal. */
-private fun parseLiteral(raw: String): Literal? {
-    var prefixEnd = 0
-    var isFString = false
-    var isRaw = false
-    while (prefixEnd < raw.length) {
-        when (raw[prefixEnd].lowercaseChar()) {
-            'f' -> isFString = true
-            'r' -> isRaw = true
-            'b', 'u' -> Unit
-            else -> break
-        }
-        prefixEnd++
-    }
-    if (prefixEnd >= raw.length) return null
-
-    val quote = raw[prefixEnd]
-    if (quote != '"' && quote != '\'') return null
-
-    val triple = prefixEnd + 2 < raw.length && raw[prefixEnd + 1] == quote && raw[prefixEnd + 2] == quote
-    val contentStart = prefixEnd + (if (triple) 3 else 1)
-    // An unterminated literal — the usual state mid-typing — runs to the end of the token.
-    val contentEnd = when {
-        triple -> if (raw.length >= contentStart + 3 && raw.endsWith("$quote$quote$quote")) raw.length - 3 else raw.length
-        raw.length > contentStart && raw[raw.length - 1] == quote -> raw.length - 1
-        else -> raw.length
-    }
-    if (contentStart >= contentEnd) return null
-    return Literal(contentStart, contentEnd, isRaw, isFString)
 }
 
 /**

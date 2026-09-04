@@ -97,7 +97,64 @@ interface ByServerExtensions {
      */
     @JsonRequest("by/alignmentGroups")
     fun alignmentGroups(args: ByAlignmentGroupsParams): CompletableFuture<List<ByAlignmentGroup>?>
+
+    /**
+     * Where this document holds a fragment of another language, and which language each is in —
+     * see [dev.basedpython.pycharm.lsp.inject.BasedPythonLanguageInjector].
+     *
+     * **Why the server.** Which language a string is written in is a question about the program,
+     * not about the text: the marker may be a comment on the statement above it, or the annotation
+     * on a parameter in another module, reached through a function that only hands the value on.
+     * The first of those an editor could find for itself; the other two need the resolved project
+     * the diagnostics in the same window came from, and re-deriving them here would mean the plugin
+     * carrying its own half-answer to a question `by` answers exactly.
+     *
+     * **Why not `textDocument/semanticTokens`.** A semantic token colours a span with one of a
+     * fixed set of kinds. This has to name a language the server has never heard of and that only
+     * the editor can act on.
+     *
+     * A `null` answer means the server declined — language services are off, or the document is not
+     * one it serves. An **empty** list is the ordinary answer for a file with no fragments in it.
+     */
+    @JsonRequest("by/injections")
+    fun injections(args: ByInjectionsParams): CompletableFuture<ByInjectionsResponse?>
 }
+
+/**
+ * The document to look through.
+ *
+ * Field names are the wire format and must match `ty_server`'s `InjectionsParams`, which is
+ * `deny_unknown_fields`. No range: which fragments a file holds is not a per-screen question — a
+ * marker at the top of the file decides a string at the bottom of it — and the answer is cached
+ * per document revision on this side anyway.
+ */
+data class ByInjectionsParams(val textDocument: TextDocumentIdentifier)
+
+/** Every fragment in the document, in source order. */
+data class ByInjectionsResponse(val injections: List<ByInjectionFragment> = emptyList())
+
+/** One fragment of another language. */
+data class ByInjectionFragment(
+    /**
+     * The language, as the marker spelled it.
+     *
+     * `by` does not interpret it and neither should anything before
+     * [dev.basedpython.pycharm.lsp.inject.ByInjectedLanguages]: an id no IDE here has support for
+     * is an ordinary answer, not an error.
+     */
+    val language: String? = null,
+    /**
+     * The runs of the file whose contents, joined in this order, are the fragment's text.
+     *
+     * One run for an ordinary literal. Several when the fragment was written as adjacent literals,
+     * and several when it is a triple-quoted string, whose incidental indentation basedpython
+     * strips — the runs are then what is left of each line, so the fragment is the text the program
+     * will hold rather than the block as it is laid out in the source.
+     */
+    val ranges: List<Range> = emptyList(),
+    /** What decided the language: `comment`, `declared` or `propagated`. */
+    val origin: String? = null,
+)
 
 /**
  * The document to look through, and how much of it.

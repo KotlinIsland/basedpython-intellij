@@ -456,6 +456,48 @@
   never / always / on the push key like the fourteen before them, and *never* still goes out as an
   `initializationOptions.inlayHints.*` switch, so a hint nobody will draw is one `by` does not
   infer. A `by` that does not send them costs nothing: the settings are three rows nothing fills.
+- **Language injection** — a fragment of another language written inside a `.by` string is now read
+  as that language: html gets html highlighting, completion, and error checking; sql gets sql's; and
+  so on for whatever the IDE has support for. Three markers work, and only the first is one an
+  editor could have found on its own:
+
+  ```by
+  # language=html
+  page = "<div>hi</div>"
+
+  def render(source: Annotated[str, "language=html"]) -> None: ...
+
+  render("<b>bold</b>")                     # html, because of the parameter it is handed to
+
+  def render_twice(source: str) -> None:
+      render(source)
+
+  render_twice("<i>italic</i>")             # html, one call further out
+  ```
+
+  Which string and which language is `by`'s answer to `by/injections`, because it is a question
+  about the program rather than about the text — the annotation may be in another module, reached
+  through a function that only passes the value along, and only the resolved project knows. The
+  plugin's half is the part the protocol cannot carry: `.by` files now have a string-literal PSI
+  element, which is what the platform needs to inject *anything* into a file, and an escaper that
+  decodes the literal, so the injected document is the string the program holds rather than the way
+  it is spelled — `"<a href=\"/\">"` is edited as `<a href="/">`, and edits inside it are written
+  back with the escapes put in again.
+
+  A triple-quoted string is injected as the text it *stands for*. basedpython strips the incidental
+  indentation the way java strips a text block's, so the fragment is what survives that — the html
+  reads, highlights and shades without the indent, instead of one indent deep inside a block of
+  shading running to the left margin.
+
+  f-strings and byte strings are never injected into (their braces are code; bytes are not text), a
+  fragment written as several adjacent literals is one injected document, and a `language=` id this
+  IDE has no support for leaves an ordinary string rather than reporting anything. Turn it off with
+  *Settings | basedpython | by server capabilities | Language injection*.
+
+  Needs a `by` carrying the two server-side halves: the dedent-aware ranges, and leaving the
+  `string` semantic token off a literal it has reported as an injection. Without the second, the
+  fragment is injected and then painted over — the platform draws an LSP semantic token at severity
+  11 and the injected language's own colours at severity 6, so the html was there and invisible.
 
 ### Fixed
 

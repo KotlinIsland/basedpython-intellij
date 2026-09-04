@@ -5,6 +5,14 @@ import com.intellij.psi.tree.IElementType
 
 class BasedPythonTokenType(debugName: String) : IElementType(debugName, BasedPythonLanguage)
 
+/**
+ * A node with children, as against a token.
+ *
+ * There is exactly one, and it exists so that a string literal has something to be: see
+ * [dev.basedpython.pycharm.lang.BasedPythonStringLiteral].
+ */
+class BasedPythonElementType(debugName: String) : IElementType(debugName, BasedPythonLanguage)
+
 object BasedPythonTokenTypes {
     @JvmField val KEYWORD: IElementType = BasedPythonTokenType("BY_KEYWORD")
     @JvmField val IDENTIFIER: IElementType = BasedPythonTokenType("BY_IDENTIFIER")
@@ -23,6 +31,14 @@ object BasedPythonTokenTypes {
     @JvmField val SEMICOLON: IElementType = BasedPythonTokenType("BY_SEMICOLON")
     @JvmField val DOT: IElementType = BasedPythonTokenType("BY_DOT")
     @JvmField val NEWLINE: IElementType = BasedPythonTokenType("BY_NEWLINE")
+
+    /**
+     * The one composite node in a `.by` tree: a [STRING] token with a PSI element around it.
+     *
+     * Not a token — nothing lexes to it. The parser wraps every string, so that the literal is
+     * something the platform can inject a language into; see [BasedPythonStringLiteral].
+     */
+    @JvmField val STRING_LITERAL: IElementType = BasedPythonElementType("BY_STRING_LITERAL")
 
     // Synthetic structural tokens produced by the indent-aware PARSING lexer only.
     // These are NEVER fed to the syntax highlighter (which keeps using the plain lexer).

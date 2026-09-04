@@ -119,6 +119,7 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
     private val byCodeLens = JCheckBox("Code lens")
     private val byDocumentHighlight = JCheckBox("Highlight usages")
     private val bySignatureHelp = JCheckBox("Signature help")
+    private val byLanguageInjection = JCheckBox("Language injection (html, sql, … inside strings)")
     private val buffFormatting = JCheckBox("Formatting")
     private val buffCodeActions = JCheckBox("Code actions (lint fixes)")
     private val buffHover = JCheckBox("Hover")
@@ -191,6 +192,7 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
                 row { cell(byCodeLens) }
                 row { cell(byDocumentHighlight) }
                 row { cell(bySignatureHelp) }
+                row { cell(byLanguageInjection) }
             }
             group("buff server capabilities") {
                 row { cell(buffFormatting) }
@@ -284,6 +286,7 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
             byCodeLens.isSelected != s.byCodeLens ||
             byDocumentHighlight.isSelected != s.byDocumentHighlight ||
             bySignatureHelp.isSelected != s.bySignatureHelp ||
+            byLanguageInjection.isSelected != s.byLanguageInjection ||
             buffFormatting.isSelected != s.buffFormatting ||
             buffCodeActions.isSelected != s.buffCodeActions ||
             buffHover.isSelected != s.buffHover
@@ -331,6 +334,7 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
         s.byCodeLens = byCodeLens.isSelected
         s.byDocumentHighlight = byDocumentHighlight.isSelected
         s.bySignatureHelp = bySignatureHelp.isSelected
+        s.byLanguageInjection = byLanguageInjection.isSelected
         s.buffFormatting = buffFormatting.isSelected
         s.buffCodeActions = buffCodeActions.isSelected
         s.buffHover = buffHover.isSelected
@@ -415,6 +419,7 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
         byCodeLens.isSelected = s.byCodeLens
         byDocumentHighlight.isSelected = s.byDocumentHighlight
         bySignatureHelp.isSelected = s.bySignatureHelp
+        byLanguageInjection.isSelected = s.byLanguageInjection
         buffFormatting.isSelected = s.buffFormatting
         buffCodeActions.isSelected = s.buffCodeActions
         buffHover.isSelected = s.buffHover
