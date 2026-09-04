@@ -9,6 +9,7 @@ import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Key
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.platform.lsp.api.LspServer
 import com.intellij.platform.lsp.api.LspServerListener
 import com.intellij.platform.lsp.api.LspServerSupportProvider
 import com.intellij.platform.lsp.api.LspServerSupportProvider.LspServerStarter
@@ -35,6 +36,8 @@ import com.intellij.platform.lsp.api.customization.LspSelectionRangeDisabled
 import com.intellij.platform.lsp.api.customization.LspSemanticTokensDisabled
 import com.intellij.platform.lsp.api.customization.LspSignatureHelpDisabled
 import com.intellij.platform.lsp.api.customization.LspTypeHierarchyDisabled
+import com.intellij.platform.lsp.api.lsWidget.LspServerWidgetItem
+import dev.basedpython.pycharm.BasedPythonIcons
 import dev.basedpython.pycharm.debug.dfa.ByDataFlowServer
 import dev.basedpython.pycharm.env.ByLaunch
 import dev.basedpython.pycharm.lang.dialect.BasedPythonProjectDetector
@@ -121,6 +124,18 @@ internal class ByLspServerSupportProvider : LspServerSupportProvider {
     }
     serverStarter.ensureServerStarted(ByLspServerDescriptor(project, launch, splitArgs(settings.effectiveByExtraArgs)))
   }
+
+  /**
+   * The `by` row in the language services popup, carrying the basedpython mark.
+   *
+   * Without this the platform draws `AllIcons.Json.Object` — the `{}` it gives every LSP
+   * integration that never says otherwise — so the row for our own type checker looked like any
+   * other server's. The icon is the file type's ([dev.basedpython.pycharm.lang.BasedPythonFileType],
+   * via [BasedPythonIcons.Logo]) rather than one drawn for the widget: the row names the server
+   * that owns `.by` files, and the popup is where a user goes looking for it by that mark.
+   */
+  override fun createLspServerWidgetItem(lspServer: LspServer, currentFile: VirtualFile?): LspServerWidgetItem =
+    LspServerWidgetItem(lspServer, currentFile, BasedPythonIcons.Logo)
 }
 
 internal class ByLspServerDescriptor(
