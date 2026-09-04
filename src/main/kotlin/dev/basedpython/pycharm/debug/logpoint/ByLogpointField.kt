@@ -32,6 +32,7 @@ import java.awt.RenderingHints
 import javax.swing.JComponent
 import javax.swing.JPanel
 import kotlin.math.ceil
+import kotlin.math.floor
 import java.awt.event.FocusAdapter
 import java.awt.event.FocusEvent
 import java.util.Collections
@@ -76,9 +77,42 @@ class ByLogpointField private constructor(
     internal var closed = false
         private set
 
+    /** Whether the file's own caret was showing when this box took focus; see [takeCaret]. */
+    private var heldCaret = false
+
     override fun dispose() {
+        // Before the inlay goes: disposing it takes the field's focus somewhere else, and the file
+        // would be left with no caret at all if this box still had it.
+        giveCaretBack()
         inlay?.let { Disposer.dispose(it) }
         inlay = null
+    }
+
+    /**
+     * Stops the file's own caret being drawn while this box has the keyboard, so the file shows one
+     * caret rather than two.
+     *
+     * There is no platform behaviour to lean on here. `EditorImpl.focusGained` activates its caret
+     * and `focusLost` only stops the *blink* — it never passivates — so an editor that has been
+     * focused once goes on painting a caret wherever it was left, and a box that takes focus without
+     * saying anything simply adds a second one. Worse, the file does not even count as unfocused:
+     * this box is a component inlay, so it lives inside the editor's own component and
+     * `EditorImpl.isEditorOwningFocus` answers yes for it.
+     *
+     * `setCaretVisible` reports what it replaced, so [giveCaretBack] can put back exactly that
+     * rather than assume — a file that never had focus should not gain a caret from having been
+     * logged in.
+     */
+    private fun takeCaret() {
+        if (heldCaret) return
+        heldCaret = hostEditor.setCaretVisible(false)
+    }
+
+    /** Undoes [takeCaret]. A no-op unless there was a caret to hide. */
+    private fun giveCaretBack() {
+        if (!heldCaret) return
+        heldCaret = false
+        if (!hostEditor.isDisposed) hostEditor.setCaretVisible(true)
     }
 
     /** Writes what is in the box onto the log point. */
@@ -109,7 +143,7 @@ class ByLogpointField private constructor(
     fun close() {
         if (closed) return
         closed = true
-        if (fieldsIn(hostEditor)[breakpoint] === this) fieldsIn(hostEditor).remove(breakpoint)
+        fieldsIn(hostEditor)?.let { open -> if (open[breakpoint] === this) open.remove(breakpoint) }
         Disposer.dispose(this)
     }
 
@@ -139,7 +173,10 @@ class ByLogpointField private constructor(
          * that cannot host components.
          */
         fun show(project: Project, editor: EditorEx, breakpoint: XLineBreakpoint<*>): ByLogpointField? {
-            val open = fieldsIn(editor)
+            // Null when the editor has no project to hold the box for. Nothing is drawn rather
+            // than drawn into a map nobody keeps: a field the registry never received is an inlay
+            // that no breakpoint event can ever close.
+            val open = fieldsIn(editor) ?: return null
             open[breakpoint]?.let { if (!it.closed) return it else open.remove(breakpoint) }
 
             val document = editor.document
@@ -198,7 +235,7 @@ class ByLogpointField private constructor(
         }
 
         /** The box showing for [breakpoint] in [editor], if any. */
-        fun of(editor: EditorEx, breakpoint: XLineBreakpoint<*>): ByLogpointField? = fieldsIn(editor)[breakpoint]
+        fun of(editor: EditorEx, breakpoint: XLineBreakpoint<*>): ByLogpointField? = fieldsIn(editor)?.get(breakpoint)
 
         /**
          * The boxes open in [editor], keyed by their log point.
@@ -213,8 +250,8 @@ class ByLogpointField private constructor(
          * an `Editor` is the platform's and outlives a plugin unload, so a box left on one keeps
          * this plugin's classloader alive and disabling the plugin reports *"didn't unload fully"*.
          */
-        private fun fieldsIn(editor: EditorEx): MutableMap<XLineBreakpoint<*>, ByLogpointField> =
-            editor.project?.service<ByLogpointFieldRegistry>()?.fieldsIn(editor) ?: mutableMapOf()
+        private fun fieldsIn(editor: EditorEx): MutableMap<XLineBreakpoint<*>, ByLogpointField>? =
+            editor.project?.service<ByLogpointFieldRegistry>()?.fieldsIn(editor)
 
         private fun expressionOf(text: String) = ByLogpoints.expressionOf(text)
 
@@ -224,26 +261,46 @@ class ByLogpointField private constructor(
         private val FIELD_BACKGROUND = JBColor(Color(0xF7F8FA), Color(0x2B2D30))
         private val FIELD_BORDER = JBColor(Color(0xC9CCD6), Color(0x393B40))
 
-        private const val ARC = 8
-        private const val FIELD_WIDTH = 320
+        /** IntelliJ IDEA's `ShadowJava2DBorder(JBUI.scale(12), …)` corner, and its caption chip's. */
+        private const val ARC = 12
+
+        /** IntelliJ IDEA's `withPreferredWidth(JBUIScale.scale(500))`. */
+        private const val FIELD_WIDTH = 500
 
         /** How narrow the box may get where the indentation leaves it no room. IntelliJ IDEA's number. */
         private const val MIN_FIELD_WIDTH = 200
 
-        /** Room above and below one line of text, so the box is a box rather than a rule. */
-        private const val FIELD_VERTICAL_PADDING = 8
+        /**
+         * Room between the box's rounded fill and the text field inside it — IntelliJ IDEA's
+         * `JBUI.Borders.empty(8, 12, 8, 8)` on the panel that holds the expression editor.
+         *
+         * Not decoration: an `EditorTextField` paints its background as a *rectangle*, so one laid
+         * straight into the bordered box covers the fill corner for corner and the box comes out
+         * square. Measured in a running PyCharm — the fill was rounded and every corner of it was
+         * painted over.
+         */
+        private val FIELD_INSETS = intArrayOf(8, 12, 8, 8)
+
+        /** Above and below the box inside its inlay, so the shadow has somewhere to fall. IDEA's `empty(4, 0)`. */
+        private const val BOX_VERTICAL_MARGIN = 4
 
         /** How much of the caption sits above the box, as IntelliJ IDEA measures it. */
         private const val CAPTION_RISE = 0.6
 
-        /** How far in from the box's border the caption starts. */
-        private const val CAPTION_INDENT = 4
+        /** How far in from the box's border the caption starts. IDEA's `insets.left + 12 - 6`. */
+        private const val CAPTION_INDENT = 6
 
         /** How far the caption rises above the box, which is also how far it reaches into it. */
         fun overhangOf(caption: JComponent): Int =
             (ceil(caption.preferredSize.height * CAPTION_RISE).toInt() - JBUI.scale(4)).coerceAtLeast(0)
 
-        private val ACTIVE_FOREGROUND = JBColor(Color(0x5A5D63), Color(0xCED0D6))
+        /**
+         * The caption while the box has focus — IntelliJ IDEA's `LogpointLabel.focusedForeground`,
+         * read off `intellij.debugger.logpoints.frontend.jar` rather than guessed. Orange in a light
+         * theme, yellow in a dark one, which is the log point's own colour: the gutter icon beside
+         * the box is the same yellow.
+         */
+        private val ACTIVE_FOREGROUND = JBColor(Color(0xED820E), Color(0xF2C55C))
         private const val LABEL = "Log:"
         private const val PLACEHOLDER = "Enter expression to log"
     }
@@ -264,7 +321,11 @@ class ByLogpointField private constructor(
             // rounded box. A settings provider is the hook that runs whenever that editor is
             // created, including the times it is recreated later.
             addSettingsProvider { inner ->
-                inner.setBorder(JBUI.Borders.empty(0, 8))
+                // No border of its own: the room around the text is the padding panel's now, and a
+                // second inset here would only push the text off centre. IDEA does the same —
+                // `editor.setBorder(null)` plus an empty border on the content component.
+                inner.setBorder(null)
+                inner.contentComponent.border = JBUI.Borders.empty()
                 // The height reserved below is one host line plus padding, so the text has to be
                 // host-sized or it does not fit in it — which is what cut the bottom off the glyphs.
                 inner.setFontSize(hostEditor.colorsScheme.editorFontSize2D)
@@ -279,35 +340,39 @@ class ByLogpointField private constructor(
             }
         }
 
-        // Sized from the host editor's line height rather than from the text field's own idea of
-        // itself: one that has not been shown yet has no editor and reports almost no height, which
-        // is how the box once came out as a bar a few pixels tall.
         val label = CaptionLabel(hostEditor)
 
-        // The caption is opaque — it paints the editor background to notch the box's border — and it
-        // sits over the box's top-left corner, which is exactly where the text starts. Without room
-        // for it the caption painted over the top of the first glyphs, which read as clipped text
-        // and was not: the box was simply not tall enough to have a line of text below the caption.
-        val intrusion = (label.preferredSize.height - overhangOf(label)).coerceAtLeast(0)
-        field?.preferredSize = Dimension(
-            JBUI.scale(FIELD_WIDTH),
-            hostEditor.lineHeight + intrusion + JBUI.scale(FIELD_VERTICAL_PADDING),
-        )
-        field?.border = JBUI.Borders.emptyTop(intrusion)
+        // Sized from the host editor's line height rather than from the text field's own idea of
+        // itself: one that has not been shown yet has no editor and reports almost no height, which
+        // is how the box once came out as a bar a few pixels tall. Height only — the width is the
+        // box's to decide, and it stretches to whatever the editor has room for.
+        field?.preferredSize = Dimension(JBUI.scale(FIELD_WIDTH), hostEditor.lineHeight)
+
+        // The padding between the rounded fill and the text field, and the whole reason the box has
+        // corners: see FIELD_INSETS. It also carries the caption, whose lower two-fifths sit inside
+        // the box's top border and would otherwise land on the first line of text.
+        val padded = BorderLayoutPanel()
+        padded.isOpaque = false
+        padded.border = JBUI.Borders.empty(FIELD_INSETS[0], FIELD_INSETS[1], FIELD_INSETS[2], FIELD_INSETS[3])
+        padded.addToCenter(expressionEditor.editorComponent)
 
         val box = BorderLayoutPanel()
         box.isOpaque = false
         box.border = ByLogpointBoxBorder(JBUI.scale(ARC), FIELD_BACKGROUND, FIELD_BORDER)
-        box.addToCenter(expressionEditor.editorComponent)
+        box.addToCenter(padded)
 
         val editorComponent = expressionEditor.editorComponent
         DumbAwareAction.create { commit() }.registerCustomShortcutSet(CommonShortcuts.ENTER, editorComponent, this)
         DumbAwareAction.create { revert() }.registerCustomShortcutSet(CommonShortcuts.ESCAPE, editorComponent, this)
         editorComponent.addFocusListener(object : FocusAdapter() {
-            override fun focusGained(e: FocusEvent) = label.setActive(true)
+            override fun focusGained(e: FocusEvent) {
+                label.setActive(true)
+                takeCaret()
+            }
 
             override fun focusLost(e: FocusEvent) {
                 label.setActive(false)
+                giveCaretBack()
                 commit()
             }
         })
@@ -327,7 +392,7 @@ class ByLogpointField private constructor(
 
         init {
             isOpaque = false
-            border = JBUI.Borders.empty(2, 6)
+            border = JBUI.Borders.empty(1, 6)
             foreground = JBUI.CurrentTheme.ContextHelp.FOREGROUND
         }
 
@@ -410,7 +475,17 @@ class ByLogpointField private constructor(
             box.setBounds(0, overhang, width, (height - overhang).coerceAtLeast(0))
             val insets = box.border?.getBorderInsets(box) ?: JBUI.emptyInsets()
             val captionSize = caption.preferredSize
-            caption.setBounds(insets.left + JBUI.scale(CAPTION_INDENT), 0, captionSize.width, captionSize.height)
+            // Straddling the box's top border rather than sitting on top of this component: the
+            // border is drawn at `overhang + insets.top`, and IDEA puts the caption's lower two
+            // fifths below that line. Anchoring at y = 0 instead left the notch off the border
+            // wherever the shadow's inset and the overhang did not happen to agree.
+            val captionY = floor(overhang + insets.top - captionSize.height * CAPTION_RISE).toInt()
+            caption.setBounds(
+                (insets.left + JBUI.scale(CAPTION_INDENT)).coerceAtLeast(0),
+                captionY.coerceAtLeast(0),
+                captionSize.width,
+                captionSize.height,
+            )
         }
     }
 
@@ -435,6 +510,10 @@ class ByLogpointField private constructor(
 
         init {
             isOpaque = false
+            // IDEA's `JBUI.Borders.empty(4, 0, 4, 0)` on the same holder. The inlay is exactly as
+            // tall as this component asks to be, so without the margin the box's shadow ends flush
+            // against the line of code below it.
+            border = JBUI.Borders.empty(BOX_VERTICAL_MARGIN, 0)
             add(box)
         }
 
@@ -450,18 +529,26 @@ class ByLogpointField private constructor(
         }
 
         override fun getPreferredSize(): Dimension = box.preferredSize.let {
-            Dimension(indent() + it.width, it.height)
+            Dimension(indent() + it.width, it.height + verticalMargin())
         }
 
         override fun getMinimumSize(): Dimension = preferredSize
 
         override fun doLayout() {
             val indent = indent()
+            val top = insets.top
             // The floor is IDEA's, and it is why the box overflows a narrow editor rather than
             // shrinking into it: an expression field a deep indent has squeezed to a few pixels is
             // worse than one that runs past the edge of a window the editor can scroll.
-            box.setBounds(indent, 0, (width - indent).coerceAtLeast(JBUI.scale(MIN_FIELD_WIDTH)), height)
+            box.setBounds(
+                indent,
+                top,
+                (width - indent).coerceAtLeast(JBUI.scale(MIN_FIELD_WIDTH)),
+                (height - verticalMargin()).coerceAtLeast(0),
+            )
         }
+
+        private fun verticalMargin(): Int = insets.let { it.top + it.bottom }
     }
 }
 
