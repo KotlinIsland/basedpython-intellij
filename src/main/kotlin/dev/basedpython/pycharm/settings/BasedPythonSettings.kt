@@ -87,6 +87,15 @@ class BasedPythonSettings : PersistentStateComponent<BasedPythonSettings.State> 
     var bySemanticTokens: Boolean = true,
     var byCodeLens: Boolean = true,
     var byDocumentHighlight: Boolean = true,
+    /**
+     * Read a string `by` says holds another language as that language.
+     *
+     * Not an LSP capability like its neighbours — `by/injections` is a protocol extension and the
+     * injecting is the plugin's — but the same kind of switch, and the one people reach for: an
+     * editor that turns a string into html the moment a parameter is annotated somewhere else is a
+     * surprise worth being able to turn off.
+     */
+    var byLanguageInjection: Boolean = true,
     var bySignatureHelp: Boolean = true,
     /**
      * Draw what a stopped program's own state settles about the code below it.
@@ -233,6 +242,9 @@ class BasedPythonSettings : PersistentStateComponent<BasedPythonSettings.State> 
   var byDocumentHighlight: Boolean
     get() = state.byDocumentHighlight
     set(value) { state.byDocumentHighlight = value }
+  var byLanguageInjection: Boolean
+    get() = state.byLanguageInjection
+    set(value) { state.byLanguageInjection = value }
   var bySignatureHelp: Boolean
     get() = state.bySignatureHelp
     set(value) { state.bySignatureHelp = value }

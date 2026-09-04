@@ -147,6 +147,23 @@
             language="basedpython"
             implementationClass="dev.basedpython.pycharm.highlight.StringEscapeAnnotator"/>
 
+        <!-- ===== Stream H2: language injection =====
+             A fragment of another language inside a `.by` string — html, sql, a regexp — read as
+             that language. Which string, and which language, is `by`'s answer to `by/injections`:
+             the marker may be a comment above the statement or an `Annotated[str, "language=…"]` on
+             a parameter in another module, and only the resolved project can tell. The injecting
+             itself is the platform's, through a host element this plugin now has
+             (`lang.BasedPythonStringLiteral`) — before it, a `.by` tree held nothing that could be
+             one, so nothing could be injected however the string was marked.
+
+             The manipulator is what lets anything holding that host read or rewrite its content
+             without knowing which quotes it is written in. -->
+        <multiHostInjector
+            implementation="dev.basedpython.pycharm.lsp.inject.BasedPythonLanguageInjector"/>
+        <lang.elementManipulator
+            forClass="dev.basedpython.pycharm.lang.BasedPythonStringLiteral"
+            implementationClass="dev.basedpython.pycharm.lang.BasedPythonStringManipulator"/>
+
         <!-- ===== Stream I: formatting ===== -->
         <actionOnSaveInfoProvider
             implementation="dev.basedpython.pycharm.format.BuffFormatOnSaveInfoProvider"/>

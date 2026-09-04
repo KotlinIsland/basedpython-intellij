@@ -1,6 +1,7 @@
 package dev.basedpython.pycharm.highlight.fstring
 
 import com.intellij.openapi.util.TextRange
+import dev.basedpython.pycharm.lang.StringLiteralShape
 
 /**
  * Pure, dependency-light helper for locating f-string `{ ... }` interpolation regions
@@ -41,13 +42,7 @@ object FStringInterpolation {
      * The prefix is the run of leading letters from `{r, b, u, f}` (case-insensitive)
      * that precedes the opening quote character.
      */
-    fun isFString(raw: String): Boolean {
-        val end = prefixEnd(raw)
-        for (i in 0 until end) {
-            if (raw[i] == 'f' || raw[i] == 'F') return true
-        }
-        return false
-    }
+    fun isFString(raw: String): Boolean = StringLiteralShape.of(raw)?.isFString == true
 
     /**
      * Full analysis: detects f-string-ness and computes the interpolation ranges
@@ -63,20 +58,11 @@ object FStringInterpolation {
      * Returns an empty list when [raw] is not an f-string or contains no interpolations.
      */
     fun interpolationRanges(raw: String): List<TextRange> {
-        if (!isFString(raw)) return emptyList()
+        val shape = StringLiteralShape.of(raw) ?: return emptyList()
+        if (!shape.isFString) return emptyList()
 
-        val len = raw.length
-        val pEnd = prefixEnd(raw)
-        if (pEnd >= len) return emptyList()
-
-        val quote = raw[pEnd]
-        if (quote != '"' && quote != '\'') return emptyList()
-
-        val triple = pEnd + 2 < len && raw[pEnd + 1] == quote && raw[pEnd + 2] == quote
-        val contentStart = pEnd + (if (triple) 3 else 1)
-
-        // Determine where the string content ends (before the closing quote(s), if present).
-        val contentEnd = computeContentEnd(raw, quote, triple, contentStart)
+        val contentStart = shape.contentStart
+        val contentEnd = shape.contentEnd
         if (contentStart >= contentEnd) return emptyList()
 
         val result = ArrayList<TextRange>()
@@ -141,45 +127,4 @@ object FStringInterpolation {
         return result
     }
 
-    // ------------------------------------------------------------------------
-    // Internals
-    // ------------------------------------------------------------------------
-
-    /**
-     * Index of the first character that is NOT part of the string prefix.
-     * The prefix is a run of leading characters from the set {r, R, b, B, u, U, f, F}.
-     */
-    private fun prefixEnd(raw: String): Int {
-        var i = 0
-        while (i < raw.length) {
-            when (raw[i]) {
-                'r', 'R', 'b', 'B', 'u', 'U', 'f', 'F' -> i++
-                else -> return i
-            }
-        }
-        return i
-    }
-
-    /**
-     * Computes the end index (exclusive) of the string's content, i.e. the position of the
-     * closing quote(s). When the literal is unterminated we return the literal length so the
-     * whole tail is treated as content.
-     */
-    private fun computeContentEnd(raw: String, quote: Char, triple: Boolean, contentStart: Int): Int {
-        val len = raw.length
-        if (triple) {
-            // Closing is three quote chars at the very end.
-            if (len - 3 >= contentStart &&
-                raw[len - 1] == quote && raw[len - 2] == quote && raw[len - 3] == quote
-            ) {
-                return len - 3
-            }
-            return len
-        }
-        // Single-quoted: closing quote is the final char if it matches and there is content.
-        if (len > contentStart && raw[len - 1] == quote) {
-            return len - 1
-        }
-        return len
-    }
 }

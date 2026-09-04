@@ -22,10 +22,21 @@ import org.eclipse.lsp4j.HoverParams
  */
 internal fun runningByServer(project: Project, file: VirtualFile): LspServer? {
     if (ApplicationManager.getApplication().isDispatchThread) return null
-    return LspServerManager.getInstance(project)
+    return byServerFor(project, file)
+}
+
+/**
+ * The same lookup without the thread rule, for deciding whether asking is worth arranging at all.
+ *
+ * Safe on any thread because it sends nothing: it reads the manager's list of servers already
+ * started for this project. A caller on the EDT that gets a server back still cannot make a request
+ * on it — it has to hand that to a background thread, which is exactly what
+ * [dev.basedpython.pycharm.lsp.inject.ByInjections] does with the answer.
+ */
+internal fun byServerFor(project: Project, file: VirtualFile): LspServer? =
+    LspServerManager.getInstance(project)
         .getServersForProvider(ByLspServerSupportProvider::class.java)
         .firstOrNull { it.state == LspServerState.Running && it.descriptor.isSupportedFile(file) }
-}
 
 /** What `textDocument/hover` had to say, with "nothing to say" kept apart from "nobody to ask". */
 sealed interface ByHover {
