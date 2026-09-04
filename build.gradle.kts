@@ -11,7 +11,7 @@ plugins {
 }
 
 dependencies {
-  testImplementation(platform("org.junit:junit-bom:5.14.2"))
+  testImplementation(platform("org.junit:junit-bom:6.1.3"))
   testImplementation("org.junit.jupiter:junit-jupiter")
   // Gradle needs the launcher on the test runtime classpath to drive the JUnit Platform.
   testRuntimeOnly("org.junit.platform:junit-platform-launcher")
