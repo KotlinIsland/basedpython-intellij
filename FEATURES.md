@@ -244,7 +244,7 @@ lexical colour only. Don't reintroduce guessed semantic colour; fix the LSP path
 ## 13. Templates
 - [x] File templates (File, Class, Data Class, Protocol)
 - [x] Live templates (cdef, dcl, fdcl, ecl, proto, ovr, nt, let)
-- [x] More live templates (main guard, async def, match/case, enum, pytest fixture)
+- [x] More live templates (main guard, async def, match/case, enum, pytest fixture). The main guard is `.py` only — `editor.BasedPythonPyTemplateContextType`, contributed as `BASED_PYTHON_PY` with `BASED_PYTHON` as its base context. In a `.by` basedpython generates the guard from `def main`, and a hand-written one turns the generated entry point off (`run.main.ByMainSignature.invokesMain`), so `main` there has to stay the `by` server's own completion — a live template whose key is exactly the typed prefix is preselected over everything else. The base context is what keeps the other eighteen, which name only `BASED_PYTHON`, offered in an owned `.py`: the platform drops a base context from the applicable set once a more specific one matches, and only `TemplateContext.isEnabled` walking the base chain saves them
 - [x] Postfix templates (see §8)
 - [x] Surround templates
 - [x] Template variable functions (byModuleName, byHeader, byOutPath macros)

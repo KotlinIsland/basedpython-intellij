@@ -452,6 +452,16 @@
 
 ### Fixed
 
+- Typing `main` in a `.by` file reaches `by`'s own completion again. The bundled `main` live
+  template was offered in every basedpython file, and a live template whose key is exactly what has
+  been typed is *preselected* over everything else whatever its relevance — so `main` + Enter took
+  the template. Taking it was wrong twice over: basedpython generates the `if __name__ ==
+  "__main__"` guard from `def main`, and a hand-written one stops it, which turns off the generated
+  argument parser, the `def main(` gutter run icon and the argument form. The template is now
+  `.py` only, through a `BASED_PYTHON_PY` context that sits under `BASED_PYTHON` — a `.py` this
+  plugin owns is run by the interpreter exactly as written, so there the guard does have to be
+  typed. The other eighteen templates name only `BASED_PYTHON` and are offered in both.
+
 - Diagnostics appear at all on 2026.3, where every one of them threw `NoSuchMethodError:
   'java.lang.String org.eclipse.lsp4j.Diagnostic.getMessage()'` out of
   `ByDiagnosticsSupport.getTooltip` and left the file unannotated. LSP 3.18 lets a diagnostic
