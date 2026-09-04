@@ -35,6 +35,10 @@ enum class ByHintKind(val option: String?, val display: String, val shape: ByHin
     INFERRED_VARIANCE("inferredVariance", "Inferred variance", ByHintShape.VARIANCE),
     INFERRED_REIFICATION("inferredReification", "Inferred reification", ByHintShape.REIFICATION),
 
+    INFERRED_READS("inferredReads", "Inferred state reads", ByHintShape.READS),
+    PARAMETER_STABILITY("parameterStability", "Unstable parameters", ByHintShape.STABILITY),
+    DERIVED_DEPENDENCIES("derivedDependencies", "Derived dependencies", ByHintShape.DERIVED_DEPENDENCIES),
+
     /**
      * A hint this plugin does not recognise, which is a hint from a newer `by` than it was built
      * against.
@@ -70,7 +74,7 @@ enum class ByHintKind(val option: String?, val display: String, val shape: ByHin
 /**
  * What a hint looks like on the wire, which is as much as the client can tell about it.
  *
- * LSP carries two kinds, `Type` and `Parameter`, for the fourteen things `by` distinguishes — so
+ * LSP carries two kinds, `Type` and `Parameter`, for the seventeen things `by` distinguishes — so
  * the rest is read off the label, which works because a hint stands in for code and is written the
  * way the language writes that code. `by`'s formats are fixed strings (`override `, `reified `,
  * ` raises `, `  revealed: `), so this is recovery, not guesswork; see [ByInlayHints.shapeOf].
@@ -116,6 +120,15 @@ enum class ByHintShape {
     /** `reified ` — a type parameter reified without saying so. */
     REIFICATION,
 
+    /** ` reads count, items` — the observables a basedpython-ui composable reads while composing. */
+    READS,
+
+    /** `unstable ` — a composable parameter the basedpython-ui runtime cannot compare. */
+    STABILITY,
+
+    /** ` depends on name, email` — what a basedpython-ui `derived(...)` computation depends on. */
+    DERIVED_DEPENDENCIES,
+
     /** Anything else, which is anything a newer `by` has learned to say. */
     UNKNOWN,
     ;
@@ -130,7 +143,7 @@ enum class ByHintShape {
      */
     val relatesToPrecedingText: Boolean
         get() = when (this) {
-            ARGUMENT_NAME, IMPLICIT_PARAMETER, OVERRIDE, VARIANCE, REIFICATION -> false
+            ARGUMENT_NAME, IMPLICIT_PARAMETER, OVERRIDE, VARIANCE, REIFICATION, STABILITY -> false
             else -> true
         }
 }
