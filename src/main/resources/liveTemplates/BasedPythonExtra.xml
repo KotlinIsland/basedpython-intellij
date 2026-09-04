@@ -1,4 +1,7 @@
 <templateSet group="BasedPythonExtra">
+    <!-- `.py` only. In a `.by` the guard is generated from `def main`, and writing one by hand
+         turns the generated entry point off, so `main` there must stay the `by` server's own
+         completion. See BasedPythonPyTemplateContextType. -->
     <template name="main"
               value="if __name__ == &quot;__main__&quot;:&#10;    $END$"
               description="main guard"
@@ -6,7 +9,7 @@
               toShortenFQNames="true">
         <context>
             <option name="OTHER" value="false"/>
-            <option name="BASED_PYTHON" value="true"/>
+            <option name="BASED_PYTHON_PY" value="true"/>
         </context>
     </template>
     <template name="adef"
