@@ -28,7 +28,12 @@ internal class ByRecompositionToolWindowFactory : ToolWindowFactory, DumbAware {
     }
 }
 
+/** The tool window's identity, and when the IDE is allowed to show its stripe button. */
 internal object ByRecompositionToolWindow {
-    /** Must equal the `id` in plugin.xml. */
+
+    /**
+     * Must match the `id` in plugin.xml — the platform keys layout and visibility on this string.
+     * `PluginXmlResourcesTest` is what makes that true rather than hoped for.
+     */
     const val ID: String = "basedpython Recompositions"
 }

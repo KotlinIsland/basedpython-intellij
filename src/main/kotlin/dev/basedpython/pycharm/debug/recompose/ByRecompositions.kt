@@ -239,7 +239,47 @@ internal object ByRecompositions {
             val gLine = g.int("line") ?: return@let null
             ByGeneratedLocation(gFile, gLine)
         }
-        return ByTraceLocation(file = file, line = line, generated = generated, reason = obj.string("reason"))
+        return ByTraceLocation(file = file, line = line, generated = generated, reason = obj.obj("reason")?.let(::parseUnmapped))
+    }
+
+    /**
+     * Read the map's account of why a location has no `.by` counterpart.
+     *
+     * An **object**, not a string: bpd's `Unmapped` is an internally tagged enum
+     * (`#[serde(tag = "unmapped")]`), so it arrives as `{"unmapped": "no_source_line", "file": …}`
+     * with the tag's own fields beside it.
+     *
+     * Unlike a cause, an unknown tag is [ByUnmapped.Unknown] rather than null: bpd's enum is
+     * `#[non_exhaustive]`, and a reason this build has no sentence for must not cost the location
+     * it is about — the file and line are still exactly what they were, and only the aside in the
+     * tooltip is poorer for it. A missing field within a *known* tag does make it unknown, since a
+     * `past_the_end` without its counts is not the fact the map reported.
+     */
+    fun parseUnmapped(obj: JsonObject): ByUnmapped {
+        val tag = obj.string("unmapped") ?: return ByUnmapped.Unknown("")
+        val unknown = ByUnmapped.Unknown(tag)
+        return when (tag) {
+            "not_in_the_map" -> ByUnmapped.NotInTheMap(file = obj.string("file") ?: return unknown)
+            "past_the_end" -> ByUnmapped.PastTheEnd(
+                file = obj.string("file") ?: return unknown,
+                line = obj.int("line") ?: return unknown,
+                covered = obj.int("covered") ?: return unknown,
+            )
+
+            "no_source_line" -> ByUnmapped.NoSourceLine(
+                file = obj.string("file") ?: return unknown,
+                line = obj.int("line") ?: return unknown,
+                source = obj.string("source") ?: return unknown,
+            )
+
+            "no_generated_line" -> ByUnmapped.NoGeneratedLine(
+                file = obj.string("file") ?: return unknown,
+                requested = obj.int("requested") ?: return unknown,
+                lastMapped = obj.int("last_mapped"),
+            )
+
+            else -> unknown
+        }
     }
 
     /** Every cause in the array under [name], or null when the field is missing or any one is unreadable. */
@@ -287,17 +327,50 @@ internal object ByRecompositions {
  * covers the generated file, else the generated place itself.
  *
  * @param generated the location the interpreter actually ran; null only when [file] already is it
- * @param reason why a mapped generated line kept its generated location, the way a frame says it
+ * @param reason the map's account of why a mapped generated line kept its generated location, the
+ *   way a frame says it — an object on the wire, tagged by which account it is
  */
 internal data class ByTraceLocation(
     val file: String,
     val line: Int,
     val generated: ByGeneratedLocation?,
-    val reason: String?,
+    val reason: ByUnmapped?,
 )
 
 /** The generated `.py` place behind a [ByTraceLocation]. Shown, never opened. */
 internal data class ByGeneratedLocation(val file: String, val line: Int)
+
+/**
+ * The map's own account of why a location has no counterpart on the other side — bpd's `Unmapped`,
+ * the same three-way vocabulary a stack frame carries, one class per tag.
+ *
+ * Written as a sentence by [ByCauseSentences.unmapped] and shown in the tooltip beside the place it
+ * is about. A `.by` line invented for one of these would be a line the user never wrote, which is
+ * why bpd reports the reason instead of resolving it.
+ */
+internal sealed interface ByUnmapped {
+    /** No entry of the map is about [file] at all. */
+    data class NotInTheMap(val file: String) : ByUnmapped
+
+    /** [line] is past the [covered] lines the map holds for [file] — a different file of the same name. */
+    data class PastTheEnd(val file: String, val line: Int, val covered: Int) : ByUnmapped
+
+    /** The transpiler emitted [line] of [file] and no line of [source] is behind it. */
+    data class NoSourceLine(val file: String, val line: Int, val source: String) : ByUnmapped
+
+    /**
+     * Nothing was generated for [requested] of [file], or for any line after it.
+     *
+     * @param lastMapped the last line anything was generated for, or null when that was none of them
+     */
+    data class NoGeneratedLine(val file: String, val requested: Int, val lastMapped: Int?) : ByUnmapped
+
+    /**
+     * A reason from a newer bpd, kept as the [tag] it came under — empty when there was not even a
+     * tag. Never a reason to lose the location: see [ByRecompositions.parseUnmapped].
+     */
+    data class Unknown(val tag: String) : ByUnmapped
+}
 
 /** A value that is `null`, an integer or a string on the wire: a scope key, or the index/key an op touched. */
 internal sealed interface ByTraceScalar {

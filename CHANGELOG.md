@@ -510,7 +510,11 @@
   change is `created` on the new scope plus the old key under the parent's `disposed`). A write
   that made nothing run is listed under its frame, which is the one worth seeing — judged within
   the frame, so a write whose run has not happened yet shows; errors and refused writes are marked. Double-click or *Jump to Source* opens the write site of a state cause
-  or the composable's definition, *Jump to Call Site* where the parent called it. *Watch* asks bpd to
+  or the composable's definition, *Jump to Call Site* where the parent called it; both open the `.by`
+  place, and the row's tooltip carries the generated one beside it, with the map's own account of why
+  a line kept its generated place when it has one (`the transpiler emitted this line and no line of
+  counter.by is behind it`) — read by its tag, and, its type being `#[non_exhaustive]`, a tag from a
+  newer bpd written out as itself rather than costing the location it is about. *Watch* asks bpd to
   send every record as it happens (`bpd/watchRecompositions`, arriving as `bpd/recomposition` events
   the plugin names in `bpd/understands` so bpd does not narrate them on the console as well), put on
   screen at most every 100 ms, touching only the frames a burst changed; *Refresh* reads the ring

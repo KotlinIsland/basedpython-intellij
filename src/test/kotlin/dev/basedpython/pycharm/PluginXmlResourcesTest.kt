@@ -1,5 +1,9 @@
 package dev.basedpython.pycharm
 
+import dev.basedpython.pycharm.debug.recompose.ByRecompositionToolWindow
+import dev.basedpython.pycharm.env.manager.EnvToolWindow
+import dev.basedpython.pycharm.tasks.ByTaskToolWindow
+import dev.basedpython.pycharm.ui.log.BasedPythonLogNotifications
 import java.nio.file.FileSystemAlreadyExistsException
 import java.nio.file.FileSystems
 import java.nio.file.Files
@@ -172,6 +176,31 @@ class PluginXmlResourcesTest {
                 runCatching { Class.forName(owner).getField(field).get(null) }.getOrNull(),
                 "toolWindow icon=\"$reference\" resolves to no icon field",
             )
+        }
+    }
+
+    /**
+     * Every tool window id the code holds is one plugin.xml declares.
+     *
+     * The id is the platform's key for a window's layout, its visibility and `getToolWindow`, and
+     * the two spellings of it — the `id` attribute and the constant the code passes around — are
+     * kept in step by nothing but eyes. A drifted pair fails as a window that will not open, or an
+     * `activate` that silently does nothing, both of which look like a broken feature rather than a
+     * typo. Every one of these constants documents itself as having to match; this is what makes
+     * that true, and what keeps a constant nothing happens to call today from rotting.
+     */
+    @Test
+    fun `every tool window id in the code is one plugin xml declares`() {
+        val declared = attr("toolWindow", "id").toSet()
+        assertTrue(declared.isNotEmpty(), "expected tool windows to be declared")
+        val held = mapOf(
+            "ByRecompositionToolWindow.ID" to ByRecompositionToolWindow.ID,
+            "ByTaskToolWindow.ID" to ByTaskToolWindow.ID,
+            "EnvToolWindow.ID" to EnvToolWindow.ID,
+            "BasedPythonLogNotifications.TOOL_WINDOW_ID" to BasedPythonLogNotifications.TOOL_WINDOW_ID,
+        )
+        for ((name, id) in held) {
+            assertTrue(id in declared, "$name is \"$id\", which plugin.xml does not declare; it has $declared")
         }
     }
 }

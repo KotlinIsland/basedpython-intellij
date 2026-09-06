@@ -382,9 +382,17 @@ is that run's cause and is not listed twice — judged within its own frame, sin
 promises the two share one, so a write in the current frame whose run has not happened yet (a stop
 in the middle of a handler) shows. Errors and refused writes are rows, marked. Double-click, or
 *Jump to Source*, opens the write site of a state cause and the definition of a run's composable;
-*Jump to Call Site* opens where the parent called it. *Watch* toggles the stream, *Refresh* reads the
-ring again while stopped, *Clear* forgets what is shown, and typing is a speed search — it jumps to
-and highlights the rows whose sentence contains the text, and hides nothing.
+*Jump to Call Site* opens where the parent called it. Both open the `.by` place; the generated one is
+in the row's tooltip and nowhere else, since the transpiled tree lives in a temp directory nobody
+edits. Where the map could not put a `.by` line in front of a generated one it says why, and the
+tooltip carries that as a clause — `the transpiler emitted this line and no line of counter.by is
+behind it`. That reason is bpd's `Unmapped`, an internally tagged enum, so it arrives as an object
+(`{"unmapped": "no_source_line", …}`) and is read by its tag; the type is `#[non_exhaustive]`, so a
+tag from a newer bpd is written out as itself rather than dressed up as one of these — and, unlike
+an unknown record or cause, it never costs the location it is about, which is still exactly the
+place it was. *Watch* toggles the stream, *Refresh* reads the ring again while stopped, *Clear*
+forgets what is shown, and typing is a speed search — it jumps to and highlights the rows whose
+sentence contains the text, and hides nothing.
 
 The second place is the editor: while the program is stopped, the definition line of every
 composable that ran in the latest frame carries `ran ×N · <the first reason>` in the margin past the

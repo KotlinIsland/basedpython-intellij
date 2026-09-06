@@ -101,6 +101,41 @@ class ByCauseSentencesTest {
         assertEquals("a.by:2", ByCauseSentences.site(ByTraceLocation("C:\\app\\a.by", 2, null, null)))
     }
 
+    /**
+     * A clause for a tooltip, not bpd's paragraph. Every tag has one, so a location that carries a
+     * reason always says something beside itself.
+     */
+    @Test
+    fun `every reason for an unmapped place has a clause`() {
+        assertEquals(
+            "the source map says nothing about this file",
+            ByCauseSentences.unmapped(ByUnmapped.NotInTheMap("/a.py")),
+        )
+        assertEquals(
+            "line 90 is past the 74 lines the map covers — the file that was generated is not the file being read",
+            ByCauseSentences.unmapped(ByUnmapped.PastTheEnd("/a.py", 90, 74)),
+        )
+        assertEquals(
+            "the transpiler emitted this line and no line of counter.by is behind it",
+            ByCauseSentences.unmapped(ByUnmapped.NoSourceLine("/tmp/b/counter.py", 90, "/app/counter.by")),
+        )
+        assertEquals(
+            "nothing was generated for line 40, or for any line after it, the last being line 31",
+            ByCauseSentences.unmapped(ByUnmapped.NoGeneratedLine("/a.by", 40, 31)),
+        )
+        assertEquals(
+            "nothing was generated for line 40, or for any line after it",
+            ByCauseSentences.unmapped(ByUnmapped.NoGeneratedLine("/a.by", 40, null)),
+        )
+    }
+
+    /** A tag from a newer bpd is read out as itself rather than dressed up as a reason this knows. */
+    @Test
+    fun `a reason this build does not know is spelled as its tag`() {
+        assertEquals("a reason from 2027", ByCauseSentences.unmapped(ByUnmapped.Unknown("a_reason_from_2027")))
+        assertEquals("unmapped, for a reason this build cannot read", ByCauseSentences.unmapped(ByUnmapped.Unknown("")))
+    }
+
     @Test
     fun `durations read in the unit that fits`() {
         assertEquals("300 ns", ByDurations.render(300))

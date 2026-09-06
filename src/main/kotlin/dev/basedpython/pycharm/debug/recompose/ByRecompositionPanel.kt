@@ -245,7 +245,7 @@ internal class ByRecompositionPanel(private val project: Project) :
             return buildString {
                 append(target.file).append(':').append(target.line)
                 target.generated?.let { append("  —  generated ").append(it.file).append(':').append(it.line) }
-                target.reason?.let { append("  (").append(it).append(')') }
+                target.reason?.let { append("  (").append(ByCauseSentences.unmapped(it)).append(')') }
                 row.callSite?.let { append("\ncalled from ").append(it.file).append(':').append(it.line) }
             }
         }

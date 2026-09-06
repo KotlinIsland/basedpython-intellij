@@ -65,6 +65,34 @@ internal object ByCauseSentences {
     fun site(location: ByTraceLocation): String =
         "${location.file.substringAfterLast('/').substringAfterLast('\\')}:${location.line}"
 
+    /**
+     * Why a location kept its generated place, in one clause for a tooltip.
+     *
+     * Shorter than bpd's own `Display`, which writes a paragraph ending in what to do about it: that
+     * is the right length for a console line and the wrong one for an aside beside a place. The fact
+     * is the same one, and the file names are left out where the tooltip has already named the file.
+     *
+     * A reason a newer bpd grew is written as its tag with the underscores taken out, which says
+     * more than nothing and never claims a meaning this build does not have.
+     */
+    fun unmapped(reason: ByUnmapped): String = when (reason) {
+        is ByUnmapped.NotInTheMap -> "the source map says nothing about this file"
+        is ByUnmapped.PastTheEnd ->
+            "line ${reason.line} is past the ${reason.covered} lines the map covers — " +
+                "the file that was generated is not the file being read"
+
+        is ByUnmapped.NoSourceLine ->
+            "the transpiler emitted this line and no line of " +
+                "${reason.source.substringAfterLast('/').substringAfterLast('\\')} is behind it"
+
+        is ByUnmapped.NoGeneratedLine ->
+            "nothing was generated for line ${reason.requested}, or for any line after it" +
+                (reason.lastMapped?.let { ", the last being line $it" } ?: "")
+
+        is ByUnmapped.Unknown ->
+            if (reason.tag.isEmpty()) "unmapped, for a reason this build cannot read" else reason.tag.replace('_', ' ')
+    }
+
     private fun String?.orUnknown(): String = this ?: UNKNOWN_VALUE
 }
 

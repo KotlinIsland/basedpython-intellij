@@ -284,18 +284,79 @@ class ByRecompositionsTest {
         assertNull(loose.called)
     }
 
+    /**
+     * `reason` is bpd's `Unmapped`, an internally tagged enum — so an **object** carrying
+     * `unmapped` and that tag's own fields, never a string. Spelled here the way
+     * `bpd_core::source_map::Unmapped` serialises it, because a shape invented on this side would
+     * be a test that agrees with itself and a reason that is silently never shown.
+     */
     @Test
     fun `a location keeps its generated place and its reason`() {
         val location = ByRecompositions.parseLocation(
-            obj("""{ "file": "/tmp/build/a.py", "line": 90, "generated": null, "reason": "no source line" }"""),
+            obj(
+                """{ "file": "/tmp/build/a.py", "line": 90, "generated": null,
+                     "reason": { "unmapped": "no_source_line", "file": "/tmp/build/a.py", "line": 90,
+                                 "source": "/app/a.by" } }""",
+            ),
         )
-        assertEquals(ByTraceLocation("/tmp/build/a.py", 90, null, "no source line"), location)
+        assertEquals(
+            ByTraceLocation("/tmp/build/a.py", 90, null, ByUnmapped.NoSourceLine("/tmp/build/a.py", 90, "/app/a.by")),
+            location,
+        )
         assertNull(ByRecompositions.parseLocation(obj("""{ "line": 3 }""")), "no file is no location")
         assertNull(ByRecompositions.parseLocation(obj("""{ "file": "/a.by", "line": "3" }""")))
         assertNull(
             ByRecompositions.parseLocation(obj("""{ "file": "/a.by", "line": 3, "generated": { "file": "/a.py" } }"""))?.generated,
             "a generated place missing its line is no generated place",
         )
+    }
+
+    /** Every tag `bpd_core::source_map::Unmapped` has, read by the layout of that tag. */
+    @Test
+    fun `every reason bpd can give is read by its tag`() {
+        assertEquals(
+            ByUnmapped.NotInTheMap("/a.py"),
+            ByRecompositions.parseUnmapped(obj("""{ "unmapped": "not_in_the_map", "file": "/a.py" }""")),
+        )
+        assertEquals(
+            ByUnmapped.PastTheEnd("/a.py", 90, 74),
+            ByRecompositions.parseUnmapped(obj("""{ "unmapped": "past_the_end", "file": "/a.py", "line": 90, "covered": 74 }""")),
+        )
+        assertEquals(
+            ByUnmapped.NoGeneratedLine("/a.by", 40, 31),
+            ByRecompositions.parseUnmapped(
+                obj("""{ "unmapped": "no_generated_line", "file": "/a.by", "requested": 40, "last_mapped": 31 }"""),
+            ),
+        )
+        assertEquals(
+            ByUnmapped.NoGeneratedLine("/a.by", 40, null),
+            ByRecompositions.parseUnmapped(
+                obj("""{ "unmapped": "no_generated_line", "file": "/a.by", "requested": 40, "last_mapped": null }"""),
+            ),
+            "last_mapped is optional: the transpiler generated nothing for that file at all",
+        )
+    }
+
+    /**
+     * `Unmapped` is `#[non_exhaustive]`, so a newer bpd can send a tag this build has no sentence
+     * for — and the location it is about is still exactly the location it was. A reason is the one
+     * thing here that degrades to *unknown* rather than to nothing.
+     */
+    @Test
+    fun `a reason this build cannot read never costs the location`() {
+        val location = ByRecompositions.parseLocation(
+            obj("""{ "file": "/a.by", "line": 3, "reason": { "unmapped": "a_reason_from_2027", "why": "…" } }"""),
+        )
+        assertEquals("/a.by", location?.file)
+        assertEquals(3, location?.line)
+        assertEquals(ByUnmapped.Unknown("a_reason_from_2027"), location?.reason)
+
+        assertEquals(
+            ByUnmapped.Unknown("past_the_end"),
+            ByRecompositions.parseUnmapped(obj("""{ "unmapped": "past_the_end", "file": "/a.py" }""")),
+            "a known tag missing its own fields is not the fact the map reported",
+        )
+        assertEquals(ByUnmapped.Unknown(""), ByRecompositions.parseUnmapped(obj("""{ "file": "/a.py" }""")))
     }
 
     @Test
