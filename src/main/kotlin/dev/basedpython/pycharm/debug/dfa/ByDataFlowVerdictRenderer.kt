@@ -35,7 +35,8 @@ import java.awt.RenderingHints
  *   so two labels stack rather than land on top of each other
  */
 internal class ByDataFlowVerdictRenderer(
-    private val label: String,
+    /** The text drawn. Readable so a test can say what the margin holds without painting it. */
+    val label: String,
     private val gap: Int = 0,
 ) : CustomHighlighterRenderer {
 

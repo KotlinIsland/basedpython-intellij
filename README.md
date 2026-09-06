@@ -71,6 +71,15 @@ support, run configurations, CLI actions, and editor tooling.
   the caller's line again, and a frame below the top is reached by forcing the frames above
   it out. Side effects already performed are not undone. Grey under debugpy, which does not
   offer the request.
+- **Why did this rerender** under bpd — the *basedpython Recompositions* tool window lists,
+  frame by frame, every basedpython-ui composable that ran and the reason it did: the state
+  write that reached it (`count 0 → 2, set at counter.by:14`), the argument that changed, the
+  parent that ran it, the error it recovered from. Double-click opens the write site or the
+  composable. While stopped, every composable that ran in the latest frame carries
+  `ran ×N · <why>` in the margin of its definition. *Watch* streams records as they happen.
+  Read from the runtime's own trace, which is on by default; a program with no basedpython-ui
+  runtime is refused in one sentence, never with an error. See
+  [docs/debugging.md](docs/debugging.md#why-did-this-rerender-what-bpd-knows-about-a-compose-runtime).
 - Breakpoint expression fields (*Condition*, *Evaluate and log*) are basedpython editors,
   not plain text boxes.
 - **Debug .by (pdb)** remains as a fallback that needs no extra package: builds, then runs
@@ -92,7 +101,9 @@ support, run configurations, CLI actions, and editor tooling.
 - Inlay hints configured per kind, one row for each kind `by` computes: variable types,
   lambda parameter types, call type arguments, type argument names, numeric promotions,
   revealed types, inferred raises, call argument names, implicit parameters, implicit
-  self, implicit arguments, inferred override, variance and reification. Each is *never*,
+  self, implicit arguments, inferred override, variance and reification, and the four about
+  basedpython-ui — inferred state reads, unstable parameters, derived dependencies and inferred
+  invalidations (the composables a state write re-runs). Each is *never*,
   *always*, or **push-to-hint**: drawn only while you hold a key (`Ctrl+Alt` by default,
   configurable). Hold it to read the inferred types, let go and the code is as you wrote
   it. A kind set to never is switched off in `by` itself, so it is never even inferred.

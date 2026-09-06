@@ -84,6 +84,35 @@ interface ByDebugProtocolServer : IDebugProtocolServer {
     fun replaceCode(
         args: dev.basedpython.pycharm.debug.hotswap.ByReplaceCodeArguments,
     ): CompletableFuture<JsonObject?>
+
+    /**
+     * Why basedpython-ui scopes ran: the compose runtime's trace ring, read at a stop.
+     *
+     * `bpd`'s alone, and the program's rather than a frame's — any held thread answers, so the
+     * body is empty and the request goes on the session's command processor rather than a frame's.
+     * A program with no compose runtime, or one whose tracing is off, is refused in a sentence
+     * (an error response), which [dev.basedpython.pycharm.debug.recompose.ByRecompositionRequests]
+     * reads back out and the tool window shows as the reason there is nothing to show.
+     *
+     * [JsonObject] rather than `Any?`, for the reason [facts] is — see `ByRecompositionsWireTest`.
+     * [dev.basedpython.pycharm.debug.recompose.ByRecompositions] reads the body field by field.
+     */
+    @JsonRequest("bpd/recompositions")
+    fun recompositions(
+        args: dev.basedpython.pycharm.debug.recompose.ByRecompositionsArguments,
+    ): CompletableFuture<JsonObject?>
+
+    /**
+     * Start or stop the stream of `bpd/recomposition` events, which carry every trace record as it
+     * is made while the program runs. Answers `{"watching": bool}` with what the flag now is.
+     *
+     * The events reach [ByDapClient.recomposed]; naming the event in [understands] is what keeps
+     * bpd from narrating each run record on the console as well.
+     */
+    @JsonRequest("bpd/watchRecompositions")
+    fun watchRecompositions(
+        args: dev.basedpython.pycharm.debug.recompose.ByWatchRecompositionsArguments,
+    ): CompletableFuture<JsonObject?>
 }
 
 /** @see ByDebugProtocolServer.understands */

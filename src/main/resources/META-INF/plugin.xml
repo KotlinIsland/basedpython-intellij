@@ -85,6 +85,14 @@
              See docs/debugging.md. -->
         <xdebugger.hotSwapInDebugSessionEnabler
             implementation="dev.basedpython.pycharm.debug.hotswap.ByHotSwapEnabler"/>
+        <!-- Why every basedpython-ui composable ran, frame by frame, read out of the program's
+             own trace ring by bpd (`bpd/recompositions` at a stop, `bpd/recomposition` events
+             while watching). Bottom, beside the debug tool window it accompanies. See
+             docs/debugging.md. -->
+        <toolWindow id="basedpython Recompositions"
+                    anchor="bottom"
+                    icon="/icons/basedpythonRecompositions.svg"
+                    factoryClass="dev.basedpython.pycharm.debug.recompose.ByRecompositionToolWindowFactory"/>
         <!-- No `editor.interLineBreakpointConfigurationProvider` here any more: that extension
              point, and the whole gutter-gap machinery behind it, is @ApiStatus.Internal. A log
              point is now added by Ctrl+Alt+F8, the gutter menu or the `print` quick fix, and drawn
@@ -367,6 +375,11 @@
              stopped. Off unless the user turns it on. -->
         <highlightingPassFactory
             implementation="dev.basedpython.pycharm.debug.dfa.ByDataFlowPassFactory"/>
+        <!-- `ran ×N · <why>` in the margin of every composable that ran in the latest frame, while
+             the program is stopped. The same shape as the data-flow pass, and restarted by
+             `ByRecompositionSession` when a stop changes what is known. -->
+        <highlightingPassFactory
+            implementation="dev.basedpython.pycharm.debug.recompose.ByRecompositionPassFactory"/>
         <annotator
             language="basedpython"
             implementationClass="dev.basedpython.pycharm.highlight.fstring.FStringInterpolationAnnotator"/>
@@ -458,6 +471,12 @@
              a pass runs, and that is not when the program stopped. -->
         <listener
             class="dev.basedpython.pycharm.debug.dfa.ByDataFlowListener"
+            topic="com.intellij.xdebugger.XDebuggerManagerListener"/>
+
+        <!-- Turns every stop of a bpd session into a `bpd/recompositions` read of the compose
+             runtime's trace. Its own listener so its setting and data flow's stay independent. -->
+        <listener
+            class="dev.basedpython.pycharm.debug.recompose.ByRecompositionListener"
             topic="com.intellij.xdebugger.XDebuggerManagerListener"/>
 
         <!-- Catches a hint drawn twice. The daemon's finish is the only event that follows every way

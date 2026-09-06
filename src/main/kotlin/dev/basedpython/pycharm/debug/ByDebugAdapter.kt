@@ -38,6 +38,7 @@ import dev.basedpython.pycharm.actions.ByCli
 import dev.basedpython.pycharm.debug.bpd.ByBpdConnection
 import dev.basedpython.pycharm.debug.bpd.ByBpdWrapper
 import dev.basedpython.pycharm.debug.bpd.ByDebugBackend
+import dev.basedpython.pycharm.debug.recompose.ByRecompositionSession
 import dev.basedpython.pycharm.run.ByCommandLineState
 import dev.basedpython.pycharm.util.BasedPythonBundle
 import kotlinx.coroutines.CancellationException
@@ -204,8 +205,20 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
         commandProcessor: DapCommandProcessor,
         sessionScope: CoroutineScope,
     ): DapClient = ByDapClient(
-        BySourceMapPublisher(eventConsumer, commandProcessor, mappings),
+        BySourceMapPublisher(
+            eventConsumer,
+            commandProcessor,
+            mappings,
+            // The compose runtime's trace is bpd's to read, so only a bpd session is told when the
+            // adapter is ready for a watch; debugpy would answer `unknown command`
+            onReady = { server ->
+                if (setup?.backend == ByDebugBackend.BPD) {
+                    ByRecompositionSession.getInstance(project).adapterReady(server)
+                }
+            },
+        ),
         onMoved = { moved -> report(moved, executionResult) },
+        onRecomposed = { event -> ByRecompositionSession.getInstance(project).append(event) },
     )
 
     /**

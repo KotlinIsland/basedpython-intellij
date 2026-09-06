@@ -269,7 +269,7 @@ class LspServerDescriptorTest {
         "numericPromotions", "revealedTypes", "inferredRaises", "callArgumentNames",
         "implicitParameters", "implicitSelf", "implicitArguments", "inferredOverride",
         "inferredVariance", "inferredReification", "inferredReads", "parameterStability",
-        "derivedDependencies",
+        "derivedDependencies", "inferredInvalidations",
       ),
       hints.keys,
     )

@@ -28,7 +28,7 @@ object ByInlayHints {
      *
      * Not patterns to match loosely: these are the exact strings its label constructors emit
      * (`ty_ide::InlayHint::inferred_raises`, `revealed_type`, `inferred_override` and friends), and
-     * matching them is how the seventeen kinds are recovered from the two LSP carries.
+     * matching them is how the eighteen kinds are recovered from the two LSP carries.
      */
     private const val RAISES = "raises "
     private const val REVEALED = "revealed:"
@@ -37,6 +37,7 @@ object ByInlayHints {
     private const val READS = "reads "
     private const val UNSTABLE = "unstable"
     private const val DEPENDS_ON = "depends on "
+    private const val INVALIDATES = "invalidates "
     private const val PROMOTION_BAR = "|"
     private const val TYPE_COLON = ":"
     private const val TYPE_ARGUMENT_BRACKET = "["
@@ -95,6 +96,7 @@ object ByInlayHints {
             text.startsWith(READS) -> ByHintShape.READS
             text == UNSTABLE -> ByHintShape.STABILITY
             text.startsWith(DEPENDS_ON) -> ByHintShape.DERIVED_DEPENDENCIES
+            text.startsWith(INVALIDATES) -> ByHintShape.INVALIDATIONS
             text in VARIANCE_KEYWORDS -> ByHintShape.VARIANCE
             text.startsWith(PROMOTION_BAR) -> ByHintShape.NUMERIC_PROMOTION
             text.startsWith(TYPE_ARGUMENT_BRACKET) -> ByHintShape.TYPE_ARGUMENTS

@@ -5,6 +5,9 @@ import com.intellij.openapi.diagnostic.Logger
 import com.intellij.platform.dap.DapClient
 import com.intellij.platform.dap.DapCommandProcessor
 import com.intellij.platform.dap.DapEventConsumer
+import dev.basedpython.pycharm.debug.recompose.ByRecompositions
+import dev.basedpython.pycharm.debug.recompose.ByEvent
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.future.await
 import org.eclipse.lsp4j.jsonrpc.services.JsonNotification
 
@@ -28,6 +31,7 @@ import org.eclipse.lsp4j.jsonrpc.services.JsonNotification
 internal class ByDapClient(
     eventConsumer: DapEventConsumer,
     private val onMoved: (ByMoved) -> Unit,
+    private val onRecomposed: (ByEvent) -> Unit,
 ) : DapClient(eventConsumer) {
 
     /**
@@ -42,6 +46,23 @@ internal class ByDapClient(
             ByMoved.parse(params)?.let(onMoved)
         } catch (e: RuntimeException) {
             LOG.warn("could not read a ${ByMoved.EVENT} event", e)
+        }
+    }
+
+    /**
+     * One trace record of the compose runtime, sent while watching, with how many records bpd's
+     * outbound queue dropped before it — see [dev.basedpython.pycharm.debug.recompose.ByRecompositions].
+     *
+     * Read on the reader thread and handed on parsed, which is all that happens on that thread:
+     * the service appends under a lock and never copies. A body this cannot read is one record
+     * from a newer bpd, and costs that record rather than the session.
+     */
+    @JsonNotification(ByRecompositions.EVENT)
+    fun recomposed(params: JsonObject?) {
+        try {
+            ByRecompositions.parseEvent(params)?.let(onRecomposed)
+        } catch (e: RuntimeException) {
+            LOG.warn("could not read a ${ByRecompositions.EVENT} event", e)
         }
     }
 
@@ -69,6 +90,13 @@ internal class BySourceMapPublisher(
     private val delegate: DapEventConsumer,
     private val commandProcessor: DapCommandProcessor,
     private val mappings: List<ByFileMapping>,
+    /**
+     * Run inside the same command, after `bpd/understands` and before the platform's breakpoints
+     * and `configurationDone`: the one moment a request can reach an initialised adapter before
+     * the program has run a line. A watch on the compose runtime is sent here, so it sees the
+     * first frame.
+     */
+    private val onReady: suspend (ByDebugProtocolServer) -> Unit = {},
 ) : DapEventConsumer by delegate {
 
     override fun initialized() {
@@ -86,6 +114,14 @@ internal class BySourceMapPublisher(
                 } catch (e: Exception) {
                     LOG.debug("the debug adapter does not answer bpd/understands", e)
                 }
+                try {
+                    onReady(byServer)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    // Whatever was asked for at this moment is an extra; the session must start
+                    LOG.warn("a request at the adapter's initialisation failed", e)
+                }
                 for (mapping in mappings) {
                     try {
                         byServer.setPydevdSourceMap(mapping.toRequest()).await()
@@ -98,15 +134,16 @@ internal class BySourceMapPublisher(
         }
     }
 
-    private companion object {
+    companion object {
         private val LOG = Logger.getInstance(BySourceMapPublisher::class.java)
 
         /**
          * Every event of bpd's this plugin reads, and therefore every narration it turns off.
          *
          * Naming one it does not in fact handle would be asking for silence about something nobody
-         * is listening to, which is the one way this can lose information.
+         * is listening to, which is the one way this can lose information. Each name here has a
+         * `@JsonNotification` on [ByDapClient]; `ByRecompositionsWireTest` pins the pair.
          */
-        private val UNDERSTOOD_EVENTS = listOf(ByMoved.EVENT)
+        internal val UNDERSTOOD_EVENTS: List<String> = listOf(ByMoved.EVENT, ByRecompositions.EVENT)
     }
 }

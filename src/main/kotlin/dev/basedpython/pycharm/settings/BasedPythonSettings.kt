@@ -106,6 +106,16 @@ class BasedPythonSettings : PersistentStateComponent<BasedPythonSettings.State> 
      */
     var debuggerDataFlow: Boolean = false,
     /**
+     * Show why basedpython-ui composables ran: the Recompositions tool window, and a label on
+     * each composable that ran in the latest frame while the program is stopped.
+     *
+     * On by default, unlike data flow. It costs one round trip per stop, and only a program with
+     * a compose runtime has anything to answer — every other program is refused in one sentence
+     * that is logged once and shown in the window. Needs the bpd backend; a debugpy session is
+     * asked nothing.
+     */
+    var debuggerRecompositions: Boolean = true,
+    /**
      * Which debugger drives a `.by` session — `bpd` or `debugpy`.
      *
      * A `String` rather than the enum for the same reason `pyFileHandling` is: the serializer
@@ -251,6 +261,9 @@ class BasedPythonSettings : PersistentStateComponent<BasedPythonSettings.State> 
   var debuggerDataFlow: Boolean
     get() = state.debuggerDataFlow
     set(value) { state.debuggerDataFlow = value }
+  var debuggerRecompositions: Boolean
+    get() = state.debuggerRecompositions
+    set(value) { state.debuggerRecompositions = value }
   var debugBackend: ByDebugBackend
     get() = ByDebugBackend.of(state.debugBackend)
     set(value) { state.debugBackend = ByDebugBackend.settingFor(value) }

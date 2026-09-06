@@ -20,7 +20,9 @@ import dev.basedpython.pycharm.lsp.inlay.ByHintMode
 import dev.basedpython.pycharm.lsp.inlay.ByPushKey
 import dev.basedpython.pycharm.lsp.reload.BasedPythonLspReloader
 import dev.basedpython.pycharm.debug.bpd.ByDebugBackend
+import dev.basedpython.pycharm.debug.recompose.ByRecompositionSession
 import dev.basedpython.pycharm.settings.BasedPythonSettings
+import dev.basedpython.pycharm.util.BasedPythonBundle
 import java.awt.BorderLayout
 import java.awt.GridBagConstraints
 import java.awt.GridBagLayout
@@ -109,6 +111,7 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
     }
 
     private val debuggerDataFlow = JCheckBox("Show what a stopped program settles about the code below it")
+    private val debuggerRecompositions = JCheckBox(BasedPythonBundle.message("settings.debug.recompositions"))
 
     // Per-server capability toggles (§142)
     private val byCompletion = JCheckBox("Completion")
@@ -182,6 +185,8 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
                     .comment(
                         "While stopped, draw which branches will be taken. Needs the bpd backend.",
                     )
+                row { cell(debuggerRecompositions) }
+                    .comment(BasedPythonBundle.message("settings.debug.recompositions.comment"))
             }
             group("by server capabilities") {
                 row { cell(byCompletion) }
@@ -278,6 +283,7 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
             pyFileHandlingCombo.selectedItem != s.pyFileHandling ||
             debugBackendCombo.selectedItem != s.debugBackend ||
             debuggerDataFlow.isSelected != s.debuggerDataFlow ||
+            debuggerRecompositions.isSelected != s.debuggerRecompositions ||
             byCompletion.isSelected != s.byCompletion ||
             byGoToDefinition.isSelected != s.byGoToDefinition ||
             byFindReferences.isSelected != s.byFindReferences ||
@@ -323,6 +329,11 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
         s.pyFileHandling = pyFileHandlingCombo.selectedItem as? PyFileHandling ?: PyFileHandling.AUTO
         s.debugBackend = debugBackendCombo.selectedItem as? ByDebugBackend ?: ByDebugBackend.BPD
         s.debuggerDataFlow = debuggerDataFlow.isSelected
+        val recompositionsChanged = debuggerRecompositions.isSelected != s.debuggerRecompositions
+        s.debuggerRecompositions = debuggerRecompositions.isSelected
+        // Off must take the margin labels of a stopped session down now: the pass that would have
+        // removed them no longer runs once the factory declines, so the service removes them itself
+        if (recompositionsChanged) ByRecompositionSession.getInstance(project).settingChanged()
         // File types are cached per file; without this, open .py editors keep the old one.
         if (handlingChanged) fireFileTypesChange()
 
@@ -411,6 +422,7 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
         pyFileHandlingCombo.selectedItem = s.pyFileHandling
         debugBackendCombo.selectedItem = s.debugBackend
         debuggerDataFlow.isSelected = s.debuggerDataFlow
+        debuggerRecompositions.isSelected = s.debuggerRecompositions
         byCompletion.isSelected = s.byCompletion
         byGoToDefinition.isSelected = s.byGoToDefinition
         byFindReferences.isSelected = s.byFindReferences

@@ -358,6 +358,70 @@ a screen full of hints that say nothing. A name bound by a loop around the stop 
 seeded, because the back edge rebinds it: what was observed is true for this iteration and false
 for the next.
 
+## Why did this rerender: what bpd knows about a compose runtime
+
+On by default; the switch is beside the data-flow one. A basedpython-ui program keeps a bounded
+record of why every scope ran, what every state write did and what every frame cost
+(`basedpython_ui.runtime.Trace`, the layout in basedpython-ui's `docs/development/trace-protocol.md`),
+and bpd reads it: `bpd/recompositions` at a stop answers with the ring as it stands, and
+`bpd/watchRecompositions {on}` makes bpd forward every record as it is made, as a `bpd/recomposition`
+event. Every location in a record has already been through the build's source map, so what arrives
+is `.by` files and lines with the generated place beside each.
+
+The plugin shows it in two places. The **basedpython Recompositions** tool window is the record,
+frame by frame: each run with its origin (`first`, `self`, `parent`), its cost and its key, and under
+it every reason the runtime wrote down, as a sentence — `count 0 → 2, set at counter.by:14` for a
+state write, with `posted from thread N` when it came from another thread and `nothing depends on it`
+when no tracker was notified; `step 1 → 2` or `step: a Draft is unstable, never compared` for an
+argument; `total 1 → 2 because …` for a derived; and created, inline, invalidated, uncommitted,
+recovery and dirty as themselves. There is no key cause: a key change is `created` on the new scope,
+and the old key is named under the parent's `disposed` once the parent's run has ended and the
+runtime knows the key was really given up. A write that made nothing run is listed under its frame,
+because that is the write worth seeing and it appears nowhere else; a write that made something run
+is that run's cause and is not listed twice — judged within its own frame, since the protocol
+promises the two share one, so a write in the current frame whose run has not happened yet (a stop
+in the middle of a handler) shows. Errors and refused writes are rows, marked. Double-click, or
+*Jump to Source*, opens the write site of a state cause and the definition of a run's composable;
+*Jump to Call Site* opens where the parent called it. *Watch* toggles the stream, *Refresh* reads the
+ring again while stopped, *Clear* forgets what is shown, and typing is a speed search — it jumps to
+and highlights the rows whose sentence contains the text, and hides nothing.
+
+The second place is the editor: while the program is stopped, the definition line of every
+composable that ran in the latest frame carries `ran ×N · <the first reason>` in the margin past the
+end of the line — painted, not inlaid, the way the data-flow verdicts are, so nothing reflows — and
+the labels go when the program resumes. The records stay: the question is usually asked at a later
+stop than the one where the thing happened, so they are kept for the session and forgotten when it
+ends. A pull at a stop is merged into what a watch has already appended rather than added to it, so
+nothing is listed twice: the pull is the truth for every frame it carries, and what the watch held
+survives only in frames older than the pull's oldest — records that have fallen off the ring since.
+The window keeps at most 8192 records (twice the ring, twice what a pull can carry); past that the
+oldest are let go and a row at the bottom says how many.
+
+**It is bpd's alone, decided from the backend**, as hot reload is: the requests are bpd's own and DAP
+has no capability flag for a custom request, so a debugpy session is asked nothing. And it is
+**refused in a sentence**, not with an error, for the ordinary case — a program that has not
+imported `basedpython_ui.runtime`, or runs it with `trace=False`, or writes a trace format this bpd
+does not read. The sentence is what the window shows instead of rows, and it is logged once per
+session at debug level. Every body is read field by field, total over any json: a record or a cause
+a newer bpd has grown costs that record, never the session, and the count of what could not be read
+is a row at the bottom of the tree rather than a silence. `bpd/recomposition` is named in
+`bpd/understands`, so bpd does not narrate each run on the console as well.
+
+A watch that was on before the session began sees the first frame: the request goes out in the same
+command as `bpd/understands`, after `initialize` has been answered and before the platform's
+`configurationDone`, so nothing has run yet — bpd accepts a watch before the program has imported
+the runtime, watching being an interest in records to come. Should bpd refuse it anyway, the watch
+is sent again at the first stop and after every pull for as long as the preference is on and bpd
+has not confirmed; a refusal of the watch is never the window's state — it is said once, as a
+notification and in the toggle's description, and the toggle shows what bpd last confirmed. The
+stream never blocks the program: bpd drops a record it cannot hand on at once and counts it, and
+the count arrives on the next record as `dropped_before`, which the window keeps as a row at the
+place it happened (`3 records were dropped before this one because the program outran the
+debugger`) and counts into the total at the bottom. Events are put on screen at most every 100 ms,
+and a burst touches only the frames it changed. A pull that gets no answer — bpd did not answer
+within 2 s, or the request failed for a reason that is not a refusal — is its own sentence in the
+window, never "nothing has run".
+
 ## Two things the console taught us
 
 **The adapter must not inherit the console.** `debugpy.listen()` spawns the debug adapter as a

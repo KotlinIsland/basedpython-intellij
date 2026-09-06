@@ -69,7 +69,7 @@ class ByInlayHintsTest {
      * with the LSP kind each one is sent under.
      *
      * This is the table the whole classification rests on: the protocol carries two kinds for the
-     * seventeen things the server distinguishes, and the rest is recovered from these shapes.
+     * eighteen things the server distinguishes, and the rest is recovered from these shapes.
      */
     @Test
     fun `every label by writes is recognised as the kind that wrote it`() {
@@ -92,6 +92,8 @@ class ByInlayHintsTest {
             Triple(" reads …", InlayHintKind.Type, ByHintShape.READS),
             Triple("unstable ", InlayHintKind.Type, ByHintShape.STABILITY),
             Triple(" depends on name, email", InlayHintKind.Type, ByHintShape.DERIVED_DEPENDENCIES),
+            Triple(" invalidates Counter, Total", InlayHintKind.Type, ByHintShape.INVALIDATIONS),
+            Triple(" invalidates nothing", InlayHintKind.Type, ByHintShape.INVALIDATIONS),
             Triple("x=", InlayHintKind.Parameter, ByHintShape.ARGUMENT_NAME),
             Triple("self", InlayHintKind.Parameter, ByHintShape.IMPLICIT_PARAMETER),
             Triple("it: int", InlayHintKind.Parameter, ByHintShape.IMPLICIT_PARAMETER),
@@ -238,6 +240,7 @@ class ByInlayHintsTest {
         assertTrue(ByHintShape.TYPE.relatesToPrecedingText)
         assertTrue(ByHintShape.TYPE_ARGUMENTS.relatesToPrecedingText)
         assertTrue(ByHintShape.RAISES.relatesToPrecedingText)
+        assertTrue(ByHintShape.INVALIDATIONS.relatesToPrecedingText)
         assertTrue(ByHintShape.UNKNOWN.relatesToPrecedingText)
     }
 

@@ -498,6 +498,52 @@
   `string` semantic token off a literal it has reported as an injection. Without the second, the
   fragment is injected and then painted over — the platform draws an LSP semantic token at severity
   11 and the injected language's own colours at severity 6, so the html was there and invisible.
+- A *basedpython Recompositions* tool window, for the question a basedpython-ui program is usually
+  being debugged over: why did that composable run again. The runtime keeps a bounded record of why
+  every scope ran, what every state write did and what every frame cost; bpd reads it at every stop
+  (`bpd/recompositions`), and the window lists it frame by frame — each run with its origin, its
+  cost and its key, and under it every reason the runtime wrote down, as a sentence:
+  `count 0 → 2, set at counter.by:14` for a state write (with `posted from thread N` when it came
+  from another thread and `nothing depends on it` when no reader was notified), `step 1 → 2` or
+  `step: a Draft is unstable, never compared` for an argument, `total 1 → 2 because …` for a
+  derived, and created, inline, invalidated, uncommitted, recovery and dirty as themselves (a key
+  change is `created` on the new scope plus the old key under the parent's `disposed`). A write
+  that made nothing run is listed under its frame, which is the one worth seeing — judged within
+  the frame, so a write whose run has not happened yet shows; errors and refused writes are marked. Double-click or *Jump to Source* opens the write site of a state cause
+  or the composable's definition, *Jump to Call Site* where the parent called it. *Watch* asks bpd to
+  send every record as it happens (`bpd/watchRecompositions`, arriving as `bpd/recomposition` events
+  the plugin names in `bpd/understands` so bpd does not narrate them on the console as well), put on
+  screen at most every 100 ms, touching only the frames a burst changed; *Refresh* reads the ring
+  again while stopped; *Clear* forgets what is shown; typing is a speed search. Records are kept
+  across stops and forgotten when the session ends; a pull is merged into what a watch appended
+  rather than added to it — the pull is the truth for every frame it carries, and what was held
+  survives only in older frames — and the window holds at most 8192, letting the oldest go and
+  saying so. The watch is sent before the program has run a line and again at a stop and after a
+  pull until bpd confirms it; a refusal of the watch is a notification and the toggle's description,
+  never the window's state. What bpd's stream dropped because the program outran the debugger
+  (`dropped_before`) is a row where it happened and part of the missing total. bpd's alone, decided
+  from the backend; a program that has not imported `basedpython_ui.runtime`, or runs it with
+  `trace=False`, is refused in one sentence that the window shows and the log records once — never
+  an error dialog — and a pull that gets no answer says so (`bpd did not answer within 2 s`) rather
+  than "nothing has run". Every body is read field by field, and a record or cause a newer bpd has
+  grown costs that record and is counted at the bottom of the tree rather than hidden
+  (`debug.recompose.ByRecompositions`, `ByRecompositionTree`, `ByRecompositionSession`,
+  `ByRecompositionPanel`).
+- While stopped under bpd, the definition line of every basedpython-ui composable that ran in the
+  latest frame carries `ran ×N · <the first reason>` in the margin past the end of the line — the
+  same painted-not-inlaid label the data-flow verdicts use, so nothing reflows — and the labels go
+  when the program resumes (`debug.recompose.ByRecompositionPass`).
+- *Settings | basedpython | Debugger | Show why basedpython-ui composables ran*, beside the data-flow
+  switch and on by default: it costs one round trip per stop, and only a program with a compose
+  runtime has anything to answer. Off, no request is sent and nothing is drawn — a session recorded
+  while it was on included: the labels already on screen come down the moment the setting is
+  applied, and the next stop asks nothing.
+- A fourth kind of inlay hint about basedpython-ui, for what a newer `by` computes at a state write:
+  the composables the write re-runs (` invalidates Counter, Total`, or ` invalidates nothing`). Its
+  own row under *Settings | basedpython | Inlay hints*, never / always / on the push key like the
+  seventeen before it, and *never* still goes out as an `initializationOptions.inlayHints.*` switch
+  (`inferredInvalidations`), so a hint nobody will draw is one `by` does not infer. A `by` that does
+  not send it costs nothing: one row nothing fills.
 
 ### Fixed
 

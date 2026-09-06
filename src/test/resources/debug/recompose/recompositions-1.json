@@ -1,0 +1,145 @@
+{
+ "format": 1,
+ "mode": {
+  "mode": "non_stop"
+ },
+ "records": {
+  "dropped": 0,
+  "kept": [
+   {
+    "called": {
+     "file": "/Users/morgan/projects/basedpython-ui/examples/counter.by",
+     "generated": {
+      "file": "/Users/morgan/projects/basedpython-ui/out/examples/counter.py",
+      "line": 127
+     },
+     "line": 22
+    },
+    "causes": [
+     {
+      "cause": "created"
+     }
+    ],
+    "defined": {
+     "file": "/Users/morgan/projects/basedpython-ui/examples/counter.by",
+     "generated": {
+      "file": "/Users/morgan/projects/basedpython-ui/out/examples/counter.py",
+      "line": 103
+     },
+     "line": 4
+    },
+    "disposed": [],
+    "elapsed_ns": 165125,
+    "frame": 0,
+    "key": null,
+    "name": "Counter",
+    "origin": "first",
+    "parent": 2,
+    "record": "run",
+    "runtime": 0,
+    "scope": 3,
+    "skipped": []
+   },
+   {
+    "called": {
+     "file": "/Users/morgan/projects/basedpython-ui/examples/counter.by",
+     "generated": {
+      "file": "/Users/morgan/projects/basedpython-ui/out/examples/counter.py",
+      "line": 128
+     },
+     "line": 22
+    },
+    "causes": [
+     {
+      "cause": "created"
+     }
+    ],
+    "defined": {
+     "file": "/Users/morgan/projects/basedpython-ui/examples/counter.by",
+     "generated": {
+      "file": "/Users/morgan/projects/basedpython-ui/out/examples/counter.py",
+      "line": 103
+     },
+     "line": 4
+    },
+    "disposed": [],
+    "elapsed_ns": 34959,
+    "frame": 0,
+    "key": null,
+    "name": "Counter",
+    "origin": "first",
+    "parent": 2,
+    "record": "run",
+    "runtime": 0,
+    "scope": 4,
+    "skipped": []
+   },
+   {
+    "called": {
+     "file": "/Users/morgan/projects/basedpython-ui/out/_capture_trace.py",
+     "generated": null,
+     "line": 5
+    },
+    "causes": [
+     {
+      "cause": "created"
+     }
+    ],
+    "defined": {
+     "file": "/Users/morgan/projects/basedpython-ui/examples/counter.by",
+     "generated": {
+      "file": "/Users/morgan/projects/basedpython-ui/out/examples/counter.py",
+      "line": 124
+     },
+     "line": 20
+    },
+    "disposed": [],
+    "elapsed_ns": 7095125,
+    "frame": 0,
+    "key": null,
+    "name": "App",
+    "origin": "first",
+    "parent": 0,
+    "record": "run",
+    "runtime": 0,
+    "scope": 2,
+    "skipped": []
+   },
+   {
+    "called": null,
+    "causes": [
+     {
+      "cause": "created"
+     }
+    ],
+    "defined": {
+     "file": "/Users/morgan/projects/basedpython-ui/out/_capture_trace.py",
+     "generated": null,
+     "line": 5
+    },
+    "disposed": [],
+    "elapsed_ns": 7156750,
+    "frame": 0,
+    "key": null,
+    "name": "root",
+    "origin": "first",
+    "parent": null,
+    "record": "run",
+    "runtime": 0,
+    "scope": 0,
+    "skipped": []
+   },
+   {
+    "commit_ns": 10090750,
+    "compose_ns": 7201750,
+    "frame": 0,
+    "record": "frame",
+    "runs": 4,
+    "runtime": 0,
+    "skips": 0
+   }
+  ]
+ },
+ "runtimes": 1,
+ "tracing": true
+}

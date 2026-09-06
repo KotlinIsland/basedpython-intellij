@@ -32,6 +32,14 @@ class BasedPythonSettingsTest {
     }
 
     @Test
+    fun `recompositions are shown unless turned off, data flow only when turned on`() {
+        assertTrue(BasedPythonSettings.State().debuggerRecompositions)
+        assertFalse(BasedPythonSettings.State().debuggerDataFlow)
+        settings.debuggerRecompositions = false
+        assertFalse(settings.debuggerRecompositions)
+    }
+
+    @Test
     fun `index generated python is mutable`() {
         settings.indexGeneratedPython = true
         assertTrue(settings.indexGeneratedPython)
