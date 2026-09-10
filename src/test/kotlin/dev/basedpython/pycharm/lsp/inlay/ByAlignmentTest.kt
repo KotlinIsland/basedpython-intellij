@@ -118,6 +118,44 @@ class ByAlignmentTest {
         )
     }
 
+    @Test
+    fun `a line with no hint of its own is pushed out to hold the column`() {
+        // The price of taking a column nobody padded: `y` has nothing to narrow, so the room it owes
+        // comes out of a spacer. This is the shape that surprises people, so it is written down as
+        // the picture rather than left to be inferred from the arithmetic.
+        val block = listOf(
+            Line(lead = "x", gap = 1, hint = ": dict[str, Any]", tail = "= json.loads(blob)"),
+            Line(lead = "y", gap = 1, hint = "", tail = "= 1"),
+        )
+        assertEquals(
+            """
+            x: dict[str, Any] = json.loads(blob)
+            y                 = 1
+            """.trimIndent(),
+            draw(block),
+        )
+    }
+
+    @Test
+    fun `a member with no gap at all is still a member`() {
+        // `by` reports `ab=f()` with a gap of nought — no spaces is not no column. Dropped instead,
+        // it would take the whole group with it and `a =1` would be left where it started.
+        //
+        // The blank before each `=` is [ByAlignment.SEPARATOR], which every block gets and this one
+        // has nowhere to take from: a hint butted straight against an `=` reads as one token.
+        val block = listOf(
+            Line(lead = "ab", gap = 0, hint = ": int", tail = "=f()"),
+            Line(lead = "a", gap = 1, hint = ": str", tail = "=1"),
+        )
+        assertEquals(
+            """
+            ab: int =f()
+            a: str  =1
+            """.trimIndent(),
+            draw(block),
+        )
+    }
+
     // endregion
 
     // region: the properties that make it safe to leave on

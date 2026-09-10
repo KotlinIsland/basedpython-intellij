@@ -72,18 +72,19 @@
   the push hints appear; let go and they are gone. They appear the instant the key goes
   down: the hints are already fetched and drawn as the key comes into it, not requested
   from `by` on the press.
-- Assignments you lined up by hand stay lined up once hints are drawn in them. A hint costs
-  exactly what its text would cost as source, which is right everywhere except in a block
-  somebody aligned: `a = [1, 2]` infers `list[int]`, so eleven columns of hint go into five
-  of padding and the `=` column is gone. Narrowing the hint into the padding cannot get it
-  back — five columns of room against eleven of hint is still six out, and the line that
-  would have to move (`basdf = 1`) has no hint to narrow. So the whole block moves together:
-  the hint gives back the room it can, and the lines without one are padded out to meet it.
-  `by` says which lines are a block — siblings in one suite, no blank line between them,
-  already sharing an `=` column, and at least one of them padded, so ordinary code is left
-  alone — and the plugin decides the widths, because only it knows which hints are on screen.
-  Nothing to configure: with no hints drawn the block reads exactly as written, so letting
-  the push key up puts your source back rather than leaving it padded for hints that are gone.
+- A column of `=` stays a column once hints are drawn into it. A hint costs exactly what its
+  text would cost as source, which is right everywhere except in a block whose lines line up:
+  `a = [1, 2]` infers `list[int]`, so eleven columns of hint go into five of padding and the
+  `=` column is gone. Narrowing the hint into the padding cannot get it back — five columns
+  of room against eleven of hint is still six out, and the line that would have to move
+  (`basdf = 1`) has no hint to narrow. So the whole block moves together: the hint gives back
+  the room it can, and the lines without one are padded out to meet it. `by` says which lines
+  are a block — siblings in one suite, no blank line between them, already sharing an `=`
+  column — and the plugin decides the widths, because only it knows which hints are on screen.
+  The padding is not the test: `a = 1 + 1` / `b = True or False` share a column because the
+  names are one character each, and it is a column to a reader either way. Nothing to
+  configure: with no hints drawn the block reads exactly as written, so letting the push key
+  up puts your source back rather than leaving it padded for hints that are gone.
 - Intentions: add return type, convert to/from `data class`, wrap null-safe, explain
   anonymous named tuple, explain rule.
 - `buff` format-on-save and import optimizer; code style settings page

@@ -53,7 +53,11 @@ object ByAlignment {
          * here and not by the server.
          */
         val hintColumns: Int,
-        /** The spaces the author left between the target and the `=`; never fewer than one. */
+        /**
+         * The spaces the author left between the target and the `=`.
+         *
+         * Nought is an ordinary value: `a=1` has no spaces and still has its `=` in a column.
+         */
         val gapColumns: Int,
     )
 

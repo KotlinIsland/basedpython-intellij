@@ -261,11 +261,17 @@ private class ByInlayHintsCollector(
      * The positions came from the source `by` parsed, and the document may have moved on. Checking
      * rather than trusting is what keeps a stale answer from laying a block out around an `=` that
      * has been typed over.
+     *
+     * **An empty gap is a gap.** `a=1` has its `=` in a column like any other line, and it is only
+     * `end < start` — a position pair that could not have come from one — that says the answer is
+     * no longer about this document. Reading `end == start` as a failure would be worse than
+     * dropping that one line, because a group is taken whole: one `a=1` in a block would throw away
+     * the alignment of every line around it.
      */
     private fun gapIn(document: Document, member: ByAlignmentMember): Pair<Int, Int>? {
         val start = getOffsetInDocument(document, member.gapStart) ?: return null
         val end = getOffsetInDocument(document, member.gapEnd) ?: return null
-        if (end <= start) return null
+        if (end < start) return null
         if (document.getLineNumber(start) != document.getLineNumber(end)) return null
         val gap = document.charsSequence.subSequence(start, end)
         return if (gap.all { it == ' ' }) start to end else null

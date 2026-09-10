@@ -43,6 +43,8 @@ class ByAlignedColumn(override val editor: Editor) : ByHintPush.Watcher {
      * against the new text, which is the same staleness the hint's own text already has.
      */
     inner class Seat internal constructor(
+        /** Where this seat sits in [seats]. Held rather than searched for — see [deltaColumns]. */
+        private val index: Int,
         private val leadColumns: Int,
         private val gapColumns: Int,
     ) {
@@ -65,9 +67,14 @@ class ByAlignedColumn(override val editor: Editor) : ByHintPush.Watcher {
          *
          * Read only to tell one layout from another — see [ByInlayHintPresentation.updateState]. The
          * width itself is *not* built from this: see [requiredWidth].
+         *
+         * By [index] rather than by searching [seats] for this one. The search was linear and this
+         * is read twice per hint per pass, which made a block cost time in the square of its length
+         * — fine for the handful of lines a hand-padded block runs to, and no longer only that: any
+         * run of same-length targets is a block now, and a wall of settings is a long one.
          */
         val deltaColumns: Int
-            get() = ByAlignment.layout(members()).getOrElse(seats.indexOf(this)) { 0 }
+            get() = ByAlignment.layout(members()).getOrElse(index) { 0 }
 
         /**
          * The pixels this line's inlays occupy between the end of its code and its `=`.
@@ -112,7 +119,8 @@ class ByAlignedColumn(override val editor: Editor) : ByHintPush.Watcher {
     }
 
     /** Adds a line to the block, in the order the lines are written. */
-    fun seat(leadColumns: Int, gapColumns: Int): Seat = Seat(leadColumns, gapColumns).also { seats += it }
+    fun seat(leadColumns: Int, gapColumns: Int): Seat =
+        Seat(seats.size, leadColumns, gapColumns).also { seats += it }
 
     /**
      * What every line of the block is asking for at this moment.
