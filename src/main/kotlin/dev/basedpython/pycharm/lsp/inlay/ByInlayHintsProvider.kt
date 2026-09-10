@@ -200,7 +200,7 @@ private class ByInlayHintsCollector(
     }
 
     /**
-     * Keeps the blocks the author lined up by hand lined up, now that hints have been put in them.
+     * Keeps the blocks that share an `=` column sharing it, now that hints have been put in them.
      *
      * Only worth asking when something was collected: with no hints in the file there is nothing to
      * displace a column, and [ByAlignment.layout] would return nought for every line anyway. A hint

@@ -5,7 +5,7 @@ package dev.basedpython.pycharm.lsp.inlay
  *
  * A hint costs exactly the room the same characters would cost as source (see
  * [ByInlayHintPresentation.width]), which is the right price for a hint that stands in for code —
- * and it is what takes a hand-aligned block apart:
+ * and it is what takes a block of lined-up `=` apart:
  *
  * ```
  * a     = [1, 2]    ->  a: list[int]     = [1, 2]

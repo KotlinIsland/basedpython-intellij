@@ -12,7 +12,7 @@ import kotlin.math.absoluteValue
 import kotlin.math.roundToInt
 
 /**
- * One block of assignments the author lined up, and the inlays that keep it lined up.
+ * One block of assignments sharing an `=` column, and the inlays that keep them sharing it.
  *
  * `by` says which lines belong together (`by/alignmentGroups`); this holds them in one editor and
  * decides, from moment to moment, how wide each one's inlay has to be. The arithmetic is

@@ -72,7 +72,7 @@ interface ByServerExtensions {
     fun transpileForBuild(args: ByTranspileForBuildParams): CompletableFuture<ByRestaged?>
 
     /**
-     * Which assignments the author lined up, so that drawing inlay hints does not take the column
+     * Which assignments share an `=` column, so that drawing inlay hints does not take the column
      * apart — see [dev.basedpython.pycharm.lsp.inlay.ByAlignment].
      *
      * **Why not `textDocument/inlayHint`.** That request can only answer *about hints*, and the

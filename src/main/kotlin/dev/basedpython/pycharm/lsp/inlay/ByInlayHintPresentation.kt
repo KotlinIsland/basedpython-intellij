@@ -106,7 +106,7 @@ class ByInlayHintPresentation(
      * the other way round: it is drawn to this width, and gets its breathing space vertically, where
      * there is room going spare.
      *
-     * **The exception.** In a block the author lined up by hand, that same rule is what pulls the
+     * **The exception.** In a block whose lines share an `=` column, that same rule is what pulls the
      * block apart, and for a reason the rule cannot see: writing the annotation out *would* have
      * broken the alignment too, so costing what the source costs is faithful to a line and unfaithful
      * to the paragraph it is in. A hint with a [seat] therefore reports what its *line* needs — often

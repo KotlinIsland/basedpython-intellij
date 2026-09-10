@@ -98,6 +98,26 @@ class ByAlignmentTest {
         )
     }
 
+    @Test
+    fun `a column nobody padded is held just the same`() {
+        // Single spaces throughout: the `=` share a column because the names are one character each,
+        // not because anyone lined them up. Hints of unequal width break that column exactly as they
+        // break a padded one, so there is nothing here for the layout to treat differently — the
+        // room simply all has to be taken, none of it given back. `by` reports the block for the
+        // same reason (`ty_ide/src/alignment.rs`).
+        val block = listOf(
+            Line(lead = "a", gap = 1, hint = ": 2", tail = "= 1 + 1"),
+            Line(lead = "b", gap = 1, hint = ": True", tail = "= True or False"),
+        )
+        assertEquals(
+            """
+            a: 2    = 1 + 1
+            b: True = True or False
+            """.trimIndent(),
+            draw(block),
+        )
+    }
+
     // endregion
 
     // region: the properties that make it safe to leave on
