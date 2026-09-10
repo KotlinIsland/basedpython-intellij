@@ -614,6 +614,13 @@
   it, and the group holds actions that hold the panel, its project and its service. It is now cleared
   with the panel.
 
+- Two tooltips and one notification no longer render `''` where an apostrophe belongs — *Upgrade
+  All*'s description, *Open pyproject.toml*'s, and the "by binary not found" notification's body.
+  `BundleBase.format` runs `MessageFormat` only when arguments are passed *and* the value contains a
+  `{`, so the doubling that correctly escapes an apostrophe in a pattern is two quote marks on
+  screen in a value that has neither. Nothing throws and no placeholder is left showing, which is
+  why it survived; the test now sweeps every value for the shape rather than checking the keys.
+
 - A module that depends on a sibling kept that sibling in the list that declares it. The edge from
   an extra's synthetic node back to its own package has to be dropped — `sub[cli]` depends on
   `click` and on `sub`, and following it nests the whole main tree under every extra — but it was

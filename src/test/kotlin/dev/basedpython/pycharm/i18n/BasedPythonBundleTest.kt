@@ -298,6 +298,26 @@ class BasedPythonBundleTest {
     fun `apostrophe in no-arg value is literal single quote`() {
         // No placeholders → BundleBase does NOT run MessageFormat, so a lone apostrophe stays as-is.
         assertEquals("Don't show again", value("notification.action.dontShowAgain"))
+        assertEquals("Re-resolve past the lock file's pins and install the result.",
+            value("env.action.upgrade.description"))
+    }
+
+    /**
+     * The mirror of `every placeholder value parses as a valid MessageFormat`, for the mistake that
+     * one cannot see.
+     *
+     * `BundleBase.format` runs `MessageFormat` only when arguments are passed *and* the value
+     * contains a `{`. A value with neither is handed back untouched, so the `''` that correctly
+     * escapes an apostrophe in a pattern is two quote marks on screen here — and nothing throws, no
+     * placeholder is left showing, and the only symptom is a tooltip reading `lock file''s`. Three
+     * values had it. Guarding the shape rather than the three keys is what stops the fourth.
+     */
+    @Test
+    fun `no placeholderless value escapes its apostrophes`() {
+        val bad = props.stringPropertyNames()
+            .filter { props.getProperty(it).let { v -> "''" in v && '{' !in v } }
+            .sorted()
+        assertTrue(bad.isEmpty(), "doubled apostrophes in values MessageFormat never sees: $bad")
     }
 
     // ----- Placeholder values round-trip through MessageFormat -----
