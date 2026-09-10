@@ -11,6 +11,7 @@ import com.intellij.util.Alarm
 import com.intellij.util.FileContentUtilCore
 import dev.basedpython.pycharm.lang.BasedPythonFile
 import dev.basedpython.pycharm.lsp.ByLspLifecycleListener
+import dev.basedpython.pycharm.lsp.byServerFor
 
 /**
  * Renders a file's docstrings once `by` is actually able to say where they are.
@@ -38,13 +39,30 @@ import dev.basedpython.pycharm.lsp.ByLspLifecycleListener
  *  - **a server became ready** ([ByLspLifecycleListener.serverInitialized]) — every `.by` file
  *    already on screen was looked at while there was nothing to ask, and every one of those answers
  *    is now wrong;
- *  - **a file was opened** while a server was already running — the platform's `didOpen` for it is
+ *  - **a file was opened while a server was already running** — the platform's `didOpen` for it is
  *    in flight, and completion is not observable from here, so this looks again shortly afterwards
  *    rather than being told.
  *
  * The second is a delayed re-check where there used to be an event, which is the honest cost of the
  * swap. It is bounded — one look per file, [RECHECK_MS] after it opens — and it is cheap, because
  * what it asks is a cached lookup that has already happened.
+ *
+ * ## while a server was already running
+ *
+ * That clause is load-bearing, and for a while it was in this comment and not in the code: the
+ * re-check was armed for every file that opened, server or no server. With nobody to have sent a
+ * `didOpen` to, the reparse it leads to cannot make a docstring appear — the file has none recorded
+ * because none can be fetched, not because the answer arrived early — so it is pure cost, and the
+ * cost is not nothing.
+ *
+ * [FileContentUtilCore.reparseFiles] is a write action that fires PSI change events, and the daemon
+ * answers those by discarding whatever it is computing and starting over. Fired from a timer it
+ * lands wherever it lands, including in the middle of a highlighting pass, and the platform says so
+ * when it catches it: *"PSI/document/model changes are not allowed during highlighting, because it
+ * leads to the daemon unnecessary restarts."* In this repository that surfaced as tests elsewhere in
+ * the module failing perhaps one run in three — whichever one happened to be highlighting a `.by`
+ * file when an unarmed-for-nothing timer went off. Asking whether there is a server first is both
+ * the correct condition and the end of that.
  *
  * ## what re-runs the pass
  *
@@ -69,8 +87,11 @@ internal class ByRenderedDocsRefresher : ProjectActivity {
             object : ByLspLifecycleListener {
                 override fun serverInitialized(serverName: String) {
                     if (serverName != BY_SERVER) return
-                    // Everything already open was asked while there was nothing to ask.
-                    FileEditorManager.getInstance(project).openFiles.forEach { refreshIfStale(project, it) }
+                    // Everything already open was asked while there was nothing to ask. Through the
+                    // alarm rather than straight through, because this arrives on whatever thread
+                    // the server's initialisation ran on and a reparse takes a write action.
+                    val open = FileEditorManager.getInstance(project).openFiles.toList()
+                    alarm.addRequest({ open.forEach { refreshIfStale(project, it) } }, 0)
                 }
             },
         )
@@ -79,6 +100,10 @@ internal class ByRenderedDocsRefresher : ProjectActivity {
             FileEditorManagerListener.FILE_EDITOR_MANAGER,
             object : FileEditorManagerListener {
                 override fun fileOpened(source: FileEditorManager, file: VirtualFile) {
+                    // Only when there is a server that has been told about this file, or is about to
+                    // be. With none, the re-check cannot turn up a docstring and the reparse it
+                    // leads to is a daemon restart bought for nothing — see the class docs.
+                    if (byServerFor(project, file) == null) return
                     // One look, once the client has had time to send its `didOpen`. If the server
                     // still says nothing, the file has no docstrings and there is nothing to fix.
                     alarm.addRequest({ refreshIfStale(project, file) }, RECHECK_MS)

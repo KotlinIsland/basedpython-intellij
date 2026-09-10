@@ -567,6 +567,23 @@
   unset for a project that is not a workspace, so a single-package project produces exactly the
   commands it always did.
 
+- Opening a `.by` file no longer arms a timer that restarts the daemon for nothing. The rendered-docs
+  refresher looks again shortly after a file opens, because `by` cannot answer a document request
+  until the client's `textDocument/didOpen` has landed and completion of that is not observable. Its
+  own comment said this was for "a file opened *while a server was already running*" — the code armed
+  it for every file that opened, server or not. With no server there is nothing to have told about
+  the file, so the re-check cannot turn up a docstring, and the `FileContentUtilCore.reparseFiles` it
+  leads to is a write action that fires PSI change events and makes the daemon discard whatever it is
+  computing. The platform says as much when it catches one: *"PSI/document/model changes are not
+  allowed during highlighting, because it leads to the daemon unnecessary restarts."* The condition
+  is now in the code as well as in the comment.
+
+  This is also what made `ByStringMarginPassTest` flaky — the timer went off inside whichever test
+  happened to be highlighting a `.by` file. Measured, with the Gradle build cache disabled so every
+  run really executes: 4 failures in 6 runs before, 0 in 15 after. Its reuse assertion also compared
+  *every* highlighter in the editor rather than the pass's own, which is not what it claims to check;
+  it now compares the margin highlighters, by identity.
+
 - A workspace whose root is *virtual* — a `pyproject.toml` holding only `[tool.uv.workspace]`, with
   no `[project]` of its own — is managed like any other. Two things about it are unlike every other
   project and both were mishandled. Its `members` array has one entry that is *not* the root, so

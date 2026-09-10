@@ -90,16 +90,29 @@ class ByStringMarginPassTest {
         )
     }
 
+    /** The margin highlighters themselves, in document order, so two passes can be compared. */
+    private fun marginHighlighters() = fixture.editor.markupModel.allHighlighters
+        .filter { (it as? RangeHighlighterEx)?.customRenderer === ByStringMarginRenderer }
+        .sortedBy { it.startOffset }
+
     /**
      * The pass runs on every keystroke, so a margin that has not moved must not be replaced —
      * a new highlighter repaints the literal, and there is one of these per string in the file.
+     *
+     * The pass's *own* highlighters, not every highlighter in the editor. What else is in the markup
+     * model belongs to other passes, and whether they choose to reuse theirs is neither this test's
+     * business nor stable enough to assert on — comparing the lot made this fail for reasons that
+     * had nothing to do with the margin.
      */
     @Test
     fun `a second pass over unchanged text reuses the highlighters`() {
         fixture.configureByText("c.by", "a = $q\n    one\n    $q\n")
         fixture.doHighlighting()
-        val first = fixture.editor.markupModel.allHighlighters.toList()
+        val first = marginHighlighters()
+        assertEquals(1, first.size, "the fixture needs one margin for this to be testing anything")
+
         fixture.doHighlighting()
-        assertEquals(first, fixture.editor.markupModel.allHighlighters.toList())
+        // Identity, which is the claim: the same objects, not equal ones.
+        assertEquals(first, marginHighlighters())
     }
 }
