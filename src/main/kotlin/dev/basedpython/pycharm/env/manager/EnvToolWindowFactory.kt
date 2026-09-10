@@ -2,6 +2,7 @@ package dev.basedpython.pycharm.env.manager
 
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.wm.ToolWindow
 import com.intellij.openapi.wm.ToolWindowFactory
 import com.intellij.openapi.wm.ToolWindowManager
@@ -21,6 +22,15 @@ internal class EnvToolWindowFactory : ToolWindowFactory, DumbAware {
         content.setDisposer(panel)
         toolWindow.contentManager.addContent(content)
         toolWindow.setAdditionalGearActions(panel.gearActions())
+        // The ⋮ menu is held by the *tool window*, which outlives the content inside it, and the
+        // group holds actions that hold the panel, its project and its service. Nothing clears it
+        // otherwise, so the panel stays reachable from a platform object after it is disposed —
+        // which is the shape this plugin is not allowed to leave lying around, because a classloader
+        // pinned that way survives an unload. Registered against the content's disposer so it is
+        // undone by whatever disposes the panel.
+        Disposer.register(panel) {
+            if (!project.isDisposed) toolWindow.setAdditionalGearActions(null)
+        }
     }
 }
 

@@ -109,4 +109,42 @@ class EnvTargetLabelsTest {
         val options = EnvTargetLabels.options(emptyList(), EnvDependencyTarget.Group("integration"))
         assertEquals(listOf("dependencies", "dev", "integration"), options)
     }
+
+    // ---- which lists a module's Add offers ---------------------------------
+
+    private val lists = listOf(
+        EnvDependencyList(EnvDependencyTarget.Main, "root"),
+        EnvDependencyList(EnvDependencyTarget.DEV, "root"),
+        EnvDependencyList(EnvDependencyTarget.Group("docs"), "root"),
+        EnvDependencyList(EnvDependencyTarget.Main, "sub"),
+    )
+
+    @Test
+    fun `only the chosen module's own lists are offered`() {
+        assertEquals(
+            listOf("dependencies", "dev", "docs"),
+            EnvTargetLabels.optionsFor(lists, lists[0], module = "root"),
+        )
+    }
+
+    /**
+     * The bug this rule exists for. Open Add on `docs in root`, then move the module combo to `sub`,
+     * which has no `docs`: `options` adds its `initial` unconditionally, so passing the opening list
+     * regardless put `docs` back in `sub`'s drop-down — and the dialog re-selects the previous
+     * choice after rebuilding the model, so it came back *selected*, one OK away from
+     * `uv add --package sub --group docs`, creating a second group of that name in a second file.
+     */
+    @Test
+    fun `the list the dialog opened on is not offered in another module`() {
+        val openedOn = EnvDependencyList(EnvDependencyTarget.Group("docs"), "root")
+        assertEquals(listOf("dependencies", "dev", "docs"), EnvTargetLabels.optionsFor(lists, openedOn, "root"))
+        assertEquals(listOf("dependencies", "dev"), EnvTargetLabels.optionsFor(lists, openedOn, "sub"))
+    }
+
+    /** A group typed once has to stay offered, which is why `initial` is added at all. */
+    @Test
+    fun `a group that exists only as the opening choice is still offered in its own module`() {
+        val typed = EnvDependencyList(EnvDependencyTarget.Group("bench"), "sub")
+        assertEquals(listOf("dependencies", "dev", "bench"), EnvTargetLabels.optionsFor(lists, typed, "sub"))
+    }
 }

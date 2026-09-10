@@ -9,6 +9,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
 import com.intellij.platform.lsp.api.LspServerManager
 import com.intellij.ui.EditorNotifications
+import dev.basedpython.pycharm.env.modules.UvWorkspace
 import dev.basedpython.pycharm.lsp.BuffLspServerSupportProvider
 import dev.basedpython.pycharm.lsp.ByLspServerSupportProvider
 import dev.basedpython.pycharm.ui.log.BasedPythonLogNotifications
@@ -109,34 +110,61 @@ internal object EnvOperations {
     fun add(
         project: Project,
         requirements: List<String>,
-        target: EnvDependencyTarget = EnvDependencyTarget.Main,
+        list: EnvDependencyList = EnvDependencyList(EnvDependencyTarget.Main),
     ) {
         if (requirements.isEmpty()) return
-        simple(
+        val backend = EnvService.getInstance(project).status.backend ?: return
+        val op = EnvOp.Add(requirements, list.target, list.module)
+        runInBackground(
             project,
-            EnvOp.Add(requirements, target),
             BasedPythonBundle.message("env.progress.adding", requirements.joinToString(", ")),
-        )
+            manifestsOf(project, listOf(list)),
+        ) { runBlockingOp(project, backend, op) }
     }
 
     /**
-     * Removes requirements, each from the group it is declared in.
+     * The manifests these lists live in, for the ones the backend's own list cannot name.
      *
-     * A map rather than a list because a selection can span groups, and removing `pytest` from
-     * `dev` and `httpx` from the main list is two edits to two lists that no single command
-     * expresses. They run in sequence in one background task, and the first failure stops the rest —
+     * `uv add --package sub` rewrites `sub/pyproject.toml`, which [EnvBackend.managedFiles] does not
+     * and cannot know about — it names files relative to the project root, and a module's manifest is
+     * neither at the root nor discoverable without the layout. Without this the file is not flushed
+     * before the command reads it and not refreshed after it writes: an unsaved editor buffer for a
+     * member's manifest survives the command and the user's next save deletes what uv just wrote.
+     *
+     * The root's own manifest is left out because [EnvFiles.saveBeforeOperation] already covers it.
+     */
+    private fun manifestsOf(project: Project, lists: Collection<EnvDependencyList>): List<java.nio.file.Path> {
+        val layout = EnvService.getInstance(project).status.modules ?: return emptyList()
+        return lists.mapNotNull { it.module }
+            .distinct()
+            .mapNotNull { layout.byName(it) }
+            .filterNot { it.isRoot }
+            .map { it.root.resolve(UvWorkspace.MANIFEST) }
+    }
+
+    /**
+     * Removes requirements, each from the list it is declared in.
+     *
+     * A map rather than a list because a selection can span lists, and removing `pytest` from `dev`
+     * and `httpx` from the main list is two edits to two lists that no single command expresses.
+     * They run in sequence in one background task, and the first failure stops the rest —
      * continuing past a `uv remove` that failed would leave the project half-edited with only a
      * notification to say which half.
+     *
+     * Keyed by [EnvDependencyList] rather than by target, so a workspace's manifests stay apart: the
+     * module is what becomes `--package`, and without it every removal edits the root's manifest.
      */
-    fun remove(project: Project, byTarget: Map<EnvDependencyTarget, List<String>>) {
-        val work = byTarget.filterValues { it.isNotEmpty() }
+    fun remove(project: Project, byList: Map<EnvDependencyList, List<String>>) {
+        val work = byList.filterValues { it.isNotEmpty() }
         if (work.isEmpty()) return
         val backend = EnvService.getInstance(project).status.backend ?: return
         val all = work.values.flatten().joinToString(", ")
-        runInBackground(project, BasedPythonBundle.message("env.progress.removing", all)) { indicator ->
-            for ((target, names) in work) {
+        val title = BasedPythonBundle.message("env.progress.removing", all)
+        runInBackground(project, title, manifestsOf(project, work.keys)) { indicator ->
+            for ((list, names) in work) {
                 indicator.text = BasedPythonBundle.message("env.progress.removing", names.joinToString(", "))
-                if (!runBlockingOp(project, backend, EnvOp.Remove(names, target))) return@runInBackground
+                val op = EnvOp.Remove(names, list.target, list.module)
+                if (!runBlockingOp(project, backend, op)) return@runInBackground
             }
         }
     }

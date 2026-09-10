@@ -309,13 +309,27 @@ internal class EnvService(
         fire()
     }
 
+    /**
+     * Tells the view something changed — but never while a dialog is up.
+     *
+     * `ModalityState.any()` is the one modality that runs *during* a modal dialog, and what these
+     * listeners do is rebuild the dependency tree. Both destructive gestures read the tree, then
+     * block: *Remove* computes what to remove and then opens a confirmation, and *Add* snapshots the
+     * lists and the module and then opens a dialog the user may sit in for minutes. A refresh
+     * landing in that window rebuilds the tree and drops the selection underneath them, so *Yes*
+     * runs a command derived from a snapshot the window no longer shows.
+     *
+     * Non-modal defers those notifications until the dialog closes, which is also when the view can
+     * next be looked at. Nothing is lost: [status] and [progress] are already the current values by
+     * then, and the deferred listener renders whatever is current rather than replaying a history.
+     */
     private fun fire() {
         ApplicationManager.getApplication().invokeLater(
             {
                 listeners.forEach { it() }
                 EnvToolWindow.refreshAvailability(project)
             },
-            ModalityState.any(),
+            ModalityState.nonModal(),
             project.disposed,
         )
     }

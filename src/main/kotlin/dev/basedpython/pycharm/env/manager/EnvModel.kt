@@ -47,13 +47,16 @@ data class PythonCandidate(
 }
 
 /**
- * Where a dependency is declared — which is also what has to be named to add or remove one.
+ * Which of a manifest's lists a dependency is declared in.
  *
  * A project's requirements are not one list. There is the main list every install gets, optional
  * extras a consumer opts into, and named groups (`dev` chief among them) that are a development
  * concern and never ship. The three are declared in different places and are added and removed with
  * different flags, so "remove httpx" is not answerable without knowing which of them it came from —
  * which is the concrete reason the tree below is grouped rather than flat.
+ *
+ * This names the list *within one manifest*, and a workspace has more than one of those — so it is
+ * half of an address, not a whole one. [EnvDependencyList] is the whole one.
  */
 sealed interface EnvDependencyTarget {
 
@@ -110,13 +113,42 @@ data class EnvDependencyNode(
     val expandedElsewhere: Boolean = false,
 )
 
-/** The dependencies declared under one [target], and everything they pull in. */
-data class EnvDependencyGroup(
+/**
+ * One dependency list, addressed completely: which module declares it, and which of that module's
+ * lists it is.
+ *
+ * The pair, rather than [EnvDependencyTarget] alone, is what an add or a remove has to be told. A
+ * workspace has a manifest per module and every one of them may declare a `dependencies` and a
+ * `dev`, so the target on its own names several lists at once — and acting on the wrong one is not
+ * a visible failure: `uv remove` without `--package` edits the *root* manifest and reports success
+ * having removed the sibling's requirement from nowhere. Modelling the module as part of the
+ * address is what stops that being expressible.
+ *
+ * See [EnvOp.Add.module] for what [module] becomes on the command line.
+ */
+data class EnvDependencyList(
     val target: EnvDependencyTarget,
+    /**
+     * The module whose manifest declares this list, or null for the project's own.
+     *
+     * Null for every list of a project that is not a workspace, so a single-package project
+     * produces exactly the commands it produced before modules were modelled at all.
+     */
+    val module: String? = null,
+)
+
+/** The dependencies declared under one [list], and everything they pull in. */
+data class EnvDependencyGroup(
+    val list: EnvDependencyList,
     /** The declared requirements themselves; their transitive dependencies are their children. */
     val roots: List<EnvDependencyNode>,
 ) {
-    /** Every distinct package under this target, declared or transitive. For the group's count. */
+    val target: EnvDependencyTarget get() = list.target
+
+    /** The module this list belongs to — see [EnvDependencyList.module]. */
+    val module: String? get() = list.module
+
+    /** Every distinct package under this list, declared or transitive. For the group's count. */
     fun packageCount(): Int {
         val seen = HashSet<String>()
         fun walk(nodes: List<EnvDependencyNode>) {

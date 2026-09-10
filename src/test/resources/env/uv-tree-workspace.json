@@ -1,0 +1,289 @@
+{
+  "schema": {
+    "version": "preview"
+  },
+  "workspace_root": "/w",
+  "workspace": {
+    "path": "/w",
+    "id": "workspace+/w"
+  },
+  "roots": [
+    {
+      "id": "sub:dev==0.1.0@editable+/w/sub"
+    },
+    {
+      "id": "sub==0.1.0@editable+/w/sub"
+    },
+    {
+      "id": "sub[cli]==0.1.0@editable+/w/sub"
+    },
+    {
+      "id": "treedemo:dev==0.1.0@virtual+/w/"
+    },
+    {
+      "id": "treedemo==0.1.0@virtual+/w/"
+    }
+  ],
+  "inverted": false,
+  "members": [
+    {
+      "name": "sub",
+      "path": "/w/sub",
+      "id": "sub==0.1.0@editable+/w/sub"
+    },
+    {
+      "name": "treedemo",
+      "path": "/w/",
+      "id": "treedemo==0.1.0@virtual+/w/"
+    }
+  ],
+  "resolution": {
+    "certifi==2026.7.22@registry+https://pypi.org/simple": {
+      "name": "certifi",
+      "version": "2026.7.22",
+      "source": {
+        "registry": {
+          "url": "https://pypi.org/simple"
+        }
+      },
+      "kind": "package",
+      "dependencies": []
+    },
+    "charset-normalizer==3.5.1@registry+https://pypi.org/simple": {
+      "name": "charset-normalizer",
+      "version": "3.5.1",
+      "source": {
+        "registry": {
+          "url": "https://pypi.org/simple"
+        }
+      },
+      "kind": "package",
+      "dependencies": []
+    },
+    "click==8.5.0@registry+https://pypi.org/simple": {
+      "name": "click",
+      "version": "8.5.0",
+      "source": {
+        "registry": {
+          "url": "https://pypi.org/simple"
+        }
+      },
+      "kind": "package",
+      "dependencies": []
+    },
+    "idna==3.19@registry+https://pypi.org/simple": {
+      "name": "idna",
+      "version": "3.19",
+      "source": {
+        "registry": {
+          "url": "https://pypi.org/simple"
+        }
+      },
+      "kind": "package",
+      "dependencies": []
+    },
+    "iniconfig==2.3.0@registry+https://pypi.org/simple": {
+      "name": "iniconfig",
+      "version": "2.3.0",
+      "source": {
+        "registry": {
+          "url": "https://pypi.org/simple"
+        }
+      },
+      "kind": "package",
+      "dependencies": []
+    },
+    "packaging==26.3@registry+https://pypi.org/simple": {
+      "name": "packaging",
+      "version": "26.3",
+      "source": {
+        "registry": {
+          "url": "https://pypi.org/simple"
+        }
+      },
+      "kind": "package",
+      "dependencies": []
+    },
+    "pluggy==1.6.0@registry+https://pypi.org/simple": {
+      "name": "pluggy",
+      "version": "1.6.0",
+      "source": {
+        "registry": {
+          "url": "https://pypi.org/simple"
+        }
+      },
+      "kind": "package",
+      "dependencies": []
+    },
+    "pygments==2.21.0@registry+https://pypi.org/simple": {
+      "name": "pygments",
+      "version": "2.21.0",
+      "source": {
+        "registry": {
+          "url": "https://pypi.org/simple"
+        }
+      },
+      "kind": "package",
+      "dependencies": []
+    },
+    "pytest==9.1.1@registry+https://pypi.org/simple": {
+      "name": "pytest",
+      "version": "9.1.1",
+      "source": {
+        "registry": {
+          "url": "https://pypi.org/simple"
+        }
+      },
+      "kind": "package",
+      "dependencies": [
+        {
+          "id": "iniconfig==2.3.0@registry+https://pypi.org/simple"
+        },
+        {
+          "id": "packaging==26.3@registry+https://pypi.org/simple"
+        },
+        {
+          "id": "pluggy==1.6.0@registry+https://pypi.org/simple"
+        },
+        {
+          "id": "pygments==2.21.0@registry+https://pypi.org/simple"
+        }
+      ]
+    },
+    "requests==2.34.2@registry+https://pypi.org/simple": {
+      "name": "requests",
+      "version": "2.34.2",
+      "source": {
+        "registry": {
+          "url": "https://pypi.org/simple"
+        }
+      },
+      "kind": "package",
+      "dependencies": [
+        {
+          "id": "certifi==2026.7.22@registry+https://pypi.org/simple"
+        },
+        {
+          "id": "charset-normalizer==3.5.1@registry+https://pypi.org/simple"
+        },
+        {
+          "id": "idna==3.19@registry+https://pypi.org/simple"
+        },
+        {
+          "id": "urllib3==2.7.0@registry+https://pypi.org/simple"
+        }
+      ]
+    },
+    "sub:dev==0.1.0@editable+/w/sub": {
+      "name": "sub",
+      "version": "0.1.0",
+      "source": {
+        "editable": "/w/sub"
+      },
+      "kind": {
+        "group": "dev"
+      },
+      "dependencies": [
+        {
+          "id": "iniconfig==2.3.0@registry+https://pypi.org/simple"
+        }
+      ]
+    },
+    "sub==0.1.0@editable+/w/sub": {
+      "name": "sub",
+      "version": "0.1.0",
+      "source": {
+        "editable": "/w/sub"
+      },
+      "kind": "package",
+      "dependencies": [
+        {
+          "id": "idna==3.19@registry+https://pypi.org/simple"
+        }
+      ],
+      "optional_dependencies": [
+        {
+          "name": "cli",
+          "id": "sub[cli]==0.1.0@editable+/w/sub"
+        }
+      ],
+      "dependency_groups": [
+        {
+          "name": "dev",
+          "id": "sub:dev==0.1.0@editable+/w/sub"
+        }
+      ]
+    },
+    "sub[cli]==0.1.0@editable+/w/sub": {
+      "name": "sub",
+      "version": "0.1.0",
+      "source": {
+        "editable": "/w/sub"
+      },
+      "kind": {
+        "extra": "cli"
+      },
+      "dependencies": [
+        {
+          "id": "click==8.5.0@registry+https://pypi.org/simple"
+        },
+        {
+          "id": "sub==0.1.0@editable+/w/sub"
+        }
+      ]
+    },
+    "treedemo:dev==0.1.0@virtual+/w/": {
+      "name": "treedemo",
+      "version": "0.1.0",
+      "source": {
+        "virtual": "/w/"
+      },
+      "kind": {
+        "group": "dev"
+      },
+      "dependencies": [
+        {
+          "id": "pytest==9.1.1@registry+https://pypi.org/simple"
+        }
+      ]
+    },
+    "treedemo==0.1.0@virtual+/w/": {
+      "name": "treedemo",
+      "version": "0.1.0",
+      "source": {
+        "virtual": "/w/"
+      },
+      "kind": "package",
+      "dependencies": [
+        {
+          "id": "requests==2.34.2@registry+https://pypi.org/simple"
+        },
+        {
+          "id": "sub==0.1.0@editable+/w/sub"
+        }
+      ],
+      "dependency_groups": [
+        {
+          "name": "dev",
+          "id": "treedemo:dev==0.1.0@virtual+/w/"
+        }
+      ]
+    },
+    "urllib3==2.7.0@registry+https://pypi.org/simple": {
+      "name": "urllib3",
+      "version": "2.7.0",
+      "source": {
+        "registry": {
+          "url": "https://pypi.org/simple"
+        }
+      },
+      "kind": "package",
+      "dependencies": []
+    },
+    "workspace+/w": {
+      "kind": "workspace",
+      "path": "/w",
+      "dependencies": []
+    }
+  }
+}

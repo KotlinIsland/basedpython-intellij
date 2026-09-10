@@ -8,6 +8,7 @@ import com.intellij.openapi.wm.ToolWindowManager
 import com.intellij.ui.EditorNotificationPanel
 import com.intellij.ui.EditorNotificationProvider
 import com.intellij.ui.EditorNotifications
+import dev.basedpython.pycharm.env.manager.EnvDependencyList
 import dev.basedpython.pycharm.env.manager.EnvDependencyTarget
 import dev.basedpython.pycharm.env.manager.EnvOperations
 import dev.basedpython.pycharm.env.manager.EnvService
@@ -55,8 +56,13 @@ class ByMissingBannerProvider : EditorNotificationProvider {
         if (EnvService.getInstance(project).status.backend != null) {
             panel.createActionLabel(BasedPythonBundle.message("banner.byMissing.installWithUv")) {
                 // The toolchain is a development dependency: it builds and checks the project, and
-                // nothing that installs the project needs it.
-                EnvOperations.add(project, listOf(BASEDPYTHON_PACKAGE), EnvDependencyTarget.DEV)
+                // nothing that installs the project needs it. The root project's `dev`, with no
+                // module named — a workspace's toolchain belongs to the workspace, not to a member.
+                EnvOperations.add(
+                    project,
+                    listOf(BASEDPYTHON_PACKAGE),
+                    EnvDependencyList(EnvDependencyTarget.DEV),
+                )
             }
         }
         panel.createActionLabel(BasedPythonBundle.message("banner.byMissing.environment")) {

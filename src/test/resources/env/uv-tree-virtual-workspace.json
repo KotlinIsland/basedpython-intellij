@@ -1,0 +1,120 @@
+{
+  "schema": {
+    "version": "preview"
+  },
+  "workspace_root": "/w",
+  "workspace": {
+    "path": "/w",
+    "id": "workspace+/w"
+  },
+  "roots": [
+    {
+      "id": "alpha:dev==0.1.0@editable+/w/pkgs/alpha"
+    },
+    {
+      "id": "alpha==0.1.0@editable+/w/pkgs/alpha"
+    },
+    {
+      "id": "workspace+/w:dev"
+    }
+  ],
+  "inverted": false,
+  "members": [
+    {
+      "name": "alpha",
+      "path": "/w/pkgs/alpha",
+      "id": "alpha==0.1.0@editable+/w/pkgs/alpha"
+    }
+  ],
+  "resolution": {
+    "alpha:dev==0.1.0@editable+/w/pkgs/alpha": {
+      "name": "alpha",
+      "version": "0.1.0",
+      "source": {
+        "editable": "/w/pkgs/alpha"
+      },
+      "kind": {
+        "group": "dev"
+      },
+      "dependencies": [
+        {
+          "id": "iniconfig==2.3.0@registry+https://pypi.org/simple"
+        }
+      ]
+    },
+    "alpha==0.1.0@editable+/w/pkgs/alpha": {
+      "name": "alpha",
+      "version": "0.1.0",
+      "source": {
+        "editable": "/w/pkgs/alpha"
+      },
+      "kind": "package",
+      "dependencies": [
+        {
+          "id": "idna==3.19@registry+https://pypi.org/simple"
+        }
+      ],
+      "dependency_groups": [
+        {
+          "name": "dev",
+          "id": "alpha:dev==0.1.0@editable+/w/pkgs/alpha"
+        }
+      ]
+    },
+    "idna==3.19@registry+https://pypi.org/simple": {
+      "name": "idna",
+      "version": "3.19",
+      "source": {
+        "registry": {
+          "url": "https://pypi.org/simple"
+        }
+      },
+      "kind": "package",
+      "dependencies": []
+    },
+    "iniconfig==2.3.0@registry+https://pypi.org/simple": {
+      "name": "iniconfig",
+      "version": "2.3.0",
+      "source": {
+        "registry": {
+          "url": "https://pypi.org/simple"
+        }
+      },
+      "kind": "package",
+      "dependencies": []
+    },
+    "packaging==26.3@registry+https://pypi.org/simple": {
+      "name": "packaging",
+      "version": "26.3",
+      "source": {
+        "registry": {
+          "url": "https://pypi.org/simple"
+        }
+      },
+      "kind": "package",
+      "dependencies": []
+    },
+    "workspace+/w": {
+      "kind": "workspace",
+      "path": "/w",
+      "dependencies": [],
+      "dependency_groups": [
+        {
+          "name": "dev",
+          "id": "workspace+/w:dev"
+        }
+      ]
+    },
+    "workspace+/w:dev": {
+      "kind": {
+        "group": "dev"
+      },
+      "path": "/w",
+      "dependencies": [
+        {
+          "id": "packaging==26.3@registry+https://pypi.org/simple"
+        }
+      ]
+    }
+  }
+}

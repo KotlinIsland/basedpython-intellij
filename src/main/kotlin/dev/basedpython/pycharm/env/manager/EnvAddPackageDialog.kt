@@ -25,6 +25,7 @@ import dev.basedpython.pycharm.env.manager.index.PackageIndexCache
 import dev.basedpython.pycharm.util.BasedPythonBundle
 import java.awt.FlowLayout
 import javax.swing.JComponent
+import javax.swing.DefaultComboBoxModel
 import javax.swing.DefaultListModel
 import javax.swing.JPanel
 import javax.swing.ListSelectionModel
@@ -53,15 +54,23 @@ import javax.swing.event.DocumentEvent
  */
 internal class EnvAddPackageDialog(
     project: Project,
-    private val initialTarget: EnvDependencyTarget,
-    existingTargets: List<EnvDependencyTarget>,
+    private val initialList: EnvDependencyList,
+    private val existingLists: List<EnvDependencyList>,
+    /**
+     * The workspace's modules, or empty for a project that is not one.
+     *
+     * A fixed set, unlike the dependency lists: a module is a directory with a manifest, so one can
+     * be chosen but never conjured by typing a name — which is why it gets a closed combo of its own
+     * rather than being folded into the editable one below it.
+     */
+    private val modules: List<String> = emptyList(),
     private val index: PackageIndex? = null,
     /** The environment's interpreter, which is what `requires_python` is judged against. */
     private val pythonVersion: String? = null,
 ) : DialogWrapper(project) {
 
     /** What the dialog asks for. */
-    data class Request(val requirements: List<String>, val target: EnvDependencyTarget)
+    data class Request(val requirements: List<String>, val list: EnvDependencyList)
 
     /**
      * The requirement, as plain text.
@@ -90,9 +99,29 @@ internal class EnvAddPackageDialog(
      * `toString()`, not through any renderer set on it. A typed model therefore put `Group(name=dev)`
      * on screen. [EnvTargetLabels] owns the mapping in both directions.
      */
-    private val targetBox = ComboBox(EnvTargetLabels.options(existingTargets, initialTarget).toTypedArray()).apply {
+    /**
+     * The module the dialog opens on.
+     *
+     * The selected list's, or the first offered — which is the root project, since that is the order
+     * the tree puts them in. Resolved once rather than read from [initialList] at each use, so the
+     * module combo and the lists offered beside it cannot open disagreeing about which manifest is
+     * being edited: *Add* pressed with nothing selected arrives here with no module at all.
+     */
+    private val initialModule: String? = initialList.module ?: modules.firstOrNull()
+
+    private val targetBox = ComboBox(targetOptions(initialModule).toTypedArray()).apply {
         isEditable = true
-        selectedItem = EnvTargetLabels.format(initialTarget)
+        selectedItem = EnvTargetLabels.format(initialList.target)
+    }
+
+    /**
+     * Which module's manifest the requirement is written into — `--package`, when there is a choice.
+     *
+     * Not editable, and absent entirely from a project that is not a workspace, so the ordinary
+     * single-package Add is exactly the dialog it always was.
+     */
+    private val moduleBox = ComboBox(modules.toTypedArray()).apply {
+        selectedItem = initialModule
     }
 
     /** Which release to pin, or the row that pins nothing. */
@@ -155,6 +184,14 @@ internal class EnvAddPackageDialog(
             }
         }.installOn(results)
         versionBox.addActionListener { if (!updatingField) applyVersionToField() }
+        // Switching module re-offers that module's own lists while keeping whatever list was chosen:
+        // "dev" means the same thing in every manifest, and having the choice reset itself on the way
+        // to picking a module would be the dialog undoing the user's earlier answer.
+        moduleBox.addActionListener {
+            val chosen = targetBox.selectedItem
+            targetBox.model = DefaultComboBoxModel(targetOptions(selectedModule()).toTypedArray())
+            targetBox.selectedItem = chosen
+        }
         init()
         warmCatalogue()
         renderDetails(null)
@@ -180,6 +217,19 @@ internal class EnvAddPackageDialog(
                 preferredSize = JBUI.size(360, 56)
             },
         )
+        .apply {
+            // Only when there is a choice to make. A project with one manifest has nothing to say
+            // here, and a disabled combo naming it would be a control that never does anything.
+            if (modules.isNotEmpty()) {
+                addLabeledComponent(BasedPythonBundle.message("env.add.module"), moduleBox)
+                addComponentToRightColumn(
+                    JBLabel(BasedPythonBundle.message("env.add.module.hint")).apply {
+                        componentStyle = UIUtil.ComponentStyle.SMALL
+                        foreground = JBColor.GRAY
+                    },
+                )
+            }
+        }
         .addLabeledComponent(BasedPythonBundle.message("env.add.target"), targetBox)
         .addComponentToRightColumn(
             JBLabel(BasedPythonBundle.message("env.add.target.hint")).apply {
@@ -195,7 +245,7 @@ internal class EnvAddPackageDialog(
     override fun doValidate(): ValidationInfo? = when {
         EnvRequirements.split(field.text).isEmpty() ->
             ValidationInfo(BasedPythonBundle.message("env.add.empty"), field)
-        selectedTarget() == null ->
+        selectedList() == null ->
             ValidationInfo(BasedPythonBundle.message("env.add.target.empty"), targetBox)
         else -> null
     }
@@ -203,12 +253,23 @@ internal class EnvAddPackageDialog(
     /** Shows the dialog; null when the user cancelled. Must be called on the EDT. */
     fun ask(): Request? {
         if (!showAndGet()) return null
-        return Request(EnvRequirements.split(field.text), selectedTarget() ?: initialTarget)
+        return Request(
+            EnvRequirements.split(field.text),
+            selectedList() ?: EnvDependencyList(initialList.target, initialModule),
+        )
     }
 
-    /** The chosen list, whether it was picked from the list or typed. */
-    private fun selectedTarget(): EnvDependencyTarget? =
+    /** The chosen list, whether its name was picked from the drop-down or typed. */
+    private fun selectedList(): EnvDependencyList? =
         EnvTargetLabels.parse(targetBox.selectedItem?.toString().orEmpty())
+            ?.let { EnvDependencyList(it, selectedModule()) }
+
+    private fun selectedModule(): String? =
+        if (modules.isEmpty()) null else moduleBox.selectedItem?.toString()
+
+    /** The lists to offer for [module] — see [EnvTargetLabels.optionsFor], which owns the rule. */
+    private fun targetOptions(module: String?): List<String> =
+        EnvTargetLabels.optionsFor(existingLists, EnvDependencyList(initialList.target, initialModule), module)
 
     // ---- the index -----------------------------------------------------------
 

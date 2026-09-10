@@ -2,6 +2,7 @@ package dev.basedpython.pycharm.env.manager
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -16,9 +17,27 @@ import org.junit.jupiter.api.Test
  */
 class UvTreeTest {
 
-    private val real: String = checkNotNull(javaClass.getResourceAsStream("/env/uv-tree.json")) {
-        "the uv tree fixture is missing from the test classpath"
-    }.use { it.readBytes().decodeToString() }
+    private val real: String = fixture("/env/uv-tree.json")
+
+    /**
+     * The same command on a two-module workspace, from uv 0.12.7: a root project with a main list, a
+     * `dev` group and a dependency on its own member, and a member with a main list, a `cli` extra
+     * and a `dev` group of its own. Paths shortened to `/w`; wheel and hash blocks removed.
+     */
+    private val workspace: String = fixture("/env/uv-tree-workspace.json")
+
+    /**
+     * A *virtual* workspace root — a manifest holding only `[tool.uv.workspace]` and its own
+     * `[dependency-groups]`, with one member. Two things about it are unlike every other fixture
+     * here: `members` has one entry that is *not* the root, and the root's own `dev` group arrives
+     * with a `kind` and no `name`, because a virtual root has no distribution name to carry.
+     */
+    private val virtualWorkspace: String = fixture("/env/uv-tree-virtual-workspace.json")
+
+    private fun fixture(path: String): String =
+        checkNotNull(javaClass.getResourceAsStream(path)) {
+            "the uv tree fixture $path is missing from the test classpath"
+        }.use { it.readBytes().decodeToString() }
 
     private fun groups() = UvTree.parse(real)
 
@@ -88,6 +107,115 @@ class UvTreeTest {
         val pytest = group(EnvDependencyTarget.Group("dev")).roots.single()
         assertTrue(names(pytest.children).contains("iniconfig"), names(pytest.children).toString())
         assertTrue(names(pytest.children).contains("pluggy"), names(pytest.children).toString())
+    }
+
+    // ---- workspaces --------------------------------------------------------
+
+    /**
+     * The bug this fixture exists for. uv emits a root per list per *module*, so a two-module
+     * workspace has two roots of kind `package` and two `dev` groups. Read by kind alone they
+     * collapse into headings that are indistinguishable on screen and — worse — equal to each other,
+     * which is what sends a member's removal to the root's manifest.
+     */
+    @Test
+    fun `each module's lists are its own`() {
+        assertEquals(
+            listOf(
+                EnvDependencyList(EnvDependencyTarget.Main, "treedemo"),
+                EnvDependencyList(EnvDependencyTarget.Group("dev"), "treedemo"),
+                EnvDependencyList(EnvDependencyTarget.Main, "sub"),
+                EnvDependencyList(EnvDependencyTarget.Extra("cli"), "sub"),
+                EnvDependencyList(EnvDependencyTarget.Group("dev"), "sub"),
+            ),
+            UvTree.parse(workspace).map { it.list },
+        )
+    }
+
+    /** Two lists that read the same on screen are two different lists to act on. */
+    @Test
+    fun `the two dev groups are not equal`() {
+        val devs = UvTree.parse(workspace).filter { it.target == EnvDependencyTarget.DEV }
+        assertEquals(2, devs.size)
+        assertNotEquals(devs[0].list, devs[1].list)
+        assertEquals(listOf("pytest"), names(devs[0].roots))
+        assertEquals(listOf("iniconfig"), names(devs[1].roots))
+    }
+
+    /**
+     * The root project's lists lead, and each module's lists stay together. Interleaving them would
+     * put the root's `dev` between the member's `dependencies` and the member's `dev`.
+     */
+    @Test
+    fun `the root module's lists come first and each module's stay together`() {
+        assertEquals(
+            listOf("treedemo", "treedemo", "sub", "sub", "sub"),
+            UvTree.parse(workspace).map { it.module },
+        )
+    }
+
+    /**
+     * A module that depends on a sibling depends on something that is itself a root. Dropping every
+     * edge that lands on a root — which is one way to remove an extra's edge back to its own base
+     * package — takes the sibling out of the list that declares it.
+     */
+    @Test
+    fun `a dependency on a workspace member is still a dependency`() {
+        val main = UvTree.parse(workspace).first { it.module == "treedemo" && it.target == EnvDependencyTarget.Main }
+        assertEquals(listOf("requests", "sub"), names(main.roots))
+    }
+
+    /** The one edge that does have to go, in a workspace as much as anywhere. */
+    @Test
+    fun `a member's extra does not contain the member`() {
+        val cli = UvTree.parse(workspace).first { it.target == EnvDependencyTarget.Extra("cli") }
+        assertEquals(listOf("click"), names(cli.roots))
+    }
+
+    /**
+     * uv lists a single-package project as the workspace's one member. Naming its module would put a
+     * qualifier on every heading of a project with nothing to qualify against, and would start
+     * passing `--package` to commands that have always managed without it.
+     */
+    @Test
+    fun `a project that is not a workspace has no module on its lists`() {
+        assertTrue(groups().all { it.module == null }, groups().map { it.module }.toString())
+    }
+
+    /**
+     * Counting members is not the same question as "is this a workspace".
+     *
+     * A single-package project lists itself as the one member; a virtual root with one member lists
+     * the *member*, and the root is not in the list at all. Reading the count alone called the
+     * second one unmanaged and dropped the module from its lists — which drops `--package` from
+     * every command the window then issues, and on uv 0.12.10 that is `uv remove idna` answering
+     * "could not be found in `project.dependencies`" and `uv add httpx` answering "Project is
+     * missing a `[project]` table".
+     */
+    @Test
+    fun `a workspace whose single member is not the root still has modules`() {
+        val groups = UvTree.parse(virtualWorkspace)
+        assertEquals(
+            listOf(
+                // The workspace root's own list leads, as the root project's does elsewhere.
+                EnvDependencyList(EnvDependencyTarget.Group("dev"), null),
+                EnvDependencyList(EnvDependencyTarget.Main, "alpha"),
+                EnvDependencyList(EnvDependencyTarget.Group("dev"), "alpha"),
+            ),
+            groups.map { it.list },
+        )
+    }
+
+    /**
+     * The virtual root's own `dev` is a list you can add to and remove from — `uv add --group dev`
+     * and `uv remove --group dev` at the workspace root both work, verified on uv 0.12.10 — so it
+     * has to be in the tree. It was not: uv gives that node a `kind` and no `name`, and requiring a
+     * name dropped it, so the group was not shown empty, it was not shown.
+     */
+    @Test
+    fun `a virtual root's own groups are not dropped for having no name`() {
+        val rootDev = UvTree.parse(virtualWorkspace).single { it.module == null }
+        assertEquals(EnvDependencyTarget.DEV, rootDev.target)
+        assertEquals(listOf("packaging"), names(rootDev.roots))
     }
 
     // ---- structural cases, on synthetic graphs -----------------------------

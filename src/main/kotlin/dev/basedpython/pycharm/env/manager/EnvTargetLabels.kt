@@ -52,7 +52,28 @@ internal object EnvTargetLabels {
     }
 
     /**
-     * The tokens to offer, given what the project already declares and where the user was.
+     * The tokens to offer for one module's manifest.
+     *
+     * A dependency group belongs to a file, so only [module]'s own lists are offered: putting the
+     * root's `docs` in a member's Add is offering to create a second group of that name in another
+     * file, which is not a decision anyone makes by picking from a drop-down.
+     *
+     * [initial] is the list the dialog opened on, and is offered only while [module] is still the
+     * module it came from. [options] adds its `initial` unconditionally — it has to, so a group
+     * typed once stays offered — so a caller that passes it regardless puts the wrong module's group
+     * back in the drop-down, already selected, the moment the module combo moves.
+     */
+    fun optionsFor(
+        existing: List<EnvDependencyList>,
+        initial: EnvDependencyList,
+        module: String?,
+    ): List<String> = options(
+        existing.filter { it.module == module }.map { it.target },
+        initial.target.takeIf { module == initial.module } ?: EnvDependencyTarget.Main,
+    )
+
+    /**
+     * The tokens to offer, given what a manifest already declares and where the user was.
      *
      * The main list and `dev` are always offered whether or not the project has them yet: they are
      * the answer to almost every add, and a project with neither is exactly the one about to gain

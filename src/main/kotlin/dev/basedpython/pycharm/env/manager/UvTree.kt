@@ -18,9 +18,20 @@ import com.google.gson.JsonParser
  *   "this project's dev group". That synthetic node's dependencies are exactly the requirements
  *   declared under that group, which is what makes the grouping possible at all.
  * - `roots` names the entry points: one per group and extra, plus the project itself.
+ * - `members` names the workspace's modules — `{name, path, id}` each — and each member's own
+ *   `resolution` entry carries `dependency_groups` and `optional_dependencies` back-links naming
+ *   the synthetic nodes that belong to it.
  *
  * So a group is a root whose kind carries a name, and the main dependency list is the root whose
  * kind is a plain package. Everything under them comes from following ids through `resolution`.
+ *
+ * ### Roots are per module, not per project
+ *
+ * A workspace has a manifest per module and uv emits a root for every list of every one of them, so
+ * a two-module workspace produces *two* roots of kind `package` and can produce two `dev` groups.
+ * Reading only `kind` therefore collapses them: two headings both called `dependencies`, and — far
+ * worse — two groups that compare equal, so a removal from one is sent as a removal from the other.
+ * `members` is what tells them apart, and [EnvDependencyList.module] is where the answer is kept.
  *
  * ### The schema says `preview`
  *
@@ -90,10 +101,87 @@ object UvTree {
             ?.toList()
             .orEmpty()
 
-        val groups = rootIds.mapNotNull { id -> group(id, entries, rootIds.toSet()) }
+        val modules = modules(root.asJsonObject, resolution)
+        val groups = rootIds.mapNotNull { id -> group(id, entries, modules) }
         return groups.filter { it.target in ALWAYS_SHOWN || it.roots.isNotEmpty() }
-            .sortedWith(GROUP_ORDER)
+            .sortedWith(order(modules))
     }
+
+    /** One `members` entry. */
+    private data class Member(val name: String, val id: String, val path: String?)
+
+    /**
+     * Which module owns each root, and which package each synthetic node belongs to.
+     *
+     * Both answers come from the same back-links, so they are read in one pass. Everything here
+     * degrades to the pre-workspace behaviour when `members` is absent or reshaped: no module on any
+     * group, and the self-edge found by name instead — see [selfEdge].
+     */
+    private class Modules(
+        /** Member name by root id. Empty for a project that is not a workspace. */
+        val ownerOf: Map<String, String>,
+        /**
+         * The member a synthetic node belongs to, by that node's id.
+         *
+         * Filled for groups as well as extras, since both are read from the same two arrays. Only
+         * an extra has an edge back to it to drop — see [selfEdge].
+         */
+        val baseOf: Map<String, String>,
+        /** The member that *is* the workspace root, whose lists sort first. Null when unknown. */
+        val rootModule: String?,
+    )
+
+    private fun modules(root: JsonObject, resolution: JsonObject): Modules {
+        val members = root.getAsJsonArray("members")
+            ?.mapNotNull { it.takeIf { e -> e.isJsonObject }?.asJsonObject }
+            ?.mapNotNull { obj ->
+                val name = obj.string("name") ?: return@mapNotNull null
+                val id = obj.string("id") ?: return@mapNotNull null
+                Member(name, id, obj.string("path"))
+            }
+            .orEmpty()
+
+        val ownerOf = LinkedHashMap<String, String>()
+        val baseOf = LinkedHashMap<String, String>()
+        for (member in members) {
+            ownerOf[member.id] = member.name
+            val entry = resolution.get(member.id)?.takeIf { it.isJsonObject }?.asJsonObject ?: continue
+            for (key in OWNED_LISTS) {
+                val owned = entry.getAsJsonArray(key) ?: continue
+                for (element in owned) {
+                    val id = element.takeIf { it.isJsonObject }?.asJsonObject?.string("id") ?: continue
+                    ownerOf[id] = member.name
+                    baseOf[id] = member.id
+                }
+            }
+        }
+
+        val workspaceRoot = root.string("workspace_root")
+        val rootModule = members.firstOrNull { samePath(it.path, workspaceRoot) }?.name
+        // A project that is not a workspace lists *itself* as the single member. Naming its module
+        // would put a qualifier on every heading of a project with nothing to qualify against — and
+        // would start passing `--package` to commands that have always managed without it.
+        //
+        // The test is that the one member *is* the root, not that there is one member. A manifest
+        // holding only `[tool.uv.workspace]` — a virtual root, with no `[project]` of its own — and
+        // one member also has a single entry, and that entry is the member, not the root. Counting
+        // alone therefore called that project unmanaged and dropped `--package` from every command
+        // it issued: `uv remove idna` answers "could not be found in `project.dependencies`" and
+        // `uv add httpx` answers "Project is missing a `[project]` table". Verified on uv 0.12.10.
+        val singlePackageProject = members.size == 1 && rootModule != null
+        return Modules(
+            ownerOf = if (singlePackageProject) emptyMap() else ownerOf,
+            baseOf = baseOf,
+            rootModule = rootModule,
+        )
+    }
+
+    /** The member back-link arrays, both of which name synthetic root nodes. */
+    private val OWNED_LISTS = listOf("dependency_groups", "optional_dependencies")
+
+    /** uv writes a member's path with a trailing separator and the workspace root's without one. */
+    private fun samePath(one: String?, other: String?): Boolean =
+        one != null && other != null && one.trimEnd('/', '\\') == other.trimEnd('/', '\\')
 
     /**
      * Groups worth a heading even with nothing in them.
@@ -112,7 +200,7 @@ object UvTree {
     private fun group(
         rootId: String,
         entries: Map<String, Entry>,
-        rootIds: Set<String>,
+        modules: Modules,
     ): EnvDependencyGroup? {
         val entry = entries[rootId] ?: return null
         val target = when (val kind = entry.kind) {
@@ -130,13 +218,38 @@ object UvTree {
         // every group reads as a complete tree of its own, and the duplication is bounded by the
         // number of groups, which is a handful.
         val expanded = HashSet<String>()
+        val self = selfEdge(rootId, entry, entries, modules)
         val roots = entry.dependencyIds
-            // An extra's synthetic node depends on the base project as well as on the extra's own
-            // requirements — that edge is what "extras include the package itself" means. Following
-            // it would nest the whole main tree under every extra.
-            .filter { it !in rootIds }
+            .filter { it != self }
             .mapNotNull { walk(it, entries, expanded, depth = 0) }
-        return EnvDependencyGroup(target, roots)
+        return EnvDependencyGroup(EnvDependencyList(target, modules.ownerOf[rootId]), roots)
+    }
+
+    /**
+     * The edge from an extra's synthetic node back to the package the extra belongs to.
+     *
+     * `sub[cli]` depends on `certifi` *and* on `sub` — that second edge is what "installing an extra
+     * installs the package too" means in the graph. Following it would nest the whole main tree
+     * under every extra, so it is dropped.
+     *
+     * Only that one edge, and only for a synthetic node. Dropping every edge that happens to land on
+     * a root — which is what this used to do — is indistinguishable from it in a single-package
+     * project and wrong in a workspace: a module that depends on a sibling depends on something that
+     * is itself a root, and the sibling would vanish from the list that declares it.
+     */
+    private fun selfEdge(
+        rootId: String,
+        entry: Entry,
+        entries: Map<String, Entry>,
+        modules: Modules,
+    ): String? {
+        if (entry.kind !is Kind.Extra) return null
+        modules.baseOf[rootId]?.let { return it }
+        // No back-links to read: the edge is still the one to a package of the same name as the
+        // node that carries the extra. Only when there is a name to match on — a nameless node would
+        // otherwise match the next nameless one and drop an edge for the resemblance.
+        if (entry.name.isEmpty()) return null
+        return entry.dependencyIds.firstOrNull { entries[it]?.name == entry.name }
     }
 
     /** The node for [id] and everything under it. */
@@ -170,11 +283,18 @@ object UvTree {
     private fun entry(value: JsonElement): Entry? {
         val obj = value.takeIf { it.isJsonObject }?.asJsonObject ?: return null
         val kind = kind(obj.get("kind")) ?: return null
-        // The workspace container carries no name; everything else must have one to be shown.
-        val name = obj.string("name") ?: return if (kind == Kind.Workspace) {
-            Entry("", "", kind, emptyList())
+        // A row is drawn with its name, so an ordinary package must have one to be shown. The nodes
+        // that head a *group* need none: the heading is the target's label, and the name was only
+        // ever used to say which package the group belongs to.
+        //
+        // Which matters because uv does omit it. A virtual workspace root — a manifest holding only
+        // `[tool.uv.workspace]` — has no distribution name, so its own `[dependency-groups]` arrive
+        // as `workspace+/path:dev` with a `kind` and no `name`. Requiring one dropped those lists
+        // from the tree entirely: the project's `dev` group was not shown as empty, it was not shown.
+        val name = obj.string("name") ?: if (kind is Kind.Package) {
+            return null
         } else {
-            null
+            ""
         }
         val dependencies = obj.getAsJsonArray("dependencies")
             ?.mapNotNull { it.takeIf { e -> e.isJsonObject }?.asJsonObject?.string("id") }
@@ -204,20 +324,28 @@ object UvTree {
         get(key)?.takeIf { it.isJsonPrimitive }?.asString?.takeIf { it.isNotEmpty() }
 
     /**
-     * Main list first, then extras, then groups, alphabetically within each.
+     * The root module first and the rest alphabetically; within a module, the main list, then
+     * extras, then groups.
      *
      * The main list leads because it is the project's actual dependencies and the answer to almost
      * every question the window is opened with. Extras come next as the other thing a *consumer*
      * can install, and named groups — a development concern that never ships — last. `dev` sorts
      * first among the groups, being the one that is nearly always there and nearly always meant.
+     *
+     * Module before target, rather than after, because a module's lists are what a person reads
+     * together: interleaving them would put the root's `dev` between a member's `dependencies` and
+     * its `dev`, and the qualifier on each heading would be the only thing holding the tree together.
      */
-    private val GROUP_ORDER: Comparator<EnvDependencyGroup> =
-        compareBy<EnvDependencyGroup> {
-            when (it.target) {
-                EnvDependencyTarget.Main -> 0
-                is EnvDependencyTarget.Extra -> 1
-                is EnvDependencyTarget.Group -> 2
+    private fun order(modules: Modules): Comparator<EnvDependencyGroup> =
+        compareBy<EnvDependencyGroup> { if (it.module == null || it.module == modules.rootModule) 0 else 1 }
+            .thenBy { it.module.orEmpty().lowercase() }
+            .thenBy {
+                when (it.target) {
+                    EnvDependencyTarget.Main -> 0
+                    is EnvDependencyTarget.Extra -> 1
+                    is EnvDependencyTarget.Group -> 2
+                }
             }
-        }.thenBy { it.target != EnvDependencyTarget.DEV }
+            .thenBy { it.target != EnvDependencyTarget.DEV }
             .thenBy { it.target.label.lowercase() }
 }

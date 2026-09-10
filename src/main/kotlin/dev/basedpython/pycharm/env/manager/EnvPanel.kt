@@ -93,11 +93,30 @@ internal class EnvPanel(private val project: Project) :
     /** What each package is doing right now, so a row can spin while it installs. */
     private var progress: EnvProgress = EnvProgress()
 
+    /**
+     * The status the tree was last built from, compared by identity.
+     *
+     * [EnvService] fires for progress and for busy as well as for a new status — and progress fires
+     * once per line the tool prints, which for a sync of two hundred packages is several hundred
+     * notifications. Rebuilding the tree for each of those is not merely wasteful: `model.reload()`
+     * fires a structure change on the root, and `JTree` answers that by clearing the selection and
+     * every toggled path, so a user who selected a row watched it deselect itself hundreds of times
+     * while the sync ran. The rows themselves did not change — only what the renderer draws on them
+     * — so a repaint is the whole job.
+     */
+    private var renderedStatus: EnvStatus? = null
+
+    /**
+     * True when the tree shows lists from more than one manifest, so every heading needs saying
+     * which. See [renderGroup].
+     */
+    private var qualifyLists: Boolean = false
+
     init {
         tree.isRootVisible = false
         tree.showsRootHandles = true
         tree.selectionModel.selectionMode = TreeSelectionModel.DISCONTIGUOUS_TREE_SELECTION
-        tree.cellRenderer = NodeRenderer({ installed }, { progress })
+        tree.cellRenderer = NodeRenderer({ installed }, { progress }, { qualifyLists })
         // A cell renderer paints once per repaint, so the spinner has to be allowed to drive
         // repaints of its own row — without this the icon is drawn as a single frozen frame.
         UIUtil.putClientProperty(tree, AnimatedIcon.ANIMATION_IN_RENDERER_ALLOWED, true)
@@ -125,8 +144,23 @@ internal class EnvPanel(private val project: Project) :
 
     private fun render() {
         val status = service.status
-        installed = status.packages.associateBy { it.name.lowercase() }
         progress = service.progress
+
+        // Same status, so the same rows: only the progress or the busy flag moved. The summary line
+        // still has to be rewritten — it says which package is downloading, which is the most useful
+        // thing this window can be saying while a sync runs — and the toolbar re-evaluated, since
+        // busy is what disables it. The banner reads nothing but [status], and the rows have not
+        // changed; only what the renderer draws on them has, so a repaint is the rest of the job.
+        // See [renderedStatus] for what rebuilding them anyway costs.
+        if (status === renderedStatus) {
+            summary.text = describe(status)
+            tree.repaint()
+            toolbar.updateActionsAsync()
+            return
+        }
+        renderedStatus = status
+        installed = status.packages.associateBy { it.name.lowercase() }
+        qualifyLists = status.dependencies.any { it.module != null }
 
         header.removeAll()
         renderBanner(status)?.let(header::add)
@@ -142,13 +176,18 @@ internal class EnvPanel(private val project: Project) :
     /**
      * Rebuilds the tree, keeping what the user had expanded.
      *
-     * Expansion is restored by group name rather than by node identity, because a refresh rebuilds
+     * Expansion is restored by *which list* rather than by node identity, because a refresh rebuilds
      * every node — and the thing worth preserving is "the user had `dev` open", which survives.
      * Deeper expansion is not restored: a transitive subtree that the user opened to answer one
      * question is not something they are still looking at three syncs later.
+     *
+     * By the whole [EnvDependencyList] and not its label, which is the same ambiguity [renderGroup]
+     * exists to remove: every module of a workspace has a `dependencies` and most have a `dev`, so
+     * keying on the label made them one key — expand a member's list and every refresh re-expanded
+     * the root's alongside it, reopening a list the user had deliberately closed.
      */
     private fun renderTree(status: EnvStatus) {
-        val expandedGroups = expandedGroupLabels()
+        val expanded = expandedLists()
         root.removeAllChildren()
         EnvTreeRows.build(status).forEach { root.add(swing(it)) }
         model.reload()
@@ -158,8 +197,8 @@ internal class EnvPanel(private val project: Project) :
             EnvTreeRows.isFlat(status) -> Unit
             // First look: open the group a person came here for, and only that one. Opening all of
             // them puts a project's entire transitive closure on screen at once.
-            expandedGroups.isEmpty() -> expandDefaultGroup()
-            else -> restoreExpanded(expandedGroups)
+            expanded.isEmpty() -> expandDefaultGroup()
+            else -> restoreExpanded(expanded)
         }
     }
 
@@ -180,19 +219,19 @@ internal class EnvPanel(private val project: Project) :
         tree.expandPath(TreePath(arrayOf(root, preferred)))
     }
 
-    private fun expandedGroupLabels(): Set<String> {
+    private fun expandedLists(): Set<EnvDependencyList> {
         val paths = tree.getExpandedDescendants(TreePath(root)) ?: return emptySet()
         return paths.toList()
             .mapNotNull { ((it.lastPathComponent as? DefaultMutableTreeNode)?.userObject as? EnvRow.Group) }
-            .mapTo(LinkedHashSet()) { it.group.target.label }
+            .mapTo(LinkedHashSet()) { it.group.list }
     }
 
-    private fun restoreExpanded(labels: Set<String>) {
+    private fun restoreExpanded(lists: Set<EnvDependencyList>) {
         tree.expandPath(TreePath(root))
         for (i in 0 until root.childCount) {
             val child = root.getChildAt(i) as DefaultMutableTreeNode
-            val label = (child.userObject as? EnvRow.Group)?.group?.target?.label ?: continue
-            if (label in labels) tree.expandPath(TreePath(arrayOf(root, child)))
+            val list = (child.userObject as? EnvRow.Group)?.group?.list ?: continue
+            if (list in lists) tree.expandPath(TreePath(arrayOf(root, child)))
         }
     }
 
@@ -274,6 +313,8 @@ internal class EnvPanel(private val project: Project) :
     private class NodeRenderer(
         private val installed: () -> Map<String, EnvPackage>,
         private val progress: () -> EnvProgress,
+        /** True when the tree holds lists from more than one manifest — see [renderGroup]. */
+        private val qualifyLists: () -> Boolean,
     ) : ColoredTreeCellRenderer() {
 
         override fun customizeCellRenderer(
@@ -293,9 +334,28 @@ internal class EnvPanel(private val project: Project) :
             }
         }
 
+        /**
+         * The list's name, qualified by the manifest it comes from once there is more than one.
+         *
+         * Unqualified would be ambiguous rather than merely terse: every module of a workspace has a
+         * `dependencies`, and two headings reading `dependencies` say nothing about which manifest
+         * the rows under them come from or which one *Remove* would edit.
+         *
+         * Every heading or none, which is why this needs to know about the tree as a whole. A null
+         * module means the workspace root's own manifest — the case a *virtual* root produces, where
+         * the root has `[dependency-groups]` but no `[project]` and so no name to be called by — and
+         * leaving that one bare beside qualified siblings makes the one heading a reader cannot
+         * place out of the only one that never moved.
+         */
         private fun renderGroup(row: EnvRow.Group) {
             icon = groupIcon(row.group.target)
             append(row.group.target.label)
+            if (qualifyLists()) {
+                val where = row.group.module
+                    ?.let { BasedPythonBundle.message("env.tree.inModule", it) }
+                    ?: BasedPythonBundle.message("env.tree.inWorkspaceRoot")
+                append("  $where", SimpleTextAttributes.GRAYED_ATTRIBUTES)
+            }
             append(
                 "  " + BasedPythonBundle.message("env.tree.count", row.group.packageCount()),
                 SimpleTextAttributes.GRAYED_ATTRIBUTES,
@@ -488,7 +548,7 @@ internal class EnvPanel(private val project: Project) :
         override fun actionPerformed(e: AnActionEvent) = EnvOperations.sync(project)
     }
 
-    /** Adds to whichever group is selected — see [targetForAdd]. */
+    /** Adds to whichever list is selected — see [EnvTreeRows.listForAdd]. */
     private inner class AddAction : DumbAwareAction(
         BasedPythonBundle.messagePointer("env.action.add"),
         BasedPythonBundle.messagePointer("env.action.add.description"),
@@ -501,14 +561,19 @@ internal class EnvPanel(private val project: Project) :
         }
 
         override fun actionPerformed(e: AnActionEvent) {
-            val groups = service.status.dependencies.map { it.target }
-            val target = EnvTreeRows.targetForAdd(selection())
             val status = service.status
+            val lists = status.dependencies.map { it.list }
+            val modules = EnvTreeRows.modulesToOffer(status)
             val index = status.projectRoot?.let { root -> status.backend?.packageIndex(root) }
             val request = EnvAddPackageDialog(
-                project, target, groups, index, status.environment?.pythonVersion,
+                project,
+                EnvTreeRows.listForAdd(selection()),
+                lists,
+                modules,
+                index,
+                status.environment?.pythonVersion,
             ).ask() ?: return
-            EnvOperations.add(project, request.requirements, request.target)
+            EnvOperations.add(project, request.requirements, request.list)
         }
     }
 
@@ -533,8 +598,13 @@ internal class EnvPanel(private val project: Project) :
         override fun actionPerformed(e: AnActionEvent) {
             val selection = EnvTreeRows.removable(selection())
             if (selection.isEmpty()) return
-            val described = selection.entries.joinToString("; ") { (target, names) ->
-                BasedPythonBundle.message("env.remove.confirm.item", names.joinToString(", "), target.label)
+            // The module is named in the confirmation whenever there is one, because it is the half
+            // of "removing foo from dependencies" that decides which file changes.
+            val described = selection.entries.joinToString("; ") { (list, names) ->
+                val where = list.module
+                    ?.let { BasedPythonBundle.message("env.remove.confirm.in", list.target.label, it) }
+                    ?: list.target.label
+                BasedPythonBundle.message("env.remove.confirm.item", names.joinToString(", "), where)
             }
             val confirmed = EnvOperations.confirm(
                 project,

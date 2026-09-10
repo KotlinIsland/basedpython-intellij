@@ -72,14 +72,39 @@ internal object EnvTreeRows {
     )
 
     /**
-     * The group whose rows a new dependency should join, given what is selected.
+     * The modules a new dependency can be written into — empty when the project has one manifest.
      *
-     * The first selected row's group wins, and the main list is the answer when nothing useful is
-     * selected. Selecting `dev` and pressing *Add* adding to `dev` is what makes the grouping worth
-     * having — otherwise the tree is a picture and the operations ignore it.
+     * From the tree when there is one, so the dialog offers exactly the modules the window is
+     * showing and can never name one the resolved graph does not have.
+     *
+     * From the module layout when there is not, which is the case that matters. A workspace with no
+     * lock file yet has no tree — `uv tree --frozen` exits non-zero and the window falls back to the
+     * flat installed list — and with no modules offered, *Add* wrote to the root manifest with no
+     * `--package`: on a workspace whose root is virtual that is an outright error, and on any other
+     * it silently declares the dependency on the wrong project. The layout is read on the same
+     * refresh and *is* populated in this state, which is why [EnvService] goes out of its way to
+     * read it before its early return.
      */
-    fun targetForAdd(selection: List<Selected>): EnvDependencyTarget =
-        selection.firstNotNullOfOrNull { it.group?.target } ?: EnvDependencyTarget.Main
+    fun modulesToOffer(status: EnvStatus): List<String> {
+        val fromTree = status.dependencies.mapNotNull { it.module }.distinct()
+        if (fromTree.isNotEmpty()) return fromTree
+        val layout = status.modules ?: return emptyList()
+        // No members is not a workspace: one manifest, and nothing to choose between.
+        return if (layout.members.isEmpty()) emptyList() else layout.all.map { it.name }
+    }
+
+    /**
+     * The list a new dependency should join, given what is selected.
+     *
+     * The first selected row's group wins, and the project's own main list is the answer when
+     * nothing useful is selected. Selecting `dev` and pressing *Add* adding to `dev` is what makes
+     * the grouping worth having — otherwise the tree is a picture and the operations ignore it.
+     *
+     * The module travels with it, so *Add* under a member's heading offers that member's manifest
+     * rather than silently proposing the root's.
+     */
+    fun listForAdd(selection: List<Selected>): EnvDependencyList =
+        selection.firstNotNullOfOrNull { it.group?.list } ?: EnvDependencyList(EnvDependencyTarget.Main)
 
     /**
      * The selected requirements that can be removed, grouped by the list to remove them from.
@@ -91,21 +116,24 @@ internal object EnvTreeRows {
      * says whether a package was declared.
      *
      * Grouped rather than flattened because a selection can span lists, and removing `pytest` from
-     * `dev` and `httpx` from the main list is two edits that no single command expresses.
+     * `dev` and `httpx` from the main list is two edits that no single command expresses. Keyed by
+     * the whole [EnvDependencyList] rather than by the target alone, because in a workspace two
+     * modules' `dev` groups are different lists in different files — keying on the target merges
+     * them into one command that edits one manifest and claims to have edited both.
      */
-    fun removable(selection: List<Selected>): Map<EnvDependencyTarget, List<String>> {
-        val byTarget = LinkedHashMap<EnvDependencyTarget, MutableList<String>>()
+    fun removable(selection: List<Selected>): Map<EnvDependencyList, List<String>> {
+        val byList = LinkedHashMap<EnvDependencyList, MutableList<String>>()
         for (selected in selection) {
             val row = selected.row as? EnvRow.Package ?: continue
             if (!row.declared) continue
-            val target = selected.group?.target ?: continue
-            val names = byTarget.getOrPut(target) { mutableListOf() }
+            val list = selected.group?.list ?: continue
+            val names = byList.getOrPut(list) { mutableListOf() }
             // A tree can legitimately show the same requirement twice — as the declared row and as
             // something else's transitive dependency — and naming it twice on one command line is
             // at best noise in the confirmation.
             if (row.node.name !in names) names.add(row.node.name)
         }
-        return byTarget
+        return byList
     }
 
     /** A selected row, together with the group heading it sits under. */

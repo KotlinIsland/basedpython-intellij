@@ -552,6 +552,74 @@
 
 ### Fixed
 
+- A uv workspace no longer shows one `dependencies` heading per module with nothing to tell them
+  apart, and *Add* / *Remove* no longer act on the wrong manifest. `uv tree` emits a root per list
+  per workspace member, so a project with modules has a `dependencies` for each of them and can have
+  a `dev` for each of them; reading only the root's `kind` collapsed them into headings that looked
+  identical and — the part that was not cosmetic — compared *equal*, so a removal under a member was
+  sent as a removal from the root's list. `uv remove` without `--package` then edits the root's
+  `pyproject.toml` and exits 0, having removed the root's copy of the name or nothing at all
+  (verified against uv 0.12.7 both ways). A dependency list is now addressed by module *and* target:
+  each heading names its module, *Add* has a module of its own and re-offers that module's lists
+  when it changes, the confirmation says which manifest is being edited, and a selection spanning
+  two modules' `dev` groups is two commands. The module is read from uv's own `members` array and
+  the `dependency_groups` / `optional_dependencies` back-links on each member's entry, and is left
+  unset for a project that is not a workspace, so a single-package project produces exactly the
+  commands it always did.
+
+- A workspace whose root is *virtual* — a `pyproject.toml` holding only `[tool.uv.workspace]`, with
+  no `[project]` of its own — is managed like any other. Two things about it are unlike every other
+  project and both were mishandled. Its `members` array has one entry that is *not* the root, so
+  counting members called it a single-package project and dropped `--package` from every command it
+  issued: `uv remove idna` answered "could not be found in `project.dependencies`" and `uv add httpx`
+  answered "Project is missing a `[project]` table". And its own `[dependency-groups]` arrive from
+  `uv tree` with a `kind` and no `name`, because a virtual root has no distribution name to carry —
+  so requiring a name dropped those lists from the tree entirely: the project's `dev` group was not
+  shown empty, it was not shown. The test is now that the one member *is* the root, and a name is
+  required only of a row that is drawn with one. Both checked against uv 0.12.10.
+
+- The environment tree no longer discards the selection several hundred times during a sync. Every
+  line uv prints notifies the view, and the view rebuilt itself for each one — `model.reload()` fires
+  a structure change on the root, and `JTree` answers that by clearing the selection and every
+  toggled path, so a row selected while 200 packages installed deselected itself as fast as uv could
+  print. The rows do not change on a progress tick; only what the renderer draws on them does, so
+  that path repaints and leaves the tree alone.
+
+- A refresh can no longer rebuild the tree underneath an open dialog. The view was notified with
+  `ModalityState.any()` — the one modality that runs *during* a modal dialog — while both destructive
+  gestures read the tree and then block: *Remove* computes what to remove and then asks for
+  confirmation, and *Add* snapshots the lists and the module and then opens a dialog. A refresh
+  landing in that window left *Yes* running a command derived from a selection the window no longer
+  showed.
+
+- Expansion is restored by *which list* rather than by its name, so a member's `dependencies` and the
+  root's are no longer one key — expanding one stopped re-expanding the other on every refresh.
+
+- *Add* and *Remove* now flush and refresh the manifest they actually edit. `uv add --package sub`
+  rewrites `sub/pyproject.toml`, which the backend's own managed-files list cannot name; without it
+  an unsaved editor buffer for that file survived the command and the user's next save deleted what
+  uv had just written. The parameter for this existed and said so; the two callers that gained
+  `--package` were not passing it.
+
+- *Add* offers a workspace's modules even before it has a lock file. With no tree to read them from
+  it offered none and wrote to the root manifest with no `--package` — an error on a virtual-root
+  workspace, and a dependency silently declared on the wrong project on any other.
+
+- The Add dialog stopped offering one module's dependency group in another module. Opening it on
+  `docs` in the root and switching the module combo to a member that has no `docs` left `docs` in the
+  drop-down *and selected*, one *OK* away from creating a second group of that name in a second file.
+
+- The environment tool window's ⋮ menu no longer keeps the panel alive after the panel is disposed.
+  `setAdditionalGearActions` stores the group on the tool window, which outlives the content inside
+  it, and the group holds actions that hold the panel, its project and its service. It is now cleared
+  with the panel.
+
+- A module that depends on a sibling kept that sibling in the list that declares it. The edge from
+  an extra's synthetic node back to its own package has to be dropped — `sub[cli]` depends on
+  `click` and on `sub`, and following it nests the whole main tree under every extra — but it was
+  being dropped by removing *every* edge that landed on a root, which in a workspace is also how a
+  sibling dependency looks. Now it is that one edge, found through the member back-links.
+
 - The `Log:` box has corners again. All four were square, because an `EditorTextField` paints its
   background as a *rectangle* and the one inside the box covered the rounded fill corner for corner
   — measured in a running PyCharm, not argued about. The expression editor now sits inside a padding
