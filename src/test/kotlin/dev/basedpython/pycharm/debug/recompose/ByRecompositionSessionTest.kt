@@ -111,9 +111,12 @@ class ByRecompositionSessionTest {
         }
     }
 
-    /** Wait for every request the link has been sent to answer and be taken. */
+    /**
+     * Wait for every request the link has been sent to answer and be taken — the service's own
+     * count, since a taken answer can send another request after the link has gone quiet.
+     */
     private fun settled(link: Scripted, and: () -> Boolean = { true }) {
-        waitUntil("the link to settle") { link.inFlight.get() == 0 && and() }
+        waitUntil("the link to settle") { service.atRest && link.inFlight.get() == 0 && and() }
         PlatformTestUtil.dispatchAllInvocationEventsInIdeEventQueue()
     }
 

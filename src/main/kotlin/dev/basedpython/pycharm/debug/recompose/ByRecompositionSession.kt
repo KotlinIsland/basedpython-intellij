@@ -28,7 +28,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.future.await
 import kotlinx.coroutines.launch
 import java.util.concurrent.CopyOnWriteArrayList
+import org.jetbrains.annotations.TestOnly
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 
 /**
@@ -146,6 +148,15 @@ internal class ByRecompositionSession(
 
     /** Whether a re-send of the watch is on its way, so a stop and its pull do not send two. */
     private val watchResending = AtomicBoolean(false)
+
+    /**
+     * Requests to bpd sent and not yet taken, including what taking one sends on — a pull's answer
+     * re-sending the watch is counted before the pull stops being. Zero is the service at rest.
+     */
+    private val outstanding = AtomicInteger()
+
+    @get:TestOnly
+    internal val atRest: Boolean get() = outstanding.get() == 0
 
     /** Sentences already logged or announced this session, so each is said once. */
     private val reported = HashSet<String>()
@@ -283,11 +294,22 @@ internal class ByRecompositionSession(
     fun pull() {
         val link = link ?: return
         val ticket = pullTickets.incrementAndGet()
-        ApplicationManager.getApplication().executeOnPooledThread {
+        offPooled {
             when (val answer = link.pull()) {
                 is ByRecompositionAnswer.Answered -> publish(link, ByRecompositions.parseAnswer(answer.body), ticket)
                 is ByRecompositionAnswer.Refused -> refused(link, answer.sentence, ticket)
                 is ByRecompositionAnswer.Unavailable -> unanswered(link, answer.why, ticket)
+            }
+        }
+    }
+
+    private fun offPooled(task: () -> Unit) {
+        outstanding.incrementAndGet()
+        ApplicationManager.getApplication().executeOnPooledThread {
+            try {
+                task()
+            } finally {
+                outstanding.decrementAndGet()
             }
         }
     }
@@ -402,12 +424,16 @@ internal class ByRecompositionSession(
 
     private fun sendWatch(link: ByRecompositionLink, on: Boolean, onDone: () -> Unit = {}) {
         val ticket = watchTickets.incrementAndGet()
-        ApplicationManager.getApplication().executeOnPooledThread {
-            try {
-                takeWatch(link, ticket, link.watch(on))
+        offPooled {
+            // Done once the answer is back, before it is taken: taking a refusal posts a
+            // notification, and a pull whose answer landed meanwhile found the re-send still "on
+            // its way" and sent nothing, leaving an unconfirmed watch unsent until the next stop.
+            val answer = try {
+                link.watch(on)
             } finally {
                 onDone()
             }
+            takeWatch(link, ticket, answer)
         }
     }
 
