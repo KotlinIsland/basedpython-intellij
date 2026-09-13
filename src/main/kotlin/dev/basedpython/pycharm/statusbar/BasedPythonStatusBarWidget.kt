@@ -19,6 +19,8 @@ import dev.basedpython.pycharm.lsp.ByLspServerSupportProvider
 import dev.basedpython.pycharm.settings.ui.BasedPythonConfigurable
 import java.awt.event.MouseEvent
 
+// No compiler bridges to the deprecated getPresentation(PlatformType), getPopupStep, getMaxValue.
+@JvmDefaultWithoutCompatibility
 internal class BasedPythonStatusBarWidget(private val project: Project) :
     StatusBarWidget, StatusBarWidget.MultipleTextValuesPresentation {
 

@@ -14,6 +14,8 @@ import dev.basedpython.pycharm.lang.dialect.BasedPythonProjectDetector
  * `by run pytest --collect-only`, so a project with no `by` to run has nothing to show and no
  * business growing a stripe button for it.
  */
+// No compiler bridges to the deprecated `isApplicable` / `isDoNotActivateOnStart` defaults.
+@JvmDefaultWithoutCompatibility
 internal class ByTestNodeToolWindowFactory : ToolWindowFactory, DumbAware {
 
     override fun shouldBeAvailable(project: Project): Boolean =

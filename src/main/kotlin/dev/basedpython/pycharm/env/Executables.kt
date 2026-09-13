@@ -1,6 +1,8 @@
 package dev.basedpython.pycharm.env
 
+import com.intellij.execution.configurations.PathEnvironmentVariableUtil
 import com.intellij.openapi.diagnostic.Logger
+import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.attribute.PosixFilePermission
@@ -39,5 +41,30 @@ object Executables {
             return false
         }
         return Files.isExecutable(path)
+    }
+
+    /**
+     * The first executable called exactly [fileName] in a directory on the IDE's `PATH`, or null.
+     *
+     * What `PathEnvironmentVariableUtil.findInPath(String)` did, step for step as 2026.2's source
+     * has it: `PATH` read through the platform (so a shell-loaded environment counts), split into
+     * its non-blank entries, relative entries and non-directories skipped, and the first regular
+     * file there the IDE may execute wins. It is written out because 2026.3 deprecates that method
+     * for removal in favour of `findFirst`, which 2026.2 does not have; the two it is built from
+     * here are public and undeprecated in both.
+     *
+     * Exact name, no `PATHEXT`: the caller adds `.exe` itself where it wants one. `java.io.File`
+     * rather than `Path` because that is what the platform tested, and because `Paths.get` throws
+     * on a malformed `PATH` entry that `File` simply finds nothing in.
+     */
+    fun findOnPath(fileName: String): Path? {
+        val path = PathEnvironmentVariableUtil.getPathVariableValue() ?: return null
+        for (entry in PathEnvironmentVariableUtil.getPathDirs(path)) {
+            val dir = File(entry)
+            if (!dir.isAbsolute || !dir.isDirectory) continue
+            val candidate = File(dir, fileName)
+            if (candidate.isFile && candidate.canExecute()) return candidate.toPath()
+        }
+        return null
     }
 }

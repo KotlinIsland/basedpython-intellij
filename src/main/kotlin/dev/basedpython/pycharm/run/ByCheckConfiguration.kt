@@ -17,7 +17,7 @@ class ByCheckConfiguration(project: Project, factory: ConfigurationFactory, name
     public override fun getOptions(): ByCheckOptions = super.getOptions() as ByCheckOptions
 
     override fun getConfigurationEditor(): SettingsEditor<out RunConfigurationBase<ByCheckOptions>> =
-        ByCheckSettingsEditor()
+        ByCheckSettingsEditor(project)
 
     override fun checkConfiguration() {
         if (!BasedPythonBinaries.isByAvailable(project)) {

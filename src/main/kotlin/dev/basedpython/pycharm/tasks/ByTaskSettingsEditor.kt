@@ -3,13 +3,14 @@ package dev.basedpython.pycharm.tasks
 import com.intellij.execution.configuration.EnvironmentVariablesComponent
 import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
 import com.intellij.openapi.options.SettingsEditor
+import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.ComboBox
 import com.intellij.openapi.ui.TextFieldWithBrowseButton
 import com.intellij.ui.DocumentAdapter
-import com.intellij.ui.SimpleListCellRenderer
 import com.intellij.ui.components.JBCheckBox
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBTextField
+import com.intellij.ui.dsl.listCellRenderer.textListCellRenderer
 import com.intellij.util.ui.FormBuilder
 import com.intellij.util.ui.UIUtil
 import dev.basedpython.pycharm.util.BasedPythonBundle
@@ -29,13 +30,13 @@ import javax.swing.event.DocumentEvent
  * shows the line it is building can be checked against what the same command does in a terminal —
  * which is the first thing anybody does when a hook behaves differently inside the IDE.
  */
-class ByTaskSettingsEditor : SettingsEditor<ByTaskConfiguration>() {
+class ByTaskSettingsEditor(private val project: Project) : SettingsEditor<ByTaskConfiguration>() {
 
     private val runnerCombo = ComboBox(ByTaskRunner.entries.toTypedArray()).apply {
-        renderer = SimpleListCellRenderer.create("") { it.display }
+        renderer = textListCellRenderer("") { it.display }
     }
     private val targetCombo = ComboBox(ByTaskKind.entries.toTypedArray()).apply {
-        renderer = SimpleListCellRenderer.create("") { BasedPythonBundle.message("tasks.kind.${it.name.lowercase()}") }
+        renderer = textListCellRenderer("") { BasedPythonBundle.message("tasks.kind.${it.name.lowercase()}") }
     }
     private val taskIdField = JBTextField()
     private val stageField = JBTextField()
@@ -43,15 +44,14 @@ class ByTaskSettingsEditor : SettingsEditor<ByTaskConfiguration>() {
     private val allFilesCheckBox = JBCheckBox(BasedPythonBundle.message("tasks.editor.allFiles"))
     private val extraArgsField = JBTextField()
     private val workingDirField = TextFieldWithBrowseButton().apply {
-        @Suppress("DEPRECATION")
         addBrowseFolderListener(
-            BasedPythonBundle.message("tasks.editor.workingDir.title"),
-            BasedPythonBundle.message("tasks.editor.workingDir.description"),
             null,
-            FileChooserDescriptorFactory.createSingleFolderDescriptor(),
+            FileChooserDescriptorFactory.createSingleFolderDescriptor()
+                .withTitle(BasedPythonBundle.message("tasks.editor.workingDir.title"))
+                .withDescription(BasedPythonBundle.message("tasks.editor.workingDir.description")),
         )
     }
-    private val envVarsComponent = EnvironmentVariablesComponent()
+    private val envVarsComponent = EnvironmentVariablesComponent(project)
     private val commandPreview = JBLabel().apply {
         font = UIUtil.getLabelFont(UIUtil.FontSize.SMALL)
         foreground = UIUtil.getContextHelpForeground()

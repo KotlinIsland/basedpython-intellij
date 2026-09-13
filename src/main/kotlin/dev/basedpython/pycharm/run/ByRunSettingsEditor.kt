@@ -18,12 +18,11 @@ class ByRunSettingsEditor(private val project: Project) : SettingsEditor<ByRunCo
     private val moduleField = JBTextField()
     private val environmentCombo = ByEnvironmentComboBox()
     private val workingDirField = TextFieldWithBrowseButton().apply {
-        @Suppress("DEPRECATION")
         addBrowseFolderListener(
-            "Working Directory",
-            "Directory the by run command is invoked from",
             null,
             FileChooserDescriptorFactory.createSingleFolderDescriptor()
+                .withTitle("Working Directory")
+                .withDescription("Directory the by run command is invoked from"),
         )
     }
 
@@ -39,7 +38,7 @@ class ByRunSettingsEditor(private val project: Project) : SettingsEditor<ByRunCo
     }.apply { setButtonIcon(AllIcons.Actions.Edit) }
     private val extraArgsField = JBTextField()
     private val pythonVersionField = JBTextField()
-    private val envVarsComponent = EnvironmentVariablesComponent()
+    private val envVarsComponent = EnvironmentVariablesComponent(project)
 
     private val panel: JPanel = FormBuilder.createFormBuilder()
         .addLabeledComponent("Module:", moduleField)

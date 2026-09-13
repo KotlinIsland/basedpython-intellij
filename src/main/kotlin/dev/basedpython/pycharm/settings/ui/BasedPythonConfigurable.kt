@@ -7,7 +7,7 @@ import com.intellij.openapi.options.Configurable
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.fileTypes.ex.FileTypeManagerEx
 import com.intellij.openapi.ui.ComboBox
-import com.intellij.ui.SimpleListCellRenderer
+import com.intellij.ui.dsl.listCellRenderer.textListCellRenderer
 import dev.basedpython.pycharm.lang.dialect.PyFileHandling
 import com.intellij.openapi.ui.TextFieldWithBrowseButton
 import com.intellij.ui.components.JBLabel
@@ -49,19 +49,19 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
     private val byPathField = TextFieldWithBrowseButton().apply {
         textField.toolTipText = "Autodetect from .venv/"
         addBrowseFolderListener(
-            "Select the by Binary",
-            "Path to the by language server binary",
             project,
-            FileChooserDescriptorFactory.createSingleFileDescriptor(),
+            FileChooserDescriptorFactory.singleFileOrDir()
+                .withTitle("Select the by Binary")
+                .withDescription("Path to the by language server binary"),
         )
     }
     private val buffPathField = TextFieldWithBrowseButton().apply {
         textField.toolTipText = "Autodetect from .venv/"
         addBrowseFolderListener(
-            "Select the buff Binary",
-            "Path to the buff formatter/linter binary",
             project,
-            FileChooserDescriptorFactory.createSingleFileDescriptor(),
+            FileChooserDescriptorFactory.singleFileOrDir()
+                .withTitle("Select the buff Binary")
+                .withDescription("Path to the buff formatter/linter binary"),
         )
     }
 
@@ -86,7 +86,7 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
         ByHintKind.entries.associateWith { modeCombo() }
 
     private val inlayPushKeyCombo = ComboBox(ByPushKey.entries.toTypedArray()).apply {
-        renderer = SimpleListCellRenderer.create("") { it.display }
+        renderer = textListCellRenderer("") { it.display }
     }
 
     private val lspTraceCombo = ComboBox(arrayOf("off", "messages", "verbose"))
@@ -97,15 +97,14 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
 
     /** Renders a [PyFileHandling] by its user-facing text while the model holds the enum. */
     private val pyFileHandlingCombo = ComboBox(PyFileHandling.entries.toTypedArray()).apply {
-        renderer = SimpleListCellRenderer.create("") { it.display }
+        renderer = textListCellRenderer("") { it.display }
     }
 
     private val debugBackendCombo = ComboBox(ByDebugBackend.entries.toTypedArray()).apply {
-        renderer = SimpleListCellRenderer.create("") {
+        renderer = textListCellRenderer("") {
             when (it) {
                 ByDebugBackend.BPD -> "bpd (recommended)"
                 ByDebugBackend.DEBUGPY -> "debugpy"
-                null -> ""
             }
         }
     }
@@ -216,7 +215,7 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
     /** Renders a [ByHintMode] by its user-facing text while the model holds the enum. */
     private fun modeCombo(): ComboBox<ByHintMode> =
         ComboBox(ByHintMode.entries.toTypedArray()).apply {
-            renderer = SimpleListCellRenderer.create("") { it.display }
+            renderer = textListCellRenderer("") { it.display }
         }
 
     private fun rowWithButton(field: JComponent, button: JButton): JComponent {
@@ -366,7 +365,7 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
      */
     private fun redrawInlayHints() {
         InlayHintsPassFactoryInternal.forceHintsUpdateOnNextPass()
-        DaemonCodeAnalyzer.getInstance(project).restart()
+        DaemonCodeAnalyzer.getInstance(project).restart("basedpython inlay hint settings applied")
     }
 
     /**

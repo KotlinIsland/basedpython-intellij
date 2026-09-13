@@ -6,6 +6,8 @@ import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
 import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.ActionPlaces
+import com.intellij.openapi.actionSystem.ActionUiKind
+import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.ex.ActionUtil
 import com.intellij.openapi.actionSystem.impl.SimpleDataContext
 import com.intellij.openapi.options.ShowSettingsUtil
@@ -58,13 +60,17 @@ internal object BasedPythonLogNotifications {
         NotificationAction.createSimple(BasedPythonBundle.message("notification.action.restartLsp")) {
             val action = ActionManager.getInstance().getAction(RESTART_LSP_ACTION_ID)
                 ?: return@createSimple
-            ActionUtil.invokeAction(
+            // What the deprecated `invokeAction(action, dataContext, place, null, null)` built:
+            // `Notification` is one of the platform's popup places, hence POPUP.
+            val event = AnActionEvent.createEvent(
                 action,
                 SimpleDataContext.getProjectContext(project),
-                ActionPlaces.NOTIFICATION,
                 null,
+                ActionPlaces.NOTIFICATION,
+                ActionUiKind.POPUP,
                 null,
             )
+            ActionUtil.performAction(action, event)
         }
 
     fun viewLog(project: Project): NotificationAction =

@@ -1,7 +1,7 @@
 package dev.basedpython.pycharm.env.manager
 
-import com.intellij.execution.configurations.PathEnvironmentVariableUtil
 import com.intellij.openapi.util.SystemInfo
+import dev.basedpython.pycharm.env.Executables
 import dev.basedpython.pycharm.env.download.ByBinaryDownloadPlan
 import java.nio.file.Files
 import java.nio.file.Path
@@ -29,7 +29,7 @@ object EnvTools {
     fun find(backend: EnvBackend): Path? {
         val name = executableName(backend.executableName)
         managedDir()?.resolve(name)?.takeIf { Files.isExecutable(it) }?.let { return it }
-        PathEnvironmentVariableUtil.findInPath(name)?.toPath()?.let { return it }
+        Executables.findOnPath(name)?.let { return it }
         return conventionalDirs().asSequence()
             .map { it.resolve(name) }
             .firstOrNull { Files.isExecutable(it) }

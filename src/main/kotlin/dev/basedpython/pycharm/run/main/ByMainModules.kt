@@ -52,8 +52,8 @@ internal object ByMainModules {
      */
     fun mainIn(project: Project, file: VirtualFile): ByMainFunction? {
         if (!BasedPythonSources.hasGeneratedEntryPoint(file)) return null
-        return ReadAction.compute<ByMainFunction?, RuntimeException> {
-            val document = FileDocumentManager.getInstance().getDocument(file) ?: return@compute null
+        return ReadAction.computeBlocking<ByMainFunction?, RuntimeException> {
+            val document = FileDocumentManager.getInstance().getDocument(file) ?: return@computeBlocking null
             mainIn(document)
         }
     }

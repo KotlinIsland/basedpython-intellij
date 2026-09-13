@@ -12,6 +12,8 @@ import com.intellij.psi.PsiFile
 import com.intellij.xdebugger.XDebuggerManager
 import com.intellij.xdebugger.XDebuggerUtil
 import com.intellij.xdebugger.breakpoints.SuspendPolicy
+import com.intellij.xdebugger.breakpoints.XLineBreakpoint
+import dev.basedpython.pycharm.debug.ByBreakpointProperties
 import dev.basedpython.pycharm.debug.ByLineBreakpointType
 import dev.basedpython.pycharm.debug.logpoint.ByLogpointUndo
 import dev.basedpython.pycharm.debug.logpoint.ByLogpoints
@@ -82,7 +84,10 @@ private class ReplaceWithLogpointFix : LocalQuickFix {
         // Asked before the deletion, so in the line numbering the document still has. A breakpoint
         // already sitting there is somebody's, with its own condition and log settings; taking the
         // line would overwrite them, and a second breakpoint on one line is not what was asked for.
-        if (breakpoints.findBreakpointAtLine(type, virtualFile, candidate.followerLine) != null) return
+        val taken = breakpoints.findBreakpointsAtLine<XLineBreakpoint<ByBreakpointProperties>, ByBreakpointProperties>(
+            type, virtualFile, candidate.followerLine,
+        )
+        if (taken.isNotEmpty()) return
 
         document.deleteString(candidate.lineStart, candidate.lineEndWithSeparator)
         documentManager.commitDocument(document)

@@ -1,6 +1,5 @@
 package dev.basedpython.pycharm.env
 
-import com.intellij.execution.configurations.PathEnvironmentVariableUtil
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.module.ModuleManager
 import com.intellij.openapi.progress.ProcessCanceledException
@@ -386,8 +385,8 @@ object ByEnvironments {
             }
 
         fun fromPath(): ByLaunch? =
-            PathEnvironmentVariableUtil.findInPath(exeName(binary))
-                ?.let { ByLaunch(it.toPath(), emptyList(), emptyMap(), null, ByEnvironmentKind.PATH) }
+            Executables.findOnPath(exeName(binary))
+                ?.let { ByLaunch(it, emptyList(), emptyMap(), null, ByEnvironmentKind.PATH) }
 
         return when (kind) {
             ByEnvironmentKind.VENV -> fromVenv()
@@ -401,7 +400,7 @@ object ByEnvironments {
         }
     }
 
-    /** `findInPath` matches the exact file name and does not apply PATHEXT, so add it ourselves. */
+    /** `PATH` lookups match the exact file name and do not apply PATHEXT, so add it ourselves. */
     private fun exeName(binary: String): String = if (SystemInfo.isWindows) "$binary.exe" else binary
 
     /**
@@ -444,8 +443,8 @@ object ByEnvironments {
         // `python3` first on POSIX; Windows ships only `python`. Both names are tried either way so a
         // POSIX box with only `python`, or a Windows box with a `python3` shim, still resolves.
         for (name in listOf("python3", "python")) {
-            PathEnvironmentVariableUtil.findInPath(exeName(name))?.let {
-                return ByLaunch(it.toPath(), emptyList(), emptyMap(), null, ByEnvironmentKind.PATH)
+            Executables.findOnPath(exeName(name))?.let {
+                return ByLaunch(it, emptyList(), emptyMap(), null, ByEnvironmentKind.PATH)
             }
         }
         return null

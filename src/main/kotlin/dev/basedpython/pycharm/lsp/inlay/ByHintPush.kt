@@ -52,9 +52,16 @@ class ByHintPush : Disposable {
 
     private val installed = AtomicBoolean(false)
 
-    private val dispatcher = IdeEventQueue.EventDispatcher { event ->
-        onEvent(event)
-        false
+    /**
+     * A [IdeEventQueue.NonLockedEventDispatcher], so an input event costs a mask and a compare with
+     * no lock taken. The write-intent lock the plain kind held around every event is taken in
+     * [onEvent] only when the modifiers changed and the editors have to be told.
+     */
+    private val dispatcher = object : IdeEventQueue.NonLockedEventDispatcher {
+        override fun dispatch(e: AWTEvent): Boolean {
+            onEvent(e)
+            return false
+        }
     }
 
     /** Whether [key] is held down at this moment. */
@@ -97,7 +104,9 @@ class ByHintPush : Disposable {
         }
         if (next == modifiers) return
         modifiers = next
-        notifyWatchers()
+        ApplicationManager.getApplication().runWriteIntentReadAction<Unit, RuntimeException> {
+            notifyWatchers()
+        }
     }
 
     /**

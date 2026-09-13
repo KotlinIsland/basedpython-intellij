@@ -5,9 +5,8 @@ import com.intellij.ide.util.PropertiesComponent
 import com.intellij.notification.NotificationAction
 import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
-import com.intellij.openapi.application.readAction
+import com.intellij.openapi.application.smartReadAction
 import com.intellij.openapi.options.ShowSettingsUtil
-import com.intellij.openapi.project.DumbService
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.startup.ProjectActivity
 import com.intellij.psi.search.FileTypeIndex
@@ -51,13 +50,13 @@ internal class BasedPythonWelcomeActivity : ProjectActivity {
     private suspend fun Project.isBasedPythonProject(): Boolean {
         val project = this
         if (BasedPythonProjectDetector.isBasedPythonProject(project)) return true
-        return readAction {
-            DumbService.getInstance(project).runReadActionInSmartMode<Boolean> {
-                FileTypeIndex.getFiles(
-                    BasedPythonFileType.INSTANCE,
-                    GlobalSearchScope.projectScope(project),
-                ).isNotEmpty()
-            }
+        // Waits for indexing to finish. `runReadActionInSmartMode` inside a read action never
+        // waited — it ran at once, and threw IndexNotReadyException when the project was dumb.
+        return smartReadAction(project) {
+            FileTypeIndex.getFiles(
+                BasedPythonFileType.INSTANCE,
+                GlobalSearchScope.projectScope(project),
+            ).isNotEmpty()
         }
     }
 

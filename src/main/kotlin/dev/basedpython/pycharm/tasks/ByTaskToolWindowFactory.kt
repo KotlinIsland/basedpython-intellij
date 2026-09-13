@@ -17,6 +17,8 @@ import java.nio.file.Paths
  * and a plugin that reads it should not make a Python project prove itself first. What gates the
  * window is the only thing that matters — whether there is anything in it.
  */
+// No compiler bridges to the deprecated `isApplicable` / `isDoNotActivateOnStart` defaults.
+@JvmDefaultWithoutCompatibility
 internal class ByTaskToolWindowFactory : ToolWindowFactory, DumbAware {
 
     override fun shouldBeAvailable(project: Project): Boolean = ByTaskToolWindow.hasConfiguration(project)

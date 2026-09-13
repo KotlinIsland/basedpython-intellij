@@ -32,7 +32,7 @@ class ImportSettingsAction : AnAction(), DumbAware {
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
 
-        val descriptor = FileChooserDescriptorFactory.createSingleFileDescriptor()
+        val descriptor = FileChooserDescriptorFactory.singleFileOrDir()
             .withTitle(BasedPythonBundle.message("settings.import.dialog.title"))
             .withDescription(BasedPythonBundle.message("settings.import.dialog.description"))
             .withFileFilter { it.extension.equals("xml", ignoreCase = true) }

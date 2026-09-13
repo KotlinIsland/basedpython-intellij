@@ -1,7 +1,7 @@
 package dev.basedpython.pycharm.debug.bpd
 
-import com.intellij.execution.configurations.PathEnvironmentVariableUtil
 import dev.basedpython.pycharm.env.ByLaunch
+import dev.basedpython.pycharm.env.Executables
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -31,7 +31,7 @@ object ByBpdExecutable {
      */
     fun resolve(launch: ByLaunch?): Path? {
         beside(launch)?.let { return it }
-        return PathEnvironmentVariableUtil.findInPath(name())?.toPath()
+        return Executables.findOnPath(name())
     }
 
     /**

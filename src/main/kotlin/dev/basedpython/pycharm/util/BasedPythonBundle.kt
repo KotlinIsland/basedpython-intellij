@@ -24,7 +24,7 @@ import org.jetbrains.annotations.PropertyKey
 @NonNls
 private const val BUNDLE = "messages.BasedPythonBundle"
 
-object BasedPythonBundle : DynamicBundle(BUNDLE) {
+object BasedPythonBundle : DynamicBundle(BasedPythonBundle::class.java, BUNDLE) {
 
     /**
      * Returns the localised message for [key], substituting [params] for any

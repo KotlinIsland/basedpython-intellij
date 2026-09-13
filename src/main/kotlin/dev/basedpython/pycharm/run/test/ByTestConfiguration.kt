@@ -51,7 +51,7 @@ class ByTestConfiguration(project: Project, factory: ConfigurationFactory, name:
     public override fun getOptions(): ByTestOptions = super.getOptions() as ByTestOptions
 
     override fun getConfigurationEditor(): SettingsEditor<out RunConfigurationBase<ByTestOptions>> =
-        ByTestSettingsEditor()
+        ByTestSettingsEditor(project)
 
     override fun checkConfiguration() {
         if (!BasedPythonBinaries.isByAvailable(project)) {

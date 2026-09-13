@@ -61,7 +61,7 @@ class ByDataFlowSession(private val project: Project) {
         ApplicationManager.getApplication().invokeLater({
             if (project.isDisposed || !file.isValid) return@invokeLater
             val psi = PsiManager.getInstance(project).findFile(file) ?: return@invokeLater
-            DaemonCodeAnalyzer.getInstance(project).restart(psi)
+            DaemonCodeAnalyzer.getInstance(project).restart(psi, "basedpython data flow verdicts changed")
         }, project.disposed)
     }
 

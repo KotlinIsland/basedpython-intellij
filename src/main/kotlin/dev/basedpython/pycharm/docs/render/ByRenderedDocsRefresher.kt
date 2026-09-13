@@ -114,9 +114,9 @@ internal class ByRenderedDocsRefresher : ProjectActivity {
 
     /** Re-runs the rendering pass over [file], but only if it is a `.by` file with nothing recorded. */
     private fun refreshIfStale(project: Project, file: VirtualFile) {
-        val stale = ReadAction.compute<Boolean, RuntimeException> {
-            if (project.isDisposed || !file.isValid) return@compute false
-            val psiFile = PsiManager.getInstance(project).findFile(file) ?: return@compute false
+        val stale = ReadAction.computeBlocking<Boolean, RuntimeException> {
+            if (project.isDisposed || !file.isValid) return@computeBlocking false
+            val psiFile = PsiManager.getInstance(project).findFile(file) ?: return@computeBlocking false
             psiFile is BasedPythonFile && ByDocstringSpans.cached(psiFile).isEmpty()
         }
         if (!stale) return

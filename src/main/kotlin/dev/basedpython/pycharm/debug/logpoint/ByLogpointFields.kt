@@ -79,7 +79,7 @@ class ByLogpointFields(private val project: Project) : XBreakpointListener<XBrea
         if (!StartupManager.getInstance(project).postStartupActivityPassed()) return
         // In a read action: breakpoints are added from a coroutine dispatcher as well as from the
         // EDT, and looking a document up off both is a read-access assertion, not a race to lose.
-        val document = ReadAction.compute<Document?, RuntimeException> {
+        val document = ReadAction.computeBlocking<Document?, RuntimeException> {
             FileDocumentManager.getInstance().getCachedDocument(file)
         } ?: return
         // A command joined has to be joined now, while it is still open; a command of our own has to

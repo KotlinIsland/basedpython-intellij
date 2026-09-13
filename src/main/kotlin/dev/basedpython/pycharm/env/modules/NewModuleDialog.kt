@@ -5,11 +5,11 @@ import com.intellij.openapi.ui.ComboBox
 import com.intellij.openapi.ui.DialogWrapper
 import com.intellij.openapi.ui.ValidationInfo
 import com.intellij.ui.DocumentAdapter
-import com.intellij.ui.SimpleListCellRenderer
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBTextField
 import com.intellij.ui.dsl.builder.AlignX
 import com.intellij.ui.dsl.builder.panel
+import com.intellij.ui.dsl.listCellRenderer.textListCellRenderer
 import com.intellij.util.ui.UIUtil
 import dev.basedpython.pycharm.env.manager.EnvOp
 import dev.basedpython.pycharm.env.manager.EnvService
@@ -56,7 +56,7 @@ internal class NewModuleDialog(
     private var locationEdited = false
 
     private val kindBox = ComboBox(ModuleKind.entries.toTypedArray()).apply {
-        renderer = SimpleListCellRenderer.create("") { BasedPythonBundle.message(kindKey(it)) }
+        renderer = textListCellRenderer("") { BasedPythonBundle.message(kindKey(it)) }
         selectedItem = ModuleKind.LIBRARY
     }
 
@@ -66,7 +66,7 @@ internal class NewModuleDialog(
     private val dependentBox = ComboBox(
         (listOf(null) + layout.all.map { it.name }).toTypedArray(),
     ).apply {
-        renderer = SimpleListCellRenderer.create("") {
+        renderer = textListCellRenderer<String?> {
             it ?: BasedPythonBundle.message("modules.new.dependent.none")
         }
     }

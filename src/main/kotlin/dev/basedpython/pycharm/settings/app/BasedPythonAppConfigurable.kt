@@ -24,19 +24,19 @@ internal class BasedPythonAppConfigurable : Configurable {
     private val byPathField = TextFieldWithBrowseButton().apply {
         textField.toolTipText = "Default by binary for new projects (blank = autodetect)"
         addBrowseFolderListener(
-            "Select the Default by Binary",
-            "Default path to the by language server binary",
             null,
-            FileChooserDescriptorFactory.createSingleFileDescriptor(),
+            FileChooserDescriptorFactory.singleFileOrDir()
+                .withTitle("Select the Default by Binary")
+                .withDescription("Default path to the by language server binary"),
         )
     }
     private val buffPathField = TextFieldWithBrowseButton().apply {
         textField.toolTipText = "Default buff binary for new projects (blank = autodetect)"
         addBrowseFolderListener(
-            "Select the Default buff Binary",
-            "Default path to the buff formatter/linter binary",
             null,
-            FileChooserDescriptorFactory.createSingleFileDescriptor(),
+            FileChooserDescriptorFactory.singleFileOrDir()
+                .withTitle("Select the Default buff Binary")
+                .withDescription("Default path to the buff formatter/linter binary"),
         )
     }
 

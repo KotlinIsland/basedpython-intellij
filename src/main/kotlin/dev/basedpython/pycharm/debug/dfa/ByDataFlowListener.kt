@@ -91,16 +91,16 @@ class ByDataFlowListener : XDebuggerManagerListener {
 
         /** Ask the debugger, then ask the server what the answer settles. */
         private fun analyse(project: Project, file: VirtualFile, line: Int): List<ByDataFlowFinding> {
-            val document = ReadAction.compute<Document?, RuntimeException> {
+            val document = ReadAction.computeBlocking<Document?, RuntimeException> {
                 FileDocumentManager.getInstance().getDocument(file)
             } ?: return emptyList()
 
-            val below = ReadAction.compute<Int, RuntimeException> {
+            val below = ReadAction.computeBlocking<Int, RuntimeException> {
                 if (line - 1 in 0 until document.lineCount) document.getLineStartOffset(line - 1) else -1
             }
             if (below < 0) return emptyList()
 
-            val text = ReadAction.compute<CharSequence, RuntimeException> { document.charsSequence }
+            val text = ReadAction.computeBlocking<CharSequence, RuntimeException> { document.charsSequence }
             val names = ByDataFlowNames.below(text, below)
             if (names.isEmpty()) return emptyList()
 

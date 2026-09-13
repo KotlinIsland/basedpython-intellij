@@ -2,11 +2,14 @@ package dev.basedpython.pycharm.transpile
 
 import com.intellij.diff.DiffManager
 import com.intellij.diff.requests.SimpleDiffRequest
+import com.intellij.openapi.Disposable
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.components.Service
+import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.editor.Document
 import com.intellij.openapi.editor.event.DocumentEvent
@@ -18,11 +21,13 @@ import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.testFramework.LightVirtualFile
 import dev.basedpython.pycharm.actions.ByCli
 import dev.basedpython.pycharm.util.BasedPythonBundle
 import dev.basedpython.pycharm.lang.BasedPythonFileType
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import javax.swing.Timer
@@ -97,12 +102,9 @@ class ShowTranspiledDiffAction : AnAction() {
 
     // ---- live refresh ----------------------------------------------------------
 
-    /** Tracks which files already have a listener installed (per project lifetime). */
-    private val listenerInstalled = mutableSetOf<String>()
-
     private fun installDocumentListener(project: Project, file: VirtualFile) {
-        val key = "${project.locationHash}::${file.path}"
-        if (!listenerInstalled.add(key)) return   // already watching this file
+        val refresh = project.service<TranspiledDiffRefresh>()
+        if (!refresh.watched.add(file.path)) return   // already watching this file
 
         val document: Document =
             FileDocumentManager.getInstance().getDocument(file) ?: return
@@ -142,13 +144,14 @@ class ShowTranspiledDiffAction : AnAction() {
             ProgressManager.getInstance().run(task)
         }
         debounce.isRepeats = false
+        Disposer.register(refresh) { debounce.stop() }
 
         document.addDocumentListener(object : DocumentListener {
             override fun documentChanged(event: DocumentEvent) {
                 pending.set(true)
                 debounce.restart()
             }
-        })
+        }, refresh)
     }
 
     private fun isByFile(file: VirtualFile): Boolean =
@@ -156,5 +159,25 @@ class ShowTranspiledDiffAction : AnAction() {
 
     companion object {
         private val LOG = Logger.getInstance(ShowTranspiledDiffAction::class.java)
+    }
+}
+
+/**
+ * What the live refresh of [ShowTranspiledDiffAction] hangs off: the files it watches in one project,
+ * and the parent its document listeners and debounce timers are disposed with.
+ *
+ * A document outlives the project that opened it, so a listener added with no parent stayed on it
+ * for as long as the IDE ran, holding the project and this plugin's classloader after either was
+ * closed or unloaded. A project service goes with the project and with the plugin, whichever is
+ * first, and takes every listener with it.
+ */
+@Service(Service.Level.PROJECT)
+internal class TranspiledDiffRefresh : Disposable {
+
+    /** Paths of the `.by` files that already have a listener in this project. */
+    val watched: MutableSet<String> = ConcurrentHashMap.newKeySet()
+
+    override fun dispose() {
+        watched.clear()
     }
 }

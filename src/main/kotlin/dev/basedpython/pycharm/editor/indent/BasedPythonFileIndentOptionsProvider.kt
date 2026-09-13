@@ -1,5 +1,9 @@
 package dev.basedpython.pycharm.editor.indent
 
+import com.intellij.openapi.fileEditor.FileDocumentManager
+import com.intellij.openapi.project.Project
+import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.psi.PsiDocumentManager
 import com.intellij.psi.PsiFile
 import com.intellij.psi.codeStyle.CodeStyleSettings
 import com.intellij.psi.codeStyle.CommonCodeStyleSettings.IndentOptions
@@ -18,7 +22,18 @@ import dev.basedpython.pycharm.lang.BasedPythonFileType
  */
 class BasedPythonFileIndentOptionsProvider : FileIndentOptionsProvider() {
 
-    override fun getIndentOptions(settings: CodeStyleSettings, file: PsiFile): IndentOptions? {
+    /**
+     * The overload the platform calls. Its default found the PSI of an already-loaded document and
+     * handed that to the `(CodeStyleSettings, PsiFile)` overload, which is deprecated; this does
+     * the same lookup itself, so a file with no loaded document still gets the platform default.
+     */
+    override fun getIndentOptions(project: Project, settings: CodeStyleSettings, file: VirtualFile): IndentOptions? {
+        val document = FileDocumentManager.getInstance().getCachedDocument(file) ?: return null
+        val psiFile = PsiDocumentManager.getInstance(project).getPsiFile(document) ?: return null
+        return indentOptions(settings, psiFile)
+    }
+
+    private fun indentOptions(settings: CodeStyleSettings, file: PsiFile): IndentOptions? {
         if (!isBasedPythonFile(file)) return null
 
         val text = file.text ?: return null

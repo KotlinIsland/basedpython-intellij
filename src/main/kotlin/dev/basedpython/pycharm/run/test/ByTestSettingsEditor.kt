@@ -3,6 +3,7 @@ package dev.basedpython.pycharm.run.test
 import com.intellij.execution.configuration.EnvironmentVariablesComponent
 import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
 import com.intellij.openapi.options.SettingsEditor
+import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.TextFieldWithBrowseButton
 import com.intellij.ui.components.JBTextField
 import com.intellij.util.ui.FormBuilder
@@ -10,21 +11,20 @@ import dev.basedpython.pycharm.run.ByEnvironmentComboBox
 import javax.swing.JComponent
 import javax.swing.JPanel
 
-class ByTestSettingsEditor : SettingsEditor<ByTestConfiguration>() {
+class ByTestSettingsEditor(private val project: Project) : SettingsEditor<ByTestConfiguration>() {
     private val pathsField = JBTextField()
     private val environmentCombo = ByEnvironmentComboBox()
     private val workingDirField = TextFieldWithBrowseButton().apply {
-        @Suppress("DEPRECATION")
         addBrowseFolderListener(
-            "Working Directory",
-            "Directory the by run pytest command is invoked from",
             null,
             FileChooserDescriptorFactory.createSingleFolderDescriptor()
+                .withTitle("Working Directory")
+                .withDescription("Directory the by run pytest command is invoked from"),
         )
     }
     private val extraArgsField = JBTextField()
     private val pythonVersionField = JBTextField()
-    private val envVarsComponent = EnvironmentVariablesComponent()
+    private val envVarsComponent = EnvironmentVariablesComponent(project)
 
     private val panel: JPanel = FormBuilder.createFormBuilder()
         .addLabeledComponent("Test targets (space-separated .by paths):", pathsField)

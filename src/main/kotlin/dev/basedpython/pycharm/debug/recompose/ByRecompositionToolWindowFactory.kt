@@ -14,6 +14,8 @@ import dev.basedpython.pycharm.lang.dialect.BasedPythonProjectDetector
  * Offered to basedpython projects, the way the test view is: its one source of data is a bpd
  * session of a `by run` configuration, and a project with no `by` has none to start.
  */
+// No compiler bridges to the deprecated `isApplicable` / `isDoNotActivateOnStart` defaults.
+@JvmDefaultWithoutCompatibility
 internal class ByRecompositionToolWindowFactory : ToolWindowFactory, DumbAware {
 
     override fun shouldBeAvailable(project: Project): Boolean =

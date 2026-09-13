@@ -536,7 +536,7 @@ internal class ByRecompositionSession(
             val daemon = DaemonCodeAnalyzer.getInstance(project)
             for (file in FileEditorManager.getInstance(project).openFiles) {
                 if (!file.isValid || normalise(file.path) !in paths) continue
-                psi.findFile(file)?.let(daemon::restart)
+                psi.findFile(file)?.let { daemon.restart(it, "basedpython recompositions changed") }
             }
         }, project.disposed)
     }

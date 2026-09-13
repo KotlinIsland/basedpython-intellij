@@ -96,7 +96,7 @@ class ByTaskConfiguration(project: Project, factory: ConfigurationFactory, name:
     public override fun getOptions(): ByTaskOptions = super.getOptions() as ByTaskOptions
 
     override fun getConfigurationEditor(): SettingsEditor<out RunConfigurationBase<ByTaskOptions>> =
-        ByTaskSettingsEditor()
+        ByTaskSettingsEditor(project)
 
     /**
      * Refuses a configuration that could not produce a command, and one whose runner is not

@@ -3,26 +3,26 @@ package dev.basedpython.pycharm.run
 import com.intellij.execution.configuration.EnvironmentVariablesComponent
 import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
 import com.intellij.openapi.options.SettingsEditor
+import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.TextFieldWithBrowseButton
 import com.intellij.ui.components.JBTextField
 import com.intellij.util.ui.FormBuilder
 import javax.swing.JComponent
 import javax.swing.JPanel
 
-class ByBuildSettingsEditor : SettingsEditor<ByBuildConfiguration>() {
+class ByBuildSettingsEditor(private val project: Project) : SettingsEditor<ByBuildConfiguration>() {
     private val environmentCombo = ByEnvironmentComboBox()
     private val workingDirField = TextFieldWithBrowseButton().apply {
-        @Suppress("DEPRECATION")
         addBrowseFolderListener(
-            "Working Directory",
-            "Directory the by build command is invoked from",
             null,
             FileChooserDescriptorFactory.createSingleFolderDescriptor()
+                .withTitle("Working Directory")
+                .withDescription("Directory the by build command is invoked from"),
         )
     }
     private val extraArgsField = JBTextField()
     private val pythonVersionField = JBTextField()
-    private val envVarsComponent = EnvironmentVariablesComponent()
+    private val envVarsComponent = EnvironmentVariablesComponent(project)
 
     private val panel: JPanel = FormBuilder.createFormBuilder()
         .addLabeledComponent("Environment:", environmentCombo)

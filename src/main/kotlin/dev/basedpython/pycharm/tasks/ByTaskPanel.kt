@@ -13,6 +13,7 @@ import com.intellij.openapi.project.DumbAwareAction
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.SimpleToolWindowPanel
 import com.intellij.ui.AnimatedIcon
+import com.intellij.ui.ClientProperty
 import com.intellij.ui.ColoredTreeCellRenderer
 import com.intellij.ui.DoubleClickListener
 import com.intellij.ui.PopupHandler
@@ -20,7 +21,6 @@ import com.intellij.ui.SimpleTextAttributes
 import com.intellij.ui.TreeSpeedSearch
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.treeStructure.Tree
-import com.intellij.util.ui.UIUtil
 import com.intellij.util.ui.tree.TreeUtil
 import dev.basedpython.pycharm.BasedPythonIcons
 import dev.basedpython.pycharm.util.BasedPythonBundle
@@ -65,7 +65,7 @@ internal class ByTaskPanel(private val project: Project) :
         tree.cellRenderer = NodeRenderer({ states }, { allFiles() })
         // Lets the running spinner actually spin: a cell renderer paints once per repaint, so the
         // icon has to be allowed to drive repaints of its own row.
-        UIUtil.putClientProperty(tree, AnimatedIcon.ANIMATION_IN_RENDERER_ALLOWED, true)
+        ClientProperty.put(tree, AnimatedIcon.ANIMATION_IN_RENDERER_ALLOWED, true)
         TreeSpeedSearch.installOn(tree)
 
         object : DoubleClickListener() {

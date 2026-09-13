@@ -10,6 +10,8 @@ import com.intellij.ui.content.ContentFactory
  * Backs the "basedpython" tool window (registered in plugin.xml) with the
  * [ConsoleView][com.intellij.execution.ui.ConsoleView] owned by [BasedPythonLog].
  */
+// No compiler bridges to the deprecated `isApplicable` / `isDoNotActivateOnStart` defaults.
+@JvmDefaultWithoutCompatibility
 internal class BasedPythonLogToolWindowFactory : ToolWindowFactory, DumbAware {
 
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {

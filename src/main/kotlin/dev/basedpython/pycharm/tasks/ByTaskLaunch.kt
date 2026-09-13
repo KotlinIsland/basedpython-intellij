@@ -1,6 +1,5 @@
 package dev.basedpython.pycharm.tasks
 
-import com.intellij.execution.configurations.PathEnvironmentVariableUtil
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.SystemInfo
 import dev.basedpython.pycharm.env.ByEnvironmentKind
@@ -60,9 +59,8 @@ internal object ByTaskLaunch {
     private fun wrapperNames(): List<String> = if (SystemInfo.isWindows) listOf("pw.bat", "pw") else listOf("pw")
 
     private fun onPath(name: String): ByLaunch? {
-        val exe: Path = PathEnvironmentVariableUtil
-            .findInPath(if (SystemInfo.isWindows) "$name.exe" else name)
-            ?.toPath()
+        val exe: Path = Executables
+            .findOnPath(if (SystemInfo.isWindows) "$name.exe" else name)
             ?: return null
         return ByLaunch(exe, emptyList(), emptyMap(), null, ByEnvironmentKind.PATH)
     }

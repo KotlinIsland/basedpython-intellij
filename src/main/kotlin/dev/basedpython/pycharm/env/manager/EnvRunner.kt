@@ -1,8 +1,8 @@
 package dev.basedpython.pycharm.env.manager
 
 import com.intellij.execution.configurations.GeneralCommandLine
-import com.intellij.execution.process.ProcessAdapter
 import com.intellij.execution.process.ProcessEvent
+import com.intellij.execution.process.ProcessListener
 import com.intellij.execution.process.ProcessOutputTypes
 import com.intellij.execution.util.ExecUtil
 import com.intellij.execution.process.OSProcessHandler
@@ -116,7 +116,7 @@ internal object EnvRunner {
         val err = StringBuilder()
         return try {
             val handler = OSProcessHandler(cmd)
-            handler.addProcessListener(object : ProcessAdapter() {
+            handler.addProcessListener(object : ProcessListener {
                 override fun onTextAvailable(event: ProcessEvent, outputType: Key<*>) {
                     val isError = outputType == ProcessOutputTypes.STDERR
                     (if (isError) err else out).append(event.text)
