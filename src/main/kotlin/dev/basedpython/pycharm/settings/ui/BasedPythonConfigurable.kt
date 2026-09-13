@@ -441,11 +441,6 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
         rootPanel = null
     }
 
-    /**
-     * Trigger LSP restart. Stream B owns LspServerManager wiring; we reflectively
-     * invoke its stopAndRestartIfNeeded if available so we don't hard-depend on
-     * a class that may shift names during integration.
-     */
     private class SimpleDocListener(val onChange: () -> Unit) : javax.swing.event.DocumentListener {
         override fun insertUpdate(e: javax.swing.event.DocumentEvent) { onChange() }
         override fun removeUpdate(e: javax.swing.event.DocumentEvent) { onChange() }
