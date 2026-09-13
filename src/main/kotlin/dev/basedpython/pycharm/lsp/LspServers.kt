@@ -1,7 +1,7 @@
 package dev.basedpython.pycharm.lsp
 
 import com.intellij.execution.configurations.GeneralCommandLine
-import com.intellij.execution.process.OSProcessHandler
+import com.intellij.execution.process.BaseProcessHandler
 import com.intellij.execution.process.ProcessEvent
 import com.intellij.execution.process.ProcessListener
 import com.intellij.execution.process.ProcessOutputTypes
@@ -9,11 +9,11 @@ import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Key
 import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.platform.lsp.api.LspServer
+import com.intellij.platform.lsp.api.LspClient
+import com.intellij.platform.lsp.api.LspIntegrationProvider
+import com.intellij.platform.lsp.api.LspIntegrationProvider.LspClientStarter
 import com.intellij.platform.lsp.api.LspServerListener
-import com.intellij.platform.lsp.api.LspServerSupportProvider
-import com.intellij.platform.lsp.api.LspServerSupportProvider.LspServerStarter
-import com.intellij.platform.lsp.api.ProjectWideLspServerDescriptor
+import com.intellij.platform.lsp.api.ProjectWideLspClientDescriptor
 import com.intellij.platform.lsp.api.customization.LspCallHierarchyDisabled
 import com.intellij.platform.lsp.api.customization.LspCodeActionsDisabled
 import com.intellij.platform.lsp.api.customization.LspCodeLensDisabled
@@ -36,7 +36,7 @@ import com.intellij.platform.lsp.api.customization.LspSelectionRangeDisabled
 import com.intellij.platform.lsp.api.customization.LspSemanticTokensDisabled
 import com.intellij.platform.lsp.api.customization.LspSignatureHelpDisabled
 import com.intellij.platform.lsp.api.customization.LspTypeHierarchyDisabled
-import com.intellij.platform.lsp.api.lsWidget.LspServerWidgetItem
+import com.intellij.platform.lsp.api.lsWidget.LspClientWidgetItem
 import dev.basedpython.pycharm.BasedPythonIcons
 import dev.basedpython.pycharm.debug.dfa.ByDataFlowServer
 import dev.basedpython.pycharm.env.ByLaunch
@@ -57,7 +57,7 @@ private val LOG = Logger.getInstance("dev.basedpython.pycharm.lsp")
  * Attaching a listener is additive and does not consume the stream, so the platform's own reader is
  * unaffected.
  */
-private fun OSProcessHandler.mirrorStderrTo(project: Project, serverName: String): OSProcessHandler {
+private fun BaseProcessHandler<*>.mirrorStderrTo(project: Project, serverName: String): BaseProcessHandler<*> {
     val log = BasedPythonLog.getInstance(project)
     addProcessListener(object : ProcessListener {
         override fun onTextAvailable(event: ProcessEvent, outputType: Key<*>) {
@@ -108,8 +108,8 @@ private fun splitArgs(raw: String): List<String> =
 
 // region: `by` server (type checker + general LSP)
 
-internal class ByLspServerSupportProvider : LspServerSupportProvider {
-  override fun fileOpened(project: Project, file: VirtualFile, serverStarter: LspServerStarter) {
+internal class ByLspServerSupportProvider : LspIntegrationProvider {
+  override fun fileOpened(project: Project, file: VirtualFile, clientStarter: LspClientStarter) {
     if (!file.isByServerFile()) return
     if (!shouldServe(project, file)) return
     val settings = BasedPythonSettings.getInstance(project)
@@ -122,7 +122,7 @@ internal class ByLspServerSupportProvider : LspServerSupportProvider {
       BasedPythonNotifications.warnBinaryMissing(project, "by")
       return
     }
-    serverStarter.ensureServerStarted(ByLspServerDescriptor(project, launch, splitArgs(settings.effectiveByExtraArgs)))
+    clientStarter.ensureClientStarted(ByLspServerDescriptor(project, launch, splitArgs(settings.effectiveByExtraArgs)))
   }
 
   /**
@@ -134,15 +134,15 @@ internal class ByLspServerSupportProvider : LspServerSupportProvider {
    * via [BasedPythonIcons.Logo]) rather than one drawn for the widget: the row names the server
    * that owns `.by` files, and the popup is where a user goes looking for it by that mark.
    */
-  override fun createLspServerWidgetItem(lspServer: LspServer, currentFile: VirtualFile?): LspServerWidgetItem =
-    LspServerWidgetItem(lspServer, currentFile, BasedPythonIcons.Logo)
+  override fun createWidgetItem(lspClient: LspClient, currentFile: VirtualFile?): LspClientWidgetItem =
+    LspClientWidgetItem(lspClient, currentFile, BasedPythonIcons.Logo)
 }
 
 internal class ByLspServerDescriptor(
   project: Project,
   private val launch: ByLaunch,
   private val extraArgs: List<String>,
-) : ProjectWideLspServerDescriptor(project, "basedpython") {
+) : ProjectWideLspClientDescriptor(project, "basedpython") {
 
   override fun isSupportedFile(file: VirtualFile): Boolean = file.isByServerFile()
 
@@ -157,7 +157,7 @@ internal class ByLspServerDescriptor(
       addAll(extraArgs)
     }).withEnvironment(launch.env)
 
-  override fun startServerProcess(): OSProcessHandler =
+  override fun startServerProcess(): BaseProcessHandler<*> =
     super.startServerProcess().mirrorStderrTo(project, "by")
 
   /**
@@ -241,8 +241,8 @@ internal class ByLspServerDescriptor(
 
 // region: `buff` server (ruff fork — formatter / linter)
 
-internal class BuffLspServerSupportProvider : LspServerSupportProvider {
-  override fun fileOpened(project: Project, file: VirtualFile, serverStarter: LspServerStarter) {
+internal class BuffLspServerSupportProvider : LspIntegrationProvider {
+  override fun fileOpened(project: Project, file: VirtualFile, clientStarter: LspClientStarter) {
     if (!file.isBasedPythonSource()) return
     if (!shouldServe(project, file)) return
     val settings = BasedPythonSettings.getInstance(project)
@@ -253,7 +253,7 @@ internal class BuffLspServerSupportProvider : LspServerSupportProvider {
       BasedPythonNotifications.warnBinaryMissing(project, "buff")
       return
     }
-    serverStarter.ensureServerStarted(BuffLspServerDescriptor(project, launch, splitArgs(settings.effectiveBuffExtraArgs)))
+    clientStarter.ensureClientStarted(BuffLspServerDescriptor(project, launch, splitArgs(settings.effectiveBuffExtraArgs)))
   }
 }
 
@@ -261,7 +261,7 @@ internal class BuffLspServerDescriptor(
   project: Project,
   private val launch: ByLaunch,
   private val extraArgs: List<String>,
-) : ProjectWideLspServerDescriptor(project, "buff") {
+) : ProjectWideLspClientDescriptor(project, "buff") {
 
   override fun isSupportedFile(file: VirtualFile): Boolean = file.isBasedPythonSource()
 
@@ -276,7 +276,7 @@ internal class BuffLspServerDescriptor(
       addAll(extraArgs)
     }).withEnvironment(launch.env)
 
-  override fun startServerProcess(): OSProcessHandler =
+  override fun startServerProcess(): BaseProcessHandler<*> =
     super.startServerProcess().mirrorStderrTo(project, "buff")
 
   /**

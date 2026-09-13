@@ -843,6 +843,12 @@
 
 ### Changed
 
+- The `by` and `buff` servers are registered through the platform's `LspIntegrationProvider` /
+  `ProjectWideLspClientDescriptor` / `LspClientManager` API rather than the `LspServer*` classes
+  2026.3 deprecates — which were 87 of the 139 deprecated usages the Plugin Verifier reported
+  against IU-263.4732.28, and are now none of the 52. Every replacement already exists in 2026.2,
+  and the old classes were thin subclasses of the new ones, so nothing a user sees changes. The
+  extension point is `platform.lsp.integrationProvider`; the old one only ever fed the same list.
 - Log points are added by `Ctrl+Alt+F8`, the gutter menu or the `print` quick fix, and no longer
   by hovering between two line numbers. JetBrains Marketplace declined this plugin's first
   submission for using internal API, and the gutter gap was the largest single piece of it: the

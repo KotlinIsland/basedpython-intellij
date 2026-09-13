@@ -11,7 +11,7 @@ import com.intellij.openapi.ui.popup.JBPopupFactory
 import com.intellij.openapi.wm.StatusBar
 import com.intellij.openapi.wm.StatusBarWidget
 import com.intellij.openapi.wm.StatusBarWidget.WidgetPresentation
-import com.intellij.platform.lsp.api.LspServerManager
+import com.intellij.platform.lsp.api.LspClientManager
 import com.intellij.util.Consumer
 import dev.basedpython.pycharm.lsp.BuffLspServerSupportProvider
 import dev.basedpython.pycharm.lsp.ByLspLifecycleListener
@@ -143,9 +143,9 @@ internal class BasedPythonStatusBarWidget(private val project: Project) :
     }
 
     private fun restartLsp() {
-        val mgr = LspServerManager.getInstance(project)
-        mgr.stopAndRestartIfNeeded(ByLspServerSupportProvider::class.java)
-        mgr.stopAndRestartIfNeeded(BuffLspServerSupportProvider::class.java)
+        val mgr = LspClientManager.getInstance(project)
+        mgr.stopAndRestartClientsIfNeeded(ByLspServerSupportProvider::class.java)
+        mgr.stopAndRestartClientsIfNeeded(BuffLspServerSupportProvider::class.java)
         update()
         refreshVersions()
     }

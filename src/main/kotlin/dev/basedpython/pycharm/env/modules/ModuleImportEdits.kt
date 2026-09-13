@@ -7,8 +7,8 @@ import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.platform.lsp.api.LspServer
-import com.intellij.platform.lsp.api.LspServerManager
+import com.intellij.platform.lsp.api.LspClient
+import com.intellij.platform.lsp.api.LspClientManager
 import dev.basedpython.pycharm.format.ByCleanup
 import dev.basedpython.pycharm.lsp.ByAnswer
 import dev.basedpython.pycharm.lsp.ByLspServerSupportProvider
@@ -54,7 +54,7 @@ internal object ModuleImportEdits {
     fun isSupported(project: Project): Boolean = server(project)?.let(::advertises) == true
 
     /** The server's own word on whether it handles `workspace/willRenameFiles`. */
-    private fun advertises(server: LspServer): Boolean =
+    private fun advertises(server: LspClient): Boolean =
         server.initializeResult?.capabilities?.workspace?.fileOperations?.willRename != null
 
     /**
@@ -145,9 +145,9 @@ internal object ModuleImportEdits {
     private fun uriOf(path: Path): String = path.toUri().toString()
 
     /** The `by` server for this project, if one is running. */
-    private fun server(project: Project): LspServer? =
-        LspServerManager.getInstance(project)
-            .getServersForProvider(ByLspServerSupportProvider::class.java)
+    private fun server(project: Project): LspClient? =
+        LspClientManager.getInstance(project)
+            .getClients(ByLspServerSupportProvider::class.java)
             .firstOrNull()
 
     /**

@@ -6,8 +6,8 @@ import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.editor.Document
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.platform.lsp.api.LspServer
-import com.intellij.platform.lsp.api.LspServerManager
+import com.intellij.platform.lsp.api.LspClient
+import com.intellij.platform.lsp.api.LspClientManager
 import dev.basedpython.pycharm.lsp.BuffLspServerSupportProvider
 import dev.basedpython.pycharm.util.BasedPythonBundle
 import org.eclipse.lsp4j.CodeActionContext
@@ -95,9 +95,9 @@ object ByCleanup {
   }
 
   /** The `buff` server serving [file], if one is running. */
-  fun findServer(project: Project, file: VirtualFile): LspServer? =
-    LspServerManager.getInstance(project)
-      .getServersForProvider(BuffLspServerSupportProvider::class.java)
+  fun findServer(project: Project, file: VirtualFile): LspClient? =
+    LspClientManager.getInstance(project)
+      .getClients(BuffLspServerSupportProvider::class.java)
       .firstOrNull { it.descriptor.isSupportedFile(file) }
 
   /**
@@ -108,7 +108,7 @@ object ByCleanup {
    * like a file that needed no changes. Answers true when the server has not reported its
    * capabilities yet, because not knowing is not the same as knowing it cannot.
    */
-  fun advertises(server: LspServer, op: ByCleanupOp): Boolean {
+  fun advertises(server: LspClient, op: ByCleanupOp): Boolean {
     val kinds = server.initializeResult
       ?.capabilities
       ?.codeActionProvider
@@ -125,7 +125,7 @@ object ByCleanup {
    * Returns null when the server could not answer at all — it is not initialized, timed out, or
    * replied with an error — which is different from an empty list, meaning there was nothing to do.
    */
-  fun requestEdits(server: LspServer, file: VirtualFile, op: ByCleanupOp): List<TextEdit>? {
+  fun requestEdits(server: LspClient, file: VirtualFile, op: ByCleanupOp): List<TextEdit>? {
     val params = CodeActionParams(
       server.getDocumentIdentifier(file),
       // The whole file. These are source actions, so the range is not what selects them; `only` is.

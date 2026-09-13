@@ -7,7 +7,7 @@ import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
-import com.intellij.platform.lsp.api.LspServerManager
+import com.intellij.platform.lsp.api.LspClientManager
 import com.intellij.ui.EditorNotifications
 import dev.basedpython.pycharm.env.modules.UvWorkspace
 import dev.basedpython.pycharm.lsp.BuffLspServerSupportProvider
@@ -319,9 +319,9 @@ internal object EnvOperations {
     fun afterEnvironmentChanged(project: Project) {
         ApplicationManager.getApplication().invokeLater({
             if (project.isDisposed) return@invokeLater
-            val manager = LspServerManager.getInstance(project)
-            manager.stopAndRestartIfNeeded(ByLspServerSupportProvider::class.java)
-            manager.stopAndRestartIfNeeded(BuffLspServerSupportProvider::class.java)
+            val manager = LspClientManager.getInstance(project)
+            manager.stopAndRestartClientsIfNeeded(ByLspServerSupportProvider::class.java)
+            manager.stopAndRestartClientsIfNeeded(BuffLspServerSupportProvider::class.java)
             EditorNotifications.getInstance(project).updateAllNotifications()
         }, project.disposed)
     }

@@ -11,18 +11,15 @@ import com.intellij.codeInsight.hints.presentation.PresentationFactory
 import com.intellij.openapi.editor.Document
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.project.DumbAware
-import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.platform.lsp.api.LspServer
-import com.intellij.platform.lsp.api.LspServerManager
-import com.intellij.platform.lsp.api.LspServerState
+import com.intellij.platform.lsp.api.LspClient
 import com.intellij.platform.lsp.util.getLsp4jRange
 import com.intellij.platform.lsp.util.getOffsetInDocument
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
 import dev.basedpython.pycharm.lang.BasedPythonFile
-import dev.basedpython.pycharm.lsp.ByLspServerSupportProvider
 import dev.basedpython.pycharm.lsp.askBy
+import dev.basedpython.pycharm.lsp.byServerFor
 import dev.basedpython.pycharm.lsp.ext.ByAlignmentGroupsParams
 import dev.basedpython.pycharm.lsp.ext.ByAlignmentMember
 import dev.basedpython.pycharm.lsp.ext.ByServerExtensions
@@ -101,7 +98,7 @@ class ByInlayHintsProvider : InlayHintsProvider<NoSettings>, DumbAware {
  * compare-and-set. A fresh collector is built for each pass, so "once" is once per daemon run.
  *
  * Threading: the platform runs this inside the daemon's background read action, so blocking on the
- * server is allowed here. [LspServer.sendRequestSync] polls `ProgressManager.checkCanceled` while it
+ * server is allowed here. [LspClient.sendRequestSync] polls `ProgressManager.checkCanceled` while it
  * waits, so an edit cancels the pass rather than queueing behind it.
  *
  * **[asked] is atomic because those elements arrive on several threads at once.** The pass pushes
@@ -139,7 +136,7 @@ private class ByInlayHintsCollector(
         val file = element.containingFile as? BasedPythonFile ?: return true
         val virtualFile = file.originalFile.virtualFile ?: return true
         val document = editor.document
-        val server = runningByServer(file.project, virtualFile) ?: return true
+        val server = byServerFor(file.project, virtualFile) ?: return true
 
         val params = InlayHintParams(
             server.getDocumentIdentifier(virtualFile),
@@ -212,7 +209,7 @@ private class ByInlayHintsCollector(
      * the wrong maximum, and is better left alone until the pass restarts.
      */
     private fun align(
-        server: LspServer,
+        server: LspClient,
         virtualFile: VirtualFile,
         editor: Editor,
         document: Document,
@@ -276,12 +273,6 @@ private class ByInlayHintsCollector(
         val gap = document.charsSequence.subSequence(start, end)
         return if (gap.all { it == ' ' }) start to end else null
     }
-
-    /** The `by` server serving this file, or `null` when there is none — off, still starting, dead. */
-    private fun runningByServer(project: Project, virtualFile: VirtualFile): LspServer? =
-        LspServerManager.getInstance(project)
-            .getServersForProvider(ByLspServerSupportProvider::class.java)
-            .firstOrNull { it.state == LspServerState.Running && it.descriptor.isSupportedFile(virtualFile) }
 
     private companion object {
         /** Numbers collectors, and so passes, for [ByInlayAuditLog]. */

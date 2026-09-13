@@ -9,8 +9,8 @@ import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
-import com.intellij.platform.lsp.api.LspServerManager
-import com.intellij.platform.lsp.api.LspServerSupportProvider
+import com.intellij.platform.lsp.api.LspClientManager
+import com.intellij.platform.lsp.api.LspIntegrationProvider
 import com.intellij.util.Alarm
 import dev.basedpython.pycharm.lsp.BuffLspServerSupportProvider
 import dev.basedpython.pycharm.lsp.ByLspLifecycleListener
@@ -23,7 +23,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * Project service that polishes the basedpython LSP lifecycle:
  *
  *  1. **Restart-on-settings-change** — [onSettingsChanged] debounces (~1s) and then
- *     restarts both servers via the same [LspServerManager.stopAndRestartIfNeeded] call
+ *     restarts both servers via the same [LspClientManager.stopAndRestartClientsIfNeeded] call
  *     used by the manual "Restart basedpython LSP Servers" action.
  *  2. **Crash recovery** — subscribes to [ByLspLifecycleListener] and, when a server stops
  *     without having been asked to, posts a `basedpython.Actions` notification with a
@@ -39,7 +39,7 @@ internal class BasedPythonLspReloader(private val project: Project) : Disposable
   private val listenerRegistered = AtomicBoolean(false)
 
   /** Provider classes whose servers we own. Restarting these is idempotent. */
-  private val providers: List<Class<out LspServerSupportProvider>> = listOf(
+  private val providers: List<Class<out LspIntegrationProvider>> = listOf(
     ByLspServerSupportProvider::class.java,
     BuffLspServerSupportProvider::class.java,
   )
@@ -61,9 +61,9 @@ internal class BasedPythonLspReloader(private val project: Project) : Disposable
   /** Immediately restart both servers (used by the debounce callback and crash "Restart"). */
   fun restartNow() {
     if (project.isDisposed) return
-    val mgr = LspServerManager.getInstance(project)
+    val mgr = LspClientManager.getInstance(project)
     for (provider in providers) {
-      runCatching { mgr.stopAndRestartIfNeeded(provider) }
+      runCatching { mgr.stopAndRestartClientsIfNeeded(provider) }
         .onFailure { LOG.warn("Failed to restart LSP server for ${provider.simpleName}", it) }
     }
   }

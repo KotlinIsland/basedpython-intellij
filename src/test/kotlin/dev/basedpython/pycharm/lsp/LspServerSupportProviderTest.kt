@@ -1,8 +1,8 @@
 package dev.basedpython.pycharm.lsp
 
 import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.platform.lsp.api.LspServerDescriptor
-import com.intellij.platform.lsp.api.LspServerSupportProvider.LspServerStarter
+import com.intellij.platform.lsp.api.LspClientDescriptor
+import com.intellij.platform.lsp.api.LspIntegrationProvider.LspClientStarter
 import com.intellij.testFramework.LightVirtualFile
 import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
@@ -17,7 +17,7 @@ import org.junit.jupiter.api.Test
  * Binary-free guard-logic tests for [ByLspServerSupportProvider] and
  * [BuffLspServerSupportProvider].
  *
- * `fileOpened` is driven with a recording [LspServerStarter] fake that never starts a
+ * `fileOpened` is driven with a recording [LspClientStarter] fake that never starts a
  * real process — it just captures whether the provider *decided* to start a server.
  *
  * In CI no `by`/`buff` binary exists, so the "would start" path can't be asserted
@@ -34,9 +34,9 @@ class LspServerSupportProviderTest {
   private val project get() = fixture.project
 
   /** Captures descriptors the provider asks to start. */
-  private class RecordingStarter : LspServerStarter {
-    val started = mutableListOf<LspServerDescriptor>()
-    override fun ensureServerStarted(descriptor: LspServerDescriptor) {
+  private class RecordingStarter : LspClientStarter {
+    val started = mutableListOf<LspClientDescriptor>()
+    override fun ensureClientStarted(descriptor: LspClientDescriptor) {
       started += descriptor
     }
   }

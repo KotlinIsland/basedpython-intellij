@@ -14,7 +14,7 @@ import java.util.concurrent.CompletableFuture
  * The requests `by` answers that LSP has no shape for.
  *
  * Declared as lsp4j protocol extensions and reached through
- * `LspServerDescriptor.lsp4jServerClass`, which is the supported way to add a request the base
+ * `LspClientDescriptor.lsp4jServerClass`, which is the supported way to add a request the base
  * protocol does not define.
  *
  * Each of these was a subprocess once, and that is what they have in common. A subprocess reads the
@@ -312,7 +312,7 @@ data class ByRuleExplanation(
 /**
  * The `buff` language server, extended with the request above.
  *
- * A named interface because `LspServerDescriptor.lsp4jServerClass` takes a class, and it has to be
+ * A named interface because `LspClientDescriptor.lsp4jServerClass` takes a class, and it has to be
  * one that is both a [org.eclipse.lsp4j.services.LanguageServer] and carries the extension.
  */
 interface BuffLanguageServer : org.eclipse.lsp4j.services.LanguageServer, BuffServerExtensions

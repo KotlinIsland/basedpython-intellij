@@ -210,9 +210,10 @@ intellijPlatform {
     // that introduces it. When something genuinely has no public equivalent, the answer is an IJPL
     // issue and an entry in docs/internal-api.md, not quietly relaxing this.
     //
-    // Deprecated and experimental usages stay informational: the platform's LSP API is mid-rename
-    // (LspServerManager to LspClientManager and the rest), so a deprecation is a migration to
-    // schedule rather than a build to stop.
+    // Deprecated and experimental usages stay informational: a deprecation is a migration to
+    // schedule rather than a build to stop, because its replacement has to exist at both ends of
+    // the range before it can be taken. The LSP API's LspServer* to LspClient* rename was one; it
+    // is done, and the 263 report lists no `platform.lsp.api` deprecation.
     //
     // MISSING_DEPENDENCIES is deliberately *not* here, though the optional dependency that used to
     // be the reason — `org.intellij.plugins.markdown` — is gone with the fence suggester. The level

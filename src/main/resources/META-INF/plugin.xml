@@ -54,9 +54,9 @@
         <!-- ===== Stream B: LSP servers + settings + notifications ===== -->
         <projectService serviceImplementation="dev.basedpython.pycharm.settings.BasedPythonSettings"/>
         <notificationGroup id="basedpython" displayType="BALLOON"/>
-        <platform.lsp.serverSupportProvider
+        <platform.lsp.integrationProvider
             implementation="dev.basedpython.pycharm.lsp.ByLspServerSupportProvider"/>
-        <platform.lsp.serverSupportProvider
+        <platform.lsp.integrationProvider
             implementation="dev.basedpython.pycharm.lsp.BuffLspServerSupportProvider"/>
 
         <!-- ===== Stream C: run configurations ===== -->

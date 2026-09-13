@@ -13,11 +13,11 @@ files (no `build.gradle.kts`, `plugin.xml`, or main-source edits). There is
   (buff disables everything except format/lint/hover/code-actions; by gates inlay
   hints on settings).
 - `LspServerSupportProviderTest.kt` — `fileOpened` guard logic via a recording
-  `LspServerStarter` fake (extension guard, settings-disabled guard, graceful
+  `LspClientStarter` fake (extension guard, settings-disabled guard, graceful
   missing-binary branch, and start-on-resolve with a fake executable).
 
 ## Binary-free guarantee
 No test launches `by`/`buff`. `createCommandLine()` is never invoked. The fake
-`LspServerStarter` only records the descriptor it is handed; on CI (no real
+`LspClientStarter` only records the descriptor it is handed; on CI (no real
 binaries) the missing-binary assertions verify the no-op path. Descriptor
 construction with a dummy `Path` does not spawn a process.

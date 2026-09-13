@@ -3,9 +3,9 @@ package dev.basedpython.pycharm.statusbar
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
-import com.intellij.platform.lsp.api.LspServerManager
+import com.intellij.platform.lsp.api.LspClientManager
+import com.intellij.platform.lsp.api.LspIntegrationProvider
 import com.intellij.platform.lsp.api.LspServerState
-import com.intellij.platform.lsp.api.LspServerSupportProvider
 import dev.basedpython.pycharm.env.ByLaunch
 import dev.basedpython.pycharm.lsp.BasedPythonBinaries
 import dev.basedpython.pycharm.lsp.BuffLspServerSupportProvider
@@ -64,7 +64,7 @@ internal object ServerLightMapping {
 }
 
 /**
- * Reads live server state for the status bar widget. State comes from [LspServerManager] rather
+ * Reads live server state for the status bar widget. State comes from [LspClientManager] rather
  * than being cached locally, so a server that fails to start is reported as such instead of being
  * indistinguishable from one that was never asked to start.
  */
@@ -88,14 +88,14 @@ internal class LspServerStateService(private val project: Project) {
     private fun lightFor(
         enabled: Boolean,
         launch: ByLaunch?,
-        providerClass: Class<out LspServerSupportProvider>,
+        providerClass: Class<out LspIntegrationProvider>,
     ): ServerLight {
         val missing = launch == null || !Files.isExecutable(launch.exe)
         return ServerLightMapping.lightFor(enabled, missing, serverState(providerClass))
     }
 
-    private fun serverState(providerClass: Class<out LspServerSupportProvider>): LspServerState? =
-        LspServerManager.getInstance(project).getServersForProvider(providerClass).firstOrNull()?.state
+    private fun serverState(providerClass: Class<out LspIntegrationProvider>): LspServerState? =
+        LspClientManager.getInstance(project).getClients(providerClass).firstOrNull()?.state
 
     companion object {
         fun getInstance(project: Project): LspServerStateService = project.service()

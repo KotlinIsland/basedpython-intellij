@@ -3,8 +3,8 @@ package dev.basedpython.pycharm.lsp
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.platform.lsp.api.LspServer
-import com.intellij.platform.lsp.api.LspServerManager
+import com.intellij.platform.lsp.api.LspClient
+import com.intellij.platform.lsp.api.LspClientManager
 import com.intellij.platform.lsp.api.LspServerState
 import com.intellij.platform.lsp.util.getLsp4jPosition
 import com.intellij.psi.PsiFile
@@ -20,7 +20,7 @@ import org.eclipse.lsp4j.HoverParams
  * the same caller — so refusing here turns a hard failure into the same "no server" the callers
  * already handle, and the background pass that follows gets the real answer.
  */
-internal fun runningByServer(project: Project, file: VirtualFile): LspServer? {
+internal fun runningByServer(project: Project, file: VirtualFile): LspClient? {
     if (ApplicationManager.getApplication().isDispatchThread) return null
     return byServerFor(project, file)
 }
@@ -33,9 +33,9 @@ internal fun runningByServer(project: Project, file: VirtualFile): LspServer? {
  * on it — it has to hand that to a background thread, which is exactly what
  * [dev.basedpython.pycharm.lsp.inject.ByInjections] does with the answer.
  */
-internal fun byServerFor(project: Project, file: VirtualFile): LspServer? =
-    LspServerManager.getInstance(project)
-        .getServersForProvider(ByLspServerSupportProvider::class.java)
+internal fun byServerFor(project: Project, file: VirtualFile): LspClient? =
+    LspClientManager.getInstance(project)
+        .getClients(ByLspServerSupportProvider::class.java)
         .firstOrNull { it.state == LspServerState.Running && it.descriptor.isSupportedFile(file) }
 
 /** What `textDocument/hover` had to say, with "nothing to say" kept apart from "nobody to ask". */
@@ -59,7 +59,7 @@ sealed interface ByHover {
  * first block, rendered documentation shows the rest. Keeping the request in one place keeps the
  * two honest about what the payload is.
  *
- * Threading: [LspServer.sendRequestSync] is background-thread-only and polls
+ * Threading: [LspClient.sendRequestSync] is background-thread-only and polls
  * `ProgressManager.checkCanceled` while it waits, so callers must already be off the EDT — a write
  * action cancels the wait instead of queueing behind it, and `timeoutMs` bounds a server that has
  * stopped answering.

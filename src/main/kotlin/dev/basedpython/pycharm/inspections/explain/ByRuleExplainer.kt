@@ -2,7 +2,7 @@ package dev.basedpython.pycharm.inspections.explain
 
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.platform.lsp.api.LspServer
+import com.intellij.platform.lsp.api.LspClient
 import dev.basedpython.pycharm.format.ByCleanup
 import dev.basedpython.pycharm.lsp.ext.BuffExplainRuleParams
 import dev.basedpython.pycharm.lsp.ext.BuffServerExtensions
@@ -75,7 +75,7 @@ internal object ByRuleExplainer {
             .openFiles
             .firstOrNull { it.extension in setOf("by", "byi", "py", "pyi") }
 
-    private fun LspServer.explain(
+    private fun LspClient.explain(
         request: (org.eclipse.lsp4j.services.LanguageServer) -> java.util.concurrent.CompletableFuture<ByRuleExplanation?>,
     ): ByRuleExplanation? = sendRequestSync { request(it) }
 }

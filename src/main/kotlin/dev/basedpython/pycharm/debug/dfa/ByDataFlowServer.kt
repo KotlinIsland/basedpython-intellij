@@ -9,7 +9,7 @@ import java.util.concurrent.CompletableFuture
 /**
  * The `by` language server, extended with the one request LSP does not have a shape for.
  *
- * Declared as an lsp4j protocol extension and returned from `LspServerDescriptor.lsp4jServerClass`,
+ * Declared as an lsp4j protocol extension and returned from `LspClientDescriptor.lsp4jServerClass`,
  * which is the supported way to add a request the base protocol does not define — the same
  * mechanism [dev.basedpython.pycharm.debug.ByDebugProtocolServer] uses on the DAP side.
  *

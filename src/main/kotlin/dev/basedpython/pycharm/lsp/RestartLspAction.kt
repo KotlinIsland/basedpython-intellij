@@ -3,7 +3,7 @@ package dev.basedpython.pycharm.lsp
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
-import com.intellij.platform.lsp.api.LspServerManager
+import com.intellij.platform.lsp.api.LspClientManager
 import dev.basedpython.pycharm.docs.render.ByRenderedDocs
 
 /**
@@ -24,8 +24,8 @@ internal class RestartLspAction : AnAction() {
     // Rendered docstrings are cached against what `by` made of them, and a restart is how a rebuilt
     // `by` gets here — nothing else would notice that the same docstring now renders differently.
     ByRenderedDocs.clearCache()
-    val mgr = LspServerManager.getInstance(project)
-    mgr.stopAndRestartIfNeeded(ByLspServerSupportProvider::class.java)
-    mgr.stopAndRestartIfNeeded(BuffLspServerSupportProvider::class.java)
+    val mgr = LspClientManager.getInstance(project)
+    mgr.stopAndRestartClientsIfNeeded(ByLspServerSupportProvider::class.java)
+    mgr.stopAndRestartClientsIfNeeded(BuffLspServerSupportProvider::class.java)
   }
 }

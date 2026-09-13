@@ -8,15 +8,13 @@ import com.intellij.openapi.editor.Document
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.platform.lsp.api.LspServerManager
-import com.intellij.platform.lsp.api.LspServerState
 import com.intellij.xdebugger.XDebugProcess
 import com.intellij.xdebugger.XDebugSession
 import com.intellij.xdebugger.XDebugSessionListener
 import com.intellij.xdebugger.XDebuggerManagerListener
 import dev.basedpython.pycharm.lang.BasedPythonFileType
-import dev.basedpython.pycharm.lsp.ByLspServerSupportProvider
 import dev.basedpython.pycharm.lsp.askBy
+import dev.basedpython.pycharm.lsp.byServerFor
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import org.eclipse.lsp4j.TextDocumentIdentifier
 
@@ -131,10 +129,7 @@ class ByDataFlowListener : XDebuggerManagerListener {
             line: Int,
             observations: List<ByObservation>,
         ): List<ByDataFlowFinding> {
-            val server = LspServerManager.getInstance(project)
-                .getServersForProvider(ByLspServerSupportProvider::class.java)
-                .firstOrNull { it.state == LspServerState.Running && it.descriptor.isSupportedFile(file) }
-                ?: return emptyList()
+            val server = byServerFor(project, file) ?: return emptyList()
 
             val params = ByDataFlowParams(
                 textDocument = TextDocumentIdentifier(server.getDocumentIdentifier(file).uri),

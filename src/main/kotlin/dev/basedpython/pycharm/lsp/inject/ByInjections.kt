@@ -35,7 +35,7 @@ import org.jetbrains.annotations.TestOnly
  *
  * ## Which thread asks
  *
- * A request to the server is background-only — `LspServer.sendRequestSync` asserts on the EDT — and
+ * A request to the server is background-only — `LspClient.sendRequestSync` asserts on the EDT — and
  * the pass that drives injection (`InjectedGeneralHighlightingPass`) is a background read action,
  * so the ordinary path asks and waits, exactly as the inlay hints collector does. On the EDT there
  * is no asking: the answer already taken for this revision is served, and if there is none the

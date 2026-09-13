@@ -2,10 +2,8 @@ package dev.basedpython.pycharm.debug.hotswap
 
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.platform.lsp.api.LspServerManager
-import com.intellij.platform.lsp.api.LspServerState
-import dev.basedpython.pycharm.lsp.ByLspServerSupportProvider
 import dev.basedpython.pycharm.lsp.askBy
+import dev.basedpython.pycharm.lsp.byServerFor
 import dev.basedpython.pycharm.lsp.ext.ByRestaged
 import dev.basedpython.pycharm.lsp.ext.ByServerExtensions
 import dev.basedpython.pycharm.lsp.ext.ByTranspileForBuildParams
@@ -42,12 +40,7 @@ internal object ByRestage {
      * would not — a user can act on the second and only a maintainer can act on the first.
      */
     fun ask(project: Project, file: VirtualFile, buildDirectory: String): ByRestaged? {
-        val server = LspServerManager.getInstance(project)
-            .getServersForProvider(ByLspServerSupportProvider::class.java)
-            .firstOrNull {
-                it.state == LspServerState.Running && it.descriptor.isSupportedFile(file)
-            }
-            ?: return null
+        val server = byServerFor(project, file) ?: return null
 
         val params = ByTranspileForBuildParams(
             textDocument = TextDocumentIdentifier(server.getDocumentIdentifier(file).uri),

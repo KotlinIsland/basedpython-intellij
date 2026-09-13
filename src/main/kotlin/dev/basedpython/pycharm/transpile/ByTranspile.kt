@@ -3,8 +3,8 @@ package dev.basedpython.pycharm.transpile
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.platform.lsp.api.LspServer
-import com.intellij.platform.lsp.api.LspServerManager
+import com.intellij.platform.lsp.api.LspClient
+import com.intellij.platform.lsp.api.LspClientManager
 import dev.basedpython.pycharm.actions.ByCli
 import dev.basedpython.pycharm.lsp.ByLspServerSupportProvider
 import dev.basedpython.pycharm.lsp.ext.ByServerExtensions
@@ -97,9 +97,9 @@ object ByTranspile {
     ): String? = report(project, snippetToPython(project, file, snippet), failureTitle)
 
     /** The `by` server serving [file], if one is running. */
-    fun findServer(project: Project, file: VirtualFile): LspServer? =
-        LspServerManager.getInstance(project)
-            .getServersForProvider(ByLspServerSupportProvider::class.java)
+    fun findServer(project: Project, file: VirtualFile): LspClient? =
+        LspClientManager.getInstance(project)
+            .getClients(ByLspServerSupportProvider::class.java)
             .firstOrNull { it.descriptor.isSupportedFile(file) }
 
     private fun request(
