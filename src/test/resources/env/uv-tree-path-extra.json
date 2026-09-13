@@ -1,0 +1,125 @@
+{
+  "schema": {
+    "version": "preview"
+  },
+  "workspace_root": "/w",
+  "workspace": {
+    "path": "/w",
+    "id": "workspace+/w"
+  },
+  "roots": [
+    {
+      "id": "app==0.1.0@editable+/w/"
+    },
+    {
+      "id": "lib==0.1.0@editable+/w/lib"
+    }
+  ],
+  "inverted": false,
+  "members": [
+    {
+      "name": "app",
+      "path": "/w/",
+      "id": "app==0.1.0@editable+/w/"
+    },
+    {
+      "name": "lib",
+      "path": "/w/lib",
+      "id": "lib==0.1.0@editable+/w/lib"
+    }
+  ],
+  "resolution": {
+    "app==0.1.0@editable+/w/": {
+      "name": "app",
+      "version": "0.1.0",
+      "source": {
+        "editable": "/w/"
+      },
+      "kind": "package",
+      "dependencies": [
+        {
+          "id": "copy==0.1.0@directory+/w/vendored/copy"
+        },
+        {
+          "id": "lib==0.1.0@editable+/w/lib"
+        },
+        {
+          "id": "tool==0.1.0@editable+/w/../tool"
+        }
+      ]
+    },
+    "copy==0.1.0@directory+/w/vendored/copy": {
+      "name": "copy",
+      "version": "0.1.0",
+      "source": {
+        "directory": "/w/vendored/copy"
+      },
+      "kind": "package",
+      "dependencies": [
+        {
+          "id": "tool==0.1.0@editable+/w/../tool"
+        }
+      ],
+      "optional_dependencies": [
+        {
+          "name": "x",
+          "id": "copy[x]==0.1.0@directory+/w/vendored/copy"
+        }
+      ]
+    },
+    "copy[x]==0.1.0@directory+/w/vendored/copy": {
+      "name": "copy",
+      "version": "0.1.0",
+      "source": {
+        "directory": "/w/vendored/copy"
+      },
+      "kind": {
+        "extra": "x"
+      },
+      "dependencies": [
+        {
+          "id": "copy==0.1.0@directory+/w/vendored/copy"
+        },
+        {
+          "id": "gitdep==0.1.0@git+file:///uvfix/gitdep#4a23a7800fbc1b2ab3a8a92d4abd659a3fc22b18"
+        }
+      ]
+    },
+    "gitdep==0.1.0@git+file:///uvfix/gitdep#4a23a7800fbc1b2ab3a8a92d4abd659a3fc22b18": {
+      "name": "gitdep",
+      "version": "0.1.0",
+      "source": {
+        "git": "file:///uvfix/gitdep#4a23a7800fbc1b2ab3a8a92d4abd659a3fc22b18"
+      },
+      "kind": "package",
+      "dependencies": []
+    },
+    "lib==0.1.0@editable+/w/lib": {
+      "name": "lib",
+      "version": "0.1.0",
+      "source": {
+        "editable": "/w/lib"
+      },
+      "kind": "package",
+      "dependencies": [
+        {
+          "id": "copy[x]==0.1.0@directory+/w/vendored/copy"
+        }
+      ]
+    },
+    "tool==0.1.0@editable+/w/../tool": {
+      "name": "tool",
+      "version": "0.1.0",
+      "source": {
+        "editable": "/w/../tool"
+      },
+      "kind": "package",
+      "dependencies": []
+    },
+    "workspace+/w": {
+      "kind": "workspace",
+      "path": "/w",
+      "dependencies": []
+    }
+  }
+}

@@ -157,7 +157,7 @@ class UvLiveBackendTest {
 
         val (treeExit, treeOut) = run(uv, dir, EnvOp.Tree)
         assertEquals(0, treeExit, "uv tree")
-        val groups = UvBackend.parseTree(treeOut)
+        val groups = UvBackend.parseTree(treeOut).groups
         assertEquals(
             listOf(
                 EnvDependencyTarget.Main,
@@ -214,7 +214,7 @@ class UvLiveBackendTest {
         // produces is what makes the view fall back to listing what is installed.
         val (exitWithoutLock, outWithoutLock) = run(uv, dir, EnvOp.Tree)
         assertTrue(exitWithoutLock != 0, "a project with no lock has no resolved tree to show")
-        assertTrue(UvBackend.parseTree(outWithoutLock).isEmpty())
+        assertTrue(UvBackend.parseTree(outWithoutLock).projects.isEmpty())
         assertTrue(
             Files.notExists(dir.resolve("uv.lock")),
             "reading the tree created a lock file in a project that had none",

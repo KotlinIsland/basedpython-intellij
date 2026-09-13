@@ -3,6 +3,7 @@ package dev.basedpython.pycharm.env.manager
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import java.nio.file.Path
 
 /**
  * Turning `uv tree --format json` into the grouped dependency tree the view shows.
@@ -24,6 +25,18 @@ import com.google.gson.JsonParser
  *
  * So a group is a root whose kind carries a name, and the main dependency list is the root whose
  * kind is a plain package. Everything under them comes from following ids through `resolution`.
+ *
+ * Each entry also carries a `source` — `{"registry": …}`, `{"editable": path}`, `{"directory": path}`,
+ * `{"git": url}` and so on — which is how a path dependency is told apart from a download. An
+ * editable path dependency and a workspace member carry the *same* shape of source, so which one a
+ * package is comes from `members`, never from the source alone.
+ *
+ * ### Projects
+ *
+ * The lists are handed back under the projects that declare them — the root, each member, and every
+ * path dependency, which uv resolves into the same graph but lists as neither a root nor a member.
+ * A path dependency's own requirements are its entry's `dependencies`; its groups are not resolved
+ * into the workspace's lock at all, so its main list is the only one there is to show.
  *
  * ### Roots are per module, not per project
  *
@@ -58,6 +71,8 @@ object UvTree {
         val version: String,
         val kind: Kind,
         val dependencyIds: List<String>,
+        /** As the entry states it. A member's reads as [EnvSource.Local]; see [sourceOf]. */
+        val source: EnvSource,
     )
 
     private sealed interface Kind {
@@ -74,10 +89,10 @@ object UvTree {
      * that printed a warning instead of a graph — because a partial dependency tree is worse than
      * none: it would silently claim a project has fewer dependencies than it does.
      */
-    fun parse(stdout: String): List<EnvDependencyGroup> = try {
+    fun parse(stdout: String): EnvDependencyGraph = try {
         parseOrThrow(stdout)
     } catch (_: Exception) {
-        emptyList()
+        EnvDependencyGraph.EMPTY
     }
 
     /**
@@ -86,11 +101,11 @@ object UvTree {
      * See [ALWAYS_SHOWN]. An empty `docs` heading is noise; an empty `dependencies` or `dev` is a
      * place the project has and you can add to.
      */
-    private fun parseOrThrow(stdout: String): List<EnvDependencyGroup> {
+    private fun parseOrThrow(stdout: String): EnvDependencyGraph {
         val root = JsonParser.parseString(stdout.trim().ifEmpty { "{}" })
-        if (!root.isJsonObject) return emptyList()
+        if (!root.isJsonObject) return EnvDependencyGraph.EMPTY
 
-        val resolution = root.asJsonObject.getAsJsonObject("resolution") ?: return emptyList()
+        val resolution = root.asJsonObject.getAsJsonObject("resolution") ?: return EnvDependencyGraph.EMPTY
         val entries = LinkedHashMap<String, Entry>()
         for ((id, value) in resolution.entrySet()) {
             entry(value)?.let { entries[id] = it }
@@ -103,9 +118,99 @@ object UvTree {
 
         val modules = modules(root.asJsonObject, resolution)
         val groups = rootIds.mapNotNull { id -> group(id, entries, modules) }
-        return groups.filter { it.target in ALWAYS_SHOWN || it.roots.isNotEmpty() }
+            .filter { it.target in ALWAYS_SHOWN || it.roots.isNotEmpty() }
             .sortedWith(order(modules))
+        return EnvDependencyGraph(projects(groups, entries, modules))
     }
+
+    /**
+     * The root first, then the members, then the path dependencies, each holding its own lists.
+     *
+     * A list whose module is null belongs to the root: that is a single-package project, whose lists
+     * carry no module at all, or a virtual root, which has no name to be called by. Either way there
+     * is exactly one project those lists can be from.
+     */
+    private fun projects(
+        groups: List<EnvDependencyGroup>,
+        entries: Map<String, Entry>,
+        modules: Modules,
+    ): List<EnvProject> {
+        val byOwner = groups.groupBy { it.module ?: modules.rootModule }
+        val rootMember = modules.members.firstOrNull { it.name == modules.rootModule }
+        val projects = mutableListOf<EnvProject>()
+
+        if (rootMember != null) {
+            projects += memberProject(rootMember, EnvProjectRole.ROOT, entries, byOwner)
+        } else {
+            byOwner[null]?.let {
+                projects += EnvProject(null, null, path(modules.workspaceRoot), EnvProjectRole.ROOT, it)
+            }
+        }
+        modules.members
+            .filter { it != rootMember }
+            .sortedBy { it.name.lowercase() }
+            .mapTo(projects) { memberProject(it, EnvProjectRole.MEMBER, entries, byOwner) }
+        projects += localProjects(entries, modules)
+        return projects
+    }
+
+    private fun memberProject(
+        member: Member,
+        role: EnvProjectRole,
+        entries: Map<String, Entry>,
+        byOwner: Map<String?, List<EnvDependencyGroup>>,
+    ): EnvProject = EnvProject(
+        name = member.name,
+        version = entries[member.id]?.version?.takeIf { it.isNotEmpty() },
+        path = path(member.path),
+        role = role,
+        groups = byOwner[member.name].orEmpty(),
+    )
+
+    /**
+     * Every package installed from a directory that is not a member: the path dependencies.
+     *
+     * One per directory, with the extras it is installed with as lists of their own. Required as
+     * `copy[x]`, a path dependency is two entries with the same directory — `copy`, a plain package,
+     * and `copy[x]`, whose `kind` names the extra (uv 0.12.13) — and they are one project: its main
+     * list from the first, the `x` list from the second.
+     */
+    private fun localProjects(entries: Map<String, Entry>, modules: Modules): List<EnvProject> {
+        val byDirectory = LinkedHashMap<Path, MutableList<Pair<String, Entry>>>()
+        for ((id, entry) in entries) {
+            val source = entry.source as? EnvSource.Local ?: continue
+            if (id in modules.memberIds) continue
+            byDirectory.getOrPut(source.path) { mutableListOf() } += id to entry
+        }
+        return byDirectory.mapNotNull { (path, found) ->
+            val (_, main) = found.firstOrNull { (_, entry) -> entry.kind == Kind.Package } ?: return@mapNotNull null
+            val source = main.source as EnvSource.Local
+            fun list(target: EnvDependencyTarget, ids: List<String>): EnvDependencyGroup {
+                val expanded = HashSet<String>()
+                val roots = ids.mapNotNull { walk(it, entries, modules, expanded, depth = 0) }
+                return EnvDependencyGroup(EnvDependencyList(target, main.name), roots, writable = false)
+            }
+            val extras = found
+                .mapNotNull { (_, entry) ->
+                    val extra = (entry.kind as? Kind.Extra)?.name ?: return@mapNotNull null
+                    val base = baseOf(entry, entries)
+                    list(EnvDependencyTarget.Extra(extra), entry.dependencyIds.filter { it != base })
+                }
+                .sortedBy { it.target.label.lowercase() }
+            EnvProject(
+                name = main.name,
+                version = main.version.takeIf { it.isNotEmpty() },
+                path = path,
+                role = EnvProjectRole.LOCAL,
+                groups = listOf(list(EnvDependencyTarget.Main, main.dependencyIds)) + extras,
+                editable = source.editable,
+            )
+        }.sortedBy { it.name.orEmpty().lowercase() }
+    }
+
+    /** [raw] as a normalised path, or null when there is none or it is not one. */
+    private fun path(raw: String?): Path? =
+        raw?.let { runCatching { Path.of(it).normalize() }.getOrNull() }
 
     /** One `members` entry. */
     private data class Member(val name: String, val id: String, val path: String?)
@@ -129,7 +234,13 @@ object UvTree {
         val baseOf: Map<String, String>,
         /** The member that *is* the workspace root, whose lists sort first. Null when unknown. */
         val rootModule: String?,
-    )
+        /** Every member, the root included even when [ownerOf] leaves it out. */
+        val members: List<Member>,
+        val workspaceRoot: String?,
+    ) {
+        /** Every member's id — what makes an editable source a member rather than a path dependency. */
+        val memberIds: Set<String> = members.mapTo(HashSet()) { it.id }
+    }
 
     private fun modules(root: JsonObject, resolution: JsonObject): Modules {
         val members = root.getAsJsonArray("members")
@@ -173,6 +284,8 @@ object UvTree {
             ownerOf = if (singlePackageProject) emptyMap() else ownerOf,
             baseOf = baseOf,
             rootModule = rootModule,
+            members = members,
+            workspaceRoot = workspaceRoot,
         )
     }
 
@@ -221,7 +334,7 @@ object UvTree {
         val self = selfEdge(rootId, entry, entries, modules)
         val roots = entry.dependencyIds
             .filter { it != self }
-            .mapNotNull { walk(it, entries, expanded, depth = 0) }
+            .mapNotNull { walk(it, entries, modules, expanded, depth = 0) }
         return EnvDependencyGroup(EnvDependencyList(target, modules.ownerOf[rootId]), roots)
     }
 
@@ -256,11 +369,17 @@ object UvTree {
     private fun walk(
         id: String,
         entries: Map<String, Entry>,
+        modules: Modules,
         expanded: MutableSet<String>,
         depth: Int,
     ): EnvDependencyNode? {
         val entry = entries[id] ?: return null
         if (entry.kind == Kind.Workspace) return null
+        val extra = (entry.kind as? Kind.Extra)?.name
+        val base = if (extra != null) baseOf(entry, entries) else null
+        // A member's extra is a member: the extra's own id is not the one `members` names.
+        val source = sourceOf(base ?: id, base?.let(entries::get) ?: entry, modules)
+        val dependencyIds = if (base != null) extraDependencies(base, entry, entries) else entry.dependencyIds
 
         // Already shown in full somewhere in this group: repeat the row, not the subtree. This is
         // also what makes a dependency cycle terminate.
@@ -268,16 +387,68 @@ object UvTree {
             return EnvDependencyNode(
                 name = entry.name,
                 version = entry.version,
-                expandedElsewhere = entry.dependencyIds.isNotEmpty(),
+                expandedElsewhere = dependencyIds.isNotEmpty(),
+                source = source,
+                extra = extra,
             )
         }
         expanded += id
 
-        val children = entry.dependencyIds
-            .mapNotNull { walk(it, entries, expanded, depth + 1) }
+        val children = dependencyIds
+            .mapNotNull { walk(it, entries, modules, expanded, depth + 1) }
             .sortedBy { it.name.lowercase() }
-        return EnvDependencyNode(entry.name, entry.version, children)
+        return EnvDependencyNode(entry.name, entry.version, children, source = source, extra = extra)
     }
+
+    /**
+     * The package an extra's node belongs to — the entry of the same name that is a plain package.
+     *
+     * A requirement with an extra, `copy[x]`, is an entry of its own whose `kind` names the extra
+     * and whose dependencies are the package itself and the extra's requirements; that first edge is
+     * what "installing an extra installs the package too" means in the graph.
+     */
+    private fun baseOf(entry: Entry, entries: Map<String, Entry>): String? =
+        entry.dependencyIds.firstOrNull { id ->
+            entries[id]?.let { it.kind == Kind.Package && it.name == entry.name } == true
+        }
+
+    /**
+     * What an extra's row holds: the package's own requirements and then the extra's, as uv's own
+     * tree shows it — `copy[x]` over `tool` and `gitdep`, where the JSON says `copy[x]` depends on
+     * `copy` and `gitdep` and `copy` on `tool` (uv 0.12.13). Following the edge to the package
+     * instead would put a `copy` row under `copy[x]`, holding what the row above it should.
+     */
+    private fun extraDependencies(base: String, entry: Entry, entries: Map<String, Entry>): List<String> =
+        (entries[base]?.dependencyIds.orEmpty() + entry.dependencyIds.filter { it != base }).distinct()
+
+    /** Where [entry] comes from, with a member told apart from a path dependency by `members`. */
+    private fun sourceOf(id: String, entry: Entry, modules: Modules): EnvSource =
+        if (id in modules.memberIds) EnvSource.Member else entry.source
+
+    /**
+     * `source` as uv writes it: a single-key object naming how the package is obtained.
+     *
+     * Anything unrecognised — or absent, as it is in output from before uv wrote sources — is an
+     * index, which is drawn as nothing. A uv that adds a new kind of source costs that source its
+     * marker, not the row.
+     *
+     * `virtual` is a project that is not built and installs nothing of its own, so there is no copy
+     * of it in the environment to go stale; for the one claim [EnvSource.Local.editable] makes —
+     * that edits reach the environment without a reinstall — it is editable.
+     */
+    private fun source(value: JsonElement?): EnvSource {
+        val obj = value?.takeIf { it.isJsonObject }?.asJsonObject ?: return EnvSource.Index
+        obj.string("editable")?.let { return local(it, editable = true) }
+        obj.string("virtual")?.let { return local(it, editable = true) }
+        obj.string("directory")?.let { return local(it, editable = false) }
+        obj.string("git")?.let { return EnvSource.Git(it) }
+        obj.string("url")?.let { return EnvSource.Archive(it) }
+        obj.string("path")?.let { return EnvSource.Archive(it) }
+        return EnvSource.Index
+    }
+
+    private fun local(raw: String, editable: Boolean): EnvSource =
+        path(raw)?.let { EnvSource.Local(it, editable) } ?: EnvSource.Index
 
     /** One `resolution` entry, or null when it is not shaped like one. */
     private fun entry(value: JsonElement): Entry? {
@@ -300,7 +471,7 @@ object UvTree {
             ?.mapNotNull { it.takeIf { e -> e.isJsonObject }?.asJsonObject?.string("id") }
             ?.toList()
             .orEmpty()
-        return Entry(name, obj.string("version").orEmpty(), kind, dependencies)
+        return Entry(name, obj.string("version").orEmpty(), kind, dependencies, source(obj.get("source")))
     }
 
     /**

@@ -215,7 +215,7 @@ internal class EnvService(
         return base.copy(
             packages = readPackages(backend, root, base.environment),
             drift = readDrift(backend, root),
-            dependencies = readDependencies(backend, root),
+            graph = readDependencies(backend, root),
         )
     }
 
@@ -265,10 +265,10 @@ internal class EnvService(
      * describe — the command exits non-zero and the view lists what is installed instead. Neither
      * is an error the user needs told about.
      */
-    private fun readDependencies(backend: EnvBackend, root: Path): List<EnvDependencyGroup> {
-        val command = backend.command(EnvOp.Tree) ?: return emptyList()
+    private fun readDependencies(backend: EnvBackend, root: Path): EnvDependencyGraph {
+        val command = backend.command(EnvOp.Tree) ?: return EnvDependencyGraph.EMPTY
         val result = EnvRunner.run(project, backend, command, root)
-        return if (result.isSuccess) backend.parseTree(result.stdout) else emptyList()
+        return if (result.isSuccess) backend.parseTree(result.stdout) else EnvDependencyGraph.EMPTY
     }
 
     /**

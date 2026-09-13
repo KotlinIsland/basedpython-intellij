@@ -12,16 +12,13 @@ import com.intellij.openapi.project.DumbAwareAction
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.SimpleToolWindowPanel
 import com.intellij.ui.AnimatedIcon
-import com.intellij.ui.ColoredTreeCellRenderer
 import com.intellij.ui.EditorNotificationPanel
 import com.intellij.ui.PopupHandler
 import com.intellij.ui.SimpleTextAttributes
 import com.intellij.ui.TreeSpeedSearch
-import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBPanel
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.treeStructure.Tree
-import com.intellij.util.ui.JBUI
 import com.intellij.util.ui.UIUtil
 import com.intellij.util.ui.tree.TreeUtil
 import dev.basedpython.pycharm.util.BasedPythonBundle
@@ -29,7 +26,6 @@ import java.awt.BorderLayout
 import javax.swing.BoxLayout
 import javax.swing.Icon
 import javax.swing.JComponent
-import javax.swing.JTree
 import javax.swing.tree.DefaultMutableTreeNode
 import javax.swing.tree.DefaultTreeModel
 import javax.swing.tree.TreePath
@@ -54,8 +50,9 @@ import javax.swing.tree.TreeSelectionModel
  * and both change what the user does next: you remove a declared dependency, you do not remove a
  * transitive one, and a `dev` group entry is not shipped to anyone.
  *
- * So the top level is *where a requirement is declared* — the main list, extras, named groups — the
- * second level is the requirements themselves, and everything below that is what they pulled in.
+ * So the tree is *where a requirement is declared* — the main list, extras, named groups — then the
+ * requirements themselves, then what they pulled in. A workspace puts its projects above that, one
+ * per member and one per path dependency, since each has lists of its own (see [EnvTreeRows.build]).
  * That structure also makes the destructive action safe: *Remove* is offered only on a declared
  * requirement, and it knows which group to remove it from, instead of guessing.
  *
@@ -71,9 +68,7 @@ internal class EnvPanel(private val project: Project) :
         layout = BoxLayout(this, BoxLayout.Y_AXIS)
     }
 
-    private val summary = JBLabel().apply {
-        border = JBUI.Borders.empty(4, 8)
-    }
+    private val summary = EnvHeader()
 
     private val root = DefaultMutableTreeNode()
     private val model = DefaultTreeModel(root)
@@ -106,21 +101,21 @@ internal class EnvPanel(private val project: Project) :
      */
     private var renderedStatus: EnvStatus? = null
 
-    /**
-     * True when the tree shows lists from more than one manifest, so every heading needs saying
-     * which. See [renderGroup].
-     */
-    private var qualifyLists: Boolean = false
-
     init {
         tree.isRootVisible = false
         tree.showsRootHandles = true
         tree.selectionModel.selectionMode = TreeSelectionModel.DISCONTIGUOUS_TREE_SELECTION
-        tree.cellRenderer = NodeRenderer({ installed }, { progress }, { qualifyLists })
+        tree.cellRenderer = EnvTreeRenderer({ installed }, { progress })
         // A cell renderer paints once per repaint, so the spinner has to be allowed to drive
         // repaints of its own row — without this the icon is drawn as a single frozen frame.
         UIUtil.putClientProperty(tree, AnimatedIcon.ANIMATION_IN_RENDERER_ALLOWED, true)
-        TreeSpeedSearch.installOn(tree)
+        // Searching collapsed rows too: the package a person types is usually a transitive one, and
+        // a search that only finds what is already on screen is no search for those.
+        TreeSpeedSearch.installOn(tree, true) { path ->
+            ((path.lastPathComponent as? DefaultMutableTreeNode)?.userObject as? EnvRow)
+                ?.let(EnvTreeRows::searchText)
+                .orEmpty()
+        }
         PopupHandler.installPopupMenu(tree, popupActions(), POPUP_PLACE)
 
         toolbar = ActionManager.getInstance().createActionToolbar(TOOLBAR_PLACE, toolbarActions(), true)
@@ -153,51 +148,60 @@ internal class EnvPanel(private val project: Project) :
         // changed; only what the renderer draws on them has, so a repaint is the rest of the job.
         // See [renderedStatus] for what rebuilding them anyway costs.
         if (status === renderedStatus) {
-            summary.text = describe(status)
+            renderSummary(status)
             tree.repaint()
             toolbar.updateActionsAsync()
             return
         }
         renderedStatus = status
         installed = status.packages.associateBy { it.name.lowercase() }
-        qualifyLists = status.dependencies.any { it.module != null }
 
         header.removeAll()
         renderBanner(status)?.let(header::add)
-        summary.text = describe(status)
+        renderSummary(status)
         header.add(summary)
         header.revalidate()
         header.repaint()
 
         renderTree(status)
+        renderEmptyText(status)
         toolbar.updateActionsAsync()
+    }
+
+    /**
+     * While something is installing, the header says what — a package being fetched is the most
+     * useful thing the window can be saying, and it is more specific than "busy".
+     */
+    private fun renderSummary(status: EnvStatus) {
+        summary.render(status, service.progress.headline?.takeIf { service.busy }, service.scanned)
     }
 
     /**
      * Rebuilds the tree, keeping what the user had expanded.
      *
-     * Expansion is restored by *which list* rather than by node identity, because a refresh rebuilds
-     * every node — and the thing worth preserving is "the user had `dev` open", which survives.
-     * Deeper expansion is not restored: a transitive subtree that the user opened to answer one
-     * question is not something they are still looking at three syncs later.
+     * Expansion is restored by *which project and which list* rather than by node identity, because a
+     * refresh rebuilds every node — and the thing worth preserving is "the user had `dev` open",
+     * which survives. Deeper expansion is not restored: a transitive subtree that the user opened to
+     * answer one question is not something they are still looking at three syncs later.
      *
-     * By the whole [EnvDependencyList] and not its label, which is the same ambiguity [renderGroup]
-     * exists to remove: every module of a workspace has a `dependencies` and most have a `dev`, so
-     * keying on the label made them one key — expand a member's list and every refresh re-expanded
-     * the root's alongside it, reopening a list the user had deliberately closed.
+     * By the whole [EnvDependencyList] and not its label: every module of a workspace has a
+     * `dependencies` and most have a `dev`, so keying on the label made them one key — expand a
+     * member's list and every refresh re-expanded the root's alongside it, reopening a list the user
+     * had deliberately closed. See [EnvRow.expansionKey].
      */
     private fun renderTree(status: EnvStatus) {
-        val expanded = expandedLists()
+        val expanded = expandedKeys()
         root.removeAllChildren()
         EnvTreeRows.build(status).forEach { root.add(swing(it)) }
         model.reload()
+        tree.expandPath(TreePath(root))
 
         when {
             // The flat fallback is one level deep; there is nothing to expand.
             EnvTreeRows.isFlat(status) -> Unit
             // First look: open the group a person came here for, and only that one. Opening all of
             // them puts a project's entire transitive closure on screen at once.
-            expanded.isEmpty() -> expandDefaultGroup()
+            expanded.isEmpty() -> expandDefault()
             else -> restoreExpanded(expanded)
         }
     }
@@ -208,30 +212,71 @@ internal class EnvPanel(private val project: Project) :
         return swing
     }
 
-    /** Opens the main dependency list, or the first group when a project declares none. */
-    private fun expandDefaultGroup() {
-        tree.expandPath(TreePath(root))
-        val preferred = (0 until root.childCount)
-            .map { root.getChildAt(it) as DefaultMutableTreeNode }
+    /**
+     * Every project opened to show its lists, and the first project's main list opened to show its
+     * requirements.
+     *
+     * A project row that opens onto nothing but headings costs a few rows and answers "what does
+     * this workspace consist of" at a glance; the requirements under every list at once would be the
+     * transitive closure of the whole workspace.
+     */
+    private fun expandDefault() {
+        val top = children(root)
+        val projects = top.filter { it.userObject is EnvRow.Project }
+        projects.forEach { tree.expandPath(TreePath(arrayOf(root, it))) }
+
+        val firstLists = projects.firstOrNull()?.let(::children) ?: top
+        val preferred = firstLists
             .firstOrNull { (it.userObject as? EnvRow.Group)?.group?.target == EnvDependencyTarget.Main }
-            ?: root.firstChild as? DefaultMutableTreeNode
+            ?: firstLists.firstOrNull()
             ?: return
-        tree.expandPath(TreePath(arrayOf(root, preferred)))
+        tree.expandPath(TreePath(preferred.path))
     }
 
-    private fun expandedLists(): Set<EnvDependencyList> {
+    private fun expandedKeys(): Set<Any> {
         val paths = tree.getExpandedDescendants(TreePath(root)) ?: return emptySet()
         return paths.toList()
-            .mapNotNull { ((it.lastPathComponent as? DefaultMutableTreeNode)?.userObject as? EnvRow.Group) }
-            .mapTo(LinkedHashSet()) { it.group.list }
+            .mapNotNull { ((it.lastPathComponent as? DefaultMutableTreeNode)?.userObject as? EnvRow)?.expansionKey }
+            .toSet()
     }
 
-    private fun restoreExpanded(lists: Set<EnvDependencyList>) {
-        tree.expandPath(TreePath(root))
-        for (i in 0 until root.childCount) {
-            val child = root.getChildAt(i) as DefaultMutableTreeNode
-            val list = (child.userObject as? EnvRow.Group)?.group?.list ?: continue
-            if (list in lists) tree.expandPath(TreePath(arrayOf(root, child)))
+    /** Re-opens the projects and lists among the first two levels whose keys are in [keys]. */
+    private fun restoreExpanded(keys: Set<Any>) {
+        for (top in children(root)) {
+            if ((top.userObject as? EnvRow)?.expansionKey !in keys) continue
+            tree.expandPath(TreePath(top.path))
+            for (list in children(top)) {
+                if ((list.userObject as? EnvRow)?.expansionKey in keys) tree.expandPath(TreePath(list.path))
+            }
+        }
+    }
+
+    private fun children(node: DefaultMutableTreeNode): List<DefaultMutableTreeNode> =
+        (0 until node.childCount).map { node.getChildAt(it) as DefaultMutableTreeNode }
+
+    /**
+     * What the tree says when it has no rows — which is only ever before a read, or when there is no
+     * environment to list.
+     *
+     * Said in the middle of the empty tree rather than only in the header, because the empty tree is
+     * where the eye goes, and an empty white area reads as "nothing is installed" whatever the header
+     * says. The one state with something to do offers it right there.
+     */
+    private fun renderEmptyText(status: EnvStatus) {
+        val text = tree.emptyText.clear()
+        when {
+            !service.scanned -> text.appendText(BasedPythonBundle.message("env.summary.scanning"))
+            status.backend == null -> text.appendText(BasedPythonBundle.message("env.summary.unmanaged"))
+            status.environment == null -> {
+                text.appendText(BasedPythonBundle.message("env.empty.noEnvironment"))
+                if (status.toolPath != null) {
+                    text.appendSecondaryText(
+                        BasedPythonBundle.message("env.action.createEnvironment"),
+                        SimpleTextAttributes.LINK_PLAIN_ATTRIBUTES,
+                    ) { EnvOperations.createEnvironment(project, null) }
+                }
+            }
+            else -> text.appendText(BasedPythonBundle.message("env.packages.empty"))
         }
     }
 
@@ -285,180 +330,10 @@ internal class EnvPanel(private val project: Project) :
         return panel
     }
 
-    /** The one-line description of the environment, always shown once something has looked. */
-    private fun describe(status: EnvStatus): String {
-        // While something is installing, the header says what — a package being fetched is the most
-        // useful thing the window can be saying, and it is more specific than "busy".
-        service.progress.headline?.takeIf { service.busy }?.let {
-            return BasedPythonBundle.message("env.summary.working", it)
-        }
-        if (!service.scanned) return BasedPythonBundle.message("env.summary.scanning")
-        val backend = status.backend ?: return BasedPythonBundle.message("env.summary.unmanaged")
-        val env = status.environment
-            ?: return BasedPythonBundle.message(
-                "env.summary.wouldBe",
-                backend.displayName,
-                status.environmentRoot?.toString().orEmpty(),
-            )
-        return BasedPythonBundle.message(
-            "env.summary.ready",
-            backend.displayName,
-            env.pythonVersion ?: "?",
-            env.root.toString(),
-        )
-    }
-
-    // ---- rows --------------------------------------------------------------
-
-    private class NodeRenderer(
-        private val installed: () -> Map<String, EnvPackage>,
-        private val progress: () -> EnvProgress,
-        /** True when the tree holds lists from more than one manifest — see [renderGroup]. */
-        private val qualifyLists: () -> Boolean,
-    ) : ColoredTreeCellRenderer() {
-
-        override fun customizeCellRenderer(
-            tree: JTree,
-            value: Any?,
-            selected: Boolean,
-            expanded: Boolean,
-            leaf: Boolean,
-            row: Int,
-            hasFocus: Boolean,
-        ) {
-            when (val item = (value as? DefaultMutableTreeNode)?.userObject) {
-                is EnvRow.Group -> renderGroup(item)
-                is EnvRow.Package -> renderPackage(item)
-                is EnvRow.Flat -> renderFlat(item)
-                else -> Unit
-            }
-        }
-
-        /**
-         * The list's name, qualified by the manifest it comes from once there is more than one.
-         *
-         * Unqualified would be ambiguous rather than merely terse: every module of a workspace has a
-         * `dependencies`, and two headings reading `dependencies` say nothing about which manifest
-         * the rows under them come from or which one *Remove* would edit.
-         *
-         * Every heading or none, which is why this needs to know about the tree as a whole. A null
-         * module means the workspace root's own manifest — the case a *virtual* root produces, where
-         * the root has `[dependency-groups]` but no `[project]` and so no name to be called by — and
-         * leaving that one bare beside qualified siblings makes the one heading a reader cannot
-         * place out of the only one that never moved.
-         */
-        private fun renderGroup(row: EnvRow.Group) {
-            icon = groupIcon(row.group.target)
-            append(row.group.target.label)
-            if (qualifyLists()) {
-                val where = row.group.module
-                    ?.let { BasedPythonBundle.message("env.tree.inModule", it) }
-                    ?: BasedPythonBundle.message("env.tree.inWorkspaceRoot")
-                append("  $where", SimpleTextAttributes.GRAYED_ATTRIBUTES)
-            }
-            append(
-                "  " + BasedPythonBundle.message("env.tree.count", row.group.packageCount()),
-                SimpleTextAttributes.GRAYED_ATTRIBUTES,
-            )
-            toolTipText = BasedPythonBundle.message(targetTooltipKey(row.group.target))
-        }
-
-        /**
-         * A declared requirement is drawn as ordinary text and a transitive one greyed, so the two
-         * levels the user acts on differently look different without needing a legend.
-         */
-        private fun renderPackage(row: EnvRow.Package) {
-            val node = row.node
-            val here = installed()[node.name.lowercase()]
-            val activity = progress().activityOf(node.name)
-            // The platform's spinner, which paints its own frames — but only in a tree that opted in
-            // with ANIMATION_IN_RENDERER_ALLOWED.
-            icon = when {
-                activity != null -> AnimatedIcon.Default.INSTANCE
-                row.declared -> AllIcons.Nodes.PpLib
-                else -> AllIcons.Nodes.PpLibFolder
-            }
-
-            val nameAttributes = when {
-                here == null -> SimpleTextAttributes.GRAYED_ITALIC_ATTRIBUTES
-                row.declared -> SimpleTextAttributes.REGULAR_ATTRIBUTES
-                else -> SimpleTextAttributes.GRAYED_ATTRIBUTES
-            }
-            append(node.name, nameAttributes)
-            append("  ${node.version}", SimpleTextAttributes.GRAYED_ATTRIBUTES)
-
-            when {
-                // Resolved to one version, a different one on disk. This is what drift looks like
-                // when you point at it, and it is the row the sync banner is talking about.
-                here != null && here.version.isNotEmpty() && here.version != node.version ->
-                    append(
-                        "  " + BasedPythonBundle.message("env.tree.installedVersion", here.version),
-                        SimpleTextAttributes.ERROR_ATTRIBUTES,
-                    )
-                // Not on disk. Ordinary for an extra or a non-default group, which is why it is
-                // stated quietly rather than coloured as a problem.
-                here == null ->
-                    append(
-                        "  " + BasedPythonBundle.message("env.tree.notInstalled"),
-                        SimpleTextAttributes.GRAYED_ITALIC_ATTRIBUTES,
-                    )
-            }
-
-            if (activity != null) {
-                append(
-                    "  " + BasedPythonBundle.message(activityKey(activity)),
-                    SimpleTextAttributes.GRAYED_ITALIC_ATTRIBUTES,
-                )
-            }
-            if (node.expandedElsewhere) {
-                append(
-                    "  " + BasedPythonBundle.message("env.tree.shownAbove"),
-                    SimpleTextAttributes.GRAYED_ITALIC_ATTRIBUTES,
-                )
-            }
-            toolTipText = if (row.declared) {
-                BasedPythonBundle.message("env.tree.tooltip.declared")
-            } else {
-                BasedPythonBundle.message("env.tree.tooltip.transitive")
-            }
-        }
-
-        private fun renderFlat(row: EnvRow.Flat) {
-            val activity = progress().activityOf(row.pkg.name)
-            icon = if (activity != null) AnimatedIcon.Default.INSTANCE else AllIcons.Nodes.PpLib
-            append(row.pkg.name)
-            append("  ${row.pkg.version}", SimpleTextAttributes.GRAYED_ATTRIBUTES)
-            row.pkg.editableLocation?.let {
-                append(
-                    "  " + BasedPythonBundle.message("env.package.editable", it),
-                    SimpleTextAttributes.GRAYED_ATTRIBUTES,
-                )
-            }
-        }
-
-        private fun activityKey(activity: EnvPackageActivity): String = when (activity) {
-            EnvPackageActivity.DOWNLOADING -> "env.activity.downloading"
-            EnvPackageActivity.PREPARING -> "env.activity.preparing"
-            EnvPackageActivity.REMOVING -> "env.activity.removing"
-        }
-
-        private fun groupIcon(target: EnvDependencyTarget): Icon = when (target) {
-            EnvDependencyTarget.Main -> AllIcons.Nodes.PpLibFolder
-            is EnvDependencyTarget.Extra -> AllIcons.Nodes.Package
-            is EnvDependencyTarget.Group -> AllIcons.Nodes.ConfigFolder
-        }
-
-        private fun targetTooltipKey(target: EnvDependencyTarget): String = when (target) {
-            EnvDependencyTarget.Main -> "env.tree.tooltip.main"
-            is EnvDependencyTarget.Extra -> "env.tree.tooltip.extra"
-            is EnvDependencyTarget.Group -> "env.tree.tooltip.group"
-        }
-    }
-
     // ---- selection ---------------------------------------------------------
 
     /**
-     * What is selected, each row paired with the group heading above it.
+     * What is selected, each row paired with the group and project headings above it.
      *
      * Walking up the path is the only part of the selection rules that needs a tree; what those
      * pairs *mean* lives in [EnvTreeRows], where it can be tested.
@@ -467,7 +342,13 @@ internal class EnvPanel(private val project: Project) :
         tree.selectionPaths.orEmpty().mapNotNull { path ->
             val row = (path.lastPathComponent as? DefaultMutableTreeNode)?.userObject as? EnvRow
                 ?: return@mapNotNull null
-            EnvTreeRows.Selected(row, groupOf(path))
+            EnvTreeRows.Selected(row, groupOf(path), projectOf(path))
+        }
+
+    /** The project heading above [path], or null when the tree has none. */
+    private fun projectOf(path: TreePath): EnvProject? =
+        path.path.firstNotNullOfOrNull {
+            ((it as? DefaultMutableTreeNode)?.userObject as? EnvRow.Project)?.project
         }
 
     /** The group heading above [path], whatever depth the selection is at. */
@@ -562,7 +443,7 @@ internal class EnvPanel(private val project: Project) :
 
         override fun actionPerformed(e: AnActionEvent) {
             val status = service.status
-            val lists = status.dependencies.map { it.list }
+            val lists = EnvTreeRows.listsToOffer(status)
             val modules = EnvTreeRows.modulesToOffer(status)
             val index = status.projectRoot?.let { root -> status.backend?.packageIndex(root) }
             val request = EnvAddPackageDialog(

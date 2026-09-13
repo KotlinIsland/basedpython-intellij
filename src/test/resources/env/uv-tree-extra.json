@@ -1,0 +1,148 @@
+{
+  "schema": {
+    "version": "preview"
+  },
+  "workspace_root": "/p",
+  "workspace": {
+    "path": "/p",
+    "id": "workspace+/p"
+  },
+  "roots": [
+    {
+      "id": "r==0.1.0@virtual+/p/"
+    }
+  ],
+  "inverted": false,
+  "members": [
+    {
+      "name": "r",
+      "path": "/p/",
+      "id": "r==0.1.0@virtual+/p/"
+    }
+  ],
+  "resolution": {
+    "certifi==2026.7.22@registry+https://pypi.org/simple": {
+      "name": "certifi",
+      "version": "2026.7.22",
+      "source": {
+        "registry": {
+          "url": "https://pypi.org/simple"
+        }
+      },
+      "kind": "package",
+      "dependencies": []
+    },
+    "charset-normalizer==3.5.1@registry+https://pypi.org/simple": {
+      "name": "charset-normalizer",
+      "version": "3.5.1",
+      "source": {
+        "registry": {
+          "url": "https://pypi.org/simple"
+        }
+      },
+      "kind": "package",
+      "dependencies": []
+    },
+    "idna==3.19@registry+https://pypi.org/simple": {
+      "name": "idna",
+      "version": "3.19",
+      "source": {
+        "registry": {
+          "url": "https://pypi.org/simple"
+        }
+      },
+      "kind": "package",
+      "dependencies": []
+    },
+    "pysocks==1.7.1@registry+https://pypi.org/simple": {
+      "name": "pysocks",
+      "version": "1.7.1",
+      "source": {
+        "registry": {
+          "url": "https://pypi.org/simple"
+        }
+      },
+      "kind": "package",
+      "dependencies": []
+    },
+    "r==0.1.0@virtual+/p/": {
+      "name": "r",
+      "version": "0.1.0",
+      "source": {
+        "virtual": "/p/"
+      },
+      "kind": "package",
+      "dependencies": [
+        {
+          "id": "requests[socks]==2.34.2@registry+https://pypi.org/simple"
+        }
+      ]
+    },
+    "requests==2.34.2@registry+https://pypi.org/simple": {
+      "name": "requests",
+      "version": "2.34.2",
+      "source": {
+        "registry": {
+          "url": "https://pypi.org/simple"
+        }
+      },
+      "kind": "package",
+      "dependencies": [
+        {
+          "id": "certifi==2026.7.22@registry+https://pypi.org/simple"
+        },
+        {
+          "id": "charset-normalizer==3.5.1@registry+https://pypi.org/simple"
+        },
+        {
+          "id": "idna==3.19@registry+https://pypi.org/simple"
+        },
+        {
+          "id": "urllib3==2.7.0@registry+https://pypi.org/simple"
+        }
+      ],
+      "optional_dependencies": [
+        {
+          "name": "socks",
+          "id": "requests[socks]==2.34.2@registry+https://pypi.org/simple"
+        }
+      ]
+    },
+    "requests[socks]==2.34.2@registry+https://pypi.org/simple": {
+      "name": "requests",
+      "version": "2.34.2",
+      "source": {
+        "registry": {
+          "url": "https://pypi.org/simple"
+        }
+      },
+      "kind": {
+        "extra": "socks"
+      },
+      "dependencies": [
+        {
+          "id": "pysocks==1.7.1@registry+https://pypi.org/simple"
+        },
+        {
+          "id": "requests==2.34.2@registry+https://pypi.org/simple"
+        }
+      ]
+    },
+    "urllib3==2.7.0@registry+https://pypi.org/simple": {
+      "name": "urllib3",
+      "version": "2.7.0",
+      "source": {
+        "registry": {
+          "url": "https://pypi.org/simple"
+        }
+      },
+      "kind": "package",
+      "dependencies": []
+    },
+    "workspace+/p": {
+      "kind": "workspace",
+      "path": "/p",
+      "dependencies": []
+    }
+  }
+}

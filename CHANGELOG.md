@@ -264,6 +264,19 @@
   they disagree, the row says so: a package the environment does not have is greyed, one
   installed at a version other than the lock's is called out. That is drift shown on the row it
   happens on, rather than only asserted in a banner.
+- A workspace's environment tree is headed by its projects — the root, each member, and every
+  path dependency — each holding its own lists, instead of one `dependencies` heading per
+  manifest told apart by a grey suffix. A path dependency such as `folder/foo` is a project of
+  its own rather than only a row under whatever pulled it in, and its lists are shown read-only,
+  since uv cannot edit a non-member's manifest from the workspace. A directory that
+  `[tool.uv.workspace]` lists in `members` and also in `exclude` is marked *excluded*, because
+  that is why it is not a member.
+- Rows say where a package comes from — *workspace*, *editable*, *path* (a built copy, whose
+  edits are not seen until it is reinstalled), *git*, *archive* — and each list carries a count and,
+  when anything under it is at the wrong version, how many, so a collapsed list still shows where
+  the drift is. The header names the environment the way the project does (`.venv`) beside an
+  *in sync* / *out of sync* chip, and speed search finds a package by its name rather than landing
+  on every heading above it first.
 - The environment window shows what is happening while it happens. Adding, syncing, upgrading or
   removing puts a spinner on each package as it is worked on, with what it is doing beside it —
   *downloading…*, *installing…*, *removing…* — and the header names the package currently being

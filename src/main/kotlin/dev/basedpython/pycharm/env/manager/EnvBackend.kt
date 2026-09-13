@@ -247,7 +247,7 @@ interface EnvBackend {
      * a manager with no notion of declared-versus-transitive returns null there and never gets
      * asked. The view falls back to the flat installed list in that case.
      */
-    fun parseTree(stdout: String): List<EnvDependencyGroup> = emptyList()
+    fun parseTree(stdout: String): EnvDependencyGraph = EnvDependencyGraph.EMPTY
 
     /**
      * What [EnvOp.CheckSync]'s exit code means.

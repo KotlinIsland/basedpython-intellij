@@ -249,7 +249,7 @@ object UvBackend : EnvBackend {
         emptyList()
     }
 
-    override fun parseTree(stdout: String): List<EnvDependencyGroup> = UvTree.parse(stdout)
+    override fun parseTree(stdout: String): EnvDependencyGraph = UvTree.parse(stdout)
 
     /**
      * The index uv would install from.

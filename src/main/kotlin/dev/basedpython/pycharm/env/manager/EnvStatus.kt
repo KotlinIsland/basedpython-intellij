@@ -32,14 +32,14 @@ data class EnvStatus(
      */
     val packages: List<EnvPackage>,
     /**
-     * What the project declares, grouped by where it is declared, with transitive dependencies
-     * beneath each.
+     * What the project declares, by project and by the list it is declared in, with transitive
+     * dependencies beneath each.
      *
      * Empty when the backend cannot produce one, or when there is nothing resolved to produce it
      * from — a project with no lock file. The view falls back to listing [packages] flat, which is
      * still the truthful answer to "what is in this environment".
      */
-    val dependencies: List<EnvDependencyGroup> = emptyList(),
+    val graph: EnvDependencyGraph = EnvDependencyGraph.EMPTY,
     /**
      * How the project is divided into modules, or null when the backend has no notion of that.
      *
@@ -57,6 +57,9 @@ data class EnvStatus(
      */
     val error: String? = null,
 ) {
+
+    /** Every list of every project in [graph], in display order. */
+    val dependencies: List<EnvDependencyGroup> get() = graph.groups
 
     /** The single question the UI leads with: what, if anything, needs doing. */
     val health: EnvHealth
