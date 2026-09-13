@@ -216,7 +216,7 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
                     ByRecompositionSession.getInstance(project).adapterReady(server)
                 }
             },
-        ),
+        ).consumer,
         onMoved = { moved -> report(moved, executionResult) },
         onRecomposed = { event -> ByRecompositionSession.getInstance(project).append(event) },
     )

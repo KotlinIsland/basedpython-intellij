@@ -10,6 +10,8 @@ import dev.basedpython.pycharm.debug.recompose.ByEvent
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.future.await
 import org.eclipse.lsp4j.jsonrpc.services.JsonNotification
+import java.lang.reflect.InvocationTargetException
+import java.lang.reflect.Proxy
 
 /**
  * The stock DAP client, subclassed rather than instantiated — and the one place a *custom* event
@@ -85,6 +87,13 @@ internal class ByDapClient(
  *
  * A failed map is logged and skipped rather than fatal. Losing one file's mapping costs that file's
  * breakpoints; aborting the session would cost all of them.
+ *
+ * The consumer handed to the platform is [consumer], a proxy, not this class. `DapEventConsumer`
+ * grows a method whenever the platform handles another DAP event — 263 added `invalidated` — and
+ * Kotlin's `by delegate` only writes forwarders for the methods of the interface it was compiled
+ * against. A class compiled against 262 therefore has no `invalidated` at all on 263: the plugin
+ * verifier rejects it, and the first `invalidated` event would be an `AbstractMethodError`. A proxy
+ * forwards whatever the running IDE's interface declares, so only [initialized] is ours.
  */
 internal class BySourceMapPublisher(
     private val delegate: DapEventConsumer,
@@ -97,9 +106,24 @@ internal class BySourceMapPublisher(
      * first frame.
      */
     private val onReady: suspend (ByDebugProtocolServer) -> Unit = {},
-) : DapEventConsumer by delegate {
+) {
 
-    override fun initialized() {
+    val consumer: DapEventConsumer = Proxy.newProxyInstance(
+        DapEventConsumer::class.java.classLoader,
+        arrayOf(DapEventConsumer::class.java),
+    ) { _, method, args ->
+        if (method.name == "initialized" && method.parameterCount == 0) {
+            initialized()
+        } else {
+            try {
+                method.invoke(delegate, *(args ?: emptyArray()))
+            } catch (e: InvocationTargetException) {
+                throw e.targetException
+            }
+        }
+    } as DapEventConsumer
+
+    private fun initialized() {
         commandProcessor.submitCommand {
             val byServer = server as? ByDebugProtocolServer
             if (byServer == null) {

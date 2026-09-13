@@ -565,6 +565,15 @@
 
 ### Fixed
 
+- Debugging a `.by` program on 2026.3 no longer ends in an `AbstractMethodError` the first time an
+  adapter sends `invalidated`. 263 gave `DapEventConsumer` an `invalidated` method, and the consumer
+  that publishes source maps wrapped the platform's with Kotlin's `by delegate`, which writes
+  forwarders only for the methods the interface had when it was compiled — against 262, so on 263
+  the class simply had no `invalidated`. Marketplace's verifier rejected 0.0.1 on IU-263.4732.28 and
+  PY-263.4732.31 for it. The wrapper is now a proxy that forwards whatever the running IDE's
+  interface declares and intercepts only `initialized`, so the next method the platform adds costs
+  nothing.
+
 - A uv workspace no longer shows one `dependencies` heading per module with nothing to tell them
   apart, and *Add* / *Remove* no longer act on the wrong manifest. `uv tree` emits a root per list
   per workspace member, so a project with modules has a `dependencies` for each of them and can have
