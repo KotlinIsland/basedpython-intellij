@@ -181,7 +181,7 @@ object ByEnvironments {
      * Pure apart from the executable check — unit tested.
      */
     fun findVenvWithBinary(startDirs: List<Path>, binary: String): Path? {
-        val uvEnv = EnvironmentUtil.getValue(UV_PROJECT_ENVIRONMENT)
+        val uvEnv = uvProjectEnvironment()
         for (start in startDirs) {
             var dir: Path? = start
             var hops = 0
@@ -195,6 +195,18 @@ object ByEnvironments {
         }
         return null
     }
+
+    /**
+     * `UV_PROJECT_ENVIRONMENT` as the uv this plugin launches will see it.
+     *
+     * Read from the shell environment the IDE loaded ([EnvironmentUtil]) rather than from the JVM's
+     * own: that is the environment [com.intellij.execution.configurations.GeneralCommandLine] hands
+     * every process it starts, and on macOS an IDE launched from the Dock has a JVM environment with
+     * none of the user's exports in it. The one place both detection and the environment manager ask,
+     * so the directory the plugin looks in and the directory uv writes to cannot come from two
+     * different environments.
+     */
+    fun uvProjectEnvironment(): String? = EnvironmentUtil.getValue(UV_PROJECT_ENVIRONMENT)
 
     /** True when [dir] is the root of a uv project. */
     private fun isUvProjectRoot(dir: Path): Boolean =

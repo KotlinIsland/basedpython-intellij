@@ -48,8 +48,10 @@ object UvBackend : EnvBackend {
     /**
      * `.venv` at the project root, or wherever `UV_PROJECT_ENVIRONMENT` points.
      *
-     * The candidate list comes from [ByEnvironments.venvCandidatesAt] — the same function binary
-     * resolution walks — so the two can never be looking at different sets of directories. Where
+     * The candidate list comes from [ByEnvironments.venvCandidatesAt], fed the variable by
+     * [ByEnvironments.uvProjectEnvironment] — the same function and the same environment binary
+     * resolution uses, and the environment the uv this plugin runs inherits — so the two can never be
+     * looking at different sets of directories. Where
      * they differ is which one wins, and they differ for a good reason: resolution is asking "where
      * is `by`" and probes both, while this is asking "where will uv put the environment", and uv
      * obeys `UV_PROJECT_ENVIRONMENT` unconditionally. That override is therefore preferred here and
@@ -57,7 +59,7 @@ object UvBackend : EnvBackend {
      * [ByEnvironments.venvCandidatesAt] lists the conventional `.venv` first.
      */
     override fun environmentRoot(projectRoot: Path): Path =
-        ByEnvironments.venvCandidatesAt(projectRoot, System.getenv(UV_PROJECT_ENVIRONMENT))
+        ByEnvironments.venvCandidatesAt(projectRoot, ByEnvironments.uvProjectEnvironment())
             .lastOrNull()
             ?: projectRoot.resolve(ByEnvironments.VENV_DIR)
 
@@ -274,9 +276,6 @@ object UvBackend : EnvBackend {
         1 -> EnvDrift.OUT_OF_SYNC
         else -> EnvDrift.UNKNOWN
     }
-
-    /** uv's override for where a project's environment lives. */
-    private const val UV_PROJECT_ENVIRONMENT = "UV_PROJECT_ENVIRONMENT"
 }
 
 /**
