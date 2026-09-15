@@ -6,12 +6,14 @@ import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.platform.lsp.api.LspClient
 import com.intellij.xdebugger.XDebugProcess
 import com.intellij.xdebugger.XDebugSession
 import com.intellij.xdebugger.XDebugSessionListener
 import com.intellij.xdebugger.XDebuggerManagerListener
 import com.intellij.xdebugger.frame.XStackFrame
 import dev.basedpython.pycharm.lang.BasedPythonFileType
+import dev.basedpython.pycharm.lsp.ByServerDocuments
 import dev.basedpython.pycharm.lsp.awaitBy
 import dev.basedpython.pycharm.lsp.byServerFor
 import dev.basedpython.pycharm.settings.BasedPythonSettings
@@ -121,26 +123,34 @@ class ByDataFlowListener : XDebuggerManagerListener {
             val observations = ByDataFlowFacts.observationsOf(facts)
             if (observations.isEmpty()) return emptyList()
 
-            return askServer(project, file, line, observations)
-        }
-
-        /** `by/dataFlowAt`, with what the debugger proved. */
-        private suspend fun askServer(
-            project: Project,
-            file: VirtualFile,
-            line: Int,
-            observations: List<ByObservation>,
-        ): List<ByDataFlowFinding> {
             val server = byServerFor(project, file) ?: return emptyList()
-
-            val params = ByDataFlowParams(
-                textDocument = TextDocumentIdentifier(server.getDocumentIdentifier(file).uri),
-                line = line,
-                observations = observations,
-            )
-            return server.awaitBy("by/dataFlowAt", ANALYSIS_TIMEOUT_MS.toLong()) {
-                (it as ByDataFlowServer).dataFlowAt(params)
-            }.value.orEmpty()
+            return askDataFlowAt(project, server, file, line, observations)
         }
     }
+}
+
+/**
+ * `by/dataFlowAt` of [server], with what the debugger proved.
+ *
+ * A document request, so the file is made sure of first: `by` refuses one about a document it was
+ * never opened on, and the platform opens none outside the content roots — a program stopped in a
+ * `.by` under an excluded directory would otherwise draw nothing, with the refusal in the log.
+ */
+internal suspend fun askDataFlowAt(
+    project: Project,
+    server: LspClient,
+    file: VirtualFile,
+    line: Int,
+    observations: List<ByObservation>,
+): List<ByDataFlowFinding> {
+    readAction { ByServerDocuments.ensureOpen(server, project, file) }
+
+    val params = ByDataFlowParams(
+        textDocument = TextDocumentIdentifier(server.getDocumentIdentifier(file).uri),
+        line = line,
+        observations = observations,
+    )
+    return server.awaitBy("by/dataFlowAt", ANALYSIS_TIMEOUT_MS.toLong()) {
+        (it as ByDataFlowServer).dataFlowAt(params)
+    }.value.orEmpty()
 }

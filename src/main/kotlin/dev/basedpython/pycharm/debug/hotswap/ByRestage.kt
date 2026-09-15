@@ -1,7 +1,10 @@
 package dev.basedpython.pycharm.debug.hotswap
 
+import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.platform.lsp.api.LspClient
+import dev.basedpython.pycharm.lsp.ByServerDocuments
 import dev.basedpython.pycharm.lsp.askBy
 import dev.basedpython.pycharm.lsp.byServerFor
 import dev.basedpython.pycharm.lsp.ext.ByRestage as ByRestageAnswer
@@ -66,6 +69,20 @@ internal object ByRestage {
         val servers = files.map { byServerFor(project, it) }.distinct()
         if (null in servers) return Asked.NoAnswer
         val server = servers.singleOrNull() ?: return Asked.SeveralServers
+        return ask(project, server, files, buildDirectory)
+    }
+
+    /**
+     * [ask] of one [server] that serves every one of [files].
+     *
+     * Each file is made sure of first, as every other request about a document is: a file the
+     * platform does not sync — outside the content roots — is one `by` would otherwise be asked to
+     * transpile without having been told the text the IDE holds for it. Background threads only.
+     */
+    internal fun ask(project: Project, server: LspClient, files: List<VirtualFile>, buildDirectory: String): Asked {
+        ReadAction.run<RuntimeException> {
+            for (file in files) ByServerDocuments.ensureOpen(server, project, file)
+        }
 
         val params = ByTranspileForBuildParams(
             textDocuments = files.map { TextDocumentIdentifier(server.getDocumentIdentifier(it).uri) },
