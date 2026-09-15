@@ -1,9 +1,14 @@
 package dev.basedpython.pycharm.editor.highlight
 
+import com.intellij.openapi.editor.EditorFactory
 import com.intellij.openapi.editor.colors.EditorColors
 import com.intellij.openapi.editor.ex.RangeHighlighterEx
+import com.intellij.openapi.editor.impl.event.EditorEventMulticasterImpl
+import com.intellij.openapi.editor.markup.RangeHighlighter
+import com.intellij.openapi.util.Disposer
 import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
+import com.intellij.testFramework.replaceService
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -114,5 +119,37 @@ class ByStringMarginPassTest {
         fixture.doHighlighting()
         // Identity, which is the claim: the same objects, not equal ones.
         assertEquals(first, marginHighlighters())
+    }
+
+    /**
+     * What unloading the plugin does to an editor that is still open: the service that owns the
+     * margins is disposed, and nothing of this plugin's may be left behind in the editor — no
+     * highlighter carrying the renderer, no listener. Either would keep the plugin's classloader
+     * alive for as long as the editor stays open.
+     */
+    @Test
+    fun `disposing the margins takes everything back out of an open editor`() {
+        val owner = Disposer.newDisposable("margins under test")
+        try {
+            val margins = ByStringMarginEditors()
+            fixture.project.replaceService(ByStringMarginEditors::class.java, margins, owner)
+            // Listeners of this class, from any instance: the light project outlives a test, and the
+            // service an earlier test created is still registered alongside this one.
+            val multicaster = EditorFactory.getInstance().eventMulticaster as EditorEventMulticasterImpl
+            fun listeners() = multicaster.listeners.values.flatten()
+                .count { it.javaClass.name.startsWith(ByStringMarginEditors::class.java.name) }
+
+            fixture.configureByText("f.by", "a = $q\n    one\n    $q\n")
+            fixture.doHighlighting()
+            assertEquals(1, marginHighlighters().size, "the fixture needs a margin for this to be testing anything")
+            val registered = listeners()
+
+            Disposer.dispose(margins)
+
+            assertEquals(emptyList<RangeHighlighter>(), marginHighlighters())
+            assertEquals(registered - 1, listeners(), "the disposed service's repaint listener is gone")
+        } finally {
+            Disposer.dispose(owner)
+        }
     }
 }
