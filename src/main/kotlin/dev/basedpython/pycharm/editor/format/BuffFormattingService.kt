@@ -3,6 +3,9 @@ package dev.basedpython.pycharm.editor.format
 import com.intellij.formatting.service.AsyncDocumentFormattingService
 import com.intellij.formatting.service.AsyncFormattingRequest
 import com.intellij.formatting.service.FormattingService
+import com.intellij.openapi.application.runReadActionBlocking
+import com.intellij.openapi.fileEditor.FileDocumentManager
+import com.intellij.openapi.progress.runBlockingCancellable
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiFile
@@ -76,7 +79,19 @@ class BuffFormattingService : AsyncDocumentFormattingService() {
                 return
             }
 
-            val edits = ByCleanup.requestEdits(server, file, ByCleanupOp.FormatAndOrganizeImports)
+            // The server only ever holds a document the editor opened, so a file with no document
+            // is not one it can answer for.
+            val document = runReadActionBlocking { FileDocumentManager.getInstance().getDocument(file) }
+                ?: run {
+                    request.onError(
+                        BasedPythonBundle.message("notification.formatFailed.title"),
+                        BasedPythonBundle.message("format.serverDidNotAnswer"),
+                    )
+                    return
+                }
+            val edits = runBlockingCancellable {
+                ByCleanup.requestEdits(server, file, document, ByCleanupOp.FormatAndOrganizeImports)
+            }
             if (cancelled) return
             if (edits == null) {
                 request.onError(
@@ -89,7 +104,7 @@ class BuffFormattingService : AsyncDocumentFormattingService() {
             // An empty list means the file was already laid out the way `buff` wants it. Handing
             // back the unchanged text is how this service says "nothing to do"; onError would
             // report a failure that did not happen.
-            request.onTextReady(ByCleanup.applyEditsTo(request.documentText, edits))
+            request.onTextReady(ByCleanup.applyEditsTo(request.documentText, edits.edits))
         }
 
         override fun cancel(): Boolean {

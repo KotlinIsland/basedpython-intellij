@@ -221,14 +221,14 @@ class ByCleanupWorkspaceEditTest {
   @Test
   fun `reads edits sent as documentChanges`() {
     val workspaceEdit = WorkspaceEdit(listOf(documentEdit(uri, edit("fixed\n"))))
-    assertEquals(listOf(edit("fixed\n")), ByCleanup.editsFor(workspaceEdit, uri))
+    assertEquals(listOf(edit("fixed\n")), ByCleanup.editsFor(workspaceEdit, uri).edits)
   }
 
   /** The other shape, for a client that did not claim `documentChanges`. */
   @Test
   fun `reads edits sent as changes`() {
     val workspaceEdit = WorkspaceEdit(mapOf(uri to listOf(edit("fixed\n"))))
-    assertEquals(listOf(edit("fixed\n")), ByCleanup.editsFor(workspaceEdit, uri))
+    assertEquals(listOf(edit("fixed\n")), ByCleanup.editsFor(workspaceEdit, uri).edits)
   }
 
   /** A pass may only rewrite the document it was asked about. */
@@ -237,7 +237,7 @@ class ByCleanupWorkspaceEditTest {
     val workspaceEdit = WorkspaceEdit(
       listOf(documentEdit("file:///project/elsewhere.by", edit("no\n"))),
     )
-    assertEquals(emptyList<TextEdit>(), ByCleanup.editsFor(workspaceEdit, uri))
+    assertEquals(emptyList<TextEdit>(), ByCleanup.editsFor(workspaceEdit, uri).edits)
   }
 
   /** Creating, renaming and deleting files are not edits, and are not this plugin's to apply. */
@@ -246,12 +246,31 @@ class ByCleanupWorkspaceEditTest {
     val workspaceEdit = WorkspaceEdit(
       listOf(Either.forRight<TextDocumentEdit, ResourceOperation>(CreateFile(uri))),
     )
-    assertEquals(emptyList<TextEdit>(), ByCleanup.editsFor(workspaceEdit, uri))
+    assertEquals(emptyList<TextEdit>(), ByCleanup.editsFor(workspaceEdit, uri).edits)
   }
 
   /** Neither shape filled in means there was nothing to do, not a failure. */
   @Test
   fun `an empty workspace edit yields no edits`() {
-    assertEquals(emptyList<TextEdit>(), ByCleanup.editsFor(WorkspaceEdit(), uri))
+    assertEquals(emptyList<TextEdit>(), ByCleanup.editsFor(WorkspaceEdit(), uri).edits)
+  }
+
+  @Test
+  fun `documentChanges carry the version the server computed against`() {
+    val workspaceEdit = WorkspaceEdit(
+      listOf(
+        Either.forLeft<TextDocumentEdit, ResourceOperation>(
+          TextDocumentEdit(VersionedTextDocumentIdentifier(uri, 7), listOf(edit("fixed\n"))),
+        ),
+      ),
+    )
+    assertEquals(7, ByCleanup.editsFor(workspaceEdit, uri).version)
+  }
+
+  /** The `changes` shape has nowhere to put a version, so none is claimed. */
+  @Test
+  fun `changes carry no version`() {
+    val workspaceEdit = WorkspaceEdit(mapOf(uri to listOf(edit("fixed\n"))))
+    assertEquals(null, ByCleanup.editsFor(workspaceEdit, uri).version)
   }
 }

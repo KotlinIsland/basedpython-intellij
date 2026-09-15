@@ -17,7 +17,9 @@ import com.intellij.openapi.vcs.ui.RefreshableOnComponent
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.ui.components.JBCheckBox
 import com.intellij.ui.dsl.builder.panel
-import org.eclipse.lsp4j.TextEdit
+import com.intellij.openapi.progress.runBlockingCancellable
+import com.intellij.platform.lsp.api.LspClient
+import dev.basedpython.pycharm.format.ByDocumentEdits
 import dev.basedpython.pycharm.format.ByCleanup
 import dev.basedpython.pycharm.format.ByCleanupOp
 import dev.basedpython.pycharm.settings.BasedPythonSettings
@@ -86,11 +88,11 @@ internal class ByCleanupCheckinHandler(private val panel: CheckinProjectPanel) :
       val server = ByCleanup.findServer(project, file) ?: continue
       val document = documents.getDocument(file) ?: continue
 
-      val edits = ByCleanup.requestEdits(server, file, ByCleanupOp.FixAll)
-      if (edits.isNullOrEmpty()) continue
+      val edits = runBlockingCancellable { ByCleanup.requestEdits(server, file, document, ByCleanupOp.FixAll) }
+      if (edits == null || edits.isEmpty()) continue
 
       // Asking the server happens here, on the progress thread; the write has to go back to the EDT.
-      applyOnEdt(document, edits)
+      applyOnEdt(server, document, edits)
       changed += file
     }
 
@@ -102,12 +104,12 @@ internal class ByCleanupCheckinHandler(private val panel: CheckinProjectPanel) :
     }
   }
 
-  private fun applyOnEdt(document: Document, edits: List<TextEdit>) {
+  private fun applyOnEdt(server: LspClient, document: Document, edits: ByDocumentEdits) {
     // A document may only be changed inside a command, not merely inside a write action.
     applyOnEdt {
       CommandProcessor.getInstance().executeCommand(
         project,
-        { runWriteAction { ByCleanup.applyEditsTo(document, edits) } },
+        { runWriteAction { ByCleanup.applyEditsTo(server, document, edits) } },
         BasedPythonBundle.message("progress.cleanupOnCommit"),
         null,
       )

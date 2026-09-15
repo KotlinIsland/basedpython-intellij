@@ -85,13 +85,12 @@ object ByCleanup {
       return false
     }
 
-    val edits = requestEdits(server, file, op)
-    if (edits.isNullOrEmpty()) return false
+    val edits = requestEdits(server, file, document, op)
+    if (edits == null || edits.isEmpty()) return false
 
-    writeCommandAction(project, op.progressText) {
-      applyEditsTo(document, edits)
+    return writeCommandAction(project, op.progressText) {
+      applyEditsTo(server, document, edits)
     }
-    return true
   }
 
   /** The `buff` server serving [file], if one is running. */
@@ -120,58 +119,103 @@ object ByCleanup {
   }
 
   /**
-   * Asks the server for [op]'s edit for [file].
+   * Asks the server for [op]'s edit for [file], whose editor copy is [document].
    *
    * Returns null when the server could not answer at all — it is not initialized, timed out, or
-   * replied with an error — which is different from an empty list, meaning there was nothing to do.
+   * replied with an error — which is different from no edits, meaning there was nothing to do. It
+   * is null too when the server answered for a different version of the document than the one the
+   * request was sent about: those edits describe text this editor does not hold.
+   *
+   * Suspends rather than blocks, so the caller's thread is free while `buff` works and the request
+   * goes when the caller's coroutine is cancelled.
    */
-  fun requestEdits(server: LspClient, file: VirtualFile, op: ByCleanupOp): List<TextEdit>? {
+  suspend fun requestEdits(
+    server: LspClient,
+    file: VirtualFile,
+    document: Document,
+    op: ByCleanupOp,
+  ): ByDocumentEdits? {
+    val requestedVersion = server.getDocumentVersion(document)
+    val identifier = server.getDocumentIdentifier(file)
     val params = CodeActionParams(
-      server.getDocumentIdentifier(file),
+      identifier,
       // The whole file. These are source actions, so the range is not what selects them; `only` is.
       Range(Position(0, 0), Position(0, 0)),
       CodeActionContext(emptyList(), listOf(op.kind)),
     )
 
-    val actions = server.sendRequestSync { it.textDocumentService.codeAction(params) } ?: return null
+    val actions = server.sendRequest { it.textDocumentService.codeAction(params) } ?: return null
 
     // `buff` answers a named source action with exactly that action, so anything else means the
     // server does not know this kind — an older binary, most likely.
     val action = actions.firstNotNullOfOrNull { it.takeIf { it.isRight }?.right } ?: run {
       LOG.debug("buff returned no `${op.kind}` action for ${file.path}")
-      return emptyList()
+      return ByDocumentEdits(emptyList(), requestedVersion)
     }
 
     val resolved = if (action.edit == null) {
-      server.sendRequestSync { it.textDocumentService.resolveCodeAction(action) } ?: return null
+      server.sendRequest { it.textDocumentService.resolveCodeAction(action) } ?: return null
     } else {
       action
     }
 
-    val edit = resolved.edit ?: return emptyList()
-    return editsFor(edit, server.getDocumentIdentifier(file).uri)
+    val edit = resolved.edit ?: return ByDocumentEdits(emptyList(), requestedVersion)
+    val edits = editsFor(edit, identifier.uri)
+    if (edits.version != null && edits.version != requestedVersion) {
+      LOG.debug(
+        "buff answered `${op.kind}` for version ${edits.version} of ${file.path}, " +
+          "not the version $requestedVersion it was asked about — edits dropped",
+      )
+      return null
+    }
+    // Stamped with the version asked about even when the server gave none, so applying them can
+    // still tell whether the document moved on in the meantime.
+    return ByDocumentEdits(edits.edits, requestedVersion)
   }
 
   /**
-   * Pulls out the edits [edit] makes to [uri] itself, ignoring any it makes elsewhere.
+   * Pulls out the edits [edit] makes to [uri] itself, ignoring any it makes elsewhere, with the
+   * document version the server says they were computed against.
    *
    * A workspace edit says the same thing in one of two shapes, and which one arrives is the
    * client's own doing: `documentChanges` when the client claimed to understand it, `changes`
    * otherwise. The platform claims it — it sets `WorkspaceEditCapabilities.documentChanges` — so
    * `buff` answers in `documentChanges` and leaves `changes` null, and reading only `changes` found
    * nothing to apply, ever. Both are read here, because that capability is the platform's to
-   * promise and not this plugin's to rely on it keeping.
+   * promise and not this plugin's to rely on it keeping. Only `documentChanges` can name a version.
    */
-  fun editsFor(edit: WorkspaceEdit, uri: String): List<TextEdit> {
-    edit.changes?.get(uri)?.let { return it }
+  fun editsFor(edit: WorkspaceEdit, uri: String): ByDocumentEdits {
+    edit.changes?.get(uri)?.let { return ByDocumentEdits(it, version = null) }
 
     // A `documentChanges` entry is either a text edit or a resource operation (create/rename/
     // delete a file); only the first is an edit to a document, and only these passes' own document
     // is this plugin's to apply.
-    return edit.documentChanges.orEmpty()
+    val changes = edit.documentChanges.orEmpty()
       .mapNotNull { change -> change.takeIf { it.isLeft }?.left }
       .filter { it.textDocument.uri == uri }
-      .flatMap { it.edits }
+    return ByDocumentEdits(
+      edits = changes.flatMap { it.edits },
+      version = changes.firstNotNullOfOrNull { it.textDocument.version },
+    )
+  }
+
+  /**
+   * Applies [edits] to [document] if it is still the version they were computed against, and
+   * reports whether anything changed.
+   *
+   * Compared here, inside the write the edit is made in, because this is the last moment the
+   * document can move under them: a keystroke between the request and this write would otherwise
+   * land every range a few characters off, silently.
+   */
+  fun applyEditsTo(server: LspClient, document: Document, edits: ByDocumentEdits): Boolean {
+    if (edits.isEmpty()) return false
+    val current = server.getDocumentVersion(document)
+    if (edits.version != null && edits.version != current) {
+      LOG.debug("Document moved from version ${edits.version} to $current — cleanup edits dropped")
+      return false
+    }
+    applyEditsTo(document, edits.edits)
+    return true
   }
 
   /**
@@ -252,6 +296,16 @@ object ByCleanup {
     text.forEachIndexed { i, c -> if (c == '\n') starts += i + 1 }
     return starts.toIntArray()
   }
+}
+
+/**
+ * The edits a pass makes to one document, and the version of that document they apply to.
+ *
+ * [version] is null only when nothing said which version it was — a workspace edit in the `changes`
+ * shape has nowhere to put one — and edits like that cannot be checked against the document.
+ */
+data class ByDocumentEdits(val edits: List<TextEdit>, val version: Int?) {
+  fun isEmpty(): Boolean = edits.isEmpty()
 }
 
 /** Reads the file behind [document], under a read action. */

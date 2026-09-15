@@ -91,7 +91,7 @@ internal object ModuleImportEdits {
     private fun editsByFile(edit: WorkspaceEdit): Map<VirtualFile, List<org.eclipse.lsp4j.TextEdit>> =
         uris(edit).mapNotNull { uri ->
             val file = fileOf(uri) ?: return@mapNotNull null
-            val edits = ByCleanup.editsFor(edit, uri).takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+            val edits = ByCleanup.editsFor(edit, uri).edits.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
             file to edits
         }.toMap()
 
