@@ -406,7 +406,7 @@ data class ByInjectionFragment(
 )
 
 /**
- * The document to look through, and how much of it.
+ * The document to look through, how much of it, and the tab size it is drawn with.
  *
  * Field names are the wire format and must match `ty_server`'s `AlignmentGroupsParams`, which is
  * `deny_unknown_fields`. [range] mirrors the one sent to `textDocument/inlayHint` so that both
@@ -416,6 +416,11 @@ data class ByInjectionFragment(
 data class ByAlignmentGroupsParams(
     val textDocument: TextDocumentIdentifier,
     val range: Range,
+    /**
+     * The columns between tab stops in the editor the hints are drawn in. `by` counts a tab before
+     * the `=` to the next stop, so whether two lines share a column depends on it.
+     */
+    val tabSize: Int,
 )
 
 /** Assignments sharing one `=` column, which therefore have to be laid out together. */
@@ -430,6 +435,14 @@ data class ByAlignmentMember(
     val gapStart: Position,
     /** The `=`. */
     val gapEnd: Position,
+    /**
+     * The display column [gapStart] is drawn at: a wide character counts two, a combining mark
+     * none, a tab reaches the next multiple of [ByAlignmentGroupsParams.tabSize]. Not
+     * `gapStart.character`, which counts UTF-16 units.
+     */
+    val gapStartColumn: Int,
+    /** The display column of the `=`, the same for every member of a group. */
+    val gapEndColumn: Int,
 )
 
 /**

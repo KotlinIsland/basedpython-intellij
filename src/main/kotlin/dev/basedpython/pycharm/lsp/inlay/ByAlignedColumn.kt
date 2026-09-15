@@ -38,9 +38,11 @@ class ByAlignedColumn(override val editor: Editor) : ByHintPush.Watcher {
     /**
      * One line of the block: the room it has, and the one inlay whose width this column decides.
      *
-     * [leadColumns] and [gapColumns] are read off the document as it was when `by` answered. An edit
-     * makes them stale, and nothing is done about that on purpose — the daemon restarts the pass
-     * against the new text, which is the same staleness the hint's own text already has.
+     * [leadColumns] and [gapColumns] are the display columns `by` counted in the document as it was
+     * when it answered — a tab or a wide character before the gap counts as the columns it is drawn
+     * across, not as one character. An edit makes them stale, and nothing is done about that on
+     * purpose — the daemon restarts the pass against the new text, which is the same staleness the
+     * hint's own text already has.
      */
     inner class Seat internal constructor(
         /** Where this seat sits in [seats]. Held rather than searched for — see [deltaColumns]. */

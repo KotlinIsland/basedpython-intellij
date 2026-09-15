@@ -10,6 +10,7 @@ import com.intellij.codeInsight.hints.SettingsKey
 import com.intellij.codeInsight.hints.presentation.PresentationFactory
 import com.intellij.openapi.editor.Document
 import com.intellij.openapi.editor.Editor
+import com.intellij.openapi.editor.ex.util.EditorUtil
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.platform.lsp.api.LspClient
@@ -225,6 +226,8 @@ private class ByInlayHintsCollector(
         val params = ByAlignmentGroupsParams(
             textDocument = TextDocumentIdentifier(server.getDocumentIdentifier(virtualFile).uri),
             range = range,
+            // The tab size the editor lays tabs out with, so `by` counts columns the way they are drawn.
+            tabSize = EditorUtil.getTabSize(editor),
         )
         val groups = server.askBy("by/alignmentGroups", ALIGNMENT_TIMEOUT_MS) {
             (it as ByServerExtensions).alignmentGroups(params)
@@ -235,20 +238,21 @@ private class ByInlayHintsCollector(
             if (gaps.size < 2 || gaps.any { it == null }) continue
             // A block with no hint anywhere in it is a block nothing has displaced, and laying it out
             // would cost every one of its lines a standing-by pixel to arrive back where it started.
-            if (gaps.none { drawn.containsKey(it?.first) }) continue
+            if (gaps.none { drawn.containsKey(it) }) continue
 
             val column = ByAlignedColumn(editor)
             val spacers = ArrayList<Pair<Int, ByAlignmentSpacer>>()
-            for (gap in gaps.filterNotNull()) {
-                val line = document.getLineStartOffset(document.getLineNumber(gap.first))
+            for ((member, gap) in group.members.zip(gaps.filterNotNull())) {
+                // Display columns as `by` counted them, not offsets: a tab or a wide character before
+                // the gap takes more columns than it takes characters.
                 val seat = column.seat(
-                    leadColumns = gap.first - line,
-                    gapColumns = gap.second - gap.first,
+                    leadColumns = member.gapStartColumn,
+                    gapColumns = member.gapEndColumn - member.gapStartColumn,
                 )
-                val hints = drawn[gap.first].orEmpty()
+                val hints = drawn[gap].orEmpty()
                 hints.forEach { seat.take(it) }
                 // Every line of a block carries an inlay at its gap, hint or not — see ByAlignedColumn.
-                if (hints.isEmpty()) spacers += gap.first to seat.standIn()
+                if (hints.isEmpty()) spacers += gap to seat.standIn()
             }
             spacers.forEach { (offset, spacer) -> sink.addInlineElement(offset, true, spacer, false) }
             if (column.watchesPush()) ByHintPush.getInstance().watch(column)
@@ -256,12 +260,13 @@ private class ByInlayHintsCollector(
     }
 
     /**
-     * Where one member's padding starts and ends in this document, or `null` if that is no longer a
-     * run of blanks on one line.
+     * Where one member's padding starts in this document, or `null` if the answer no longer describes
+     * a run of spaces on one line.
      *
      * The positions came from the source `by` parsed, and the document may have moved on. Checking
      * rather than trusting is what keeps a stale answer from laying a block out around an `=` that
-     * has been typed over.
+     * has been typed over. The spaces are also counted against the columns `by` reported for them —
+     * a gap is spaces only, so the two agree unless the text changed underneath.
      *
      * **An empty gap is a gap.** `a=1` has its `=` in a column like any other line, and it is only
      * `end < start` — a position pair that could not have come from one — that says the answer is
@@ -269,13 +274,14 @@ private class ByInlayHintsCollector(
      * dropping that one line, because a group is taken whole: one `a=1` in a block would throw away
      * the alignment of every line around it.
      */
-    private fun gapIn(document: Document, member: ByAlignmentMember): Pair<Int, Int>? {
+    private fun gapIn(document: Document, member: ByAlignmentMember): Int? {
         val start = getOffsetInDocument(document, member.gapStart) ?: return null
         val end = getOffsetInDocument(document, member.gapEnd) ?: return null
         if (end < start) return null
         if (document.getLineNumber(start) != document.getLineNumber(end)) return null
+        if (end - start != member.gapEndColumn - member.gapStartColumn) return null
         val gap = document.charsSequence.subSequence(start, end)
-        return if (gap.all { it == ' ' }) start to end else null
+        return if (gap.all { it == ' ' }) start else null
     }
 
     private companion object {
