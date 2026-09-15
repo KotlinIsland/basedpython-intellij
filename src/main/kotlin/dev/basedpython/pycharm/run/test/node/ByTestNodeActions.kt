@@ -3,12 +3,10 @@ package dev.basedpython.pycharm.run.test.node
 import com.intellij.execution.Executor
 import com.intellij.execution.ProgramRunnerUtil
 import com.intellij.execution.RunManager
-import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.fileEditor.OpenFileDescriptor
 import com.intellij.openapi.project.Project
 import dev.basedpython.pycharm.run.test.ByTestConfiguration
 import dev.basedpython.pycharm.run.test.ByTestConfigurationType
-import dev.basedpython.pycharm.run.test.tree.ByTestLocations
 import dev.basedpython.pycharm.run.test.tree.ByTestSources
 
 /**
@@ -71,29 +69,20 @@ internal object ByTestNodeActions {
     }
 
     /**
-     * Opens the declaration [target] was collected from — the `.by` it was transpiled from, or the
+     * Opens the declaration [target] was collected from — in the `.by` `by run` staged it from, or the
      * `.py` itself — and reports whether it could.
      *
-     * Deliberately the same textual resolution the test tree of a *run* navigates with
-     * ([ByTestLocations]): the PSI for `.by` is flat, so there are no declarations to walk, and
-     * both views should land on the same line for the same node id.
+     * The same resolution the test tree of a *run* navigates with ([ByTestSources.locate]), so both
+     * views land on the same name for the same node id.
      */
     fun navigate(
         project: Project,
         target: String?,
         source: ByTestSource = ByTestSource.TRANSPILED,
     ): Boolean {
-        val location = target?.let(ByTestLocations::parse) ?: return false
-        // For a test plain pytest collected, the `.py` in the node id *is* the source file; the
-        // `.by` [ByTestLocations] maps to does not exist.
-        val path = if (source == ByTestSource.PYTHON) target.substringBefore("::") else location.file
-        val file = ByTestSources.findSourceFile(project, path) ?: return false
-        val text = FileDocumentManager.getInstance().getDocument(file)?.charsSequence?.toString()
-        val offset = text
-            ?.takeIf { location.symbols.isNotEmpty() }
-            ?.let { ByTestLocations.declarationOffset(it, location.symbols) }
-            ?: 0
-        OpenFileDescriptor(project, file, offset).navigate(true)
+        val place = target?.let { ByTestSources.locate(project, it, transpiled = source == ByTestSource.TRANSPILED) }
+            ?: return false
+        OpenFileDescriptor(project, place.file, place.offset).navigate(true)
         return true
     }
 }

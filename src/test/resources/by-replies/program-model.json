@@ -1358,6 +1358,93 @@
      "unittest": false
     }
    ]
+  },
+  {
+   "source": "def outer():\n    def test_top():\n        assert False\n\n\nclass TestGroup:\n    def test_in_class(self):\n        assert True\n\n\ndef test_top():\n    assert True\n",
+   "tests": [
+    {
+     "children": [
+      {
+       "children": [],
+       "id": "TestGroup::test_in_class",
+       "kind": "function",
+       "name": "test_in_class",
+       "range": {
+        "end": {
+         "character": 19,
+         "line": 7
+        },
+        "start": {
+         "character": 4,
+         "line": 6
+        }
+       },
+       "selectionRange": {
+        "end": {
+         "character": 21,
+         "line": 6
+        },
+        "start": {
+         "character": 8,
+         "line": 6
+        }
+       },
+       "unittest": false
+      }
+     ],
+     "id": "TestGroup",
+     "kind": "class",
+     "name": "TestGroup",
+     "range": {
+      "end": {
+       "character": 19,
+       "line": 7
+      },
+      "start": {
+       "character": 0,
+       "line": 5
+      }
+     },
+     "selectionRange": {
+      "end": {
+       "character": 15,
+       "line": 5
+      },
+      "start": {
+       "character": 6,
+       "line": 5
+      }
+     },
+     "unittest": false
+    },
+    {
+     "children": [],
+     "id": "test_top",
+     "kind": "function",
+     "name": "test_top",
+     "range": {
+      "end": {
+       "character": 15,
+       "line": 11
+      },
+      "start": {
+       "character": 0,
+       "line": 10
+      }
+     },
+     "selectionRange": {
+      "end": {
+       "character": 12,
+       "line": 10
+      },
+      "start": {
+       "character": 4,
+       "line": 10
+      }
+     },
+     "unittest": false
+    }
+   ]
   }
  ]
 }

@@ -98,9 +98,9 @@ class ByTestOutputParser {
     /**
      * The `by_test://` URL for a node id, already split on `::`.
      *
-     * Emitted with the extension pytest reported. The node id names the *transpiled* tree, which
-     * differs from the `.by` source only in that extension (see [dev.basedpython.pycharm.run.test.ByPytest]);
-     * mapping it back is [ByTestLocator]'s job, since only it knows the project layout.
+     * Emitted exactly as pytest reported it. The node id names the *transpiled* tree, whose layout
+     * follows the module tree rather than the project's directories; mapping it back to a source is
+     * [ByTestLocator]'s job, from what `by` says that layout is.
      */
     private fun locationHint(parts: List<String>): String? {
         if (parts.isEmpty() || !parts[0].endsWith(".py", ignoreCase = true)) return null
