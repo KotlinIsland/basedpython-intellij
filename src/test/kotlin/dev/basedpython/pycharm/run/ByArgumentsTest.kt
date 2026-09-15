@@ -78,9 +78,31 @@ class ByArgumentsTest {
     }
 
     @Test
-    fun `extra args come last and are split like a shell`() {
-        val args = byArguments("run", "--min-version", "3.14", listOf("main"), "--soundness none")
-        assertEquals(listOf("run", "--min-version", "3.14", "main", "--soundness", "none"), args)
+    fun `extra args are by's flags, so they come before the module and are split like a shell`() {
+        // `by run` forwards everything after the module to the program: `by run main --soundness
+        // none` runs `main` with `sys.argv[1:] == ["--soundness", "none"]` and default soundness.
+        val args = byArguments("run", "--min-version", "3.14", listOf("main", "--user-flag"), "--soundness none")
+        assertEquals(listOf("run", "--min-version", "3.14", "--soundness", "none", "main", "--user-flag"), args)
+    }
+
+    @Test
+    fun `extra args meant for the program follow the positionals`() {
+        val args = byArguments(
+            subcommand = "run",
+            pythonVersionFlag = "--min-version",
+            pythonVersion = "",
+            subcommandArgs = listOf("pytest", "-v", "tests/test_a.py"),
+            extraArgs = "-k fast",
+            infrastructureArgs = listOf("--python", "/tmp/bpd-python"),
+            extraArgsForProgram = true,
+        )
+        assertEquals(listOf("run", "--python", "/tmp/bpd-python", "pytest", "-v", "tests/test_a.py", "-k", "fast"), args)
+    }
+
+    @Test
+    fun `check takes its extra flags ahead of the paths`() {
+        val args = byArguments("check", "--python-version", "3.13", listOf("src"), "--error-on-warning")
+        assertEquals(listOf("check", "--python-version", "3.13", "--error-on-warning", "src"), args)
     }
 
     @Test

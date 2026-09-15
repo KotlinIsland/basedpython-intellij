@@ -75,6 +75,9 @@ class ByTestConfiguration(project: Project, factory: ConfigurationFactory, name:
 
             override fun buildSubcommandArgs(): List<String> = ByPytest.arguments(opts.paths)
 
+            // The editor labels them "Extra pytest args": they are pytest's, after its targets.
+            override val extraArgsForProgram = true
+
             /**
              * Assembled here rather than in `createConsole` because the SM runner attaches the
              * console itself.

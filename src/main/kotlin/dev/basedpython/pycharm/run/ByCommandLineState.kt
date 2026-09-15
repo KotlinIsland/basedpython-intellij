@@ -47,6 +47,14 @@ abstract class ByCommandLineState(
     protected abstract fun buildSubcommandArgs(): List<String>
 
     /**
+     * Whether [ByCommonOptions.extraArgs] are for the program `by run` starts rather than for `by`.
+     *
+     * Only a configuration whose field says so — the test configuration's "Extra pytest args" —
+     * sets this; everywhere else the field is `by`'s own flags. See [byArguments].
+     */
+    protected open val extraArgsForProgram: Boolean = false
+
+    /**
      * Environment set by the infrastructure around the run rather than by the user, applied after
      * [ByCommonOptions.envVars] so it cannot be shadowed by a stale project setting.
      *
@@ -151,6 +159,7 @@ abstract class ByCommandLineState(
         subcommandArgs = buildSubcommandArgs(),
         extraArgs = options.extraArgs,
         infrastructureArgs = infrastructureArgs,
+        extraArgsForProgram = extraArgsForProgram,
     )
 
     /**
@@ -224,6 +233,10 @@ internal fun composePythonPath(prefixes: List<String>, existing: String?): Strin
  * [infrastructureArgs] are the debugger's own flags. They go with the version flag, ahead of the
  * positionals, because `by run` forwards everything after the module to the program — a
  * `--python` behind it would reach the debuggee as an argument instead of `by` as an option.
+ *
+ * [extraArgs] go there too, for the same reason: they are `by`'s flags, and `by run main --soundness
+ * none` hands `--soundness none` to `main`. Only when [extraArgsForProgram] says they belong to the
+ * program (`by run pytest -v … -k name`) do they follow the positionals.
  */
 internal fun byArguments(
     subcommand: String,
@@ -232,7 +245,9 @@ internal fun byArguments(
     subcommandArgs: List<String>,
     extraArgs: String,
     infrastructureArgs: List<String> = emptyList(),
+    extraArgsForProgram: Boolean = false,
 ): List<String> = buildList {
+    val extra = if (extraArgs.isBlank()) emptyList() else ParametersListUtil.parse(extraArgs)
     add(subcommand)
     val version = pythonVersion.trim()
     if (pythonVersionFlag != null && version.isNotEmpty()) {
@@ -240,6 +255,7 @@ internal fun byArguments(
         add(version)
     }
     addAll(infrastructureArgs)
+    if (!extraArgsForProgram) addAll(extra)
     addAll(subcommandArgs)
-    if (extraArgs.isNotBlank()) addAll(ParametersListUtil.parse(extraArgs))
+    if (extraArgsForProgram) addAll(extra)
 }

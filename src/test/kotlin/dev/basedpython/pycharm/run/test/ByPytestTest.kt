@@ -90,7 +90,8 @@ class ByPytestTest {
 
     @Test
     fun `extra args are forwarded to pytest after the targets`() {
-        val args = byArguments("run", "--min-version", "", ByPytest.arguments("tests"), "-k slow")
+        // The test configuration's extra args are pytest's, which it says with `extraArgsForProgram`.
+        val args = byArguments("run", "--min-version", "", ByPytest.arguments("tests"), "-k slow", extraArgsForProgram = true)
         assertEquals(listOf("run", "pytest", "-v", "tests", "-k", "slow"), args)
     }
 }
