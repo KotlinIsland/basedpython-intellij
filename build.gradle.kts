@@ -322,6 +322,17 @@ tasks {
     // that touch no UI at all. Nothing here needs a window server: the Swing the tests do build
     // (combo boxes, the test-node panel) is built, queried and thrown away, never shown.
     systemProperty("java.awt.headless", "true")
+    // A temp directory of the run's own, emptied before every run. A light fixture project's base
+    // directory is the JVM's temp directory, and the project detector lists that base for its
+    // markers: left at the machine-wide one, a `.by` or `api.lock` any other process put there —
+    // a test JVM in another checkout, a crashed run of this one — made the fixture project
+    // basedpython, and the tests that assert it is not failed for the state of the machine.
+    val jvmTemp = temporaryDir.resolve("jvm")
+    systemProperty("java.io.tmpdir", jvmTemp.absolutePath)
+    doFirst {
+      jvmTemp.deleteRecursively()
+      jvmTemp.mkdirs()
+    }
   }
 
   // No `publishPlugin { dependsOn(patchChangelog) }`. It reads like housekeeping and is not: a
