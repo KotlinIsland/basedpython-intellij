@@ -1,11 +1,15 @@
 package dev.basedpython.pycharm.testFramework
 
 import com.intellij.testFramework.LightProjectDescriptor
+import com.intellij.testFramework.PlatformTestUtil
 import com.intellij.testFramework.fixtures.CodeInsightTestFixture
 import com.intellij.testFramework.fixtures.IdeaTestFixtureFactory
 import com.intellij.testFramework.fixtures.impl.LightTempDirTestFixtureImpl
 import com.intellij.testFramework.junit5.fixture.TestFixture
 import com.intellij.testFramework.junit5.fixture.testFixture
+import com.intellij.testFramework.junit5.impl.testApplication
+import com.intellij.testFramework.runInEdtAndWait
+import org.junit.jupiter.api.extension.ExtensionContext
 
 /**
  * A JUnit 5 [TestFixture] wrapping the classic [CodeInsightTestFixture] — the light, in-memory
@@ -32,9 +36,32 @@ import com.intellij.testFramework.junit5.fixture.testFixture
 fun codeInsightFixture(
   projectDescriptor: LightProjectDescriptor = LightProjectDescriptor.EMPTY_PROJECT_DESCRIPTOR,
 ): TestFixture<CodeInsightTestFixture> = testFixture("codeInsight") { context ->
+  closeLightProjectsBeforeTheApplication(context.extensionContext)
   val factory = IdeaTestFixtureFactory.getFixtureFactory()
   val projectFixture = factory.createLightFixtureBuilder(projectDescriptor, context.testName).fixture
   val fixture = factory.createCodeInsightFixture(projectFixture, LightTempDirTestFixtureImpl(true))
   fixture.setUp()
   initialized(fixture) { fixture.tearDown() }
+}
+
+/**
+ * Closes the shared light project before the JUnit 5 application checks for leaked projects.
+ *
+ * The light project outlives every test by design, and only the JUnit 3 shutdown
+ * (`TestApplicationManager.disposeApplicationAndCheckForLeaks`) closes it, through
+ * [PlatformTestUtil.cleanupAllProjects]. The JUnit 5 one never does: it asserts that no project is
+ * left and then disposes the application. So a run that held both this fixture and any
+ * `@TestApplication` class — which is what creates that shutdown — ended reporting the light project
+ * as leaked, through whichever of the platform's project services happened to be found first.
+ *
+ * The application is asked for first so that its resource is in the root store before this one:
+ * the store closes what it holds in reverse order, which puts the project's close first.
+ */
+private fun closeLightProjectsBeforeTheApplication(context: ExtensionContext) {
+  context.testApplication().getOrThrow()
+  context.root.getStore(ExtensionContext.Namespace.GLOBAL).getOrComputeIfAbsent(
+    "basedpython.lightProjects",
+    { AutoCloseable { runInEdtAndWait { PlatformTestUtil.cleanupAllProjects() } } },
+    AutoCloseable::class.java,
+  )
 }
