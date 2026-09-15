@@ -156,11 +156,10 @@ venv/
 env/
 
 # basedpython build output
-out/
+build/
 
 # Distribution / packaging
 dist/
-build/
 *.egg-info/
 
 # IDE
@@ -198,7 +197,7 @@ buff format .
 $projectName/
 ├── src/
 │   └── main.by        # basedpython source files
-├── out/               # Transpiled Python (generated, excluded from indexing)
+├── build/             # Transpiled Python (generated, excluded from indexing)
 ├── pyproject.toml     # Project config + [tool.ruff] config
 └── .gitignore
 ```

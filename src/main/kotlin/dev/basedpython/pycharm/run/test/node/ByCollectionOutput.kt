@@ -86,8 +86,8 @@ internal object ByCollectionOutput {
           - for the transpiled half, pytest's rootdir is that temp directory, so
             [tool.pytest.ini_options] in pyproject.toml, pytest.ini, tox.ini and setup.cfg
             are not read, and a hand-written conftest.py is not either (a conftest.by is);
-          - the plain half ignores out/, which holds what `by build` wrote, so a .by test is
-            not reported twice;
+          - the plain half ignores the build directory, which holds what `by build` wrote, so
+            a .by test is not reported twice;
           - each half needs pytest importable by the interpreter it uses; the plain half is
             silent when it is not, since a .by-only project has no reason to have it.
     """.trimIndent()

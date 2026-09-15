@@ -43,7 +43,7 @@ class ByCollectionOutputTest {
         val text = ByCollectionOutput.render(listOf(run))
         assertTrue(text.contains("rootdir"), text)
         assertTrue(text.contains("tests written in .py are not"), text)
-        assertTrue(text.contains("ignores out/"), text)
+        assertTrue(text.contains("ignores the build directory"), text)
         assertTrue(text.contains("pytest importable"), text)
     }
 
@@ -51,7 +51,7 @@ class ByCollectionOutputTest {
     fun `both halves are shown, each under its own heading`() {
         val plain = run.copy(
             label = "plain pytest",
-            commandLine = "/p/.venv/bin/python -m pytest --collect-only -q --ignore=out",
+            commandLine = "/p/.venv/bin/python -m pytest --collect-only -q --ignore=/p/build",
             exitCode = 0,
             stdout = "test_main.py::test_asdf",
         )

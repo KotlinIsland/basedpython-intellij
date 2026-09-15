@@ -118,7 +118,45 @@ interface ByServerExtensions {
      */
     @JsonRequest("by/injections")
     fun injections(args: ByInjectionsParams): CompletableFuture<ByInjectionsResponse?>
+
+    /**
+     * Where a path stands in its project's build: the directory `by build` writes, the file a
+     * source is written to, the source a generated file came from — see
+     * [dev.basedpython.pycharm.lsp.build.ByBuildOutputs].
+     *
+     * **Why the server.** The layout is the build's, and it is not the one an editor would guess:
+     * the directory is `build/`, and the path inside it follows the *module* tree — a src-layout
+     * project's `src/pkg/main.by` is written to `build/pkg/main.py`. The server holds the same
+     * project database, module roots and file set the build reads, so its answer is the build's.
+     *
+     * Not a document request: a directory, or a generated file the editor has never opened, is
+     * asked about as often as a source.
+     *
+     * A `null` answer means no project in the session holds the path.
+     */
+    @JsonRequest("by/buildOutput")
+    fun buildOutput(args: ByBuildOutputParams): CompletableFuture<ByBuildOutput?>
 }
+
+/**
+ * The path to place, as a URI.
+ *
+ * Field names are the wire format and must match `ty_server`'s `BuildOutputParams`, which is
+ * `deny_unknown_fields`.
+ */
+data class ByBuildOutputParams(val uri: String)
+
+/** A path's place in its project's build. Every path is absolute. */
+data class ByBuildOutput(
+    /** Where `by build` has to run for [buildDirectory] to be where it writes. */
+    val projectRoot: String? = null,
+    /** Where `by build`, run at [projectRoot] with no `--out`, writes the project. */
+    val buildDirectory: String? = null,
+    /** For a `.by` or `.byi` the build is made of, the file it is written to. */
+    val generated: String? = null,
+    /** For a file in [buildDirectory] a source is written to, that source. */
+    val source: String? = null,
+)
 
 /**
  * The document to look through.

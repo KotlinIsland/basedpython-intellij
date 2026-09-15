@@ -66,7 +66,7 @@ class BasedPythonSettings : PersistentStateComponent<BasedPythonSettings.State> 
     /** The key held to show "on push" hints, as a [dev.basedpython.pycharm.lsp.inlay.ByPushKey.id]. */
     var inlayPushKey: String = "",
     /**
-     * When true, the generated `out/` directory is NOT excluded from indexing,
+     * When true, the build directories are NOT excluded from indexing,
      * so a Python plugin (PyCharm, or IDEA with the Python plugin) provides full
      * native code intelligence on the transpiled `.py` files. Off by default to
      * keep `.by` files as the single source of truth and avoid duplicate symbols.

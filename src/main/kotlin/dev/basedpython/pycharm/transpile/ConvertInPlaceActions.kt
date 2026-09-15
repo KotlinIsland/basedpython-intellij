@@ -17,23 +17,26 @@ import com.intellij.openapi.util.io.FileUtil
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.openapi.vfs.VirtualFile
+import dev.basedpython.pycharm.actions.ByCli
 import dev.basedpython.pycharm.util.BasedPythonBundle
 import dev.basedpython.pycharm.lang.BasedPythonFileType
+import dev.basedpython.pycharm.lsp.build.ByBuildOutputs
 import java.nio.file.Path
 import java.nio.file.Paths
 
 // ---------------------------------------------------------------------------
 // "Convert .by → .py (in place)"
 //
-// Asks the `by` server for the file's python and writes it to an `out/` sibling at
-// <projectRoot>/out/<relPath>.py, creating the file if necessary.
+// Asks the `by` server for the file's python and writes it where `by build` would write it,
+// creating the file if necessary.
 // ---------------------------------------------------------------------------
 
 /**
  * Action: "Convert .by → .py (in place)"
  *
- * Transpiles the current file through the `by` server, then writes the Python output to the
- * corresponding `out/<relPath>.py` file (creating it if necessary). Opens the result in the editor.
+ * Transpiles the current file through the `by` server, then writes the Python output to the file
+ * `by build` writes it to — `by`'s answer, see [ByBuildOutputs] — creating it if necessary. Opens
+ * the result in the editor.
  */
 class ConvertByToPyAction : AnAction() {
 
@@ -42,14 +45,12 @@ class ConvertByToPyAction : AnAction() {
     override fun update(e: AnActionEvent) {
         val file = e.getData(CommonDataKeys.VIRTUAL_FILE)
         e.presentation.isEnabledAndVisible =
-            file != null && !file.isDirectory && isByFile(file) && e.project?.basePath != null
+            e.project != null && file != null && !file.isDirectory && file.isInLocalFileSystem && isByFile(file)
     }
 
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
         val file = e.getData(CommonDataKeys.VIRTUAL_FILE) ?: return
-        val basePath = project.basePath ?: return
-        val filePath = file.toNioPath()
 
         ProgressManager.getInstance().run(
             object : Task.Backgroundable(project, "Converting ${file.name} → .py", true) {
@@ -60,10 +61,14 @@ class ConvertByToPyAction : AnAction() {
                         file,
                         failureTitle = BasedPythonBundle.message("notification.transpileFailed.title"),
                     ) ?: return
-                    val base = Paths.get(basePath)
-                    val relPath = try { base.relativize(filePath) } catch (_: IllegalArgumentException) { filePath.fileName }
-                    val relStr = relPath.toString().replaceFirst(Regex("\\.by$", RegexOption.IGNORE_CASE), ".py")
-                    val outPath = base.resolve("out").resolve(relStr)
+                    val outPath = ByBuildOutputs.getInstance(project).of(file)?.generated?.let { Paths.get(it) } ?: run {
+                        ByCli.notifyError(
+                            project,
+                            "Convert .by → .py",
+                            "`by` did not say where ${file.name} is built to. Is the `by` language server running?",
+                        )
+                        return
+                    }
 
                     ApplicationManager.getApplication().invokeLater({
                         writeConvertedAndOpen(project, outPath, pyContent, "Convert .by → .py")
@@ -97,7 +102,7 @@ class ConvertPyToByAction : AnAction() {
     override fun update(e: AnActionEvent) {
         val file = e.getData(CommonDataKeys.VIRTUAL_FILE)
         e.presentation.isEnabledAndVisible =
-            file != null && !file.isDirectory && isPyFile(file)
+            file != null && !file.isDirectory && file.isInLocalFileSystem && isPyFile(file)
     }
 
     override fun actionPerformed(e: AnActionEvent) {

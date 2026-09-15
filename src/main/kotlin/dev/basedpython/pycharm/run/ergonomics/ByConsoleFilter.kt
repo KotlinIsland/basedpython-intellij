@@ -13,7 +13,7 @@ import java.nio.file.Paths
  *
  * Matching lives in [findConsoleLinks]; this resolves what it finds and builds the hyperlinks.
  * Recognised shapes:
- *   - `src/main.by:12:5`, `out/main.py:7`, `/abs/path/foo.by`
+ *   - `src/main.by:12:5`, `build/main.py:7`, `/abs/path/foo.by`
  *   - `File "/abs/path/main.by", line 12, in main` — a traceback frame, which `by run` already
  *     rewrites onto `.by` sources
  *   - `tests/test_math.py:8` from pytest, resolved to the `tests/test_math.by` it came from
@@ -50,7 +50,7 @@ class ByConsoleFilter(private val project: Project) : Filter {
      * That last step is what makes a pytest failure clickable: the suite runs against the
      * transpiled tree, so pytest reports `tests/test_math.py:8` for a project that only contains
      * `tests/test_math.by`. Trying the path as written first keeps real generated output under
-     * `out/` linking to itself.
+     * `build/` linking to itself.
      */
     private fun resolve(path: String): VirtualFile? =
         resolveExact(path) ?: byCounterpart(path)?.let(::resolveExact)

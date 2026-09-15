@@ -89,7 +89,7 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
     }
 
     private val indexGeneratedPython = JCheckBox(
-        "Index generated .py in out/ (enables native Python support — requires a Python plugin)",
+        "Index generated .py in build/ (enables native Python support — requires a Python plugin)",
     )
 
     /** Renders a [PyFileHandling] by its user-facing text while the model holds the enum. */

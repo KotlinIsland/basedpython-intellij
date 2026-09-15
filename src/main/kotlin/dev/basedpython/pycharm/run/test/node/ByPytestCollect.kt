@@ -85,12 +85,12 @@ internal object ByPytestCollect {
     /**
      * The arguments for the plain-pytest half, run as `python -m pytest` in the project itself.
      *
-     * `out/` is ignored because it holds what `by build` transpiled: collecting there would report
-     * every `.by` test a second time, as the generated `.py` it was written to. pytest skips
-     * dot-directories (so `.venv`) on its own.
+     * Each of [buildDirectories] is ignored because it holds what `by build` transpiled: collecting
+     * there would report every `.by` test a second time, as the generated `.py` it was written to.
+     * pytest skips dot-directories (so `.venv`) on its own.
      */
-    fun pythonArguments(): List<String> =
-        listOf("-m", ByPytest.MODULE, COLLECT_ONLY, QUIET, "--ignore=$OUT_DIR")
+    fun pythonArguments(buildDirectories: List<String>): List<String> =
+        listOf("-m", ByPytest.MODULE, COLLECT_ONLY, QUIET) + buildDirectories.map { "--ignore=$it" }
 
     /**
      * A node id line: a path ending in `.py`, optionally followed by `::`-separated names.
@@ -195,9 +195,6 @@ internal object ByPytestCollect {
     private val NO_PYTEST = Regex("No module named pytest", RegexOption.IGNORE_CASE)
 
     private const val COLLECTION_FAILED = "collection failed"
-
-    /** Where `by build` writes transpiled output; the plain half must not collect it twice. */
-    private const val OUT_DIR = "out"
 
     /**
      * pytest's exit code for "collection ran fine and found nothing", which `by run` passes

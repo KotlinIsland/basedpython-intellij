@@ -63,7 +63,7 @@ internal fun findConsoleLinks(text: String): List<ByConsoleLink> {
  *
  * `by run` transpiles into a temp directory preserving relative paths, so pytest reports failures
  * against `tests/test_math.py` for a project that only ever had `tests/test_math.by`. Trying the
- * path as written first means real generated output under `out/` still links to itself.
+ * path as written first means real generated output under `build/` still links to itself.
  */
 internal fun byCounterpart(path: String): String? =
     if (path.endsWith(PY_EXTENSION, ignoreCase = true)) {

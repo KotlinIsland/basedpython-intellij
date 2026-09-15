@@ -34,7 +34,7 @@ internal object BasedPythonSettingsEffects {
 
   /**
    * Re-evaluates directory-index exclusions, so toggling [BasedPythonSettings.indexGeneratedPython]
-   * includes or excludes the generated `out/` directory straight away.
+   * includes or excludes the build directories straight away.
    *
    * Later and in a write action, for the reason [BasedPythonProjectDetector.fileTypesMayHaveChanged]
    * gives; and not at all for a project closed in the meantime, whose root manager is gone.

@@ -69,7 +69,7 @@ internal class ByTestSyncActivity : ProjectActivity {
      * True for a `.by` or `.py` file that belongs to the project rather than to its output or its
      * environment.
      *
-     * `out/` is what `by build` wrote and `.venv` is somebody else's code; collecting again because
+     * `build/` is what `by build` wrote and `.venv` is somebody else's code; collecting again because
      * either changed would mean collecting again because *we* collected, since a run writes into
      * both.
      */

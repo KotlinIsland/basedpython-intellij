@@ -16,8 +16,9 @@ import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VfsUtil
 import dev.basedpython.pycharm.actions.ByCli
 import dev.basedpython.pycharm.env.ByEnvironments
-import dev.basedpython.pycharm.lang.BasedPythonFileType
 import com.intellij.openapi.vfs.VirtualFile
+import dev.basedpython.pycharm.lang.BasedPythonFileType
+import dev.basedpython.pycharm.lsp.build.ByBuildOutputs
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -33,8 +34,8 @@ import java.nio.file.Paths
  * clickable thanks to the basedpython console filter, and "Go to Generated .py" maps frames back to
  * the `.by` source.
  *
- * It cannot be source-mapped itself: the line map lives in `_by_sourcemap.py`, which `by run`
- * writes into its temp directory and `by build` does not emit at all.
+ * It cannot be source-mapped itself: pdb reports lines of the generated `.py`, and knows nothing of
+ * the `_by_sourcemap.py` the build writes beside it.
  */
 class DebugWithPdbAction : AnAction() {
 
@@ -43,35 +44,42 @@ class DebugWithPdbAction : AnAction() {
     override fun update(e: AnActionEvent) {
         val file = e.getData(CommonDataKeys.VIRTUAL_FILE)
         e.presentation.isEnabledAndVisible =
-            file != null && !file.isDirectory && isByFile(file) && e.project?.basePath != null
+            e.project != null && file != null && !file.isDirectory && file.isInLocalFileSystem && isByFile(file)
     }
 
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
         val file = e.getData(CommonDataKeys.VIRTUAL_FILE) ?: return
-        val basePath = project.basePath ?: return
-        val outPath = resolveOutPath(file, basePath) ?: run {
-            ByCli.notifyError(project, "Debug .by (pdb)", "Could not resolve output path for ${file.name}.")
-            return
-        }
-        val cwd = Paths.get(basePath)
 
         ProgressManager.getInstance().run(object : Task.Backgroundable(project, "Building for debug…", true) {
             override fun run(indicator: ProgressIndicator) {
                 indicator.isIndeterminate = true
-                val out = ByCli.run(project, "build", cwd = cwd) ?: return
+                // Where the build writes this file, and where it has to run to write there: `by`'s
+                // answer, see ByBuildOutputs.
+                val answer = ByBuildOutputs.getInstance(project).of(file)
+                val generated = answer?.generated?.let { Paths.get(it) }
+                val cwd = answer?.projectRoot?.let { Paths.get(it) }
+                if (generated == null || cwd == null) {
+                    ByCli.notifyError(
+                        project,
+                        "Debug .by (pdb)",
+                        "`by` did not say where ${file.name} is built to. Is the `by` language server running?",
+                    )
+                    return
+                }
+                val out = buildAt(project, cwd, "Building for debug…") ?: return
                 if (out.exitCode != 0) {
                     ByCli.notifyError(project, "by build failed", out.stderr.ifBlank { "exit ${out.exitCode}" })
                     return
                 }
-                LocalFileSystem.getInstance().refreshAndFindFileByNioFile(outPath.parent ?: cwd)
+                LocalFileSystem.getInstance().refreshAndFindFileByNioFile(generated.parent ?: cwd)
                     ?.let { VfsUtil.markDirtyAndRefresh(false, true, true, it) }
-                if (!Files.exists(outPath)) {
-                    ByCli.notifyError(project, "Debug .by (pdb)", "by build succeeded but ${outPath.fileName} was not found in out/.")
+                if (!Files.exists(generated)) {
+                    ByCli.notifyError(project, "Debug .by (pdb)", "by build succeeded but did not write $generated.")
                     return
                 }
                 ApplicationManager.getApplication().invokeLater {
-                    launchPdb(project, cwd, outPath, file.nameWithoutExtension)
+                    launchPdb(project, cwd, generated, file.nameWithoutExtension)
                 }
             }
         })
@@ -98,17 +106,6 @@ class DebugWithPdbAction : AnAction() {
             .run()
     }
 
-
-    private fun resolveOutPath(file: VirtualFile, basePath: String): Path? {
-        val base = Paths.get(basePath)
-        return try {
-            val relative = base.relativize(file.toNioPath()).toString()
-            val withPy = relative.replaceFirst(Regex("\\.by$", RegexOption.IGNORE_CASE), ".py")
-            base.resolve("out").resolve(withPy)
-        } catch (_: IllegalArgumentException) {
-            null
-        }
-    }
 
     private fun isByFile(file: VirtualFile): Boolean =
         file.fileType == BasedPythonFileType.INSTANCE || file.extension.equals("by", ignoreCase = true)

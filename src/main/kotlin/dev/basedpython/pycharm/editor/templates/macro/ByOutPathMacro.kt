@@ -7,8 +7,9 @@ import com.intellij.codeInsight.template.TextResult
 import com.intellij.codeInsight.template.macro.MacroBase
 
 /**
- * Live-template macro `byOutPath()` — expands to the `out/<rel>.py` path the current `.by` file
- * transpiles to (relative to the project base, `/`-separated), e.g. `out/pkg/sub/foo.py`.
+ * Live-template macro `byOutPath()` — expands to the path `by build` writes the current `.by` file
+ * to, relative to the project root and `/`-separated, e.g. `build/pkg/sub/foo.py`. See
+ * [ByMacroSupport.outPath].
  */
 class ByOutPathMacro : MacroBase("byOutPath", "byOutPath()") {
 

@@ -267,7 +267,7 @@
             language="TOML"
             implementationClass="dev.basedpython.pycharm.project.PyprojectCompletionContributor"/>
         <directoryIndexExcludePolicy
-            implementation="dev.basedpython.pycharm.project.OutDirExcludePolicy"/>
+            implementation="dev.basedpython.pycharm.project.BuildDirectoryExcludePolicy"/>
         <!-- The TOML icon with the Python logo on it, for `pyproject.toml`. `fileIconProvider`
              covers both the VirtualFile path (editor tabs, Search Everywhere) and the PSI path
              (project view); the two other icon EPs, `iconProvider` and `iconLayerProvider`, are

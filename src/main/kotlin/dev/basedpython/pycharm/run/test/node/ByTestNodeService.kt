@@ -11,11 +11,13 @@ import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
+import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.execution.ExecutionException
 import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.execution.util.ExecUtil
 import dev.basedpython.pycharm.actions.ByCli
 import dev.basedpython.pycharm.env.ByEnvironments
+import dev.basedpython.pycharm.lsp.build.ByBuildOutputs
 import dev.basedpython.pycharm.ui.log.BasedPythonLog
 import dev.basedpython.pycharm.util.BasedPythonBundle
 import java.nio.file.Paths
@@ -27,6 +29,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicBoolean
+
 
 /**
  * Holds the collected test tree for one project and refreshes it by running
@@ -314,6 +317,18 @@ internal class ByTestNodeService(
      * nothing to add rather than as a red node under every such project. Skipped entirely when no
      * `.py` test file exists, which keeps a second `by`-less process off the common path.
      */
+    /**
+     * Where `by build` writes this project, so the plain half does not collect it a second time.
+     *
+     * `by`'s answer for [cwd] when the server can give one now, and otherwise the ones it gave last
+     * — see [ByBuildOutputs].
+     */
+    private fun buildDirectories(cwd: java.nio.file.Path): List<String> {
+        val outputs = ByBuildOutputs.getInstance(project)
+        val root = LocalFileSystem.getInstance().findFileByNioFile(cwd)
+        return root?.let { outputs.of(it)?.buildDirectory }?.let(::listOf) ?: outputs.buildDirectories
+    }
+
     private fun collectPythonTests(cwd: java.nio.file.Path?): ByCollection {
         if (cwd == null || ByPythonTests.find(cwd, limit = 1).isEmpty()) return ByCollection()
         val python = ByEnvironments.resolvePython(project) ?: return ByCollection()
@@ -321,7 +336,7 @@ internal class ByTestNodeService(
         val command = GeneralCommandLine()
             .withExePath(python.exe.toString())
             .withParameters(python.prependArgs)
-            .withParameters(ByPytestCollect.pythonArguments())
+            .withParameters(ByPytestCollect.pythonArguments(buildDirectories(cwd)))
             .withCharset(Charsets.UTF_8)
             .withEnvironment(python.env)
             .withWorkDirectory(cwd.toFile())
