@@ -7,9 +7,7 @@ import com.intellij.execution.actions.RunConfigurationProducer
 import com.intellij.psi.PsiFile
 import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
-import dev.basedpython.pycharm.lang.dialect.PyFileHandling
 import dev.basedpython.pycharm.run.main.ByMainArgumentHistory
-import dev.basedpython.pycharm.settings.BasedPythonSettings
 import dev.basedpython.pycharm.run.test.ByTestConfiguration
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -18,8 +16,6 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import java.nio.file.Files
-import java.nio.file.Paths
 
 /**
  * Exercises the context-based run configuration producers end-to-end through real PSI files
@@ -52,23 +48,8 @@ class RunConfigurationProducerTest {
      * Pinned rather than left on AUTO so the outcome does not depend on whether the IDE running the
      * tests happens to provide the Python language.
      */
-    private fun asBasedPythonProject(body: () -> Unit) {
-        val settings = BasedPythonSettings.getInstance(project)
-        val handling = settings.pyFileHandling
-        val enabled = settings.byEnabled
-        val marker = Paths.get(project.basePath!!).also { Files.createDirectories(it) }.resolve("api.lock")
-        val created = !Files.exists(marker)
-        if (created) Files.createFile(marker)
-        settings.byEnabled = true
-        settings.pyFileHandling = PyFileHandling.ALWAYS
-        try {
-            body()
-        } finally {
-            settings.pyFileHandling = handling
-            settings.byEnabled = enabled
-            if (created) Files.deleteIfExists(marker)
-        }
-    }
+    private fun asBasedPythonProject(body: () -> Unit) =
+        dev.basedpython.pycharm.testFramework.asBasedPythonProject(project, body)
 
     // ------------------------------------------------------------------
     // by run

@@ -7,8 +7,6 @@ import com.intellij.openapi.editor.Editor
 import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.lang.dialect.BasedPythonSources
-import dev.basedpython.pycharm.lang.dialect.PyFileHandling
-import dev.basedpython.pycharm.settings.BasedPythonSettings
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
 import dev.basedpython.pycharm.testFramework.letContentHashingFinish
 import org.junit.jupiter.api.AfterEach
@@ -16,8 +14,6 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import java.nio.file.Files
-import java.nio.file.Paths
 
 /**
  * The bundled live templates expand in a `.by` file.
@@ -146,25 +142,8 @@ class LiveTemplateContextTest {
     }
 
     /** The plugin owning `.py`, which is what puts a `.py` in the basedpython template contexts. */
-    private fun asBasedPythonProject(body: () -> Unit) {
-        val settings = BasedPythonSettings.getInstance(fixture.project)
-        val handling = settings.pyFileHandling
-        val enabled = settings.byEnabled
-        val marker = Paths.get(fixture.project.basePath!!)
-            .also { Files.createDirectories(it) }
-            .resolve("api.lock")
-        val created = !Files.exists(marker)
-        if (created) Files.createFile(marker)
-        settings.byEnabled = true
-        settings.pyFileHandling = PyFileHandling.ALWAYS
-        try {
-            body()
-        } finally {
-            settings.pyFileHandling = handling
-            settings.byEnabled = enabled
-            if (created) Files.deleteIfExists(marker)
-        }
-    }
+    private fun asBasedPythonProject(body: () -> Unit) =
+        dev.basedpython.pycharm.testFramework.asBasedPythonProject(fixture.project, body)
 
     /** The abbreviation the changelog and the docs name, expanded end to end. */
     @Test

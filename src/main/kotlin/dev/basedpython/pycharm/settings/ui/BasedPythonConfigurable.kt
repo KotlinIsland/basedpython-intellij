@@ -5,9 +5,9 @@ import com.intellij.codeInsight.daemon.impl.InlayHintsPassFactoryInternal
 import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
 import com.intellij.openapi.options.Configurable
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.fileTypes.ex.FileTypeManagerEx
 import com.intellij.openapi.ui.ComboBox
 import com.intellij.ui.dsl.listCellRenderer.textListCellRenderer
+import dev.basedpython.pycharm.lang.dialect.BasedPythonProjectDetector
 import dev.basedpython.pycharm.lang.dialect.PyFileHandling
 import com.intellij.openapi.ui.TextFieldWithBrowseButton
 import com.intellij.ui.components.JBLabel
@@ -299,7 +299,9 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
         s.buffPath = buffPathField.text.trim().ifEmpty { null }
         // Written only when changed, so a project that never touched the box keeps following the
         // IDE-wide default instead of freezing the value it happened to show.
-        if (byEnabled.isSelected != s.byEnabled) s.byEnabled = byEnabled.isSelected
+        // `by` being on is half of what makes a project basedpython, and so of who owns its `.py`.
+        val byEnabledChanged = byEnabled.isSelected != s.byEnabled
+        if (byEnabledChanged) s.byEnabled = byEnabled.isSelected
         if (buffEnabled.isSelected != s.buffEnabled) s.buffEnabled = buffEnabled.isSelected
         s.byExtraArgs = byExtraArgs.text
         s.buffExtraArgs = buffExtraArgs.text
@@ -325,7 +327,9 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
         if (dataFlowChanged) ByDataFlowSession.getInstance(project).settingChanged()
         if (recompositionsChanged) ByRecompositionSession.getInstance(project).settingChanged()
         // File types are cached per file; without this, open .py editors keep the old one.
-        if (handlingChanged) fireFileTypesChange()
+        if (handlingChanged || byEnabledChanged) {
+            BasedPythonProjectDetector.fileTypesMayHaveChanged("basedpython .py handling changed")
+        }
 
         s.byCompletion = byCompletion.isSelected
         s.byGoToDefinition = byGoToDefinition.isSelected
@@ -357,26 +361,6 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
     private fun redrawInlayHints() {
         InlayHintsPassFactoryInternal.forceHintsUpdateOnNextPass()
         DaemonCodeAnalyzer.getInstance(project).restart("basedpython inlay hint settings applied")
-    }
-
-    /**
-     * Tells the platform the answer to "what type is this file" has changed.
-     *
-     * In a write action, and not inline. A file-type change fires a roots change, and
-     * `ProjectRootManagerImpl.fireBeforeRootsChanged` asserts write access — while [apply] runs
-     * under a write-*intent* read action, which is a weaker lock and not the same thing:
-     * `SettingsNonModalDialog.applyWithWriteIntent` is what calls us. Pressing OK with the `.py`
-     * handling changed therefore threw, and the settings after that point were never applied.
-     *
-     * Same shape as [fireRootsRescan], for the same reason.
-     */
-    private fun fireFileTypesChange() {
-        com.intellij.openapi.application.ApplicationManager.getApplication().invokeLater {
-            if (project.isDisposed) return@invokeLater
-            com.intellij.openapi.application.WriteAction.run<RuntimeException> {
-                FileTypeManagerEx.getInstanceEx().makeFileTypesChange("basedpython .py handling changed") {}
-            }
-        }
     }
 
     /**

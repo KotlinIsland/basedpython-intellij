@@ -7,6 +7,7 @@ import com.intellij.openapi.ui.TextFieldWithBrowseButton
 import com.intellij.ui.components.JBTextField
 import com.intellij.ui.dsl.builder.AlignX
 import com.intellij.ui.dsl.builder.panel
+import dev.basedpython.pycharm.lang.dialect.BasedPythonProjectDetector
 import dev.basedpython.pycharm.lsp.reload.BasedPythonLspReloader
 import javax.swing.JCheckBox
 import javax.swing.JComponent
@@ -85,6 +86,7 @@ internal class BasedPythonAppConfigurable : Configurable {
 
     override fun apply() {
         val changed = isModified
+        val byEnabledChanged = byEnabled.isSelected != settings.defaultByEnabled
         val s = settings
         s.defaultByPath = byPathField.text.trim().ifEmpty { null }
         s.defaultBuffPath = buffPathField.text.trim().ifEmpty { null }
@@ -98,6 +100,9 @@ internal class BasedPythonAppConfigurable : Configurable {
             for (project in ProjectManager.getInstance().openProjects) {
                 BasedPythonLspReloader.getInstance(project).onSettingsChanged()
             }
+        }
+        if (byEnabledChanged) {
+            BasedPythonProjectDetector.fileTypesMayHaveChanged("basedpython default for the by server changed")
         }
     }
 

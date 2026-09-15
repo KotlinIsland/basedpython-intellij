@@ -9,9 +9,8 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import java.nio.file.Files
-import java.nio.file.Path
-import java.nio.file.Paths
+import com.intellij.openapi.application.WriteAction
+import com.intellij.openapi.vfs.VfsUtil
 
 /**
  * Which files this plugin runs and debugs.
@@ -30,7 +29,7 @@ class BasedPythonSourcesTest {
 
     private val project get() = fixture.project
 
-    private val createdMarkers = mutableListOf<Path>()
+    private val createdMarkers = mutableListOf<VirtualFile>()
 
     private fun settings() = BasedPythonSettings.getInstance(project)
 
@@ -38,15 +37,11 @@ class BasedPythonSourcesTest {
     private fun makeBasedPythonProject(handling: PyFileHandling = PyFileHandling.ALWAYS) {
         settings().byEnabled = true
         settings().pyFileHandling = handling
-        val base = Paths.get(project.basePath!!)
-        if (!Files.exists(base)) {
-            Files.createDirectories(base)
-            createdMarkers.add(base)
-        }
-        val marker = base.resolve("api.lock")
-        if (!Files.exists(marker)) {
-            Files.createFile(marker)
-            createdMarkers.add(marker)
+        // Through the VFS: the detector's verdict is dropped by VFS events, not by a file appearing
+        // on disk behind the IDE's back.
+        WriteAction.runAndWait<RuntimeException> {
+            val base = VfsUtil.createDirectories(project.basePath!!)
+            if (base.findChild("api.lock") == null) createdMarkers += base.createChildData(this, "api.lock")
         }
     }
 
@@ -55,11 +50,8 @@ class BasedPythonSourcesTest {
 
     @AfterEach
     fun removeMarkers() {
-        for (path in createdMarkers.reversed()) {
-            try {
-                Files.deleteIfExists(path)
-            } catch (_: Exception) {
-            }
+        WriteAction.runAndWait<RuntimeException> {
+            for (marker in createdMarkers) if (marker.isValid) marker.delete(this)
         }
         createdMarkers.clear()
     }

@@ -4,9 +4,7 @@ import com.intellij.execution.lineMarker.RunLineMarkerContributor
 import com.intellij.psi.PsiElement
 import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
-import dev.basedpython.pycharm.lang.dialect.PyFileHandling
 import dev.basedpython.pycharm.run.main.ByRunWithArgumentsAction
-import dev.basedpython.pycharm.settings.BasedPythonSettings
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -14,8 +12,6 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import java.nio.file.Files
-import java.nio.file.Paths
 
 /**
  * What the gutter offers on a `def main`, which depends entirely on what that `main` takes.
@@ -136,23 +132,6 @@ class ByRunLineMarkerContributorTest {
      * both back. Pinned rather than left on AUTO so the outcome does not depend on whether the IDE
      * running the tests happens to provide the Python language.
      */
-    private fun asBasedPythonProject(body: () -> Unit) {
-        val settings = BasedPythonSettings.getInstance(fixture.project)
-        val handling = settings.pyFileHandling
-        val enabled = settings.byEnabled
-        val marker = Paths.get(fixture.project.basePath!!)
-            .also { Files.createDirectories(it) }
-            .resolve("api.lock")
-        val created = !Files.exists(marker)
-        if (created) Files.createFile(marker)
-        settings.byEnabled = true
-        settings.pyFileHandling = PyFileHandling.ALWAYS
-        try {
-            body()
-        } finally {
-            settings.pyFileHandling = handling
-            settings.byEnabled = enabled
-            if (created) Files.deleteIfExists(marker)
-        }
-    }
+    private fun asBasedPythonProject(body: () -> Unit) =
+        dev.basedpython.pycharm.testFramework.asBasedPythonProject(fixture.project, body)
 }

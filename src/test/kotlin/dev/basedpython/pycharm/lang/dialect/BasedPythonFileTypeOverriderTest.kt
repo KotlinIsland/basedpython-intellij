@@ -12,9 +12,14 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import java.nio.file.Files
-import java.nio.file.Path
-import java.nio.file.Paths
+import com.intellij.openapi.application.WriteAction
+import com.intellij.openapi.fileTypes.FileTypeListener
+import com.intellij.openapi.fileTypes.FileTypeManager
+import com.intellij.openapi.fileTypes.FileTypeEvent
+import com.intellij.openapi.util.Disposer
+import com.intellij.openapi.vfs.VfsUtil
+import com.intellij.testFramework.PlatformTestUtil
+import org.junit.jupiter.api.Assertions.assertEquals
 
 /**
  * Tests for [BasedPythonFileTypeOverrider].
@@ -35,38 +40,41 @@ class BasedPythonFileTypeOverriderTest {
     private val project get() = fixture.project
 
     private val overrider = BasedPythonFileTypeOverrider()
-    private val createdMarkers = mutableListOf<Path>()
+    private val createdMarkers = mutableListOf<String>()
 
-    private fun base(): Path = Paths.get(project.basePath!!)
     private fun settings() = BasedPythonSettings.getInstance(project)
+
+    /**
+     * The project base directory, through the VFS — which is how markers are written here too: the
+     * detector's verdict is dropped by VFS events, as it is when a user or `git` changes the files.
+     */
+    private fun baseDir(): VirtualFile =
+        WriteAction.computeAndWait<VirtualFile, RuntimeException> { VfsUtil.createDirectories(project.basePath!!) }
+
+    private fun createMarker(name: String, content: String = "") {
+        WriteAction.runAndWait<RuntimeException> {
+            val file = baseDir().findChild(name) ?: baseDir().createChildData(this, name).also { createdMarkers += name }
+            VfsUtil.saveText(file, content)
+        }
+    }
+
+    private fun deleteMarker(name: String) {
+        WriteAction.runAndWait<RuntimeException> { baseDir().findChild(name)?.delete(this) }
+    }
 
     private fun makeBasedPythonProject() {
         settings().byEnabled = true
         // Pin the ownership choice so the outcome does not depend on whether the IDE running the
         // tests happens to provide the Python language.
         settings().pyFileHandling = PyFileHandling.ALWAYS
-        val base = base()
-        if (!Files.exists(base)) {
-            Files.createDirectories(base)
-            createdMarkers.add(base)
-        }
         // A bare pyproject.toml is no longer enough — it has to mention basedpython.
-        val marker = base.resolve("api.lock")
-        if (!Files.exists(marker)) {
-            Files.createFile(marker)
-            createdMarkers.add(marker)
-        }
+        createMarker("api.lock")
     }
 
     private fun makeVanillaProject() {
         settings().byEnabled = true
         // Ensure no markers linger at base from a previous run.
-        for (name in listOf("pyproject.toml", "api.lock", "basedpython.toml")) {
-            try {
-                Files.deleteIfExists(base().resolve(name))
-            } catch (_: Exception) {
-            }
-        }
+        for (name in listOf("pyproject.toml", "api.lock", "basedpython.toml")) deleteMarker(name)
     }
 
     /** Creates a real project file via the fixture and returns its [VirtualFile]. */
@@ -75,13 +83,9 @@ class BasedPythonFileTypeOverriderTest {
 
     @AfterEach
     fun removeMarkers() {
-        for (p in createdMarkers.reversed()) {
-            try {
-                Files.deleteIfExists(p)
-            } catch (_: Exception) {
-            }
-        }
+        for (name in createdMarkers) deleteMarker(name)
         createdMarkers.clear()
+        settings().loadState(BasedPythonSettings.State())
     }
 
     // =========================================================================
@@ -211,5 +215,68 @@ class BasedPythonFileTypeOverriderTest {
         settings().byEnabled = false
         val file = fixtureFile("script.py")
         assertNull(overrider.getOverriddenFileType(file))
+    }
+
+    // =========================================================================
+    // when the verdict is read again
+    // =========================================================================
+
+    private fun cache() = project.getService(BasedPythonProjectKindCache::class.java)
+
+    @Test
+    fun `a file created outside the base directory does not cost a rescan`() {
+        makeVanillaProject()
+        // The directory itself is an entry of the base directory, so it is made before the baseline.
+        val sub = WriteAction.computeAndWait<VirtualFile, RuntimeException> {
+            VfsUtil.createDirectories(project.basePath!! + "/sub")
+        }
+        BasedPythonProjectDetector.kind(project)
+        val scans = cache().scans
+
+        fixtureFile("pkg/deep/elsewhere.py")
+        WriteAction.runAndWait<RuntimeException> { sub.createChildData(this, "unrelated.txt") }
+        PlatformTestUtil.dispatchAllEventsInIdeEventQueue()
+        BasedPythonProjectDetector.kind(project)
+
+        assertEquals(scans, cache().scans)
+        WriteAction.runAndWait<RuntimeException> { baseDir().findChild("sub")?.delete(this) }
+    }
+
+    @Test
+    fun `editing pyproject toml changes the verdict`() {
+        makeVanillaProject()
+        createMarker("pyproject.toml", "[project]\nname = \"plain\"\n")
+        assertEquals(ProjectKind.PYTHON, BasedPythonProjectDetector.kind(project))
+
+        createMarker("pyproject.toml", "[project]\nname = \"based\"\ndependencies = [\"basedpython\"]\n")
+
+        assertEquals(ProjectKind.BASEDPYTHON, BasedPythonProjectDetector.kind(project))
+    }
+
+    /** Files the platform typed before the change have to be typed again, or open `.py` files keep the old type. */
+    @Test
+    fun `a verdict that flips tells the platform file types changed`() {
+        makeVanillaProject()
+        assertEquals(false, BasedPythonProjectDetector.kind(project) == ProjectKind.BASEDPYTHON)
+        var changes = 0
+        val disposable = Disposer.newDisposable()
+        try {
+            project.messageBus.connect(disposable).subscribe(FileTypeManager.TOPIC, object : FileTypeListener {
+                override fun fileTypesChanged(event: FileTypeEvent) {
+                    changes++
+                }
+            })
+
+            createMarker("api.lock")
+
+            val deadline = System.currentTimeMillis() + 10_000
+            while (changes == 0 && System.currentTimeMillis() < deadline) {
+                PlatformTestUtil.dispatchAllEventsInIdeEventQueue()
+                Thread.sleep(10)
+            }
+            assertTrue(changes > 0, "no file type change after the project became basedpython")
+        } finally {
+            Disposer.dispose(disposable)
+        }
     }
 }
