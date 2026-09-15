@@ -1,6 +1,10 @@
 package dev.basedpython.pycharm.env.manager
 
+import com.intellij.openapi.application.ModalityState
+import com.intellij.openapi.application.impl.LaterInvocator
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.util.Disposer
+import com.intellij.testFramework.PlatformTestUtil
 import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
@@ -8,6 +12,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertSame
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Test
 import java.nio.file.Files
@@ -78,6 +83,41 @@ class EnvServiceTest {
             assertEquals(base.resolve(".venv"), UvBackend.environmentRoot(base))
         } finally {
             if (!existed) Files.deleteIfExists(manifest)
+        }
+    }
+
+    /**
+     * A view inside a modal dialog is told about changes while that dialog is up; the tool window is
+     * not.
+     *
+     * *Settings | Modules* lives in the modal Settings dialog, and every change used to be delivered
+     * non-modally — after Settings closed — so the table showed a module created from it only once
+     * the page that created it was gone.
+     */
+    @Test
+    fun `a listener that asks for any modality is told while a dialog is open, the default is not`() {
+        val service = EnvService.getInstance(project)
+        val parent = Disposer.newDisposable("modality test")
+        val dialog = Any()
+        try {
+            var toolWindow = 0
+            var settingsPage = 0
+            service.addListener(parent) { toolWindow++ }
+            service.addListener(parent, ModalityState.any()) { settingsPage++ }
+
+            LaterInvocator.enterModal(dialog)
+            try {
+                service.clearProgress()
+                PlatformTestUtil.dispatchAllInvocationEventsInIdeEventQueue()
+                assertTrue(settingsPage > 0, "the page inside the dialog is told now")
+                assertEquals(0, toolWindow, "the tool window waits for the dialog to close")
+            } finally {
+                LaterInvocator.leaveModal(dialog)
+            }
+            PlatformTestUtil.dispatchAllInvocationEventsInIdeEventQueue()
+            assertTrue(toolWindow > 0, "and is told once it has")
+        } finally {
+            Disposer.dispose(parent)
         }
     }
 }

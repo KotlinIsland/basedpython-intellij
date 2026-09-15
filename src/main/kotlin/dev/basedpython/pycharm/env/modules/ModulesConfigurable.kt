@@ -5,6 +5,8 @@ import com.intellij.openapi.Disposable
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
+import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.options.Configurable
 import com.intellij.openapi.options.ConfigurableProvider
@@ -84,7 +86,18 @@ internal class ModulesConfigurable(private val project: Project) : SearchableCon
     override fun createComponent(): JComponent {
         val disposable = Disposer.newDisposable("basedpython modules page")
         uiDisposable = disposable
-        service.addListener(disposable) { render() }
+        // In any modality, because this page is drawn inside the modal Settings dialog and the
+        // service's default waits for every dialog to close. Then re-dispatched in the page's own
+        // modality, so a redraw still waits while *Edit module* or the removal confirmation is open
+        // on top of Settings, and lands the moment the page is the thing being looked at again.
+        service.addListener(disposable, ModalityState.any()) {
+            ApplicationManager.getApplication().invokeLater(
+                { render() },
+                ModalityState.stateForComponent(table),
+                // Expired once [disposeUIResources] has let this component go.
+                { uiDisposable !== disposable },
+            )
+        }
 
         object : DoubleClickListener() {
             override fun onDoubleClick(event: MouseEvent): Boolean {

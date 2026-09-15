@@ -80,7 +80,10 @@ internal class EnvService(
         }
     }
 
-    private val listeners = CopyOnWriteArrayList<() -> Unit>()
+    /** A listener, and the modality it is told in — see [addListener]. */
+    private class Listener(val modality: ModalityState, val onChange: () -> Unit)
+
+    private val listeners = CopyOnWriteArrayList<Listener>()
 
     /** Guards against a second refresh while one is in flight. */
     private val refreshing = AtomicBoolean(false)
@@ -121,10 +124,20 @@ internal class EnvService(
 
     private var syncJob: Job? = null
 
-    /** Registers [listener], called on the EDT after every change, until [parent] is disposed. */
-    fun addListener(parent: Disposable, listener: () -> Unit) {
-        listeners += listener
-        Disposer.register(parent) { listeners -= listener }
+    /**
+     * Registers [listener], called on the EDT after every change, until [parent] is disposed.
+     *
+     * [modality] is when it may run. The default is the tool window's answer — never while a dialog
+     * is up, see [fire]. A view that itself lives *inside* a modal dialog cannot take that default:
+     * non-modal notifications wait for every dialog to close, the one it is drawn in included, so
+     * *Settings | Modules* would show the table as it was when Settings opened until Settings closed.
+     * Such a view passes [ModalityState.any] and decides for itself, against its own component,
+     * whether now is a moment it can redraw.
+     */
+    fun addListener(parent: Disposable, modality: ModalityState = ModalityState.nonModal(), listener: () -> Unit) {
+        val registered = Listener(modality, listener)
+        listeners += registered
+        Disposer.register(parent) { listeners -= registered }
     }
 
     fun refreshIfNeeded() {
@@ -324,14 +337,24 @@ internal class EnvService(
      * then, and the deferred listener renders whatever is current rather than replaying a history.
      */
     private fun fire() {
-        ApplicationManager.getApplication().invokeLater(
+        val application = ApplicationManager.getApplication()
+        application.invokeLater(
             {
-                listeners.forEach { it() }
+                listeners.filter { it.modality == ModalityState.nonModal() }.forEach { it.onChange() }
                 EnvToolWindow.refreshAvailability(project)
             },
             ModalityState.nonModal(),
             project.disposed,
         )
+        // Listeners that asked for another modality — see [addListener] — are told in that one, one
+        // dispatch per modality rather than per listener: this runs for every line uv prints.
+        listeners.map { it.modality }.filter { it != ModalityState.nonModal() }.distinct().forEach { modality ->
+            application.invokeLater(
+                { listeners.filter { it.modality == modality }.forEach { it.onChange() } },
+                modality,
+                project.disposed,
+            )
+        }
     }
 
     companion object {
