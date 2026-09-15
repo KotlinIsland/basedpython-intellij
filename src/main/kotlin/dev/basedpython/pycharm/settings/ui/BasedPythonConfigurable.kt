@@ -7,7 +7,6 @@ import com.intellij.openapi.options.Configurable
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.ComboBox
 import com.intellij.ui.dsl.listCellRenderer.textListCellRenderer
-import dev.basedpython.pycharm.lang.dialect.BasedPythonProjectDetector
 import dev.basedpython.pycharm.lang.dialect.PyFileHandling
 import com.intellij.openapi.ui.TextFieldWithBrowseButton
 import com.intellij.ui.components.JBLabel
@@ -23,6 +22,7 @@ import dev.basedpython.pycharm.debug.bpd.ByDebugBackend
 import dev.basedpython.pycharm.debug.dfa.ByDataFlowSession
 import dev.basedpython.pycharm.debug.recompose.ByRecompositionSession
 import dev.basedpython.pycharm.settings.BasedPythonSettings
+import dev.basedpython.pycharm.settings.BasedPythonSettingsEffects
 import dev.basedpython.pycharm.util.BasedPythonBundle
 import java.awt.BorderLayout
 import java.awt.GridBagConstraints
@@ -295,13 +295,12 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
 
     override fun apply() {
         val s = settings
+        val before = BasedPythonSettingsEffects.snapshot(s)
         s.byPath = byPathField.text.trim().ifEmpty { null }
         s.buffPath = buffPathField.text.trim().ifEmpty { null }
         // Written only when changed, so a project that never touched the box keeps following the
         // IDE-wide default instead of freezing the value it happened to show.
-        // `by` being on is half of what makes a project basedpython, and so of who owns its `.py`.
-        val byEnabledChanged = byEnabled.isSelected != s.byEnabled
-        if (byEnabledChanged) s.byEnabled = byEnabled.isSelected
+        if (byEnabled.isSelected != s.byEnabled) s.byEnabled = byEnabled.isSelected
         if (buffEnabled.isSelected != s.buffEnabled) s.buffEnabled = buffEnabled.isSelected
         s.byExtraArgs = byExtraArgs.text
         s.buffExtraArgs = buffExtraArgs.text
@@ -311,11 +310,7 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
         }
         s.inlayPushKey = inlayPushKeyCombo.selectedItem as? ByPushKey ?: ByPushKey.CTRL_ALT
 
-        val indexChanged = indexGeneratedPython.isSelected != s.indexGeneratedPython
         s.indexGeneratedPython = indexGeneratedPython.isSelected
-        if (indexChanged) fireRootsRescan()
-
-        val handlingChanged = pyFileHandlingCombo.selectedItem != s.pyFileHandling
         s.pyFileHandling = pyFileHandlingCombo.selectedItem as? PyFileHandling ?: PyFileHandling.AUTO
         s.debugBackend = debugBackendCombo.selectedItem as? ByDebugBackend ?: ByDebugBackend.BPD
         val dataFlowChanged = debuggerDataFlow.isSelected != s.debuggerDataFlow
@@ -326,10 +321,7 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
         // no longer runs once the factory declines, so each service removes its marks itself
         if (dataFlowChanged) ByDataFlowSession.getInstance(project).settingChanged()
         if (recompositionsChanged) ByRecompositionSession.getInstance(project).settingChanged()
-        // File types are cached per file; without this, open .py editors keep the old one.
-        if (handlingChanged || byEnabledChanged) {
-            BasedPythonProjectDetector.fileTypesMayHaveChanged("basedpython .py handling changed")
-        }
+        BasedPythonSettingsEffects.announce(project, before)
 
         s.byCompletion = byCompletion.isSelected
         s.byGoToDefinition = byGoToDefinition.isSelected
@@ -361,23 +353,6 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
     private fun redrawInlayHints() {
         InlayHintsPassFactoryInternal.forceHintsUpdateOnNextPass()
         DaemonCodeAnalyzer.getInstance(project).restart("basedpython inlay hint settings applied")
-    }
-
-    /**
-     * Re-evaluate directory-index exclusions so toggling [indexGeneratedPython]
-     * immediately includes/excludes the generated `out/` directory.
-     */
-    private fun fireRootsRescan() {
-        com.intellij.openapi.application.ApplicationManager.getApplication().invokeLater {
-            com.intellij.openapi.application.WriteAction.run<RuntimeException> {
-                com.intellij.openapi.roots.ex.ProjectRootManagerEx
-                    .getInstanceEx(project)
-                    .makeRootsChange(
-                        com.intellij.openapi.util.EmptyRunnable.getInstance(),
-                        com.intellij.openapi.project.RootsChangeRescanningInfo.TOTAL_RESCAN,
-                    )
-            }
-        }
     }
 
     override fun reset() {

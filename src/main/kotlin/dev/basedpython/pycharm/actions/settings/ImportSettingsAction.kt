@@ -14,12 +14,14 @@ import com.intellij.util.xmlb.XmlSerializer
 import com.intellij.util.xmlb.XmlSerializerUtil
 import dev.basedpython.pycharm.lsp.reload.BasedPythonLspReloader
 import dev.basedpython.pycharm.settings.BasedPythonSettings
+import dev.basedpython.pycharm.settings.BasedPythonSettingsEffects
 import dev.basedpython.pycharm.util.BasedPythonBundle
 
 /**
  * Reads a basedpython settings file previously written by [ExportSettingsAction] and applies
- * it to the current project's [BasedPythonSettings], then restarts the LSP servers so the
- * imported configuration takes effect.
+ * it to the current project's [BasedPythonSettings], then restarts the LSP servers and tells the IDE
+ * about the file-type and indexing changes the import implies, so the imported configuration takes
+ * effect.
  */
 class ImportSettingsAction : AnAction(), DumbAware {
 
@@ -44,8 +46,10 @@ class ImportSettingsAction : AnAction(), DumbAware {
             val imported = XmlSerializer.deserialize(element, BasedPythonSettings.State::class.java)
 
             val settings = BasedPythonSettings.getInstance(project)
+            val before = BasedPythonSettingsEffects.snapshot(settings)
             XmlSerializerUtil.copyBean(imported, settings.state)
 
+            BasedPythonSettingsEffects.announce(project, before)
             BasedPythonLspReloader.getInstance(project).onSettingsChanged()
 
             notify(
