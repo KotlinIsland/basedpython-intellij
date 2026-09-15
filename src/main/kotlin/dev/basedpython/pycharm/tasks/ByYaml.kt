@@ -107,15 +107,46 @@ internal object ByYaml {
      * --short=8 HEAD#tag` is a value, not a comment — and never inside quotes.
      */
     private fun stripComment(raw: String): String {
-        var quote = ' '
+        val quoted = quoted(raw)
         raw.forEachIndexed { index, ch ->
-            when {
-                quote != ' ' -> if (ch == quote) quote = ' '
-                ch == '"' || ch == '\'' -> quote = ch
-                ch == '#' && (index == 0 || raw[index - 1].isWhitespace()) -> return raw.substring(0, index)
+            if (!quoted[index] && ch == '#' && (index == 0 || raw[index - 1].isWhitespace())) {
+                return raw.substring(0, index)
             }
         }
         return raw
+    }
+
+    /**
+     * Which characters of [text] are inside quotes, the quotes themselves included.
+     *
+     * The one place that knows where a quoted run ends: at its matching quote, except that inside
+     * double quotes a backslash escapes the character after it — `"a \" # b"` is one value. Inside
+     * single quotes `''` reads as the quote closing and reopening, which comes to the same thing.
+     */
+    private fun quoted(text: String): BooleanArray {
+        val mask = BooleanArray(text.length)
+        var quote = ' '
+        var index = 0
+        while (index < text.length) {
+            val ch = text[index]
+            when {
+                quote == '"' && ch == '\\' -> {
+                    mask[index] = true
+                    if (index + 1 < text.length) mask[index + 1] = true
+                    index++
+                }
+                quote != ' ' -> {
+                    mask[index] = true
+                    if (ch == quote) quote = ' '
+                }
+                ch == '"' || ch == '\'' -> {
+                    mask[index] = true
+                    quote = ch
+                }
+            }
+            index++
+        }
+        return mask
     }
 
     private class Parser(lines: List<Line>) {
@@ -250,12 +281,11 @@ internal object ByYaml {
      */
     private fun splitKey(text: String): Pair<String, String>? {
         if (text.startsWith("[") || text.startsWith("{")) return null
-        var quote = ' '
+        val quoted = quoted(text)
         var depth = 0
         text.forEachIndexed { index, ch ->
             when {
-                quote != ' ' -> if (ch == quote) quote = ' '
-                ch == '"' || ch == '\'' -> quote = ch
+                quoted[index] -> Unit
                 ch == '[' || ch == '{' -> depth++
                 ch == ']' || ch == '}' -> depth--
                 ch == ':' && depth == 0 && (index == text.lastIndex || text[index + 1] == ' ') ->
@@ -272,18 +302,11 @@ internal object ByYaml {
         }
         val items = mutableListOf<String>()
         val current = StringBuilder()
-        var quote = ' '
+        val quoted = quoted(body)
         var depth = 0
-        for (ch in body) {
+        body.forEachIndexed { index, ch ->
             when {
-                quote != ' ' -> {
-                    if (ch == quote) quote = ' '
-                    current.append(ch)
-                }
-                ch == '"' || ch == '\'' -> {
-                    quote = ch
-                    current.append(ch)
-                }
+                quoted[index] -> current.append(ch)
                 ch == '[' || ch == '{' -> {
                     depth++
                     current.append(ch)
@@ -312,10 +335,61 @@ internal object ByYaml {
         val body = trimmed.substring(1, trimmed.length - 1)
         // A single-quoted scalar has exactly one escape: '' for a literal quote.
         if (quote == '\'') return body.replace("''", "'")
-        return body
-            .replace("\\\"", "\"")
-            .replace("\\n", "\n")
-            .replace("\\t", "\t")
-            .replace("\\\\", "\\")
+        return unescape(body)
     }
+
+    /**
+     * The body of a double-quoted scalar with its escapes undone, left to right in one pass.
+     *
+     * One pass is the point: undoing one kind of escape after another reads `\\n` — an escaped
+     * backslash, then an `n` — as a backslash and a newline or as `\n`, depending on which kind went
+     * first. An escape YAML does not define is kept as written rather than guessed at.
+     */
+    private fun unescape(body: String): String = buildString {
+        var index = 0
+        while (index < body.length) {
+            val ch = body[index]
+            if (ch != '\\' || index + 1 == body.length) {
+                append(ch)
+                index++
+                continue
+            }
+            val escape = body[index + 1]
+            val hexDigits = when (escape) {
+                'x' -> 2
+                'u' -> 4
+                'U' -> 8
+                else -> 0
+            }
+            if (hexDigits > 0) {
+                val code = body.substring(index + 2, minOf(body.length, index + 2 + hexDigits))
+                    .takeIf { it.length == hexDigits }
+                    ?.toIntOrNull(16)
+                    ?.takeIf { Character.isValidCodePoint(it) }
+                if (code == null) {
+                    append(ch)
+                    index++
+                } else {
+                    appendCodePoint(code)
+                    index += 2 + hexDigits
+                }
+                continue
+            }
+            val decoded = ESCAPES[escape]
+            if (decoded == null) {
+                append(ch)
+                index++
+            } else {
+                append(decoded)
+                index += 2
+            }
+        }
+    }
+
+    /** YAML 1.2's single-character escapes, and what each stands for. */
+    private val ESCAPES: Map<Char, Char> = mapOf(
+        '0' to ' ', 'a' to '', 'b' to '\b', 't' to '\t', '\t' to '\t', 'n' to '\n',
+        'v' to '', 'f' to '', 'r' to '\r', 'e' to '', ' ' to ' ', '"' to '"',
+        '/' to '/', '\\' to '\\', 'N' to '', '_' to ' ', 'L' to ' ', 'P' to ' ',
+    )
 }

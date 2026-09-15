@@ -164,6 +164,44 @@ class ByYamlTest {
         assertEquals("bare value", document.value("plain").text())
     }
 
+    /** Expected values are what PyYAML's `safe_load` reads from the same text. */
+    @Test
+    fun `escapes are undone in one pass, so an escaped backslash stays a backslash`() {
+        val document = ByYaml.parse(
+            """
+            newline: "a\nb"
+            backslash_n: "a\\nb"
+            backslash_t: "a\\tb"
+            tab: "a\tb"
+            unicode: "café \x41"
+            """.trimIndent(),
+        )
+
+        assertEquals("a\nb", document.value("newline").text())
+        assertEquals("a\\nb", document.value("backslash_n").text())
+        assertEquals("a\\tb", document.value("backslash_t").text())
+        assertEquals("a\tb", document.value("tab").text())
+        assertEquals("café A", document.value("unicode").text())
+    }
+
+    /** Expected values are what PyYAML's `safe_load` reads from the same text. */
+    @Test
+    fun `an escaped quote does not end the quoted text`() {
+        val document = ByYaml.parse(
+            """
+            quote_hash: "a \" # b"  # real comment
+            single_hash: 'it''s # here'  # real comment
+            "quoted \" key": v
+            flow: ["a \" , b", c]
+            """.trimIndent(),
+        )
+
+        assertEquals("a \" # b", document.value("quote_hash").text())
+        assertEquals("it's # here", document.value("single_hash").text())
+        assertEquals("v", document.value("quoted \" key").text())
+        assertEquals(listOf("a \" , b", "c"), document.value("flow").strings())
+    }
+
     @Test
     fun `a scalar sequence item is text, not a mapping`() {
         val document = ByYaml.parse(
