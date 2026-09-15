@@ -53,8 +53,12 @@ import java.util.WeakHashMap
  * stamp it asks once per edit.
  *
  * [of] is the way in, from any thread: off the EDT it asks the server, on the EDT `runningByServer`
- * refuses and it falls back to what is already known. [cached] asks nothing at all, for the one
- * caller that only wants to know whether an answer exists yet.
+ * refuses and it falls back to what is already known. [cached] and [recorded] ask nothing at all,
+ * for the callers that only want what is already known — [recorded] keeping "not answered yet"
+ * apart from "no docstrings".
+ *
+ * Every answer is dropped when a `by` server initializes, by [ByRenderedDocsRefresher]: they were
+ * the previous server's, and a restart is how a rebuilt `by` arrives.
  */
 internal object ByDocstringSpans {
 
@@ -87,10 +91,19 @@ internal object ByDocstringSpans {
     }
 
     /** What was worked out last time, or nothing. Asks the server for nothing. */
-    fun cached(file: PsiFile): List<ByDocstring> {
-        val stamp = file.viewProvider.document?.modificationStamp ?: return emptyList()
-        val virtualFile = file.originalFile.virtualFile ?: return emptyList()
-        return file.project.service<ByDocstringSpanCache>().spans(virtualFile, stamp).orEmpty()
+    fun cached(file: PsiFile): List<ByDocstring> = recorded(file).orEmpty()
+
+    /**
+     * What the server said about the file as it is now, or `null` when it has not said anything
+     * yet. Asks the server for nothing.
+     *
+     * Empty and `null` are different answers: empty is a file the server says has no docstrings,
+     * `null` is a file whose pass asked before the server could answer.
+     */
+    fun recorded(file: PsiFile): List<ByDocstring>? {
+        val stamp = file.viewProvider.document?.modificationStamp ?: return null
+        val virtualFile = file.originalFile.virtualFile ?: return null
+        return file.project.service<ByDocstringSpanCache>().spans(virtualFile, stamp)
     }
 
     /** `null` when the server could not answer, which is not the same as a file with no docstrings. */
@@ -196,5 +209,10 @@ internal class ByDocstringSpanCache {
 
     fun remember(file: VirtualFile, stamp: Long, spans: List<ByDocstring>) {
         byFile[file] = Cached(stamp, spans)
+    }
+
+    /** Forgets every answer, for when the server that gave them has been replaced. */
+    fun clear() {
+        byFile.clear()
     }
 }

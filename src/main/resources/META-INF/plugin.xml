@@ -303,7 +303,7 @@
         <!-- Rendered docstrings are the server's answer, and the pass that asks runs before the
              client has told `by` the file exists. This asks again once it has. -->
         <postStartupActivity
-            implementation="dev.basedpython.pycharm.docs.render.ByRenderedDocsRefresher"/>
+            implementation="dev.basedpython.pycharm.docs.render.ByRenderedDocsRefresher$Activity"/>
 
         <!-- ===== Stream U: docs & help ===== -->
         <lang.documentationProvider

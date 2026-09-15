@@ -1,6 +1,9 @@
 package dev.basedpython.pycharm.docs.render
 
+import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ReadAction
+import com.intellij.openapi.components.Service
+import com.intellij.openapi.components.service
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.fileEditor.FileEditorManagerListener
 import com.intellij.openapi.project.Project
@@ -12,6 +15,7 @@ import com.intellij.util.FileContentUtilCore
 import dev.basedpython.pycharm.lang.BasedPythonFile
 import dev.basedpython.pycharm.lsp.ByLspLifecycleListener
 import dev.basedpython.pycharm.lsp.byServerFor
+import org.jetbrains.annotations.VisibleForTesting
 
 /**
  * Renders a file's docstrings once `by` is actually able to say where they are.
@@ -72,26 +76,49 @@ import dev.basedpython.pycharm.lsp.byServerFor
  * it replaces, since `resetEditorToDefaultState` returned manually toggled blocks to their default
  * and this leaves them alone.
  *
- * Either way it only acts when the file has no docstrings recorded, so a file that rendered
- * correctly is never disturbed.
+ * On a file that was opened it only acts when the server has not answered for the file as it is now.
+ * An empty answer is an answer — a file with no docstrings — and reparsing it would buy a daemon
+ * restart for nothing, which is what every docstring-less file used to pay [RECHECK_MS] after it
+ * opened, because "no docstrings" and "not asked yet" read the same.
+ *
+ * ## a server became ready
+ *
+ * Every answer held so far — the spans in [ByDocstringSpanCache], the markdown in [ByRenderedDocs] —
+ * came from no server or from the previous one, and a restart is how a rebuilt `by` or a changed
+ * configuration arrives. So both are dropped here, whichever route restarted the server (the action,
+ * a settings change, crash recovery), and every open `.by` file is looked at again.
+ *
+ * ## lifetime
+ *
+ * A project service, so the connection and the alarm are disposed with the project or with the
+ * plugin, whichever goes first; [Activity] only makes sure it exists once a project opens.
  */
-internal class ByRenderedDocsRefresher : ProjectActivity {
+@Service(Service.Level.PROJECT)
+internal class ByRenderedDocsRefresher(private val project: Project) : Disposable {
 
-    override suspend fun execute(project: Project) {
-        val connection = project.messageBus.connect()
-        // Parented to the connection, so both go when the project does.
-        val alarm = Alarm(Alarm.ThreadToUse.SWING_THREAD, connection)
+    internal class Activity : ProjectActivity {
+        override suspend fun execute(project: Project) {
+            project.service<ByRenderedDocsRefresher>()
+        }
+    }
+
+    private val alarm = Alarm(Alarm.ThreadToUse.SWING_THREAD, this)
+
+    init {
+        val connection = project.messageBus.connect(this)
 
         connection.subscribe(
             ByLspLifecycleListener.TOPIC,
             object : ByLspLifecycleListener {
                 override fun serverInitialized(serverName: String) {
                     if (serverName != BY_SERVER) return
-                    // Everything already open was asked while there was nothing to ask. Through the
-                    // alarm rather than straight through, because this arrives on whatever thread
-                    // the server's initialisation ran on and a reparse takes a write action.
+                    forgetAnswers()
+                    // Everything already open was asked while there was nothing to ask, or asked of
+                    // a server that is gone. Through the alarm rather than straight through, because
+                    // this arrives on whatever thread the server's initialisation ran on and a
+                    // reparse takes a write action.
                     val open = FileEditorManager.getInstance(project).openFiles.toList()
-                    alarm.addRequest({ open.forEach { refreshIfStale(project, it) } }, 0)
+                    alarm.addRequest({ open.forEach { refreshIfStale(it) } }, 0)
                 }
             },
         )
@@ -105,23 +132,33 @@ internal class ByRenderedDocsRefresher : ProjectActivity {
                     // leads to is a daemon restart bought for nothing — see the class docs.
                     if (byServerFor(project, file) == null) return
                     // One look, once the client has had time to send its `didOpen`. If the server
-                    // still says nothing, the file has no docstrings and there is nothing to fix.
-                    alarm.addRequest({ refreshIfStale(project, file) }, RECHECK_MS)
+                    // answered in the meantime, even with nothing, there is nothing to fix.
+                    alarm.addRequest({ refreshIfStale(file) }, RECHECK_MS)
                 }
             },
         )
     }
 
-    /** Re-runs the rendering pass over [file], but only if it is a `.by` file with nothing recorded. */
-    private fun refreshIfStale(project: Project, file: VirtualFile) {
-        val stale = ReadAction.computeBlocking<Boolean, RuntimeException> {
-            if (project.isDisposed || !file.isValid) return@computeBlocking false
-            val psiFile = PsiManager.getInstance(project).findFile(file) ?: return@computeBlocking false
-            psiFile is BasedPythonFile && ByDocstringSpans.cached(psiFile).isEmpty()
-        }
-        if (!stale) return
-        FileContentUtilCore.reparseFiles(listOf(file))
+    /** Drops what the previous server said, so that nothing it said outlives it. */
+    private fun forgetAnswers() {
+        project.service<ByDocstringSpanCache>().clear()
+        ByRenderedDocs.clearCache()
     }
+
+    /** Re-runs the rendering pass over [file], but only if it is a `.by` file with no answer recorded. */
+    private fun refreshIfStale(file: VirtualFile) {
+        if (isStale(file)) FileContentUtilCore.reparseFiles(listOf(file))
+    }
+
+    /** Whether [file] is a `.by` file the server has not answered for, as the file is now. */
+    @VisibleForTesting
+    fun isStale(file: VirtualFile): Boolean = ReadAction.computeBlocking<Boolean, RuntimeException> {
+        if (project.isDisposed || !file.isValid) return@computeBlocking false
+        val psiFile = PsiManager.getInstance(project).findFile(file) ?: return@computeBlocking false
+        psiFile is BasedPythonFile && ByDocstringSpans.recorded(psiFile) == null
+    }
+
+    override fun dispose() {}
 
     private companion object {
         /** The name [dev.basedpython.pycharm.lsp.ByLspServerDescriptor] publishes under. */

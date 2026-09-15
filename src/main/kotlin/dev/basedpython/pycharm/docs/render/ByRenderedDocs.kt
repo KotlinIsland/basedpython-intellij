@@ -53,8 +53,9 @@ import java.util.Collections
  * anywhere in a file costs no requests once its docstrings have been seen, and a docstring being
  * edited costs one request per distinct state it passes through.
  *
- * The cache is dropped only by its own size and by [clearCache], which the restart action calls: a
- * rebuilt `by` may translate a docstring differently, and nothing else would say so.
+ * The cache is dropped only by its own size and by [clearCache], which [ByRenderedDocsRefresher]
+ * calls whenever a `by` server initializes: a rebuilt `by` may translate a docstring differently, and
+ * nothing else would say so.
  */
 internal object ByRenderedDocs {
 
