@@ -105,11 +105,15 @@ class ByDebugRoutingTest {
                 arguments.request,
                 "bpd is an adapter that starts programs, so this is a real launch",
             )
+            // `by run` has not chosen the program yet — the module when the configuration names
+            // none, what follows it, the directory the runner is in — so nothing here may guess
+            // at it. The descriptor fills it in from the wrapper's record before the request goes
             assertEquals(
-                "_by_runner.py",
+                null,
                 arguments.arguments["program"],
-                "the program is the runner shim, relative to the directory `by run` transpiled into",
+                "the provider named a program before `by run` had chosen one",
             )
+            assertNotNull(arguments.arguments["python"], "bpd has to be told which interpreter to run")
         } finally {
             settings.debugBackend = previous
         }

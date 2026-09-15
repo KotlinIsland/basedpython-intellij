@@ -1,5 +1,7 @@
 package dev.basedpython.pycharm.debug.bpd
 
+import com.google.gson.Gson
+import java.util.concurrent.Executors
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -116,6 +118,34 @@ class ByBpdLiveSessionTest {
                     reply.contains("\"command\":\"initialize\""),
                     "the reply is not to the request that was sent: $reply",
                 )
+
+                // and the program, launched with what `by run` recorded rather than what the IDE
+                // could have guessed: the runner by the path `by run` named, and its arguments
+                val arguments = connection.record.launchArguments(mapOf("python" to python, "stopOnEntry" to false))
+                send(connection.output, 2, "launch", arguments)
+                send(connection.output, 3, "configurationDone", emptyMap())
+                val seen = Executors.newSingleThreadExecutor().let { reader ->
+                    try {
+                        reader.submit<List<String>> {
+                            val messages = mutableListOf<String>()
+                            while (messages.none { it.contains("\"event\":\"terminated\"") || it.contains("\"event\":\"exited\"") }) {
+                                messages += readMessage(connection.input)
+                            }
+                            messages
+                        }.get(60, TimeUnit.SECONDS)
+                    } finally {
+                        reader.shutdownNow()
+                    }
+                }
+                val launched = seen.firstOrNull { it.contains("\"command\":\"launch\"") }
+                assertTrue(
+                    launched?.contains("\"success\":true") == true,
+                    "bpd would not launch what the record names ($arguments): $seen",
+                )
+                assertTrue(
+                    seen.any { it.contains("\"event\":\"output\"") && it.contains("5") },
+                    "the program ran without printing its `limit`: $seen",
+                )
             } finally {
                 runBlocking { connection.disconnect() }
             }
@@ -123,6 +153,14 @@ class ByBpdLiveSessionTest {
             byRun.destroy()
             byRun.waitFor(30, TimeUnit.SECONDS)
         }
+    }
+
+    private fun send(output: java.io.OutputStream, seq: Int, command: String, arguments: Map<String, Any?>) {
+        val body = Gson().toJson(mapOf("seq" to seq, "type" to "request", "command" to command, "arguments" to arguments))
+            .toByteArray(StandardCharsets.UTF_8)
+        output.write("Content-Length: ${body.size}\r\n\r\n".toByteArray(StandardCharsets.US_ASCII))
+        output.write(body)
+        output.flush()
     }
 
     /** One DAP message: a header block, a blank line, then exactly `Content-Length` bytes. */

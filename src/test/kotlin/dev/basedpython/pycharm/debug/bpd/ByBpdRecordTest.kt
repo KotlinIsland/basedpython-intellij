@@ -40,6 +40,36 @@ class ByBpdRecordTest {
         assertEquals("abc", ready.token)
     }
 
+    /**
+     * The program bpd is told to launch is the one `by run` handed the wrapper — the runner by the
+     * path `by run` gave it, then everything after — and not the run configuration's idea of it. A
+     * configuration that names no module runs `run.main`, which only `by run` reads.
+     */
+    @Test
+    fun `the launch request names what by run asked for, over what the provider knew`() {
+        val ready = assertInstanceOf(
+            ByBpdRecord.Ready::class.java,
+            ByBpdRecord.parse(
+                """
+                cwd /tmp/by-build-1
+                arg /tmp/by-build-1/_by_runner.py
+                arg app.main
+                arg --verbose
+                $announcement
+                """.trimIndent(),
+            ),
+        )
+        assertEquals(
+            mapOf(
+                "python" to "/project/.venv/bin/python",
+                "stopOnEntry" to false,
+                "program" to "/tmp/by-build-1/_by_runner.py",
+                "args" to listOf("app.main", "--verbose"),
+            ),
+            ready.launchArguments(mapOf("python" to "/project/.venv/bin/python", "stopOnEntry" to false)),
+        )
+    }
+
     @Test
     fun `the wrapper's half without bpd's is not yet rather than broken`() {
         val record = ByBpdRecord.parse("cwd /tmp/x\narg _by_runner.py\n")

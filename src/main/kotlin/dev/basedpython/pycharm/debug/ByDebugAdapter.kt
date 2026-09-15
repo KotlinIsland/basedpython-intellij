@@ -35,6 +35,7 @@ import com.intellij.xdebugger.frame.XDropFrameHandler
 import com.intellij.xdebugger.frame.XSuspendContext
 import dev.basedpython.pycharm.actions.ByCli
 import dev.basedpython.pycharm.debug.bpd.ByBpdConnection
+import dev.basedpython.pycharm.debug.bpd.ByBpdRecord
 import dev.basedpython.pycharm.debug.bpd.ByBpdWrapper
 import dev.basedpython.pycharm.debug.bpd.ByDebugBackend
 import dev.basedpython.pycharm.debug.recompose.ByRecompositionLink
@@ -82,6 +83,10 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
 
     private var setup: ByDebugSetup? = null
     private var mappings: List<ByFileMapping> = emptyList()
+
+    /** What a bpd session's wrapper recorded, once [launchDebugAdapter] has read it. */
+    @Volatile
+    private var bpdRecord: ByBpdRecord.Ready? = null
 
     /**
      * This session's link to bpd's compose runtime: the identity every recomposition call of this
@@ -180,7 +185,7 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
             // from the filesystem the program is on, and reports `.by` locations from the agent.
             // `mappings` stays empty and `BySourceMapPublisher` sends nothing, which is right —
             // sending pydevd's request to bpd would be sending it a request it does not have
-            return ByBpdConnection.open(setup.infoFile, processHandler)
+            return ByBpdConnection.open(setup.infoFile, processHandler).also { bpdRecord = it.record }
         }
 
         val info = awaitDebuggeeInfo(setup.infoFile) { processHandler?.isProcessTerminated != true }
@@ -288,6 +293,20 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
         recordFile = setup?.infoFile,
         recompositionLink = recompositionLinkFor(dapDebugSession.commandProcessor),
     )
+
+    /**
+     * The arguments the session is started with: [provided], as the launch-arguments provider
+     * built them, completed from what `by run` recorded when the session is a bpd one.
+     *
+     * The provider runs before `by run` has chosen the program, so it cannot name it; by the time
+     * `start` is sent, [launchDebugAdapter] has read the record that does. Called only after
+     * `initialize`, so a bpd session with no record is one whose adapter was never reached.
+     */
+    fun startArguments(provided: Map<String, Any?>): Map<String, Any?> {
+        if (setup?.backend != ByDebugBackend.BPD) return provided
+        val record = bpdRecord ?: throw ExecutionException(BasedPythonBundle.message("debug.error.noSetup"))
+        return record.launchArguments(provided)
+    }
 
     /**
      * Whether [fail] has already put the reason on screen.
@@ -524,7 +543,10 @@ internal class ByDapXDebugProcess(
             if (!initBreakpointsCustomWay()) session.initBreakpoints()
             sessionState.value = DapXDebugSessionState.Connecting
             dapDebugSession.initialize(executionEnvironment, result)
-            dapDebugSession.start(startRequestType, startRequestArguments)
+            dapDebugSession.start(
+                startRequestType,
+                ownDescriptor?.startArguments(startRequestArguments) ?: startRequestArguments,
+            )
             sessionState.value = DapXDebugSessionState.Running
             session.rebuildViews()
         } catch (e: CancellationException) {

@@ -29,7 +29,20 @@ sealed interface ByBpdRecord {
         /** The header a client must present on its first message, and its value. */
         val tokenHeader: String,
         val token: String,
-    ) : ByBpdRecord
+    ) : ByBpdRecord {
+
+        /**
+         * The `launch` request's arguments: [base], with the program and its arguments as `by run`
+         * really asked for them.
+         *
+         * Taken from here rather than from the run configuration, because only `by run` knows them:
+         * it chooses the module when the configuration names none (`run.main`), decides what goes
+         * after the runner, and names the runner by a path in a directory it has only just made. A
+         * launch request built from the configuration was a second guess at all three.
+         */
+        fun launchArguments(base: Map<String, Any?>): Map<String, Any?> =
+            base + mapOf(PROGRAM to argv.first(), ARGS to argv.drop(1))
+    }
 
     /**
      * The file exists and is not finished, or is not what this reads.
@@ -42,6 +55,10 @@ sealed interface ByBpdRecord {
     companion object {
 
         private val LOG = Logger.getInstance(ByBpdRecord::class.java)
+
+        /** The `bpd_dap::Configuration` keys [Ready.launchArguments] fills in. */
+        const val PROGRAM: String = "program"
+        const val ARGS: String = "args"
 
         /**
          * The tree `by run` chose, out of a record file that may still be half written.

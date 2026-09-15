@@ -52,6 +52,8 @@ private val POLL_INTERVAL: Duration = 100.milliseconds
 class ByBpdConnection private constructor(
     private val socket: Socket,
     private val debuggee: ProcessHandler?,
+    /** What the wrapper and `bpd` recorded, which is also what the session is launched with. */
+    val record: ByBpdRecord.Ready,
 ) : DebugAdapterHandle {
 
     override val input: InputStream = socket.getInputStream()
@@ -116,7 +118,7 @@ class ByBpdConnection private constructor(
                 )
             }
 
-            return ByBpdConnection(socket, debuggee)
+            return ByBpdConnection(socket, debuggee, ready)
         }
 
         /**
