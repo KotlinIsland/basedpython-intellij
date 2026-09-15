@@ -18,9 +18,11 @@ import dev.basedpython.pycharm.util.Debounced
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
@@ -124,7 +126,14 @@ internal suspend fun runCapturing(cmd: GeneralCommandLine, timeout: Duration? = 
         if (timeout == null) exited.await()
         else if (withTimeoutOrNull(timeout) { exited.await() } == null) output.setTimeout()
     } finally {
-        if (!handler.isProcessTerminated) handler.destroyProcess()
+        if (!exited.isCompleted) {
+            if (!handler.isProcessTerminated) handler.destroyProcess()
+            // Not back until it is gone. A kill is asynchronous — the tree is walked, signalled, and
+            // its output readers have to see the pipes close — so returning straight after asking
+            // left a cancelled or timed-out process, and the threads reading it, running on behind
+            // a caller that had been told it was over.
+            withContext(NonCancellable) { exited.await() }
+        }
     }
     return output
 }
