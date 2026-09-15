@@ -101,6 +101,33 @@ class PrintToLogpointFixTest {
         )
     }
 
+    /**
+     * Redo puts back the log point undo took, and only that one. The fix records its undo, and so
+     * does the breakpoint listener that hears the same addition; recorded twice, redo made two.
+     */
+    @Test
+    fun `redo puts back exactly one log point`() {
+        applyFix("def f(x):\n    print(x)\n    return x * 2\n")
+        val editor = FileEditorManager.getInstance(fixture.project).getSelectedEditor(fixture.file.virtualFile)
+        val undo = UndoManager.getInstance(fixture.project)
+        undo.undo(editor)
+        undo.redo(editor)
+
+        assertEquals("def f(x):\n    return x * 2\n", fixture.editor.document.text)
+        assertEquals(
+            listOf(1),
+            XDebuggerManager.getInstance(fixture.project).breakpointManager.getBreakpoints(type).map { it.line },
+        )
+
+        undo.undo(editor)
+        assertEquals("def f(x):\n    print(x)\n    return x * 2\n", fixture.editor.document.text)
+        assertEquals(
+            emptyList<Int>(),
+            XDebuggerManager.getInstance(fixture.project).breakpointManager.getBreakpoints(type).map { it.line },
+            "the log point redo put back is taken back by the next undo",
+        )
+    }
+
     @Test
     fun `no fix is offered where the log point would have nowhere to bind`() {
         // The print is the last statement of the function; the next line runs at import time.

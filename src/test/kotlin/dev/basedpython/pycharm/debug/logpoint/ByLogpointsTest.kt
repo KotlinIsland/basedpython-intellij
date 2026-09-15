@@ -1,9 +1,13 @@
 package dev.basedpython.pycharm.debug.logpoint
 
+import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.application.WriteAction
+import com.intellij.openapi.command.CommandProcessor
 import com.intellij.openapi.command.undo.UndoManager
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.fileEditor.TextEditor
 import com.intellij.openapi.fileEditor.impl.text.TextEditorProvider
+import com.intellij.testFramework.PlatformTestUtil
 import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import com.intellij.xdebugger.XDebuggerManager
@@ -171,5 +175,44 @@ class ByLogpointsTest {
             breakpoints.getBreakpoints(type).none { ByLogpoints.asLogpoint(it) != null },
             "undo takes the log point back",
         )
+    }
+
+    /**
+     * A log point reported on another thread while the EDT is in the middle of a command — a
+     * keystroke, here — gets an undo step of its own after it, and is not folded into the keystroke.
+     * Asked from that thread, "is a command open" was answering about the keystroke, and Ctrl+Z
+     * then took back the typing and the log point together.
+     */
+    @Test
+    fun `a log point reported off the EDT does not join the command the EDT is in`() {
+        fixture.configureByText("main.by", "def f(x):\n    return x\n")
+        val editor: TextEditor = TextEditorProvider.getInstance().getTextEditor(fixture.editor)
+        val document = fixture.editor.document
+        val listener = ByLogpointFields(fixture.project)
+
+        // Made so that nothing has recorded an undo for it yet: a plain breakpoint that a newer one
+        // displaced before it became a log point, which is no creation to undo on its own.
+        val breakpoint = breakpoints.addLineBreakpoint(type, fixture.file.virtualFile.url, 1, ByBreakpointProperties())
+        breakpoints.addLineBreakpoint(type, fixture.file.virtualFile.url, 0, ByBreakpointProperties())
+        breakpoint.suspendPolicy = SuspendPolicy.NONE
+        breakpoint.logExpressionObject = ByLogpoints.expressionOf("x")
+        PlatformTestUtil.dispatchAllInvocationEventsInIdeEventQueue()
+
+        CommandProcessor.getInstance().executeCommand(
+            fixture.project,
+            {
+                WriteAction.run<RuntimeException> { document.insertString(0, "#") }
+                ApplicationManager.getApplication().executeOnPooledThread { listener.breakpointAdded(breakpoint) }.get()
+            },
+            "Typing",
+            null,
+            document,
+        )
+        PlatformTestUtil.dispatchAllInvocationEventsInIdeEventQueue()
+
+        assertTrue(topUndoIsTheLogPoint(editor), "the log point has an undo step of its own")
+        UndoManager.getInstance(fixture.project).undo(editor)
+        assertTrue(breakpoints.getBreakpoints(type).none { ByLogpoints.asLogpoint(it) != null }, "undo takes the log point back")
+        assertTrue(document.text.startsWith("#"), "undoing the log point took the keystroke with it: ${document.text}")
     }
 }

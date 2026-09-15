@@ -1,10 +1,7 @@
 package dev.basedpython.pycharm.debug.logpoint
 
 import com.intellij.openapi.application.ApplicationManager
-import com.intellij.openapi.application.ReadAction
-import com.intellij.openapi.command.CommandProcessor
 import com.intellij.openapi.startup.StartupManager
-import com.intellij.openapi.editor.Document
 import com.intellij.openapi.editor.ex.EditorEx
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.fileEditor.FileEditorManager
@@ -74,20 +71,19 @@ class ByLogpointFields(private val project: Project) : XBreakpointListener<XBrea
      * than `getDocument`, which would answer for both — and would drag every `.by` file holding a
      * breakpoint into memory at startup to do it. The startup check is the same statement made
      * twice, for the case where a document does happen to be loaded early.
+     *
+     * Always on the EDT, because commands are the EDT's. An addition reported there is recorded at
+     * once, joining the command it was made in if there is one. An addition reported on another
+     * thread — breakpoints are added from a coroutine dispatcher as well — was made in no command,
+     * and asking from that thread whether one is open would read whatever the EDT is doing at that
+     * moment: a keystroke, whose undo step the log point would then have joined.
      */
     private fun recordUndo(logpoint: XLineBreakpoint<*>, file: VirtualFile) {
         if (!StartupManager.getInstance(project).postStartupActivityPassed()) return
-        // In a read action: breakpoints are added from a coroutine dispatcher as well as from the
-        // EDT, and looking a document up off both is a read-access assertion, not a race to lose.
-        val document = ReadAction.computeBlocking<Document?, RuntimeException> {
-            FileDocumentManager.getInstance().getCachedDocument(file)
-        } ?: return
-        // A command joined has to be joined now, while it is still open; a command of our own has to
-        // be opened on the EDT, which this is not always on.
-        if (CommandProcessor.getInstance().currentCommand != null) {
+        onEdt {
+            if (project.isDisposed) return@onEdt
+            val document = FileDocumentManager.getInstance().getCachedDocument(file) ?: return@onEdt
             ByLogpointUndo.record(project, document, logpoint)
-        } else {
-            onEdt { if (!project.isDisposed) ByLogpointUndo.record(project, document, logpoint) }
         }
     }
 

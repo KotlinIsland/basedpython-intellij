@@ -12,6 +12,9 @@ import com.intellij.xdebugger.XDebuggerUtil
 import com.intellij.xdebugger.breakpoints.SuspendPolicy
 import com.intellij.xdebugger.breakpoints.XLineBreakpoint
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.util.concurrency.ThreadingAssertions
+import java.util.Collections
+import java.util.WeakHashMap
 import dev.basedpython.pycharm.debug.ByLineBreakpointType
 
 /**
@@ -29,6 +32,12 @@ import dev.basedpython.pycharm.debug.ByLineBreakpointType
 object ByLogpointUndo {
 
     /**
+     * The breakpoints an undo step has been recorded for. Weak, so a log point removed is not kept
+     * alive by having once been undoable; EDT only, as [record] is.
+     */
+    private val recorded: MutableSet<XLineBreakpoint<*>> = Collections.newSetFromMap(WeakHashMap())
+
+    /**
      * Records [breakpoint] as part of the command in progress, so <kbd>Ctrl+Z</kbd> takes it back.
      *
      * Joins the command when there is one — that is the `print` quick fix, where the deleted line
@@ -38,8 +47,17 @@ object ByLogpointUndo {
      * gutter menu, and IntelliJ IDEA's own click in the gutter gap, neither of which runs in a
      * command at all — which is exactly why neither could be undone. A command of our own gives the
      * log point an undo step of its own, which is what the user is reaching for.
+     *
+     * Once per breakpoint. The `print` quick fix records the log point it adds, and the breakpoint
+     * listener hears the same addition and records it too; recorded twice, one redo put back two
+     * log points on the line.
+     *
+     * EDT only: whether a command is open is a question about the EDT, and joining one from another
+     * thread would put this into whatever the EDT happens to be doing.
      */
     fun record(project: Project, document: Document, breakpoint: XLineBreakpoint<*>) {
+        ThreadingAssertions.assertEventDispatchThread()
+        if (!recorded.add(breakpoint)) return
         val file = breakpoint.sourcePosition?.file ?: return
         val state = Recreate(
             file = file,
