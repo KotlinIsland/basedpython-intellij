@@ -4,25 +4,35 @@ import com.intellij.notification.NotificationType
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
+import com.intellij.openapi.diagnostic.ControlFlowException
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
+import com.intellij.util.io.Decompressor
 import com.intellij.util.io.HttpRequests
 import dev.basedpython.pycharm.env.Executables
+import dev.basedpython.pycharm.env.manager.EnvOperations
 import dev.basedpython.pycharm.lsp.BasedPythonBinaries
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import dev.basedpython.pycharm.ui.log.BasedPythonLogNotifications
 import dev.basedpython.pycharm.util.BasedPythonBundle
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.StandardCopyOption
+import java.security.MessageDigest
+import java.util.concurrent.CancellationException
 
 /**
  * FEATURES.md §58 — when the `by` / `buff` binaries cannot be resolved, offer to download a
  * per-OS prebuilt binary into a plugin-managed location (`~/.basedpython/bin`) and point
  * [BasedPythonSettings] at it.
+ *
+ * The binaries come from the newest `basedpython` wheel on PyPI for this platform — the only place
+ * basedpython publishes them, see [ByBinaryDownloadPlan]. The wheel is checked against the SHA-256
+ * the index lists for it before anything is taken out of it, and the whole download is cancellable.
  *
  * The pure planning logic lives in [ByBinaryDownloadPlan]; this class only wires platform
  * detection, user confirmation, off-EDT download + IO, and notifications together.
@@ -62,7 +72,6 @@ class DownloadBinariesAction : AnAction() {
         }
 
         val missing = missingBinaries(project).ifEmpty { ByBinaryDownloadPlan.BINARY_NAMES }
-        val version = BasedPythonSettings.getInstance(project).effectivePythonVersion
         val home = System.getProperty("user.home")
 
         val choice = Messages.showYesNoDialog(
@@ -80,41 +89,104 @@ class DownloadBinariesAction : AnAction() {
 
         ProgressManager.getInstance().run(object : Task.Backgroundable(project, BasedPythonBundle.message("download.progress.title"), true) {
             override fun run(indicator: ProgressIndicator) {
-                val installed = mutableListOf<String>()
-                val failures = mutableListOf<String>()
-                for ((idx, name) in missing.withIndex()) {
-                    indicator.checkCanceled()
-                    indicator.fraction = idx.toDouble() / missing.size
-                    indicator.text = BasedPythonBundle.message("download.progress.item", name)
-                    try {
-                        val url = ByBinaryDownloadPlan.downloadUrl(name, version, platform)
-                        val target = ByBinaryDownloadPlan.installPath(home, name, platform)
-                        downloadTo(url, target)
-                        markExecutable(target, platform)
-                        applyToSettings(project, name, target)
-                        installed.add(name)
-                    } catch (ex: Exception) {
-                        LOG.warn("Failed to download $name", ex)
-                        failures.add("$name (${ex.message})")
-                    }
+                val installed = try {
+                    install(indicator, platform, home, missing)
+                } catch (ex: Exception) {
+                    // Cancelling is the user pressing stop, not a download that failed.
+                    if (ex is ControlFlowException || ex is CancellationException) throw ex
+                    LOG.warn("Failed to download basedpython binaries", ex)
+                    notifyResult(project, emptyList(), listOf(ex.message ?: ex.javaClass.simpleName))
+                    return
                 }
-                notifyResult(project, installed, failures)
+                installed.forEach { (name, target) -> applyToSettings(project, name, target) }
+                notifyResult(project, installed.map { it.first }, emptyList())
+                // The language servers were started from — or failed to find — a binary path that is
+                // no longer the answer, and the "not found" banner is a cached verdict.
+                EnvOperations.afterEnvironmentChanged(project)
             }
         })
     }
 
-    /** Streams [url] into [target], creating parent dirs. Runs off the EDT (within the task). */
-    private fun downloadTo(url: String, target: Path) {
-        Files.createDirectories(target.parent)
-        val tmp = target.resolveSibling(target.fileName.toString() + ".part")
-        HttpRequests.request(url).productNameAsUserAgent().saveToFile(tmp.toFile(), null)
-        Files.move(tmp, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+    /**
+     * Downloads the wheel, verifies it, and installs [names] out of it; returns what was installed
+     * where. Throws on anything short of every binary installed, so settings are never pointed at
+     * half a download.
+     */
+    private fun install(
+        indicator: ProgressIndicator,
+        platform: ByBinaryDownloadPlan.Platform,
+        home: String,
+        names: List<String>,
+    ): List<Pair<String, Path>> {
+        indicator.isIndeterminate = true
+        indicator.text = BasedPythonBundle.message("download.progress.index")
+        val releases = HttpRequests.request(ByBinaryDownloadPlan.RELEASES_URL)
+            .productNameAsUserAgent()
+            .readString(indicator)
+        val wheel = ByBinaryDownloadPlan.newestWheel(releases, platform)
+            ?: error(BasedPythonBundle.message("download.noWheel", ByBinaryDownloadPlan.DISTRIBUTION, platform.slug))
+
+        val installDir = ByBinaryDownloadPlan.installDir(home)
+        Files.createDirectories(installDir)
+        val work = Files.createTempDirectory(installDir, ".basedpython-download")
+        try {
+            indicator.text = BasedPythonBundle.message("download.progress.item", wheel.filename)
+            val archive = work.resolve(wheel.filename)
+            HttpRequests.request(wheel.url).productNameAsUserAgent().saveToFile(archive.toFile(), indicator)
+            indicator.checkCanceled()
+
+            val actual = sha256(archive)
+            check(actual == wheel.sha256) {
+                BasedPythonBundle.message("download.checksumMismatch", wheel.filename, wheel.sha256, actual)
+            }
+
+            val unpacked = work.resolve("unpacked")
+            Decompressor.Zip(archive)
+                .filter { entry -> names.any { ByBinaryDownloadPlan.isBinaryEntry(entry, it, platform) } }
+                .extract(unpacked)
+            indicator.checkCanceled()
+
+            val found = names.map { name ->
+                val file = Files.walk(unpacked).use { paths ->
+                    paths.filter { Files.isRegularFile(it) }
+                        .filter { ByBinaryDownloadPlan.isBinaryEntry(unpacked.relativize(it).joinToString("/"), name, platform) }
+                        .findFirst()
+                        .orElse(null)
+                } ?: error(BasedPythonBundle.message("download.binaryMissing", name, wheel.filename))
+                name to file
+            }
+            return found.map { (name, file) ->
+                val target = ByBinaryDownloadPlan.installPath(home, name, platform)
+                Files.move(file, target, StandardCopyOption.REPLACE_EXISTING)
+                if (!platform.windows) Executables.makeExecutable(target)
+                name to target
+            }
+        } finally {
+            deleteRecursively(work)
+        }
     }
 
-    /** Adds the execute bits on POSIX filesystems; no-op elsewhere. Best effort — see [Executables]. */
-    private fun markExecutable(target: Path, platform: ByBinaryDownloadPlan.Platform) {
-        if (platform.windows) return
-        Executables.makeExecutable(target)
+    private fun sha256(file: Path): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        Files.newInputStream(file).use { input ->
+            val buffer = ByteArray(1 shl 16)
+            while (true) {
+                val read = input.read(buffer)
+                if (read < 0) break
+                digest.update(buffer, 0, read)
+            }
+        }
+        return digest.digest().joinToString("") { "%02x".format(it) }
+    }
+
+    /** Best-effort cleanup of the scratch directory; a leftover must not fail an install that worked. */
+    private fun deleteRecursively(dir: Path) {
+        runCatching {
+            if (!Files.exists(dir)) return
+            Files.walk(dir).use { paths ->
+                paths.sorted(Comparator.reverseOrder()).forEach { runCatching { Files.delete(it) } }
+            }
+        }
     }
 
     private fun applyToSettings(project: Project, name: String, target: Path) {

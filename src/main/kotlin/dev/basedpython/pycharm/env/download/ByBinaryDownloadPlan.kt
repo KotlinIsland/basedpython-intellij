@@ -1,23 +1,34 @@
 package dev.basedpython.pycharm.env.download
 
+import com.google.gson.JsonObject
+import com.google.gson.JsonParser
+import dev.basedpython.pycharm.env.manager.index.Pep440
 import java.nio.file.Path
 import java.nio.file.Paths
 
 /**
  * Pure, side-effect-free core for the "bundled fallback binary download" feature
  * (FEATURES.md §58). All functions are deterministic and take their environment
- * (os.name / os.arch / user home) as parameters so tests can drive every platform
- * without touching `System.getProperty` or the filesystem.
+ * (os.name / os.arch / user home, the index's answer) as parameters so tests can drive every
+ * platform without touching `System.getProperty`, the network or the filesystem.
+ *
+ * ### Where the binaries come from
+ *
+ * basedpython publishes `by` and `buff` in one place: the `basedpython` wheels on PyPI, one per
+ * platform, with both executables under `basedpython-<version>.data/scripts/`. Its GitHub releases
+ * carry only a `dist-manifest.json` — the release workflow is configured for wheels and no
+ * standalone archives — so there is no per-binary asset URL to build. The index's JSON API names
+ * every wheel with its SHA-256, which is what the download is checked against.
  *
  * Nothing in this object performs network or disk IO.
  */
 object ByBinaryDownloadPlan {
 
-    /** Base URL for the GitHub release assets. `{...}` placeholders filled by [downloadUrl]. */
-    const val BASE_URL = "https://github.com/basedpython/basedpython/releases/download"
+    /** The distribution the binaries ship in. */
+    const val DISTRIBUTION = "basedpython"
 
-    /** Default release version used when a caller does not supply one. */
-    const val DEFAULT_VERSION = "1.0.0"
+    /** PyPI's JSON API for [DISTRIBUTION]: every release, every file, every digest. */
+    const val RELEASES_URL = "https://pypi.org/pypi/$DISTRIBUTION/json"
 
     /** Directory (relative to user home) under which downloaded binaries are installed. */
     const val INSTALL_DIR_NAME = ".basedpython"
@@ -27,17 +38,74 @@ object ByBinaryDownloadPlan {
     val BINARY_NAMES: List<String> = listOf("by", "buff")
 
     /**
-     * Supported per-OS/arch download targets. The [slug] is the platform fragment used
-     * in the asset name; [exe] is the executable suffix (`.exe` on Windows, else empty).
+     * Supported per-OS/arch download targets. The [slug] names the platform to people and to the
+     * bundled layout; [exe] is the executable suffix (`.exe` on Windows, else empty); [wheelTag] is
+     * whether a wheel's platform tag is one this machine can run.
      */
-    enum class Platform(val slug: String, val exe: String, val windows: Boolean) {
-        MAC_ARM64("mac-arm64", "", false),
-        MAC_X64("mac-x64", "", false),
-        LINUX_X64("linux-x64", "", false),
-        LINUX_ARM64("linux-arm64", "", false),
-        WINDOWS_X64("windows-x64", ".exe", true),
-        WINDOWS_ARM64("windows-arm64", ".exe", true),
+    enum class Platform(val slug: String, val exe: String, val windows: Boolean, private val wheelTag: (String) -> Boolean) {
+        MAC_ARM64("mac-arm64", "", false, { it.startsWith("macosx_") && it.endsWith("_arm64") }),
+        MAC_X64("mac-x64", "", false, { it.startsWith("macosx_") && it.endsWith("_x86_64") }),
+        // glibc builds. The musl wheels are published too, but an IDE's bundled JVM is a glibc
+        // build, so a machine running this plugin on Linux runs glibc binaries.
+        LINUX_X64("linux-x64", "", false, { it.startsWith("manylinux") && it.endsWith("_x86_64") }),
+        LINUX_ARM64("linux-arm64", "", false, { it.startsWith("manylinux") && it.endsWith("_aarch64") }),
+        WINDOWS_X64("windows-x64", ".exe", true, { it == "win_amd64" }),
+        WINDOWS_ARM64("windows-arm64", ".exe", true, { it == "win_arm64" }),
+        ;
+
+        /**
+         * True when the wheel called [filename] runs here.
+         *
+         * A wheel's platform tag is the last `-` field before `.whl`, and may be several tags
+         * joined by `.` — `manylinux_2_17_x86_64.manylinux2014_x86_64` — any of which is enough.
+         */
+        fun runsWheel(filename: String): Boolean {
+            if (!filename.endsWith(".whl")) return false
+            val tags = filename.removeSuffix(".whl").substringAfterLast('-')
+            return tags.split('.').any(wheelTag)
+        }
     }
+
+    /** One wheel the index offers: where to get it, and what its SHA-256 must be. */
+    data class Wheel(val version: String, val filename: String, val url: String, val sha256: String)
+
+    /**
+     * The newest wheel in PyPI's [releasesJson] that runs on [platform], or null when there is none.
+     *
+     * Newest by PEP 440, pre-releases included — every basedpython release so far is one, and the
+     * index's own "latest" (`info.version`) skips them and names a placeholder. A file that is
+     * yanked, or that carries no SHA-256 to check it against, is never chosen.
+     */
+    fun newestWheel(releasesJson: String, platform: Platform): Wheel? {
+        val releases = runCatching { JsonParser.parseString(releasesJson).asJsonObject.getAsJsonObject("releases") }
+            .getOrNull() ?: return null
+        return releases.keySet()
+            .sortedWith(Pep440.NEWEST_FIRST)
+            .firstNotNullOfOrNull { version ->
+                releases.get(version)?.takeIf { it.isJsonArray }?.asJsonArray
+                    ?.mapNotNull { it.takeIf { f -> f.isJsonObject }?.asJsonObject?.let { f -> wheel(version, f) } }
+                    ?.firstOrNull { platform.runsWheel(it.filename) }
+            }
+    }
+
+    private fun wheel(version: String, file: JsonObject): Wheel? {
+        fun text(key: String): String? = file.get(key)?.takeIf { it.isJsonPrimitive }?.asString
+        if (file.get("yanked")?.takeIf { it.isJsonPrimitive }?.asBoolean == true) return null
+        val sha256 = file.getAsJsonObject("digests")?.get("sha256")?.takeIf { it.isJsonPrimitive }?.asString
+            ?.takeIf { it.matches(SHA256) } ?: return null
+        return Wheel(version, text("filename") ?: return null, text("url") ?: return null, sha256.lowercase())
+    }
+
+    private val SHA256 = Regex("[0-9a-fA-F]{64}")
+
+    /**
+     * True when the wheel entry [entryName] is [binaryName] for [platform].
+     *
+     * Matched on the `.data/scripts/` tail, which is where a wheel keeps the executables it
+     * installs onto `PATH`, so the versioned directory above it does not have to be predicted.
+     */
+    fun isBinaryEntry(entryName: String, binaryName: String, platform: Platform): Boolean =
+        entryName.endsWith(".data/scripts/${executableFileName(binaryName, platform)}")
 
     /**
      * Detect the [Platform] from raw `os.name` / `os.arch` strings (as returned by
@@ -60,32 +128,6 @@ object ByBinaryDownloadPlan {
                 if (isArm) Platform.LINUX_ARM64 else if (is64) Platform.LINUX_X64 else null
             else -> null
         }
-    }
-
-    /** Normalise a possibly-blank/`v`-prefixed version into a bare `x.y.z` string. */
-    fun normalizeVersion(version: String?): String {
-        val v = version?.trim().orEmpty()
-        if (v.isEmpty()) return DEFAULT_VERSION
-        return v.removePrefix("v").removePrefix("V").ifEmpty { DEFAULT_VERSION }
-    }
-
-    /** Asset file name for [binaryName] on [platform], e.g. `by-mac-arm64` or `buff-windows-x64.exe`. */
-    fun assetName(binaryName: String, platform: Platform): String =
-        "$binaryName-${platform.slug}${platform.exe}"
-
-    /**
-     * Full download URL for [binaryName] at [version] on [platform], rooted at [baseUrl].
-     * Example: `.../download/v1.0.0/by-mac-arm64`.
-     */
-    fun downloadUrl(
-        binaryName: String,
-        version: String?,
-        platform: Platform,
-        baseUrl: String = BASE_URL,
-    ): String {
-        val ver = normalizeVersion(version)
-        val root = baseUrl.trimEnd('/')
-        return "$root/v$ver/${assetName(binaryName, platform)}"
     }
 
     /** Local executable file name for [binaryName] on [platform] (adds `.exe` on Windows). */

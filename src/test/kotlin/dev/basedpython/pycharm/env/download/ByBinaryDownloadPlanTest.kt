@@ -2,6 +2,7 @@ package dev.basedpython.pycharm.env.download
 
 import dev.basedpython.pycharm.env.download.ByBinaryDownloadPlan.Platform
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -118,87 +119,90 @@ class ByBinaryDownloadPlanTest {
         assertEquals(Platform.MAC_X64, ByBinaryDownloadPlan.detectPlatform("Mac OS X", "ppc"))
     }
 
-    // --- normalizeVersion --------------------------------------------------
+    // --- the wheel on PyPI --------------------------------------------------
+
+    private val sha = "a".repeat(64)
+
+    private fun file(filename: String, yanked: Boolean = false, digest: String? = sha) = """
+        {"filename": "$filename", "url": "https://files.example/$filename", "yanked": $yanked,
+         "digests": {${digest?.let { "\"sha256\": \"$it\"" }.orEmpty()}}}
+    """
+
+    private fun releases(vararg versions: Pair<String, List<String>>) =
+        """{"info": {"version": "0.0.0"}, "releases": {${versions.joinToString(",") { (v, files) -> "\"$v\": [${files.joinToString(",")}]" }}}}"""
+
+    /** The file names basedpython 0.0.1a9 actually published, as the index lists them. */
+    private val published = listOf(
+        "basedpython-0.0.1a9-py3-none-linux_armv6l.whl",
+        "basedpython-0.0.1a9-py3-none-macosx_10_12_x86_64.whl",
+        "basedpython-0.0.1a9-py3-none-macosx_11_0_arm64.whl",
+        "basedpython-0.0.1a9-py3-none-manylinux_2_17_aarch64.manylinux2014_aarch64.whl",
+        "basedpython-0.0.1a9-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+        "basedpython-0.0.1a9-py3-none-musllinux_1_2_x86_64.whl",
+        "basedpython-0.0.1a9-py3-none-win32.whl",
+        "basedpython-0.0.1a9-py3-none-win_amd64.whl",
+        "basedpython-0.0.1a9-py3-none-win_arm64.whl",
+        "basedpython-0.0.1a9.tar.gz",
+    )
 
     @Test
-    fun `normalizeVersion strips leading v`() {
-        assertEquals("1.2.3", ByBinaryDownloadPlan.normalizeVersion("v1.2.3"))
-    }
-
-    @Test
-    fun `normalizeVersion strips uppercase V`() {
-        assertEquals("2.0.0", ByBinaryDownloadPlan.normalizeVersion("V2.0.0"))
-    }
-
-    @Test
-    fun `normalizeVersion keeps bare version`() {
-        assertEquals("3.4.5", ByBinaryDownloadPlan.normalizeVersion("3.4.5"))
-    }
-
-    @Test
-    fun `normalizeVersion trims whitespace`() {
-        assertEquals("1.0.0", ByBinaryDownloadPlan.normalizeVersion("  1.0.0  "))
-    }
-
-    @Test
-    fun `normalizeVersion null yields default`() {
-        assertEquals(ByBinaryDownloadPlan.DEFAULT_VERSION, ByBinaryDownloadPlan.normalizeVersion(null))
-    }
-
-    @Test
-    fun `normalizeVersion blank yields default`() {
-        assertEquals(ByBinaryDownloadPlan.DEFAULT_VERSION, ByBinaryDownloadPlan.normalizeVersion("   "))
-    }
-
-    // --- assetName ---------------------------------------------------------
-
-    @Test
-    fun `assetName mac has no extension`() {
-        assertEquals("by-mac-arm64", ByBinaryDownloadPlan.assetName("by", Platform.MAC_ARM64))
-    }
-
-    @Test
-    fun `assetName windows has exe extension`() {
-        assertEquals("buff-windows-x64.exe", ByBinaryDownloadPlan.assetName("buff", Platform.WINDOWS_X64))
-    }
-
-    @Test
-    fun `assetName linux variants`() {
-        assertEquals("by-linux-x64", ByBinaryDownloadPlan.assetName("by", Platform.LINUX_X64))
-        assertEquals("by-linux-arm64", ByBinaryDownloadPlan.assetName("by", Platform.LINUX_ARM64))
-    }
-
-    // --- downloadUrl -------------------------------------------------------
-
-    @Test
-    fun `downloadUrl builds full github url`() {
-        assertEquals(
-            "https://github.com/basedpython/basedpython/releases/download/v1.0.0/by-mac-arm64",
-            ByBinaryDownloadPlan.downloadUrl("by", "1.0.0", Platform.MAC_ARM64),
+    fun `every supported platform finds exactly one of the wheels basedpython publishes`() {
+        val expected = mapOf(
+            Platform.MAC_ARM64 to "basedpython-0.0.1a9-py3-none-macosx_11_0_arm64.whl",
+            Platform.MAC_X64 to "basedpython-0.0.1a9-py3-none-macosx_10_12_x86_64.whl",
+            Platform.LINUX_X64 to "basedpython-0.0.1a9-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+            Platform.LINUX_ARM64 to "basedpython-0.0.1a9-py3-none-manylinux_2_17_aarch64.manylinux2014_aarch64.whl",
+            Platform.WINDOWS_X64 to "basedpython-0.0.1a9-py3-none-win_amd64.whl",
+            Platform.WINDOWS_ARM64 to "basedpython-0.0.1a9-py3-none-win_arm64.whl",
         )
+        for (platform in Platform.values()) {
+            assertEquals(listOf(expected[platform]), published.filter { platform.runsWheel(it) }, platform.name)
+        }
     }
 
+    /**
+     * The index's own "latest" is a placeholder that skips pre-releases, and every real release so
+     * far is one — so newest is decided by PEP 440 over every release, not taken from `info`.
+     */
     @Test
-    fun `downloadUrl adds exe on windows`() {
-        assertEquals(
-            "https://github.com/basedpython/basedpython/releases/download/v2.1.0/buff-windows-x64.exe",
-            ByBinaryDownloadPlan.downloadUrl("buff", "v2.1.0", Platform.WINDOWS_X64),
+    fun `the newest release with a wheel for the platform is chosen, pre-releases included`() {
+        val json = releases(
+            "0.0.0" to listOf(file("basedpython-0.0.0-py3-none-any.whl")),
+            "0.0.1a8" to listOf(file("basedpython-0.0.1a8-py3-none-macosx_11_0_arm64.whl")),
+            "0.0.1a10" to listOf(file("basedpython-0.0.1a10-py3-none-win_amd64.whl")),
+            "0.0.1a9" to listOf(file("basedpython-0.0.1a9-py3-none-macosx_11_0_arm64.whl")),
         )
+
+        val wheel = ByBinaryDownloadPlan.newestWheel(json, Platform.MAC_ARM64)
+        assertEquals("0.0.1a9", wheel?.version, "a10 has nothing for this platform; 0.0.0 has no binaries")
+        assertEquals("https://files.example/basedpython-0.0.1a9-py3-none-macosx_11_0_arm64.whl", wheel?.url)
+        assertEquals(sha, wheel?.sha256)
     }
 
     @Test
-    fun `downloadUrl uses default version when null`() {
-        val url = ByBinaryDownloadPlan.downloadUrl("by", null, Platform.LINUX_X64)
-        assertTrue(url.contains("/v${ByBinaryDownloadPlan.DEFAULT_VERSION}/"))
-        assertTrue(url.endsWith("/by-linux-x64"))
-    }
-
-    @Test
-    fun `downloadUrl honours custom base url and trims trailing slash`() {
-        assertEquals(
-            "https://example.com/dl/v1.0.0/by-linux-arm64",
-            ByBinaryDownloadPlan.downloadUrl("by", "1.0.0", Platform.LINUX_ARM64, baseUrl = "https://example.com/dl/"),
+    fun `a yanked wheel, or one with no digest to check, is never chosen`() {
+        val json = releases(
+            "2.0" to listOf(file("basedpython-2.0-py3-none-win_amd64.whl", yanked = true)),
+            "1.5" to listOf(file("basedpython-1.5-py3-none-win_amd64.whl", digest = null)),
+            "1.0" to listOf(file("basedpython-1.0-py3-none-win_amd64.whl")),
         )
+        assertEquals("1.0", ByBinaryDownloadPlan.newestWheel(json, Platform.WINDOWS_X64)?.version)
+    }
+
+    @Test
+    fun `an index answer that is not a release listing chooses nothing`() {
+        assertNull(ByBinaryDownloadPlan.newestWheel("<html>", Platform.LINUX_X64))
+        assertNull(ByBinaryDownloadPlan.newestWheel(releases(), Platform.LINUX_X64))
+    }
+
+    /** Both executables live under the wheel's data scripts directory, and nothing else matches. */
+    @Test
+    fun `the binaries are found under the wheel's scripts directory`() {
+        assertTrue(ByBinaryDownloadPlan.isBinaryEntry("basedpython-0.0.1a9.data/scripts/by", "by", Platform.MAC_ARM64))
+        assertTrue(ByBinaryDownloadPlan.isBinaryEntry("basedpython-0.0.1a9.data/scripts/buff.exe", "buff", Platform.WINDOWS_X64))
+        assertFalse(ByBinaryDownloadPlan.isBinaryEntry("basedpython-0.0.1a9.data/scripts/buff", "by", Platform.MAC_ARM64))
+        assertFalse(ByBinaryDownloadPlan.isBinaryEntry("basedpython-0.0.1a9.dist-info/RECORD", "by", Platform.MAC_ARM64))
+        assertFalse(ByBinaryDownloadPlan.isBinaryEntry("basedpython-0.0.1a9.data/scripts/by", "by", Platform.WINDOWS_X64))
     }
 
     // --- executableFileName ------------------------------------------------
