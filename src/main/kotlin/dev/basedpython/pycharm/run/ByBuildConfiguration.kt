@@ -11,7 +11,7 @@ import com.intellij.openapi.options.SettingsEditor
 import com.intellij.openapi.project.Project
 
 class ByBuildConfiguration(project: Project, factory: ConfigurationFactory, name: String) :
-    RunConfigurationBase<ByBuildOptions>(project, factory, name) {
+    RunConfigurationBase<ByBuildOptions>(project, factory, name), ByConfiguration {
 
     public override fun getOptions(): ByBuildOptions = super.getOptions() as ByBuildOptions
 

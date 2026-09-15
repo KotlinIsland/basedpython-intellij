@@ -12,7 +12,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.util.execution.ParametersListUtil
 
 class ByCheckConfiguration(project: Project, factory: ConfigurationFactory, name: String) :
-    RunConfigurationBase<ByCheckOptions>(project, factory, name) {
+    RunConfigurationBase<ByCheckOptions>(project, factory, name), ByConfiguration {
 
     public override fun getOptions(): ByCheckOptions = super.getOptions() as ByCheckOptions
 

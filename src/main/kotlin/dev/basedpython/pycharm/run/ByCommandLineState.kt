@@ -85,7 +85,7 @@ abstract class ByCommandLineState(
 
     /**
      * Whether this subcommand ends up running the transpiled program, and so needs the project's
-     * own `.py` modules to be importable — see [startProcess].
+     * own `.py` modules to be importable — see [byCommandLine].
      *
      * `run` does, and a test run *is* a `by run pytest`. `build` and `check` emit or inspect code
      * without ever starting an interpreter, so there is no `sys.path` to repair and no reason to
@@ -94,51 +94,14 @@ abstract class ByCommandLineState(
     protected open val startsProgram: Boolean get() = subcommandStartsProgram(subcommand)
 
     override fun startProcess(): ProcessHandler {
-        val launch = BasedPythonBinaries.launchBy(project, kind = options.environmentKind)
-            ?: throw ExecutionException(notFoundMessage())
-
-        val cmd = GeneralCommandLine()
-            .withExePath(launch.exe.toString())
-            .withCharset(Charsets.UTF_8)
-
-        // Empty for a plain venv launch; for uv this is `run --project <dir> by`.
-        cmd.addParameters(launch.prependArgs)
-        cmd.addParameters(buildCommand())
-
-        val wd = FileUtil.toSystemDependentName(
-            options.workingDir.ifBlank { project.basePath ?: System.getProperty("user.home") },
+        val cmd = byCommandLine(
+            project = project,
+            options = options,
+            arguments = buildCommand(),
+            infrastructureEnv = infrastructureEnv,
+            pythonPathPrefix = pythonPathPrefix,
+            startsProgram = startsProgram,
         )
-        cmd.withWorkDirectory(wd)
-
-        cmd.withParentEnvironmentType(
-            if (options.passParentEnv) GeneralCommandLine.ParentEnvironmentType.CONSOLE
-            else GeneralCommandLine.ParentEnvironmentType.NONE
-        )
-        // Activation first so a user-set variable of the same name still wins.
-        cmd.withEnvironment(activationEnv(launch))
-        // `by run` spawns a Python child whose stdout is a pipe, and CPython block-buffers a pipe:
-        // a program's output appeared only when it exited, which is useless while stepping through
-        // it in the debugger. Set before the user's own environment so it stays overridable.
-        cmd.withEnvironment(PYTHONUNBUFFERED, "1")
-        cmd.withEnvironment(options.envVars)
-        cmd.withEnvironment(infrastructureEnv)
-        // The working directory belongs on `PYTHONPATH`, behind whatever the debugger put there.
-        //
-        // `by run` transpiles into a temp directory and starts `<python> _by_runner.py` *there*, so
-        // `sys.path[0]` is the temp tree rather than the project — and a plain `.py` is never
-        // copied into that tree. A project mixing `helper.py` with `main.by` therefore died on
-        // `ImportError: No module named 'helper'` before a debugger was ever in the picture, while
-        // `by` itself resolved the same import happily when type checking. This restores what
-        // `python main.py` would have given the program: the directory its sources are in.
-        //
-        // Behind the transpiled output, never in front of it: the temp tree stays `sys.path[0]`, so
-        // a generated module still wins over a stale `.py` of the same name left lying beside the
-        // source it was generated from.
-        val prefixes = pythonPathPrefix + listOfNotNull(wd.takeIf { startsProgram })
-        if (prefixes.isNotEmpty()) {
-            cmd.withEnvironment(PYTHONPATH, composePythonPath(prefixes, inheritedPythonPath()))
-        }
-
         val handler = KillableColoredProcessHandler(cmd)
         // Stop has to reach the program, not just the launcher. `by run` is a Rust parent that
         // spawns `python _by_runner.py` and then blocks waiting for it, and a SIGINT to `by`
@@ -161,40 +124,109 @@ abstract class ByCommandLineState(
         infrastructureArgs = infrastructureArgs,
         extraArgsForProgram = extraArgsForProgram,
     )
-
-    /**
-     * The venv activation to apply.
-     *
-     * [ByLaunch.env] carries a `PATH` built on top of the IDE's own, which is right for an inherited
-     * environment and wrong when the user unticked "pass parent environment" — that leaks the whole
-     * IDE `PATH` back in through the explicit map. Rebuild against an empty parent in that case, so a
-     * hermetic run gets the venv's bin directory and nothing else.
-     */
-    private fun activationEnv(launch: ByLaunch): Map<String, String> {
-        if (options.passParentEnv) return launch.env
-        val venv = launch.venvRoot ?: return launch.env
-        return ByEnvironments.activationEnv(venv, parentPath = null)
-    }
-
-    /**
-     * The `PYTHONPATH` [pythonPathPrefix] has to be prepended to.
-     *
-     * A user-set value wins, then the IDE's own — but only when the run inherits the parent
-     * environment. A hermetic run has no inherited `PYTHONPATH` to extend, and pulling the IDE's
-     * back in here would be the same leak [activationEnv] avoids for `PATH`.
-     */
-    private fun inheritedPythonPath(): String? =
-        options.envVars[PYTHONPATH]
-            ?: if (options.passParentEnv) EnvironmentUtil.getValue(PYTHONPATH) else null
-
-    private fun notFoundMessage(): String =
-        if (options.environmentKind == ByEnvironmentKind.AUTO) {
-            "by binary not found — set path in Settings | basedpython"
-        } else {
-            "by binary not found via ${options.environmentKind.display} — change the Environment " +
-                "setting of this run configuration, or set a path in Settings | basedpython"
-        }
 }
+
+/**
+ * The `by` process a configuration with [options] launches for [arguments]: the `by` its
+ * environment setting resolves, in its working directory, with its environment.
+ *
+ * Shared by every `by` configuration and by anything that runs `by` *on behalf of* one — the
+ * "Run `by build` first" step builds with the environment of the configuration it precedes, so the
+ * build and the run cannot disagree about which `by` or which variables they saw.
+ *
+ * [infrastructureEnv] is applied after the user's variables and [pythonPathPrefix] goes in front of
+ * `PYTHONPATH`, as [ByCommandLineState.infrastructureEnv] and [ByCommandLineState.pythonPathPrefix]
+ * describe. [startsProgram] puts the working directory on `PYTHONPATH` as well.
+ *
+ * @throws ExecutionException when no `by` can be found.
+ */
+internal fun byCommandLine(
+    project: Project,
+    options: ByCommonOptions,
+    arguments: List<String>,
+    infrastructureEnv: Map<String, String> = emptyMap(),
+    pythonPathPrefix: List<String> = emptyList(),
+    startsProgram: Boolean = false,
+): GeneralCommandLine {
+    val launch = BasedPythonBinaries.launchBy(project, kind = options.environmentKind)
+        ?: throw ExecutionException(byNotFoundMessage(options.environmentKind))
+
+    val cmd = GeneralCommandLine()
+        .withExePath(launch.exe.toString())
+        .withCharset(Charsets.UTF_8)
+
+    // Empty for a plain venv launch; for uv this is `run --project <dir> by`.
+    cmd.addParameters(launch.prependArgs)
+    cmd.addParameters(arguments)
+
+    val wd = FileUtil.toSystemDependentName(
+        options.workingDir.ifBlank { project.basePath ?: System.getProperty("user.home") },
+    )
+    cmd.withWorkDirectory(wd)
+
+    cmd.withParentEnvironmentType(
+        if (options.passParentEnv) GeneralCommandLine.ParentEnvironmentType.CONSOLE
+        else GeneralCommandLine.ParentEnvironmentType.NONE
+    )
+    // Activation first so a user-set variable of the same name still wins.
+    cmd.withEnvironment(activationEnv(options, launch))
+    // `by run` spawns a Python child whose stdout is a pipe, and CPython block-buffers a pipe:
+    // a program's output appeared only when it exited, which is useless while stepping through
+    // it in the debugger. Set before the user's own environment so it stays overridable.
+    cmd.withEnvironment(PYTHONUNBUFFERED, "1")
+    cmd.withEnvironment(options.envVars)
+    cmd.withEnvironment(infrastructureEnv)
+    // The working directory belongs on `PYTHONPATH`, behind whatever the debugger put there.
+    //
+    // `by run` transpiles into a temp directory and starts `<python> _by_runner.py` *there*, so
+    // `sys.path[0]` is the temp tree rather than the project — and a plain `.py` is never
+    // copied into that tree. A project mixing `helper.py` with `main.by` therefore died on
+    // `ImportError: No module named 'helper'` before a debugger was ever in the picture, while
+    // `by` itself resolved the same import happily when type checking. This restores what
+    // `python main.py` would have given the program: the directory its sources are in.
+    //
+    // Behind the transpiled output, never in front of it: the temp tree stays `sys.path[0]`, so
+    // a generated module still wins over a stale `.py` of the same name left lying beside the
+    // source it was generated from.
+    val prefixes = pythonPathPrefix + listOfNotNull(wd.takeIf { startsProgram })
+    if (prefixes.isNotEmpty()) {
+        cmd.withEnvironment(PYTHONPATH, composePythonPath(prefixes, inheritedPythonPath(options)))
+    }
+    return cmd
+}
+
+/**
+ * The venv activation to apply.
+ *
+ * [ByLaunch.env] carries a `PATH` built on top of the IDE's own, which is right for an inherited
+ * environment and wrong when the user unticked "pass parent environment" — that leaks the whole
+ * IDE `PATH` back in through the explicit map. Rebuild against an empty parent in that case, so a
+ * hermetic run gets the venv's bin directory and nothing else.
+ */
+private fun activationEnv(options: ByCommonOptions, launch: ByLaunch): Map<String, String> {
+    if (options.passParentEnv) return launch.env
+    val venv = launch.venvRoot ?: return launch.env
+    return ByEnvironments.activationEnv(venv, parentPath = null)
+}
+
+/**
+ * The `PYTHONPATH` a prefix has to be prepended to.
+ *
+ * A user-set value wins, then the IDE's own — but only when the run inherits the parent
+ * environment. A hermetic run has no inherited `PYTHONPATH` to extend, and pulling the IDE's
+ * back in here would be the same leak [activationEnv] avoids for `PATH`.
+ */
+private fun inheritedPythonPath(options: ByCommonOptions): String? =
+    options.envVars[PYTHONPATH]
+        ?: if (options.passParentEnv) EnvironmentUtil.getValue(PYTHONPATH) else null
+
+private fun byNotFoundMessage(kind: ByEnvironmentKind): String =
+    if (kind == ByEnvironmentKind.AUTO) {
+        "by binary not found — set path in Settings | basedpython"
+    } else {
+        "by binary not found via ${kind.display} — change the Environment " +
+            "setting of this run configuration, or set a path in Settings | basedpython"
+    }
 
 /**
  * Whether [subcommand] ends up starting an interpreter on the transpiled output.

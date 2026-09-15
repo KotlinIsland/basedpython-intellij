@@ -59,6 +59,17 @@ open class ByCommonOptions : RunConfigurationOptions() {
         set(v) { passParentEnvProp.setValue(this, v) }
 }
 
+/**
+ * A run configuration that launches `by` with [ByCommonOptions] — so its `by`, directory and
+ * environment can be reused by something acting on its behalf, such as the build before it.
+ *
+ * An interface rather than a list of classes so asking the question loads none of them: the test
+ * configuration is built on the SM test runner, which may be absent.
+ */
+interface ByConfiguration {
+    fun getOptions(): ByCommonOptions
+}
+
 class ByRunOptions : ByCommonOptions() {
     private val moduleProp = string("").provideDelegate(this, "module")
     private val programArgsProp = string("").provideDelegate(this, "programArgs")

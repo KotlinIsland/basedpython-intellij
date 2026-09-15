@@ -19,7 +19,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.util.execution.ParametersListUtil
 
 class ByRunConfiguration(project: Project, factory: ConfigurationFactory, name: String) :
-    RunConfigurationBase<ByRunOptions>(project, factory, name) {
+    RunConfigurationBase<ByRunOptions>(project, factory, name), ByConfiguration {
 
     public override fun getOptions(): ByRunOptions = super.getOptions() as ByRunOptions
 

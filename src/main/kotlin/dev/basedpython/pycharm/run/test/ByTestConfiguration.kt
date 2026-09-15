@@ -3,6 +3,7 @@ package dev.basedpython.pycharm.run.test
 import dev.basedpython.pycharm.lsp.BasedPythonBinaries
 import dev.basedpython.pycharm.run.ByCommandLineState
 import dev.basedpython.pycharm.run.ByCommonOptions
+import dev.basedpython.pycharm.run.ByConfiguration
 import dev.basedpython.pycharm.run.test.tree.ByTestEventsConverter
 import dev.basedpython.pycharm.run.test.tree.ByTestLocator
 import com.intellij.execution.DefaultExecutionResult
@@ -46,7 +47,7 @@ class ByTestOptions : ByCommonOptions() {
 }
 
 class ByTestConfiguration(project: Project, factory: ConfigurationFactory, name: String) :
-    RunConfigurationBase<ByTestOptions>(project, factory, name) {
+    RunConfigurationBase<ByTestOptions>(project, factory, name), ByConfiguration {
 
     public override fun getOptions(): ByTestOptions = super.getOptions() as ByTestOptions
 
