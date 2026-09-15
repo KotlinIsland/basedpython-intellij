@@ -264,9 +264,6 @@
         <newProjectWizard.generator
             implementation="dev.basedpython.pycharm.project.BasedPythonProjectGenerator"/>
         <completion.contributor
-            language="TEXT"
-            implementationClass="dev.basedpython.pycharm.project.PyprojectCompletionContributor"/>
-        <completion.contributor
             language="TOML"
             implementationClass="dev.basedpython.pycharm.project.PyprojectCompletionContributor"/>
         <directoryIndexExcludePolicy
