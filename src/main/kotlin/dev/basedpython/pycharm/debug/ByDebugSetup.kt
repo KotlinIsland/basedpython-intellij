@@ -1,7 +1,16 @@
 package dev.basedpython.pycharm.debug
 
 import com.intellij.execution.ExecutionException
-import com.intellij.openapi.util.Key
+import com.intellij.execution.configurations.RunProfile
+import com.intellij.execution.process.ProcessEvent
+import com.intellij.execution.process.ProcessHandler
+import com.intellij.execution.process.ProcessListener
+import com.intellij.openapi.Disposable
+import com.intellij.openapi.components.Service
+import com.intellij.openapi.components.service
+import com.intellij.openapi.diagnostic.Logger
+import com.intellij.openapi.project.Project
+import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.util.io.FileUtil
 import com.intellij.util.net.NetUtils
 import dev.basedpython.pycharm.debug.bpd.ByBpdWrapper
@@ -12,6 +21,7 @@ import kotlinx.coroutines.delay
 import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.WeakHashMap
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
@@ -23,7 +33,7 @@ import kotlin.time.Duration.Companion.minutes
  *
  * Created by `ByDapLaunchArgumentsProvider` (the first thing the DAP runner calls, and the only
  * place that knows the port early enough to put it in the `attach` arguments) and handed to
- * `ByDebugAdapterDescriptor` through [KEY] on the run profile.
+ * `ByDebugAdapterDescriptor` through [ByDebugSetups], which also owns its directory.
  */
 class ByDebugSetup(
     val port: Int,
@@ -50,8 +60,13 @@ class ByDebugSetup(
     /** The script `PYTHON` is pointed at, for a [ByDebugBackend.BPD] session. */
     val wrapper: Path get() = wrapperOf(bootstrapDir)
 
+    /** Remove [bootstrapDir] and everything the session wrote into it. */
+    fun delete() {
+        if (!FileUtil.delete(bootstrapDir.toFile())) LOG.info("could not delete the debug session's directory $bootstrapDir")
+    }
+
     companion object {
-        val KEY: Key<ByDebugSetup> = Key.create("basedpython.debug.setup")
+        private val LOG = Logger.getInstance(ByDebugSetup::class.java)
 
         const val ENV_PORT: String = "BASEDPYTHON_DEBUG_PORT"
         const val ENV_INFO_OUT: String = "BASEDPYTHON_DEBUG_INFO_OUT"
@@ -135,6 +150,79 @@ class ByDebugSetup(
             }
             return ByDebugSetup(freePort(), dir, dir.resolve("debug-info.json"))
         }
+    }
+}
+
+/**
+ * Where a [ByDebugSetup] waits between the two hooks of one debug start, and who deletes its
+ * directory.
+ *
+ * The launch-arguments provider and the adapter descriptor are separate objects the platform calls
+ * in turn, with the run profile the only thing both are handed. The setup used to wait on the
+ * profile's user data — a plugin class on a platform object that lives as long as the run
+ * configuration, left there whenever the start failed between the two hooks. Here it waits in a
+ * plugin service, keyed weakly by the profile.
+ *
+ * Its directory lives exactly as long as the program that reads it: the bootstrap and the wrapper
+ * are read when the interpreter starts, and the record for as long as the session runs. So it is
+ * deleted when the process ends, when a newer start for the same profile replaces a setup that
+ * was never taken, and — for anything still here — when the plugin is unloaded or the project
+ * closes.
+ */
+@Service(Service.Level.PROJECT)
+internal class ByDebugSetups : Disposable {
+
+    private val lock = Any()
+
+    /** Setups made for a start and not yet taken by its descriptor. Under [lock]. */
+    private val waiting = WeakHashMap<RunProfile, ByDebugSetup>()
+
+    /** Setups taken, whose program has not ended yet, each with what watches for its end. Under [lock]. */
+    private val running = HashMap<ByDebugSetup, Disposable>()
+
+    /** [setup] is for the start of [profile] that is under way. */
+    fun offer(profile: RunProfile, setup: ByDebugSetup) {
+        synchronized(lock) { waiting.put(profile, setup) }?.delete()
+    }
+
+    /** The setup [offer]ed for [profile], which is the caller's to [releaseWith] from here. */
+    fun take(profile: RunProfile): ByDebugSetup? = synchronized(lock) { waiting.remove(profile) }
+
+    /**
+     * Delete [setup]'s directory when [process] ends, or at once if it already has. A session with
+     * no process of the IDE's to watch keeps its directory until this service goes.
+     */
+    fun releaseWith(setup: ByDebugSetup, process: ProcessHandler?) {
+        val watch = Disposer.newDisposable(this, "basedpython debug setup of ${setup.bootstrapDir}")
+        synchronized(lock) { running[setup] = watch }
+        if (process == null) return
+        process.addProcessListener(
+            object : ProcessListener {
+                override fun processTerminated(event: ProcessEvent) = release(setup)
+            },
+            watch,
+        )
+        if (process.isProcessTerminated) release(setup)
+    }
+
+    private fun release(setup: ByDebugSetup) {
+        val watch = synchronized(lock) { running.remove(setup) } ?: return
+        Disposer.dispose(watch)
+        setup.delete()
+    }
+
+    override fun dispose() {
+        val left = synchronized(lock) {
+            (waiting.values + running.keys).also {
+                waiting.clear()
+                running.clear()
+            }
+        }
+        left.forEach(ByDebugSetup::delete)
+    }
+
+    companion object {
+        fun getInstance(project: Project): ByDebugSetups = project.service()
     }
 }
 

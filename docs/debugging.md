@@ -66,8 +66,8 @@ The pieces, all under `src/main/kotlin/dev/basedpython/pycharm/debug/` unless no
 1. **`ByDapLaunchArgumentsProvider`** declares `by run` configurations debuggable — and *only*
    under the Debug executor, because `DapProgramRunner.canRun` would otherwise route ordinary runs
    through the debug adapter too. It is the first hook in a DAP start, so it also allocates the
-   session's port and temp directory (`ByDebugSetup`) and hands them onward on the run profile's
-   user data. The DAP request is `attach`, not `launch`: the IDE starts `by run` exactly as a
+   session's port and temp directory (`ByDebugSetup`) and hands them onward through the
+   `ByDebugSetups` project service, which deletes the directory when the program ends. The DAP request is `attach`, not `launch`: the IDE starts `by run` exactly as a
    normal run would and connects to the port the debuggee opens.
 2. **`ByDebugAdapterDescriptor.configureProfileState`** puts `BASEDPYTHON_DEBUG_PORT`,
    `BASEDPYTHON_DEBUG_INFO_OUT` and the bootstrap directory on `PYTHONPATH` — the platform's hook

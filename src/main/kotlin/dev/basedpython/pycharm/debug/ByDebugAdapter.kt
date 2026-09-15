@@ -11,7 +11,6 @@ import com.intellij.execution.ui.ConsoleViewContentType
 import com.intellij.execution.ui.ExecutionConsole
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.util.UserDataHolder
 import com.intellij.util.PathUtil
 import com.intellij.platform.dap.DapBreakpointsDescription
 import com.intellij.platform.dap.DapClient
@@ -120,10 +119,8 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
      * moment where the environment of a process somebody else launches can still be changed.
      */
     override fun configureProfileState(environment: ExecutionEnvironment, state: RunProfileState) {
-        val holder = environment.runProfile as? UserDataHolder
-        val setup = holder?.getUserData(ByDebugSetup.KEY)
+        val setup = ByDebugSetups.getInstance(project).take(environment.runProfile)
             ?: throw ExecutionException(BasedPythonBundle.message("debug.error.noSetup"))
-        holder.putUserData(ByDebugSetup.KEY, null)
         this.setup = setup
 
         val commandLine = state as? ByCommandLineState
@@ -176,6 +173,7 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
     ): DebugAdapterHandle {
         val setup = setup ?: throw ExecutionException(BasedPythonBundle.message("debug.error.noSetup"))
         val processHandler = executionResult?.processHandler
+        ByDebugSetups.getInstance(project).releaseWith(setup, processHandler)
 
         if (setup.backend == ByDebugBackend.BPD) {
             // No source maps to invert and none to publish: bpd reads `_by_sourcemap.py` itself,

@@ -3,7 +3,6 @@ package dev.basedpython.pycharm.debug
 import com.intellij.execution.configurations.RunProfile
 import com.intellij.execution.executors.DefaultDebugExecutor
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.util.UserDataHolder
 import com.intellij.platform.dap.DapLaunchArgumentsProvider
 import com.intellij.platform.dap.DapStartRequest
 import com.intellij.platform.dap.LaunchRequestArguments
@@ -38,8 +37,8 @@ import java.nio.file.Paths
  *
  * [getLaunchArguments] is the earliest hook in a DAP start, and the port has to exist by then to go
  * into the `attach` arguments — so this is also where [ByDebugSetup] is created. It travels to
- * [ByDebugAdapterDescriptor] on the run profile's user data, which the descriptor consumes and
- * clears in `configureProfileState` moments later in the same start.
+ * [ByDebugAdapterDescriptor] through [ByDebugSetups], which the descriptor takes it from in
+ * `configureProfileState` moments later in the same start.
  */
 class ByDapLaunchArgumentsProvider : DapLaunchArgumentsProvider {
 
@@ -49,7 +48,7 @@ class ByDapLaunchArgumentsProvider : DapLaunchArgumentsProvider {
 
     override fun getLaunchArguments(project: Project, profile: RunProfile): LaunchRequestArguments {
         val setup = prepare(project)
-        (profile as? UserDataHolder)?.putUserData(ByDebugSetup.KEY, setup)
+        ByDebugSetups.getInstance(project).offer(profile, setup)
         return when (setup.backend) {
             // debugpy's adapter is *in* the debuggee: the bootstrap called `debugpy.listen()` and
             // the IDE is the one connecting. `connect` is how its adapter spells that
