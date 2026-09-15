@@ -14,9 +14,8 @@ import dev.basedpython.pycharm.run.test.tree.ByTestSources
 /**
  * What the node view can do with a node: run it, and open the code behind it.
  *
- * Both take a pytest target as the tree stores it — naming the transpiled `.py`, exactly as pytest
- * reported it — and translate it back to the `.by` source themselves, so a caller never has to
- * remember which of the two worlds a string is in.
+ * Both take a pytest target as the tree stores it — naming the file in the tree `by run` stages, or
+ * the `.py` plain pytest collected, exactly as pytest reported it.
  */
 internal object ByTestNodeActions {
 
@@ -46,10 +45,10 @@ internal object ByTestNodeActions {
         executor: Executor,
         source: ByTestSource = ByTestSource.TRANSPILED,
     ) {
-        // A transpiled target names a `.py` that stands for a `.by`, and the configuration rewrites
-        // it back on the way out; a target plain pytest collected already names the file to run.
+        // Either kind of target is already what its pytest run takes: a transpiled one names the file
+        // where `by run` stages it, and one plain pytest collected names the file in the project.
         val plain = source == ByTestSource.PYTHON
-        val paths = target?.let { if (plain) it else ByTestNodes.sourceTarget(it) }.orEmpty()
+        val paths = target.orEmpty()
         val runManager = RunManager.getInstance(project)
         val settings = runManager.createConfiguration(
             when {

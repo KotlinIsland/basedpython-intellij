@@ -4,7 +4,6 @@ import dev.basedpython.pycharm.run.model.ByProgramModel
 import dev.basedpython.pycharm.run.model.innermostAt
 import dev.basedpython.pycharm.run.test.ByTestConfiguration
 import dev.basedpython.pycharm.run.test.ByTestConfigurationType
-import dev.basedpython.pycharm.run.test.tree.ByTestSources
 import com.intellij.execution.actions.ConfigurationContext
 import com.intellij.execution.actions.ConfigurationFromContext
 import com.intellij.execution.actions.LazyRunConfigurationProducer
@@ -18,9 +17,8 @@ import com.intellij.psi.PsiFile
  * Right-click a `.by` test file (or click the "Run test" gutter icon) → produce a configuration
  * that runs `by run pytest -v <path>[::Class][::test_name]`.
  *
- * The target names the `.by` source the user is looking at; rewriting it onto the transpiled `.py`
- * that pytest actually collects happens when the command line is built, in
- * [dev.basedpython.pycharm.run.test.ByPytest].
+ * The target is the node id pytest gives the test in the tree `by run` stages: the file as `by`
+ * stages it ([ByProgramModel.stagedPath]), then the names `by/testItems` gives the test.
  *
  * Without this producer the test gutter icons contributed by
  * [dev.basedpython.pycharm.run.testmarker.ByTestRunLineMarkerContributor] have no configuration
@@ -69,8 +67,8 @@ class ByTestFromFileProducer : LazyRunConfigurationProducer<ByTestConfiguration>
 
 /**
  * Builds the pytest target for [context], or null when the context holds no test. Returns
- * `<relpath>`, `<relpath>::test_name`, or `<relpath>::Class::test_name`, with the path still naming
- * the `.by` source.
+ * `<staged>`, `<staged>::test_name`, or `<staged>::Class::test_name`, where `<staged>` is the path
+ * `by run` stages the file at — null too while `by` has not said where that is.
  *
  * Which declarations are tests is `by/testItems`' answer ([ByProgramModel]), the same one the gutter
  * icons are drawn from: an icon whose producer declined would leave a green arrow that runs the
@@ -91,7 +89,7 @@ private fun testTargetFor(context: ConfigurationContext): String? {
         ?: return null
     if (file.extension != "by") return null
     val model = ByProgramModel.getInstance(context.project)
-    val relPath = ByTestSources.relativePath(context.project, file) ?: file.path
+    val staged = model.stagedPath(file) ?: return null
 
     val psiFile = element.containingFile
     val document = psiFile?.let { PsiDocumentManager.getInstance(context.project).getDocument(it) }
@@ -101,12 +99,12 @@ private fun testTargetFor(context: ConfigurationContext): String? {
         if (items.isEmpty()) return null
         val line = document.getLineNumber(offset)
         val item = items.innermostAt(line, offset - document.getLineStartOffset(line))
-            ?: return relPath
-        return relPath + "::" + item.symbols.joinToString("::")
+            ?: return staged
+        return staged + "::" + item.symbols.joinToString("::")
     }
 
     val holdsTests = model.cachedTestItems(file)?.isNotEmpty()
         ?: model.projectTests()?.let { it.byFile[file]?.isNotEmpty() ?: false }
         ?: return null
-    return relPath.takeIf { holdsTests }
+    return staged.takeIf { holdsTests }
 }

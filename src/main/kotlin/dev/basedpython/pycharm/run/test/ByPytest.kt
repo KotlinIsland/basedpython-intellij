@@ -10,18 +10,19 @@ import com.intellij.util.execution.ParametersListUtil
  * `error: unrecognized subcommand 'test'` before producing a single line of output, which is why
  * the test tree never showed anything.
  *
- * What works is `by run pytest`. `by run <module>` transpiles the whole project into a temp
- * directory and runs `python -m <module>` there, and the module does not have to be one of yours —
- * so `pytest` runs against the transpiled tree, discovering the `.py` files `by` just produced.
- * Relative paths are preserved, so `tests/test_math.by` is collected as `tests/test_math.py` and
- * every node id differs from the source only in its extension.
+ * What is run is `by run pytest`. `by run <module>` transpiles the whole project into a temp
+ * directory and runs `<module>` with that tree first on `sys.path`, and the module does not have to
+ * be one of yours — so `pytest` is what is handed the transpiled tree. That tree follows the module
+ * tree, not the directory tree: a src-layout project's `src/tests/test_math.by` is staged as
+ * `tests/test_math.py`. So a target is written the way pytest names a file in that tree —
+ * [dev.basedpython.pycharm.run.model.ByProgramModel.stagedPath], which is `by`'s answer — and passed
+ * on as it is.
  *
- * Two consequences worth knowing:
+ * `by run` runs the module in the directory it was started in, not in the tree it staged, and pytest
+ * resolves a path target against that directory: a target naming a staged file is only found where
+ * the run's working directory is the staged tree.
  *
- *  - pytest's rootdir is the temp directory, so configuration in the project's `pyproject.toml`
- *    (`[tool.pytest.ini_options]`) and any hand-written `conftest.py` are *not* picked up — only
- *    `.by` files are transpiled into that directory. A `conftest.by` works fine.
- *  - `pytest` has to be importable by the interpreter `by run` picks: the one named by the `PYTHON`
+ * Worth knowing too: `pytest` has to be importable by the interpreter `by run` picks: the one named by the `PYTHON`
  *    environment variable, otherwise `python3` from `PATH`. A missing one fails with
  *    `ImportError: No module named pytest`.
  */
@@ -40,32 +41,12 @@ internal object ByPytest {
     /**
      * The arguments that follow `by run`, for the configured [paths].
      *
-     * @param paths whitespace-separated `.by` targets, each optionally carrying a pytest node id
-     *   suffix (`tests/test_math.by::TestGroup::test_one`). Blank runs the whole project.
+     * @param paths whitespace-separated pytest targets in the staged tree, each optionally carrying a
+     *   node id suffix (`tests/test_math.py::TestGroup::test_one`). Blank runs the whole project.
      */
     fun arguments(paths: String): List<String> = buildList {
         add(MODULE)
         add(VERBOSE)
-        if (paths.isNotBlank()) {
-            ParametersListUtil.parse(paths).mapTo(this, ::nodeId)
-        }
+        if (paths.isNotBlank()) addAll(ParametersListUtil.parse(paths))
     }
-
-    /**
-     * Rewrites one configured target onto the transpiled tree: `tests/test_x.by::test_a` becomes
-     * `tests/test_x.py::test_a`.
-     *
-     * Only the file part is touched — the `::` suffix is a pytest node id, and a target that is a
-     * directory, or that already names a `.py`, is left exactly as it is.
-     */
-    fun nodeId(target: String): String {
-        val separator = target.indexOf("::")
-        val path = if (separator < 0) target else target.substring(0, separator)
-        val suffix = if (separator < 0) "" else target.substring(separator)
-        if (!path.endsWith(BY_EXTENSION)) return target
-        return path.dropLast(BY_EXTENSION.length) + PY_EXTENSION + suffix
-    }
-
-    private const val BY_EXTENSION = ".by"
-    private const val PY_EXTENSION = ".py"
 }

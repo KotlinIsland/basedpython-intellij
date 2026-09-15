@@ -1,6 +1,5 @@
 package dev.basedpython.pycharm.run.test.node
 
-import dev.basedpython.pycharm.run.test.ByPytest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -20,7 +19,7 @@ class ByTestNodesTest {
     fun `directories, the file, the class and the test each become a level`() {
         val root = tree("tests/unit/test_math.py::TestGroup::test_add")
 
-        val file = root.child("tests/unit").child("test_math.by")
+        val file = root.child("tests/unit").child("test_math.py")
         assertEquals(ByTestNodeKind.FILE, file.kind)
         assertEquals("tests/unit/test_math.py", file.target)
 
@@ -34,10 +33,20 @@ class ByTestNodesTest {
         assertTrue(test.children.isEmpty())
     }
 
+    /** `by` staged `src/tests/test_math.by` at `tests/test_math.py`; the view names the source. */
     @Test
-    fun `a file is named as the source it was transpiled from`() {
-        val file = tree("tests/test_math.py::test_add").child("tests").child("test_math.by")
-        // The name is the `.by` the user edits; the target stays the `.py` pytest knows about.
+    fun `a file is named as the source by staged it from`() {
+        val root = ByTestNodes.build(collectionOf("tests/test_math.py::test_add")) { staged ->
+            "test_math.by".takeIf { staged == "tests/test_math.py" }
+        }
+        val file = root.child("tests").child("test_math.by")
+        // The name is the `.by` the user edits; the target stays the path pytest knows about.
+        assertEquals("tests/test_math.py", file.target)
+    }
+
+    @Test
+    fun `a file whose source is not known keeps the name pytest gave it`() {
+        val file = tree("tests/test_math.py::test_add").child("tests").child("test_math.py")
         assertEquals("tests/test_math.py", file.target)
     }
 
@@ -46,7 +55,7 @@ class ByTestNodesTest {
         val file = tree(
             "tests/test_math.py::test_param[1-2]",
             "tests/test_math.py::test_param[3-4]",
-        ).child("tests").child("test_math.by")
+        ).child("tests").child("test_math.py")
 
         val test = file.child("test_param")
         assertEquals(ByTestNodeKind.TEST, test.kind)
@@ -66,7 +75,7 @@ class ByTestNodesTest {
             "tests/test_math.py::TestGroup::test_in_class",
         )
         assertEquals(4, root.testCount)
-        assertEquals(2, root.child("tests").child("test_math.by").child("test_param").testCount)
+        assertEquals(2, root.child("tests").child("test_math.py").child("test_param").testCount)
     }
 
     @Test
@@ -74,7 +83,7 @@ class ByTestNodesTest {
         val file = tree(
             "tests/test_math.py::test_zebra",
             "tests/test_math.py::test_apple",
-        ).child("tests").child("test_math.by")
+        ).child("tests").child("test_math.py")
         assertEquals(listOf("test_zebra", "test_apple"), file.children.map { it.name })
     }
 
@@ -98,7 +107,7 @@ class ByTestNodesTest {
     @Test
     fun `a test file at the project root needs no directory node`() {
         val root = tree("test_math.py::test_add")
-        val file = root.child("test_math.by")
+        val file = root.child("test_math.py")
         assertEquals(ByTestNodeKind.FILE, file.kind)
         assertEquals("test_math.py", file.target)
     }
@@ -113,7 +122,7 @@ class ByTestNodesTest {
         )
         val error = root.children.last()
         assertEquals(ByTestNodeKind.ERROR, error.kind)
-        assertEquals("tests/test_pyerr.by", error.name)
+        assertEquals("tests/test_pyerr.py", error.name)
         assertEquals("RuntimeError: boom", error.detail)
         // An error is not a test, so it does not inflate the count.
         assertEquals(1, root.testCount)
@@ -134,23 +143,5 @@ class ByTestNodesTest {
         assertTrue(root.children.isEmpty())
         assertEquals(0, root.testCount)
         assertNull(root.target)
-    }
-
-    @Test
-    fun `a target round-trips through the rewrite the run configuration does`() {
-        val target = tree("tests/test_math.py::TestGroup::test_add")
-            .child("tests").child("test_math.by").child("TestGroup").child("test_add").target!!
-        val source = ByTestNodes.sourceTarget(target)
-        assertEquals("tests/test_math.by::TestGroup::test_add", source)
-        // What the tree hands the run configuration is what the configuration turns back into the
-        // node id pytest reported.
-        assertEquals(target, ByPytest.nodeId(source))
-    }
-
-    @Test
-    fun `only the trailing extension of the path is rewritten`() {
-        assertEquals("by/nested.by", ByTestNodes.sourceTarget("by/nested.py"))
-        assertEquals("tests", ByTestNodes.sourceTarget("tests"))
-        assertEquals("tests/x.py.d/y.by", ByTestNodes.sourceTarget("tests/x.py.d/y.py"))
     }
 }

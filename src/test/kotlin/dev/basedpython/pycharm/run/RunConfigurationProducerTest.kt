@@ -7,9 +7,12 @@ import com.intellij.execution.actions.RunConfigurationProducer
 import com.intellij.psi.PsiFile
 import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
+import dev.basedpython.pycharm.lsp.build.ByBuildOutputs
+import dev.basedpython.pycharm.lsp.ext.ByBuildOutput
 import dev.basedpython.pycharm.run.main.ByMainArgumentHistory
 import dev.basedpython.pycharm.run.model.ByProgramModel
 import dev.basedpython.pycharm.run.model.ByReplies
+import dev.basedpython.pycharm.run.test.ByPytest
 import dev.basedpython.pycharm.run.test.ByTestConfiguration
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -50,13 +53,24 @@ class RunConfigurationProducerTest {
     private fun addModule(path: String, text: String, module: String): PsiFile =
         fixture.addFileToProject(path, text).also { model.rememberModuleNames(mapOf(it.virtualFile to module)) }
 
-    /** Adds a test file, with the tests `by/testItems` finds in [text] ([ByReplies]) already known. */
-    private fun addTestFile(path: String, text: String): PsiFile =
+    /**
+     * Adds a test file, with the tests `by/testItems` finds in [text] ([ByReplies]) already known, and
+     * `by/buildOutput`'s answer that it is staged at [staged].
+     */
+    private fun addTestFile(path: String, text: String, staged: String = path.removeSuffix(".by") + ".py"): PsiFile =
         fixture.addFileToProject(path, text).also {
             val items = ByReplies.testItems(text)
             model.rememberTestItems(it.virtualFile, items)
             model.rememberProjectTests(it.virtualFile, items)
+            rememberStaged(it, staged)
         }
+
+    /** Puts in `by/buildOutput`'s answer that [file] is written to [staged] within the build. */
+    private fun rememberStaged(file: PsiFile, staged: String) =
+        ByBuildOutputs.getInstance(project).remember(
+            file.virtualFile,
+            ByBuildOutput(projectRoot = "/p", buildDirectory = "/p/build", generated = "/p/build/$staged"),
+        )
 
     private inline fun <reified T : RunConfigurationProducer<*>> producer(): T =
         RunConfigurationProducer.getInstance(T::class.java)
@@ -174,14 +188,41 @@ class RunConfigurationProducerTest {
             .createConfigurationFromContext(contextFor(file))
         assertNotNull(fromContext, "the pytest producer should fire on a `def test_…` line")
         val config = fromContext!!.configuration as ByTestConfiguration
-        // The path prefix is project-relative; in the in-memory fixture it stays absolute, so
-        // assert on the meaningful node-id suffix.
-        assertTrue(
-            config.options.paths.endsWith("test_thing.by::test_addition"),
-            "paths was '${config.options.paths}'",
+        assertEquals("test_thing.py::test_addition", config.options.paths)
+        assertEquals("pytest test_thing.py::test_addition", config.name)
+    }
+
+    /**
+     * `by run` stages a src-layout project's `src/tests/test_staged.by` as `tests/test_staged.py`:
+     * the path inside the staged tree follows the module tree, not the directory tree. The target is
+     * where `by/buildOutput` says the file lands — `by run` and `by build` lay a source out with the
+     * same `transpiled_destination` — and not the source's own path with its extension swapped.
+     */
+    @Test
+    fun `a src-layout test is targeted where by stages it`() {
+        val file = addTestFile(
+            "src/tests/test_staged.by",
+            "def test_addition():\n    assert 1 + 1 == 2\n",
+            staged = "tests/test_staged.py",
         )
-        assertTrue(config.name.startsWith("pytest "), "name was '${config.name}'")
-        assertTrue(config.name.endsWith("test_thing.by::test_addition"), "name was '${config.name}'")
+        val config = producer<ByTestFromFileProducer>().createConfigurationFromContext(contextFor(file))
+            ?.configuration as? ByTestConfiguration
+        assertNotNull(config)
+        assertEquals("tests/test_staged.py::test_addition", config!!.options.paths)
+        assertEquals(
+            listOf("pytest", "-v", "tests/test_staged.py::test_addition"),
+            ByPytest.arguments(config.options.paths),
+        )
+    }
+
+    /** Until `by` has said where a file is staged, there is no target to give pytest, and no guess is made. */
+    @Test
+    fun `a test file by has not placed produces nothing`() {
+        val file = fixture.addFileToProject("tests/test_unplaced.by", "def test_addition():\n    assert 1 + 1 == 2\n")
+        val items = ByReplies.testItems(file.text)
+        model.rememberTestItems(file.virtualFile, items)
+        model.rememberProjectTests(file.virtualFile, items)
+        assertNull(producer<ByTestFromFileProducer>().createConfigurationFromContext(contextFor(file)))
     }
 
     @Test
@@ -194,10 +235,7 @@ class RunConfigurationProducerTest {
             .createConfigurationFromContext(ConfigurationContext(element))
         assertNotNull(fromContext, "the pytest producer should fire on a nested `def test_…` method")
         val config = fromContext!!.configuration as ByTestConfiguration
-        assertTrue(
-            config.options.paths.endsWith("test_thing.by::TestMath::test_add"),
-            "paths was '${config.options.paths}'",
-        )
+        assertEquals("test_thing.py::TestMath::test_add", config.options.paths)
     }
 
     @Test
@@ -226,7 +264,7 @@ class RunConfigurationProducerTest {
             val config = producer<ByTestFromFileProducer>().createConfigurationFromContext(context)
                 ?.configuration as? ByTestConfiguration
             assertNotNull(config, "a test file should be runnable as a whole")
-            assertTrue(config!!.options.paths.endsWith("test_whole.by"), "paths was '${config.options.paths}'")
+            assertEquals("tests/test_whole.py", config!!.options.paths)
         }
     }
 
@@ -245,8 +283,7 @@ class RunConfigurationProducerTest {
         val config = producer<ByTestFromFileProducer>().createConfigurationFromContext(ConfigurationContext(element))
             ?.configuration as? ByTestConfiguration
         assertNotNull(config)
-        assertTrue(config!!.options.paths.endsWith("test_nested.by"), "paths was '${config.options.paths}'")
-        assertFalse(config.options.paths.contains("TestA"), "paths was '${config.options.paths}'")
+        assertEquals("tests/test_nested.py", config!!.options.paths)
     }
 
     @Test

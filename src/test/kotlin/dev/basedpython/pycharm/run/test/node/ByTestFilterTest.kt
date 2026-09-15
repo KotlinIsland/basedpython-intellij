@@ -40,7 +40,7 @@ class ByTestFilterTest {
     @Test
     fun `only failures leaves the failure and the path to it`() {
         val result = filtered(ByTestState.FAILED)
-        assertEquals(listOf("Tests", "tests", "test_math.by", "test_fails"), names(result))
+        assertEquals(listOf("Tests", "tests", "test_math.py", "test_fails"), names(result))
     }
 
     @Test
@@ -65,7 +65,7 @@ class ByTestFilterTest {
     @Test
     fun `never-run tests are a state like any other`() {
         val result = filtered(ByTestState.NOT_RUN)
-        assertEquals(listOf("Tests", "tests", "other", "test_more.by", "test_top"), names(result))
+        assertEquals(listOf("Tests", "tests", "other", "test_more.py", "test_top"), names(result))
     }
 
     @Test

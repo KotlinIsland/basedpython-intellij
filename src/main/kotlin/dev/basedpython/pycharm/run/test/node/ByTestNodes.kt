@@ -8,7 +8,7 @@ internal enum class ByTestNodeKind {
     /** A directory holding tests, possibly several path segments deep — see [ByTestNodes.build]. */
     DIRECTORY,
 
-    /** One test file, named as its `.by` source. */
+    /** One test file, named as its source. */
     FILE,
 
     /** A `class Test…` grouping tests inside a file. */
@@ -27,13 +27,13 @@ internal enum class ByTestNodeKind {
 /**
  * A node of the collected test tree.
  *
- * @param name what the user reads — a file is named as its `.by` source, a case as just its
- *   bracketed parameters
+ * @param name what the user reads — a file is named as its source, a case as just its bracketed
+ *   parameters
  * @param target the pytest target that runs exactly this node, as pytest reported it; null for the
  *   root (which is "everything") and for an error with no file
  * @param source which pytest run found it, which decides how [target] is read and how it is run:
- *   a [ByTestSource.TRANSPILED] path stands for a `.by` source, a [ByTestSource.PYTHON] one is the
- *   file itself
+ *   a [ByTestSource.TRANSPILED] path names a file in the tree `by run` stages, a
+ *   [ByTestSource.PYTHON] one is the file itself
  * @param detail a grey (or red, for [ByTestNodeKind.ERROR]) suffix
  */
 internal data class ByTestNode(
@@ -68,14 +68,23 @@ internal data class ByTestNode(
  */
 internal object ByTestNodes {
 
-    /** The tree for one collection, errors included as [ByTestNodeKind.ERROR] nodes at the end. */
-    fun build(collection: ByCollection, rootName: String = "Tests"): ByTestNode {
+    /**
+     * The tree for one collection, errors included as [ByTestNodeKind.ERROR] nodes at the end.
+     *
+     * @param sourceName the name of the source `by run` staged at a path, when that is known; a
+     *   transpiled file whose source is not known is shown under the name pytest gave it
+     */
+    fun build(
+        collection: ByCollection,
+        rootName: String = "Tests",
+        sourceName: (stagedPath: String) -> String? = { null },
+    ): ByTestNode {
         val root = Node(rootName, ByTestNodeKind.ROOT, target = null, source = ByTestSource.TRANSPILED)
-        for (node in collection.nodes) insert(root, node)
+        for (node in collection.nodes) insert(root, node, sourceName)
         val tests = root.freeze().children.map(::compress)
         val errors = collection.errors.map {
             ByTestNode(
-                name = it.target?.let(::sourceTarget) ?: it.message,
+                name = it.target ?: it.message,
                 kind = ByTestNodeKind.ERROR,
                 target = it.target,
                 detail = if (it.target == null) null else it.message,
@@ -84,33 +93,8 @@ internal object ByTestNodes {
         return ByTestNode(rootName, ByTestNodeKind.ROOT, target = null, children = tests + errors)
     }
 
-    /**
-     * The `.by` source form of a pytest target: `tests/test_x.py::test_a` → `tests/test_x.by::test_a`.
-     *
-     * The inverse of [dev.basedpython.pycharm.run.test.ByPytest.nodeId], and needed for the same
-     * reason: pytest only ever sees the transpiled tree, while both navigation and the run
-     * configuration are written in terms of the sources. Only the file part is touched — everything
-     * after `::` is a name, not a path.
-     */
-    fun sourceTarget(target: String): String {
-        val separator = target.indexOf("::")
-        val path = if (separator < 0) target else target.substring(0, separator)
-        val suffix = if (separator < 0) "" else target.substring(separator)
-        if (!path.endsWith(PY_EXTENSION)) return target
-        return path.dropLast(PY_EXTENSION.length) + BY_EXTENSION + suffix
-    }
-
-    /**
-     * The path a node id names in the project: the `.by` it was transpiled from, or the `.py`
-     * itself when plain pytest collected it.
-     */
-    fun sourcePath(node: ByCollectedNode): String {
-        val path = node.nodeId.substringBefore("::")
-        return if (node.source == ByTestSource.TRANSPILED) sourceTarget(path) else path
-    }
-
     /** Adds one collected node to the tree, creating whatever levels it needs. */
-    private fun insert(root: Node, collected: ByCollectedNode) {
+    private fun insert(root: Node, collected: ByCollectedNode, sourceName: (String) -> String?) {
         val nodeId = collected.nodeId
         val source = collected.source
         val separator = nodeId.indexOf("::")
@@ -128,7 +112,7 @@ internal object ByTestNodes {
                 key = segment,
                 // A transpiled file is named as the `.by` the user edits; a `.py` collected in the
                 // project already is the file they edit.
-                name = if (isFile && source == ByTestSource.TRANSPILED) sourceTarget(segment) else segment,
+                name = if (isFile && source == ByTestSource.TRANSPILED) sourceName(path) ?: segment else segment,
                 kind = if (isFile) ByTestNodeKind.FILE else ByTestNodeKind.DIRECTORY,
                 target = target,
                 source = source,
@@ -182,7 +166,4 @@ internal object ByTestNodes {
         fun freeze(): ByTestNode =
             ByTestNode(name, kind, target, children.values.map { it.freeze() }, source = source)
     }
-
-    private const val PY_EXTENSION = ".py"
-    private const val BY_EXTENSION = ".by"
 }

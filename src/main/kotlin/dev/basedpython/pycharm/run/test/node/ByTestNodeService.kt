@@ -201,19 +201,19 @@ internal class ByTestNodeService(
      */
     fun showStatic() {
         if (collecting.get()) return
-        val tests = ByProgramModel.getInstance(project).projectTests() ?: return
-        setState(State.Collected(ByTestNodes.build(staticCollection(tests), rootName()), fromPytest = false))
+        val tests = model.projectTests() ?: return
+        setState(State.Collected(buildTree(staticCollection(tests)), fromPytest = false))
     }
 
     /** The server's answer, as the node ids pytest would report for it. */
     private fun staticCollection(tests: ByProjectTests): ByCollection = ByCollection(
         nodes = tests.byFile.flatMap { (file, items) ->
             if (!file.isValid) return@flatMap emptyList()
-            val relative = ByTestSources.relativePath(project, file) ?: return@flatMap emptyList()
             val transpiled = file.extension == BY_EXTENSION
-            // A `.by` is collected as the `.py` it transpiles to, which is how every node id the
-            // tree and a run speak in names it; a `.py` is collected as itself.
-            val nodePath = if (transpiled) "${relative.removeSuffix(".$BY_EXTENSION")}.py" else relative
+            // A `.by` is collected where `by run` stages it, which is how every node id the tree and
+            // a run speak in names it; a `.py` is collected by plain pytest in the project, as itself.
+            val nodePath = (if (transpiled) model.stagedPath(file) else ByTestSources.relativePath(project, file))
+                ?: return@flatMap emptyList()
             val source = if (transpiled) ByTestSource.TRANSPILED else ByTestSource.PYTHON
             items.flatMap(::leaves).map { ByCollectedNode("$nodePath::${it.symbols.joinToString("::")}", source) }
         },
@@ -366,7 +366,13 @@ internal class ByTestNodeService(
     }
 
     private fun collected(collection: ByCollection): State.Collected =
-        State.Collected(tree = ByTestNodes.build(collection, rootName()), fromPytest = true)
+        State.Collected(tree = buildTree(collection), fromPytest = true)
+
+    /** The tree for [collection], its transpiled files named as the sources `by` staged them from. */
+    private fun buildTree(collection: ByCollection): ByTestNode =
+        ByTestNodes.build(collection, rootName()) { staged -> model.stagedFile(staged)?.name }
+
+    private val model: ByProgramModel get() = ByProgramModel.getInstance(project)
 
     private fun failure(message: String?): ByCollection = ByCollection(
         errors = listOf(

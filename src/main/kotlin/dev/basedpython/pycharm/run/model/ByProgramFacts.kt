@@ -1,12 +1,14 @@
 package dev.basedpython.pycharm.run.model
 
 import com.intellij.openapi.vfs.VirtualFile
+import dev.basedpython.pycharm.lsp.ext.ByBuildOutput
 import dev.basedpython.pycharm.lsp.ext.ByEntryPointResponse
 import dev.basedpython.pycharm.lsp.ext.ByRunModulesProjectReply
 import dev.basedpython.pycharm.lsp.ext.ByTestItemReply
 import dev.basedpython.pycharm.run.main.ByMainFunction
 import org.eclipse.lsp4j.Position
 import org.eclipse.lsp4j.Range
+import java.nio.file.Paths
 
 /**
  * How a module runs, as `by/entryPoint` said: the lines that start it, and the command line its
@@ -85,6 +87,24 @@ private fun Range.contains(line: Int, column: Int): Boolean {
     val beforeEnd = line < end.line || (line == end.line && column <= end.character)
     return afterStart && beforeEnd
 }
+
+/**
+ * The path, `/`-separated, a source is staged at inside the tree `by run` builds — which is the path
+ * pytest, collecting that tree, names the file by in a node id; null when the answer places no source.
+ *
+ * `by/buildOutput` says where `by build` writes the file, and a `by run` tree is laid out the same
+ * way: both place a source with `by_stage::transpiled_destination`, relative to the module root that
+ * holds it. So a src-layout project's `src/tests/test_x.by` is `tests/test_x.py` — the source's own
+ * path with its extension swapped is right only for a project whose module root is its root.
+ */
+internal val ByBuildOutput.stagedPath: String?
+    get() {
+        val directory = buildDirectory ?: return null
+        val file = generated ?: return null
+        val relative = runCatching { Paths.get(directory).relativize(Paths.get(file)) }.getOrNull() ?: return null
+        if (relative.startsWith("..")) return null
+        return relative.joinToString("/")
+    }
 
 /** The tests of every project file that holds some. */
 internal data class ByProjectTests(val byFile: Map<VirtualFile, List<ByTestItem>>)

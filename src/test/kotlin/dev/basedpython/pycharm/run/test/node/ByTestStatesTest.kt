@@ -23,7 +23,7 @@ class ByTestStatesTest {
         children.first { it.name == name }
 
     private val dir get() = tree.child("tests")
-    private val math get() = dir.child("test_math.by")
+    private val math get() = dir.child("test_math.py")
 
     @Test
     fun `nothing has run, so nothing has a result`() {

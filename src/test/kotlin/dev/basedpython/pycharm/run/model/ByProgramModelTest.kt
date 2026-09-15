@@ -10,6 +10,8 @@ import com.intellij.openapi.vfs.newvfs.events.VFilePropertyChangeEvent
 import com.intellij.psi.PsiDocumentManager
 import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
+import dev.basedpython.pycharm.lsp.build.ByBuildOutputs
+import dev.basedpython.pycharm.lsp.ext.ByBuildOutput
 import dev.basedpython.pycharm.run.BasedPythonRunConfigurationType
 import dev.basedpython.pycharm.run.ByRunConfiguration
 import dev.basedpython.pycharm.run.test.node.ByTestNodeService
@@ -106,6 +108,10 @@ class ByProgramModelTest {
     fun `the static answer becomes the test tree without running anything`() {
         val file = fixture.addFileToProject("tests/test_tree.by", nested)
         model.rememberProjectTests(file.virtualFile, ByReplies.testItems(nested))
+        ByBuildOutputs.getInstance(fixture.project).remember(
+            file.virtualFile,
+            ByBuildOutput(projectRoot = "/p", buildDirectory = "/p/build", generated = "/p/build/tests/test_tree.py"),
+        )
         val service = ByTestNodeService.getInstance(fixture.project)
 
         service.showStatic()
@@ -118,8 +124,8 @@ class ByProgramModelTest {
             }
             walk(state.tree)
         }
-        assertTrue(targets.any { it.endsWith("tests/test_tree.py::TestA::test_one") }, "targets were $targets")
-        assertTrue(targets.any { it.endsWith("tests/test_tree.py::test_top") }, "targets were $targets")
+        assertTrue(targets.any { it == "tests/test_tree.py::TestA::test_one" }, "targets were $targets")
+        assertTrue(targets.any { it == "tests/test_tree.py::test_top" }, "targets were $targets")
         assertFalse(targets.any { "test_inner" in it }, "targets were $targets")
     }
 

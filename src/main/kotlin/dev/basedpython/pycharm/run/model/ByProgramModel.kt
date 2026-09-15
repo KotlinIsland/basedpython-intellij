@@ -21,6 +21,7 @@ import dev.basedpython.pycharm.lsp.ByAnswer
 import dev.basedpython.pycharm.lsp.ByLspLifecycleListener
 import dev.basedpython.pycharm.lsp.ByLspServerSupportProvider
 import dev.basedpython.pycharm.lsp.askBy
+import dev.basedpython.pycharm.lsp.build.ByBuildOutputs
 import dev.basedpython.pycharm.lsp.byServerFor
 import dev.basedpython.pycharm.lsp.ext.ByEntryPointParams
 import dev.basedpython.pycharm.lsp.ext.ByEntryPointResponse
@@ -44,7 +45,8 @@ import kotlin.time.Duration.Companion.milliseconds
  *
  * Every answer here is the server's: `by/entryPoint` for a module's `main` and `__main__` guards,
  * `by/testItems` for the tests pytest would collect, `by/runModules` for the name `by run` runs each
- * file under and the project's `run.main`. None of it is worked out from the source text.
+ * file under and the project's `run.main`, `by/buildOutput` for where `by run` stages a test file.
+ * None of it is worked out from the source text.
  *
  * ## Who may wait, and who may not
  *
@@ -54,7 +56,7 @@ import kotlin.time.Duration.Companion.milliseconds
  *  - [entryPoint] and [testItems] **ask and wait** off the EDT — the line-marker pass is a
  *    cancellable background read action, and `sendRequestSync` polls for that cancellation — and
  *    serve only what is already known on the EDT, starting a request behind the answer.
- *  - [cachedTestItems], [moduleName], [projectTests] and [configuredMain] **never wait**: a run
+ *  - [cachedTestItems], [moduleName], [projectTests], [stagedPath] and [configuredMain] **never wait**: a run
  *    configuration producer runs inside a read action while a menu is being built, and blocking it
  *    on a process would freeze whoever is holding the menu open. They answer from what the last
  *    request said, and start one when nothing has been said yet.
@@ -183,6 +185,21 @@ internal class ByProgramModel(private val project: Project, scope: CoroutineScop
      */
     fun projectTests(): ByProjectTests? = tests ?: run { requestProjectRefresh(); null }
 
+    /**
+     * The path pytest names [file] by when it collects the tree `by run` stages ([stagedPath]), as of
+     * the last `by/buildOutput` answer about it; null when there has been none, or it places no
+     * source. Never waits.
+     *
+     * The answer is asked for each test file whenever the project-wide answers are refreshed, and for
+     * every `.by` file an editor opens ([ByBuildOutputs.warm]).
+     */
+    fun stagedPath(file: VirtualFile): String? = ByBuildOutputs.getInstance(project).cached(file)?.stagedPath
+
+    /** The test file `by run` stages at [path] — the inverse of [stagedPath]. Never waits. */
+    fun stagedFile(path: String): VirtualFile? =
+        (tests?.byFile?.keys.orEmpty().asSequence() + testFiles.keys.asSequence())
+            .firstOrNull { it.isValid && stagedPath(it) == path }
+
     private fun askTestItems(file: VirtualFile): List<ByTestItem>? {
         val client = byServerFor(project, file) ?: return null
         val stamp = stampOf(file)
@@ -241,10 +258,20 @@ internal class ByProgramModel(private val project: Project, scope: CoroutineScop
             if (changed) restartDaemon()
         }
         projectTests.value?.let { reply ->
-            tests = ByProjectTests(reply.files.mapNotNull { file ->
+            val next = ByProjectTests(reply.files.mapNotNull { file ->
                 val virtualFile = file.uri?.let(::fileAt) ?: return@mapNotNull null
                 virtualFile to file.tests.map(ByTestItem::of)
             }.toMap())
+            // Where each test file is staged, before anyone is told there are tests to run: a target
+            // and a node id are built from it. Asked only where it is not known, since it changes
+            // when a file moves or the server restarts, both of which forget it.
+            val outputs = ByBuildOutputs.getInstance(project)
+            withContext(Dispatchers.IO) {
+                for (file in next.byFile.keys) {
+                    if (file.extension == BY_EXTENSION && outputs.cached(file) == null) outputs.of(file)
+                }
+            }
+            tests = next
         }
         if (!project.isDisposed) project.messageBus.syncPublisher(CHANGED).run()
     }
@@ -338,6 +365,7 @@ internal class ByProgramModel(private val project: Project, scope: CoroutineScop
             runCatching { Paths.get(URI(uri)) }.getOrNull()?.let(LocalFileSystem.getInstance()::findFileByNioFile)
 
         private const val BY_SERVER = "by"
+        private const val BY_EXTENSION = "by"
         private const val ENTRY_POINT = "entryPoint"
         private const val TEST_ITEMS = "testItems"
         private const val REQUEST_TIMEOUT_MS = 2_000

@@ -27,7 +27,7 @@ class ByTestSettingsEditor(private val project: Project) : SettingsEditor<ByTest
     private val envVarsComponent = EnvironmentVariablesComponent(project)
 
     private val panel: JPanel = FormBuilder.createFormBuilder()
-        .addLabeledComponent("Test targets (space-separated .by paths):", pathsField)
+        .addLabeledComponent("Test targets (space-separated pytest node ids in the tree by run stages):", pathsField)
         .addLabeledComponent("Environment:", environmentCombo)
         .addLabeledComponent("Working directory:", workingDirField)
         .addLabeledComponent("Extra pytest args:", extraArgsField)
