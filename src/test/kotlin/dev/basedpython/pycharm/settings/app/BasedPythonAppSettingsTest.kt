@@ -51,8 +51,6 @@ class BasedPythonAppSettingsTest {
         val s = BasedPythonAppSettings.State()
         assertEquals("", s.defaultByExtraArgs)
         assertEquals("", s.defaultBuffExtraArgs)
-        assertEquals("3.10", s.defaultPythonVersion)
-        assertEquals("off", s.defaultLspTraceLevel)
     }
 
     // --- service registration ----------------------------------------------
@@ -73,8 +71,6 @@ class BasedPythonAppSettingsTest {
         settings.defaultBuffEnabled = false
         settings.defaultByExtraArgs = "--by"
         settings.defaultBuffExtraArgs = "--buff"
-        settings.defaultPythonVersion = "3.12"
-        settings.defaultLspTraceLevel = "verbose"
 
         assertEquals("/opt/by", settings.defaultByPath)
         assertEquals("/opt/buff", settings.defaultBuffPath)
@@ -82,8 +78,6 @@ class BasedPythonAppSettingsTest {
         assertFalse(settings.defaultBuffEnabled)
         assertEquals("--by", settings.defaultByExtraArgs)
         assertEquals("--buff", settings.defaultBuffExtraArgs)
-        assertEquals("3.12", settings.defaultPythonVersion)
-        assertEquals("verbose", settings.defaultLspTraceLevel)
     }
 
     @Test
@@ -103,8 +97,6 @@ class BasedPythonAppSettingsTest {
             defaultBuffEnabled = false,
             defaultByExtraArgs = "--a",
             defaultBuffExtraArgs = "--b",
-            defaultPythonVersion = "3.13",
-            defaultLspTraceLevel = "messages",
         )
         settings.loadState(incoming)
         assertEquals("/g/by", settings.defaultByPath)
@@ -113,20 +105,18 @@ class BasedPythonAppSettingsTest {
         assertFalse(settings.defaultBuffEnabled)
         assertEquals("--a", settings.defaultByExtraArgs)
         assertEquals("--b", settings.defaultBuffExtraArgs)
-        assertEquals("3.13", settings.defaultPythonVersion)
-        assertEquals("messages", settings.defaultLspTraceLevel)
     }
 
     @Test
     fun `loadState then getState round-trips bean`() {
         val incoming = BasedPythonAppSettings.State(
             defaultByPath = "/r/by",
-            defaultPythonVersion = "3.11",
+            defaultByEnabled = false,
         )
         settings.loadState(incoming)
         val out = settings.state
         assertEquals(incoming.defaultByPath, out.defaultByPath)
-        assertEquals(incoming.defaultPythonVersion, out.defaultPythonVersion)
+        assertEquals(incoming.defaultByEnabled, out.defaultByEnabled)
     }
 
     @Test
@@ -134,7 +124,6 @@ class BasedPythonAppSettingsTest {
         val src = BasedPythonAppSettings.State(
             defaultByPath = "/c/by",
             defaultBuffExtraArgs = "--copy",
-            defaultLspTraceLevel = "verbose",
         )
         val dst = BasedPythonAppSettings.State()
         XmlSerializerUtil.copyBean(src, dst)
@@ -171,17 +160,12 @@ class BasedPythonAppSettingsTest {
     }
 
     @Test
-    fun `convenience python version uses app default`() {
-        settings.defaultPythonVersion = "3.12"
-        assertEquals("3.12", BasedPythonDefaults.effectivePythonVersion(null))
-        assertEquals("3.13", BasedPythonDefaults.effectivePythonVersion("3.13"))
-    }
-
-    @Test
-    fun `convenience lsp trace uses app default`() {
-        settings.defaultLspTraceLevel = "messages"
-        assertEquals("messages", BasedPythonDefaults.effectiveLspTraceLevel(""))
-        assertEquals("verbose", BasedPythonDefaults.effectiveLspTraceLevel("verbose"))
+    fun `convenience server toggles use app defaults`() {
+        settings.defaultByEnabled = false
+        settings.defaultBuffEnabled = false
+        assertFalse(BasedPythonDefaults.effectiveByEnabled(null))
+        assertFalse(BasedPythonDefaults.effectiveBuffEnabled(null))
+        assertTrue(BasedPythonDefaults.effectiveByEnabled(true))
     }
 
     @AfterEach

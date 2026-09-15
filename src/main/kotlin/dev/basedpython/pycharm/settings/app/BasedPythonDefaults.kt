@@ -4,11 +4,11 @@ package dev.basedpython.pycharm.settings.app
  * Pure resolution helpers that layer project-level values over application-level
  * defaults from [BasedPythonAppSettings].
  *
- * Semantics: a project value *wins* when it is present, i.e. non-null and (for
- * strings) non-blank. Otherwise the application default is used. For string
- * paths a null/blank project value means "inherit the global default"; for the
- * global default itself a null/blank value means "autodetect" and is propagated
- * as-is.
+ * Semantics: a project value *wins* when it is present — non-null, and for strings non-blank.
+ * Otherwise the application default is used. For string paths a null/blank project value means
+ * "inherit the global default"; for the global default itself a null/blank value means
+ * "autodetect" and is propagated as-is. A toggle has no blank, so a project that has never chosen
+ * holds null rather than the default it would otherwise have to copy, and freeze, at creation.
  *
  * Each resolver comes in two flavours:
  *  - a pure overload taking the explicit default (trivially unit-testable), and
@@ -35,11 +35,9 @@ object BasedPythonDefaults {
   fun effectiveExtraArgs(projectValue: String?, default: String): String =
     if (isSet(projectValue)) projectValue!! else default
 
-  fun effectivePythonVersion(projectValue: String?, default: String): String =
-    if (isSet(projectValue)) projectValue!! else default
-
-  fun effectiveLspTraceLevel(projectValue: String?, default: String): String =
-    if (isSet(projectValue)) projectValue!! else default
+  /** A project's own on/off choice, or [default] when it has not made one. */
+  fun effectiveEnabled(projectValue: Boolean?, default: Boolean): Boolean =
+    projectValue ?: default
 
   // --- Convenience overloads (read app service) ---------------------------
 
@@ -55,9 +53,9 @@ object BasedPythonDefaults {
   fun effectiveBuffExtraArgs(projectValue: String?): String =
     effectiveExtraArgs(projectValue, BasedPythonAppSettings.getInstance().defaultBuffExtraArgs)
 
-  fun effectivePythonVersion(projectValue: String?): String =
-    effectivePythonVersion(projectValue, BasedPythonAppSettings.getInstance().defaultPythonVersion)
+  fun effectiveByEnabled(projectValue: Boolean?): Boolean =
+    effectiveEnabled(projectValue, BasedPythonAppSettings.getInstance().defaultByEnabled)
 
-  fun effectiveLspTraceLevel(projectValue: String?): String =
-    effectiveLspTraceLevel(projectValue, BasedPythonAppSettings.getInstance().defaultLspTraceLevel)
+  fun effectiveBuffEnabled(projectValue: Boolean?): Boolean =
+    effectiveEnabled(projectValue, BasedPythonAppSettings.getInstance().defaultBuffEnabled)
 }

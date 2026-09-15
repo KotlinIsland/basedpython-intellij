@@ -400,12 +400,11 @@
         <postStartupActivity
             implementation="dev.basedpython.pycharm.run.test.node.ByTestSyncActivity"/>
 
-        <!-- ===== Wave 9: log tool window, module facet, explain intention ===== -->
+        <!-- ===== Wave 9: log tool window, explain intention ===== -->
         <toolWindow id="basedpython"
                     anchor="bottom"
                     canCloseContents="false"
                     factoryClass="dev.basedpython.pycharm.ui.log.BasedPythonLogToolWindowFactory"/>
-        <facetType implementation="dev.basedpython.pycharm.facet.BasedPythonFacetType"/>
         <intentionAction>
             <language>basedpython</language>
             <className>dev.basedpython.pycharm.inspections.explain.ExplainRuleIntention</className>

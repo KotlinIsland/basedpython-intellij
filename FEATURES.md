@@ -272,11 +272,10 @@ lexical colour only. Don't reintroduce guessed semantic colour; fix the LSP path
 - [x] Template variable functions (byModuleName, byHeader, byOutPath macros)
 
 ## 14. Settings UI
-- [x] Binary paths, toggles, args, py-version, Test buttons
+- [x] Binary paths, toggles, args, Test buttons
 - [x] Inlay hint modes, one per kind `by` computes (its own option list, eighteen of them, plus an *other* catch-all), each never / always / while the push key is held, plus which key that is
 - [x] Format-on-save toggle
 - [x] Inspection severity config (IDE-automatic per LocalInspectionTool)
-- [x] LSP trace level (off/messages/verbose)
 - [x] Per-server enable + capability toggles — byEnabled/buffEnabled plus per-capability switches (by: completion, goto-def, references, rename, semantic tokens, code lens, highlight usages, signature help; buff: formatting, code actions, hover) wired into LspServers descriptors + Configurable; restart-on-change
 - [x] Import/export settings (actions.settings.Export/ImportSettingsAction)
 - [x] Application-level defaults vs project override — settings.app.BasedPythonAppSettings (APP service) + BasedPythonDefaults resolver; BasedPythonSettings.effective* getters fall back to IDE-wide defaults; BasedPythonAppConfigurable UI ("basedpython Defaults")
@@ -296,7 +295,6 @@ lexical colour only. Don't reintroduce guessed semantic colour; fix the LSP path
 - [x] Mark `out/` as generated/excluded (project.OutDirExcludePolicy)
 - [x] Python interop: opt-in setting to index generated `.py` in `out/` so an installed Python plugin (PyCharm / IDEA+Python) gives native code intelligence on the transpiled output — `BasedPythonSettings.indexGeneratedPython` gates OutDirExcludePolicy; toggle fires roots rescan (IDEA Ultimate does NOT bundle Python, so reuse is opt-in when a Python plugin is present)
 - [x] Watch mode: auto `by build` on save (opt-in) (run.watch.WatchModeSaveListener + ToggleWatchModeAction)
-- [x] Module facet for basedpython (facet.BasedPythonFacetType)
 - [x] **Hook tasks tool window** — the platform's npm view, for the task runners a Python repository actually uses: `.pre-commit-config.yaml` (hooks under the repo they come from), `lefthook.yml` and its variants (each git hook with its `commands`, `scripts` and `jobs`, nested groups included), and `[tool.pyprojectx.aliases]` of a `pyproject.toml`. Double-click runs a row as a temporary run configuration (`tasks.ByTaskConfigurationType`), so it appears in the run combo with Rerun and can be edited or saved; the process's exit code comes back as the row's verdict, and a group folds its children worst-first (`ByTaskStates`) unless it was run itself. Discovery is nine file names read at the project root — no process is started to enumerate tasks, unlike the test view's `by run pytest --collect-only` — so a VFS listener re-scans on save (500 ms debounce) and the tool window makes itself available when a project grows its first config file
   - Commands are one place (`ByTaskCommands`, pure + tested): `pre-commit run <id>`, `prek run <id>` (the two differ in exactly one flag — `--hook-stage` vs `--stage` — which is why they are separate runners), `lefthook run <hook> --commands|--jobs <name> --no-tty`, `./pw <alias>`. A hook whose `stages:` exclude `pre-commit` carries its stage into the command, since a plain `run <id>` would skip it silently with a zero exit code. A lefthook `scripts:` entry has no CLI filter to select it (there is no `--scripts`), so its row runs the whole hook and says so in grey
   - Config files are parsed by hand (`ByYaml`, `ByToml`) rather than through the YAML/TOML PSI: the scan is a pure function of file text on a background thread, which is what makes it testable against real configuration and free of read actions. Both document what they do not do (anchors/aliases/multi-document, dotted keys/array-of-tables) — none of it reachable from these schemas

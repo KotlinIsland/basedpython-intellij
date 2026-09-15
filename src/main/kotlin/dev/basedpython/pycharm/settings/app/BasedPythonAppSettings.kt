@@ -11,8 +11,8 @@ import com.intellij.util.xmlb.XmlSerializerUtil
 /**
  * Application-level (IDE-wide) default settings for the basedpython plugin.
  *
- * These hold the *defaults* that new projects inherit unless the project-level
- * [dev.basedpython.pycharm.settings.BasedPythonSettings] overrides them. The
+ * These hold the *defaults* every project follows until its project-level
+ * [dev.basedpython.pycharm.settings.BasedPythonSettings] sets a value of its own. The
  * resolution logic lives in [BasedPythonDefaults], which falls back to these
  * values whenever a project value is unset (null / blank).
  *
@@ -34,8 +34,6 @@ class BasedPythonAppSettings : PersistentStateComponent<BasedPythonAppSettings.S
     var defaultBuffEnabled: Boolean = true,
     var defaultByExtraArgs: String = "",
     var defaultBuffExtraArgs: String = "",
-    var defaultPythonVersion: String = "3.10",
-    var defaultLspTraceLevel: String = "off",
   )
 
   private var state = State()
@@ -68,14 +66,6 @@ class BasedPythonAppSettings : PersistentStateComponent<BasedPythonAppSettings.S
   var defaultBuffExtraArgs: String
     get() = state.defaultBuffExtraArgs
     set(value) { state.defaultBuffExtraArgs = value }
-
-  var defaultPythonVersion: String
-    get() = state.defaultPythonVersion
-    set(value) { state.defaultPythonVersion = value }
-
-  var defaultLspTraceLevel: String
-    get() = state.defaultLspTraceLevel
-    set(value) { state.defaultLspTraceLevel = value }
 
   companion object {
     @JvmStatic

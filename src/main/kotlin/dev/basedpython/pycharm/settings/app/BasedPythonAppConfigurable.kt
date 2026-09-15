@@ -2,11 +2,12 @@ package dev.basedpython.pycharm.settings.app
 
 import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
 import com.intellij.openapi.options.Configurable
-import com.intellij.openapi.ui.ComboBox
+import com.intellij.openapi.project.ProjectManager
 import com.intellij.openapi.ui.TextFieldWithBrowseButton
 import com.intellij.ui.components.JBTextField
 import com.intellij.ui.dsl.builder.AlignX
 import com.intellij.ui.dsl.builder.panel
+import dev.basedpython.pycharm.lsp.reload.BasedPythonLspReloader
 import javax.swing.JCheckBox
 import javax.swing.JComponent
 
@@ -14,15 +15,15 @@ import javax.swing.JComponent
  * Application-level Configurable for basedpython defaults. Lives at
  * Settings → Languages & Frameworks → basedpython Defaults (IDE-wide).
  *
- * Edits [BasedPythonAppSettings]; new projects inherit these unless their
- * project-level settings override them (see [BasedPythonDefaults]).
+ * Edits [BasedPythonAppSettings]; every project follows these until its own
+ * project-level settings set a value (see [BasedPythonDefaults]).
  */
 internal class BasedPythonAppConfigurable : Configurable {
 
     private val settings get() = BasedPythonAppSettings.getInstance()
 
     private val byPathField = TextFieldWithBrowseButton().apply {
-        textField.toolTipText = "Default by binary for new projects (blank = autodetect)"
+        textField.toolTipText = "The by binary for projects that set none (blank = autodetect)"
         addBrowseFolderListener(
             null,
             FileChooserDescriptorFactory.singleFileOrDir()
@@ -31,7 +32,7 @@ internal class BasedPythonAppConfigurable : Configurable {
         )
     }
     private val buffPathField = TextFieldWithBrowseButton().apply {
-        textField.toolTipText = "Default buff binary for new projects (blank = autodetect)"
+        textField.toolTipText = "The buff binary for projects that set none (blank = autodetect)"
         addBrowseFolderListener(
             null,
             FileChooserDescriptorFactory.singleFileOrDir()
@@ -40,14 +41,11 @@ internal class BasedPythonAppConfigurable : Configurable {
         )
     }
 
-    private val byEnabled = JCheckBox("Enable the by language server by default")
-    private val buffEnabled = JCheckBox("Enable the buff (formatter/linter) server by default")
+    private val byEnabled = JCheckBox("Enable the by language server in projects that do not choose")
+    private val buffEnabled = JCheckBox("Enable the buff (formatter/linter) server in projects that do not choose")
 
     private val byExtraArgs = JBTextField()
     private val buffExtraArgs = JBTextField()
-
-    private val pythonVersionCombo = ComboBox(arrayOf("3.10", "3.11", "3.12", "3.13"))
-    private val lspTraceCombo = ComboBox(arrayOf("off", "messages", "verbose"))
 
     private var rootPanel: JComponent? = null
 
@@ -69,12 +67,6 @@ internal class BasedPythonAppConfigurable : Configurable {
                 row("Extra args for by:") { cell(byExtraArgs).align(AlignX.FILL) }
                 row("Extra args for buff:") { cell(buffExtraArgs).align(AlignX.FILL) }
             }
-            group("Default target") {
-                row("Min Python version:") { cell(pythonVersionCombo) }
-            }
-            group("Default diagnostics") {
-                row("LSP trace level:") { cell(lspTraceCombo) }
-            }
         }
         reset()
         rootPanel = panel
@@ -88,12 +80,11 @@ internal class BasedPythonAppConfigurable : Configurable {
             byEnabled.isSelected != s.defaultByEnabled ||
             buffEnabled.isSelected != s.defaultBuffEnabled ||
             byExtraArgs.text != s.defaultByExtraArgs ||
-            buffExtraArgs.text != s.defaultBuffExtraArgs ||
-            (pythonVersionCombo.selectedItem as? String ?: "3.10") != s.defaultPythonVersion ||
-            (lspTraceCombo.selectedItem as? String ?: "off") != s.defaultLspTraceLevel
+            buffExtraArgs.text != s.defaultBuffExtraArgs
     }
 
     override fun apply() {
+        val changed = isModified
         val s = settings
         s.defaultByPath = byPathField.text.trim().ifEmpty { null }
         s.defaultBuffPath = buffPathField.text.trim().ifEmpty { null }
@@ -101,8 +92,13 @@ internal class BasedPythonAppConfigurable : Configurable {
         s.defaultBuffEnabled = buffEnabled.isSelected
         s.defaultByExtraArgs = byExtraArgs.text
         s.defaultBuffExtraArgs = buffExtraArgs.text
-        s.defaultPythonVersion = pythonVersionCombo.selectedItem as? String ?: "3.10"
-        s.defaultLspTraceLevel = lspTraceCombo.selectedItem as? String ?: "off"
+        // Every open project that has not chosen for itself follows these, so its servers are
+        // started again the way a change on its own page restarts them.
+        if (changed) {
+            for (project in ProjectManager.getInstance().openProjects) {
+                BasedPythonLspReloader.getInstance(project).onSettingsChanged()
+            }
+        }
     }
 
     override fun reset() {
@@ -113,8 +109,6 @@ internal class BasedPythonAppConfigurable : Configurable {
         buffEnabled.isSelected = s.defaultBuffEnabled
         byExtraArgs.text = s.defaultByExtraArgs
         buffExtraArgs.text = s.defaultBuffExtraArgs
-        pythonVersionCombo.selectedItem = s.defaultPythonVersion
-        lspTraceCombo.selectedItem = s.defaultLspTraceLevel
     }
 
     override fun disposeUIResources() {

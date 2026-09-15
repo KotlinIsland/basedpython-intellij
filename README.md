@@ -96,8 +96,8 @@ support, run configurations, CLI actions, and editor tooling.
 
 ### Settings & status
 - Project settings page at *Settings → Languages & Frameworks → basedpython*: binary
-  paths (with **Test** buttons + live detection), per-server toggles, extra args, target
-  Python version, format-on-save, inlay-hint modes, and LSP trace level.
+  paths (with **Test** buttons + live detection), per-server toggles, extra args,
+  format-on-save, and inlay-hint modes.
 - Inlay hints configured per kind, one row for each kind `by` computes: variable types,
   lambda parameter types, call type arguments, type argument names, numeric promotions,
   revealed types, inferred raises, call argument names, implicit parameters, implicit

@@ -72,8 +72,6 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
     private val byExtraArgs = JBTextField()
     private val buffExtraArgs = JBTextField()
 
-    private val pythonVersionCombo = ComboBox(arrayOf("3.10", "3.11", "3.12", "3.13"))
-
     // No on-save checkboxes here: "Apply all basedpython fixes" lives on the platform's own
     // Settings | Tools | Actions on Save page, beside Reformat code and Optimize imports. A second
     // pair of checkboxes for the same settings meant whichever page was applied last won, so the
@@ -89,8 +87,6 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
     private val inlayPushKeyCombo = ComboBox(ByPushKey.entries.toTypedArray()).apply {
         renderer = textListCellRenderer("") { it.display }
     }
-
-    private val lspTraceCombo = ComboBox(arrayOf("off", "messages", "verbose"))
 
     private val indexGeneratedPython = JCheckBox(
         "Index generated .py in out/ (enables native Python support — requires a Python plugin)",
@@ -154,18 +150,12 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
                 row("Extra args for by:") { cell(byExtraArgs).align(AlignX.FILL) }
                 row("Extra args for buff:") { cell(buffExtraArgs).align(AlignX.FILL) }
             }
-            group("Target") {
-                row("Min Python version:") { cell(pythonVersionCombo) }
-            }
             group("Inlay hints") {
                 for ((kind, combo) in inlayModeCombos) {
                     row("${kind.display}:") { cell(combo) }
                 }
                 row("Push key:") { cell(inlayPushKeyCombo) }
                     .comment("Hold this key to see the hints set to show while it is held.")
-            }
-            group("Diagnostics") {
-                row("LSP trace level:") { cell(lspTraceCombo) }
             }
             group("Python interop") {
                 row("Treat .py as basedpython:") { cell(pyFileHandlingCombo) }
@@ -276,9 +266,7 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
             buffEnabled.isSelected != s.buffEnabled ||
             byExtraArgs.text != s.byExtraArgs ||
             buffExtraArgs.text != s.buffExtraArgs ||
-            (pythonVersionCombo.selectedItem as? String ?: "3.10") != s.pythonVersion ||
             inlayModified() ||
-            (lspTraceCombo.selectedItem as? String ?: "off") != s.lspTraceLevel ||
             indexGeneratedPython.isSelected != s.indexGeneratedPython ||
             pyFileHandlingCombo.selectedItem != s.pyFileHandling ||
             debugBackendCombo.selectedItem != s.debugBackend ||
@@ -309,17 +297,17 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
         val s = settings
         s.byPath = byPathField.text.trim().ifEmpty { null }
         s.buffPath = buffPathField.text.trim().ifEmpty { null }
-        s.byEnabled = byEnabled.isSelected
-        s.buffEnabled = buffEnabled.isSelected
+        // Written only when changed, so a project that never touched the box keeps following the
+        // IDE-wide default instead of freezing the value it happened to show.
+        if (byEnabled.isSelected != s.byEnabled) s.byEnabled = byEnabled.isSelected
+        if (buffEnabled.isSelected != s.buffEnabled) s.buffEnabled = buffEnabled.isSelected
         s.byExtraArgs = byExtraArgs.text
         s.buffExtraArgs = buffExtraArgs.text
-        s.pythonVersion = pythonVersionCombo.selectedItem as? String ?: "3.10"
         val inlayChanged = inlayModified()
         for ((kind, combo) in inlayModeCombos) {
             s.setInlayMode(kind, combo.selectedItem as? ByHintMode ?: ByHintMode.ALWAYS)
         }
         s.inlayPushKey = inlayPushKeyCombo.selectedItem as? ByPushKey ?: ByPushKey.CTRL_ALT
-        s.lspTraceLevel = lspTraceCombo.selectedItem as? String ?: "off"
 
         val indexChanged = indexGeneratedPython.isSelected != s.indexGeneratedPython
         s.indexGeneratedPython = indexGeneratedPython.isSelected
@@ -416,10 +404,8 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
         buffEnabled.isSelected = s.buffEnabled
         byExtraArgs.text = s.byExtraArgs
         buffExtraArgs.text = s.buffExtraArgs
-        pythonVersionCombo.selectedItem = s.pythonVersion
         for ((kind, combo) in inlayModeCombos) combo.selectedItem = s.inlayMode(kind)
         inlayPushKeyCombo.selectedItem = s.inlayPushKey
-        lspTraceCombo.selectedItem = s.lspTraceLevel
         indexGeneratedPython.isSelected = s.indexGeneratedPython
         pyFileHandlingCombo.selectedItem = s.pyFileHandling
         debugBackendCombo.selectedItem = s.debugBackend

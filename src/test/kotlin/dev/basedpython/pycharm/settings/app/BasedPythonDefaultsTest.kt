@@ -81,37 +81,17 @@ class BasedPythonDefaultsTest {
         assertEquals("", BasedPythonDefaults.effectiveExtraArgs("", ""))
     }
 
-    // --- python version -----------------------------------------------------
+    // --- server toggles -----------------------------------------------------
 
     @Test
-    fun `pythonVersion project value wins`() {
-        assertEquals("3.13", BasedPythonDefaults.effectivePythonVersion("3.13", "3.10"))
+    fun `enabled project choice wins over default either way`() {
+        assertEquals(false, BasedPythonDefaults.effectiveEnabled(false, true))
+        assertEquals(true, BasedPythonDefaults.effectiveEnabled(true, false))
     }
 
     @Test
-    fun `pythonVersion blank falls back to default`() {
-        assertEquals("3.11", BasedPythonDefaults.effectivePythonVersion("  ", "3.11"))
-    }
-
-    @Test
-    fun `pythonVersion null falls back to default`() {
-        assertEquals("3.10", BasedPythonDefaults.effectivePythonVersion(null, "3.10"))
-    }
-
-    // --- lsp trace level ----------------------------------------------------
-
-    @Test
-    fun `lspTrace project value wins`() {
-        assertEquals("verbose", BasedPythonDefaults.effectiveLspTraceLevel("verbose", "off"))
-    }
-
-    @Test
-    fun `lspTrace blank falls back to default`() {
-        assertEquals("messages", BasedPythonDefaults.effectiveLspTraceLevel("", "messages"))
-    }
-
-    @Test
-    fun `lspTrace null falls back to default`() {
-        assertEquals("off", BasedPythonDefaults.effectiveLspTraceLevel(null, "off"))
+    fun `enabled unchosen follows default either way`() {
+        assertEquals(true, BasedPythonDefaults.effectiveEnabled(null, true))
+        assertEquals(false, BasedPythonDefaults.effectiveEnabled(null, false))
     }
 }

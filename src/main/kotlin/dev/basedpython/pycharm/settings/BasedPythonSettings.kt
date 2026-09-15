@@ -27,11 +27,14 @@ class BasedPythonSettings : PersistentStateComponent<BasedPythonSettings.State> 
   data class State(
     var byPath: String? = null,
     var buffPath: String? = null,
-    var byEnabled: Boolean = true,
-    var buffEnabled: Boolean = true,
+    /**
+     * Whether each server runs in this project. Null until this project chooses, and the IDE-wide
+     * default in [dev.basedpython.pycharm.settings.app.BasedPythonAppSettings] answers until then.
+     */
+    var byEnabled: Boolean? = null,
+    var buffEnabled: Boolean? = null,
     var byExtraArgs: String = "",
     var buffExtraArgs: String = "",
-    var pythonVersion: String = "3.10",
     /**
      * Apply every fix the project's lint configuration asks for when a document is saved.
      *
@@ -62,7 +65,6 @@ class BasedPythonSettings : PersistentStateComponent<BasedPythonSettings.State> 
     var inlayHintModes: MutableMap<String, String> = mutableMapOf(),
     /** The key held to show "on push" hints, as a [dev.basedpython.pycharm.lsp.inlay.ByPushKey.id]. */
     var inlayPushKey: String = "",
-    var lspTraceLevel: String = "off",
     /**
      * When true, the generated `out/` directory is NOT excluded from indexing,
      * so a Python plugin (PyCharm, or IDEA with the Python plugin) provides full
@@ -145,12 +147,14 @@ class BasedPythonSettings : PersistentStateComponent<BasedPythonSettings.State> 
     get() = state.buffPath
     set(value) { state.buffPath = value }
 
+  /** Whether the `by` server runs: this project's choice, or the IDE-wide default until it makes one. */
   var byEnabled: Boolean
-    get() = state.byEnabled
+    get() = dev.basedpython.pycharm.settings.app.BasedPythonDefaults.effectiveByEnabled(state.byEnabled)
     set(value) { state.byEnabled = value }
 
+  /** Whether the `buff` server runs: this project's choice, or the IDE-wide default until it makes one. */
   var buffEnabled: Boolean
-    get() = state.buffEnabled
+    get() = dev.basedpython.pycharm.settings.app.BasedPythonDefaults.effectiveBuffEnabled(state.buffEnabled)
     set(value) { state.buffEnabled = value }
 
   var byExtraArgs: String
@@ -160,10 +164,6 @@ class BasedPythonSettings : PersistentStateComponent<BasedPythonSettings.State> 
   var buffExtraArgs: String
     get() = state.buffExtraArgs
     set(value) { state.buffExtraArgs = value }
-
-  var pythonVersion: String
-    get() = state.pythonVersion
-    set(value) { state.pythonVersion = value }
 
   var fixAllOnSave: Boolean
     get() = state.fixAllOnSave
@@ -212,10 +212,6 @@ class BasedPythonSettings : PersistentStateComponent<BasedPythonSettings.State> 
   var inlayPushKey: ByPushKey
     get() = ByPushKey.fromId(state.inlayPushKey)
     set(value) { state.inlayPushKey = value.id }
-
-  var lspTraceLevel: String
-    get() = state.lspTraceLevel
-    set(value) { state.lspTraceLevel = value }
 
   var indexGeneratedPython: Boolean
     get() = state.indexGeneratedPython
@@ -292,12 +288,6 @@ class BasedPythonSettings : PersistentStateComponent<BasedPythonSettings.State> 
 
   val effectiveBuffExtraArgs: String
     get() = dev.basedpython.pycharm.settings.app.BasedPythonDefaults.effectiveBuffExtraArgs(state.buffExtraArgs)
-
-  val effectivePythonVersion: String
-    get() = dev.basedpython.pycharm.settings.app.BasedPythonDefaults.effectivePythonVersion(state.pythonVersion)
-
-  val effectiveLspTraceLevel: String
-    get() = dev.basedpython.pycharm.settings.app.BasedPythonDefaults.effectiveLspTraceLevel(state.lspTraceLevel)
 
   companion object {
     @JvmStatic

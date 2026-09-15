@@ -6,10 +6,12 @@ import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.lsp.inlay.ByHintKind
 import dev.basedpython.pycharm.lsp.inlay.ByHintMode
 import dev.basedpython.pycharm.lsp.inlay.ByPushKey
+import dev.basedpython.pycharm.settings.app.BasedPythonAppSettings
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
@@ -69,14 +71,12 @@ class BasedPythonSettingsTest {
             buffEnabled = false,
             byExtraArgs = "--x",
             buffExtraArgs = "--y",
-            pythonVersion = "3.13",
             fixAllOnSave = true,
             fixAllOnCommit = true,
             inlayParameterHints = false,
             inlayTypeHints = false,
             inlayHintModes = mutableMapOf("variableTypes" to "push", "inferredRaises" to "never"),
             inlayPushKey = "alt",
-            lspTraceLevel = "verbose",
             indexGeneratedPython = true,
         )
         settings.loadState(incoming)
@@ -86,7 +86,6 @@ class BasedPythonSettingsTest {
         assertFalse(settings.buffEnabled)
         assertEquals("--x", settings.byExtraArgs)
         assertEquals("--y", settings.buffExtraArgs)
-        assertEquals("3.13", settings.pythonVersion)
         assertTrue(settings.fixAllOnSave)
         assertTrue(settings.fixAllOnCommit)
         assertFalse(settings.inlayParameterHints)
@@ -94,7 +93,6 @@ class BasedPythonSettingsTest {
         assertEquals(ByHintMode.ON_PUSH, settings.inlayMode(ByHintKind.VARIABLE_TYPES))
         assertEquals(ByHintMode.NEVER, settings.inlayMode(ByHintKind.INFERRED_RAISES))
         assertEquals(ByPushKey.ALT, settings.inlayPushKey)
-        assertEquals("verbose", settings.lspTraceLevel)
         assertTrue(settings.indexGeneratedPython)
     }
 
@@ -240,10 +238,71 @@ class BasedPythonSettingsTest {
         assertFalse(settings.buffHover)
     }
 
+    // ---- Server toggles layered over the IDE-wide defaults ----
+
+    private val appSettings get() = BasedPythonAppSettings.getInstance()
+
+    @Test
+    fun `a project that never chose follows the IDE-wide default, whenever it changes`() {
+        appSettings.defaultByEnabled = false
+        appSettings.defaultBuffEnabled = false
+        assertFalse(settings.byEnabled)
+        assertFalse(settings.buffEnabled)
+
+        appSettings.defaultByEnabled = true
+        assertTrue(settings.byEnabled)
+        assertFalse(settings.buffEnabled)
+    }
+
+    @Test
+    fun `a project's own choice outlasts a change to the default`() {
+        settings.byEnabled = true
+        appSettings.defaultByEnabled = false
+        assertTrue(settings.byEnabled)
+
+        settings.buffEnabled = false
+        appSettings.defaultBuffEnabled = true
+        assertFalse(settings.buffEnabled)
+    }
+
+    /**
+     * The settings file is where "never chose" has to survive: a project whose file held the default
+     * it was created with would have stopped following the IDE-wide one the day it was created.
+     */
+    @Test
+    fun `an unchosen toggle stays unchosen through the settings file, a chosen one stays chosen`() {
+        val untouched = XmlSerializer.deserialize(
+            XmlSerializer.serialize(BasedPythonSettings.State()),
+            BasedPythonSettings.State::class.java,
+        )
+        assertNull(untouched.byEnabled)
+        assertNull(untouched.buffEnabled)
+
+        val chosen = XmlSerializer.deserialize(
+            XmlSerializer.serialize(BasedPythonSettings.State(byEnabled = false, buffEnabled = true)),
+            BasedPythonSettings.State::class.java,
+        )
+        assertEquals(false, chosen.byEnabled)
+        assertEquals(true, chosen.buffEnabled)
+    }
+
+    /** A settings file written while the toggle was a plain boolean keeps the value it recorded. */
+    @Test
+    fun `a settings file that recorded a toggle keeps it`() {
+        val element = org.jdom.Element("State").addContent(
+            org.jdom.Element("option").setAttribute("name", "byEnabled").setAttribute("value", "false"),
+        )
+        appSettings.defaultByEnabled = true
+        settings.loadState(XmlSerializer.deserialize(element, BasedPythonSettings.State::class.java))
+        assertFalse(settings.byEnabled)
+        assertTrue(settings.buffEnabled)
+    }
+
     @AfterEach
     fun resetSettings() {
         // Reset to defaults so we don't leak state between fixtures.
         settings.loadState(BasedPythonSettings.State())
+        appSettings.loadState(BasedPythonAppSettings.State())
     }
 
     /** Both are off until asked for: fixes rewrite a file the user has not asked to be rewritten. */
