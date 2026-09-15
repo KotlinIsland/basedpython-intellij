@@ -1,6 +1,10 @@
 package dev.basedpython.pycharm.lsp.diagnostics
 
+import com.intellij.codeInsight.intention.IntentionAction
+import com.intellij.lang.annotation.AnnotationHolder
+import com.intellij.openapi.util.TextRange
 import com.intellij.platform.lsp.api.customization.LspDiagnosticsSupport
+import dev.basedpython.pycharm.inspections.explain.ExplainRuleFix
 import dev.basedpython.pycharm.markup.ByCodeSpans
 import org.eclipse.lsp4j.Diagnostic
 
@@ -27,4 +31,15 @@ import org.eclipse.lsp4j.Diagnostic
  */
 internal class ByDiagnosticsSupport : LspDiagnosticsSupport() {
     override fun getTooltip(diagnostic: Diagnostic): String = ByCodeSpans.toHtml(getMessage(diagnostic))
+
+    /** Every diagnostic that names its rule offers to explain it; see [ExplainRuleFix]. */
+    override fun createAnnotation(
+        holder: AnnotationHolder,
+        diagnostic: Diagnostic,
+        textRange: TextRange,
+        quickFixes: List<IntentionAction>,
+    ) {
+        val code = ExplainRuleFix.codeOf(diagnostic)
+        super.createAnnotation(holder, diagnostic, textRange, if (code == null) quickFixes else quickFixes + ExplainRuleFix(code))
+    }
 }

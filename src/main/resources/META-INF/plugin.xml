@@ -400,16 +400,11 @@
         <postStartupActivity
             implementation="dev.basedpython.pycharm.run.test.node.ByTestSyncActivity"/>
 
-        <!-- ===== Wave 9: log tool window, explain intention ===== -->
+        <!-- ===== Wave 9: log tool window ===== -->
         <toolWindow id="basedpython"
                     anchor="bottom"
                     canCloseContents="false"
                     factoryClass="dev.basedpython.pycharm.ui.log.BasedPythonLogToolWindowFactory"/>
-        <intentionAction>
-            <language>basedpython</language>
-            <className>dev.basedpython.pycharm.inspections.explain.ExplainRuleIntention</className>
-            <category>basedpython</category>
-        </intentionAction>
 
         <!-- ===== Wave 10: settings web help ===== -->
         <webHelpProvider id="dev.basedpython.pycharm"
