@@ -18,7 +18,8 @@ import javax.swing.Icon
  * New-project generator for basedpython projects.
  *
  * Shown in the "New Project" wizard under the generator list.
- * Scaffolds: pyproject.toml, src/main.by, .gitignore, README.md.
+ * Scaffolds what [BasedPythonProjectScaffold] lists: pyproject.toml, src/main.by, .gitignore,
+ * README.md.
  *
  * Registration in plugin.xml (Stream O integration):
  *
@@ -56,30 +57,44 @@ class BasedPythonProjectGenerator : GeneratorNewProjectWizard {
         }
     }
 
-    // -------------------------------------------------------------------
-    // Scaffolding helpers
-    // -------------------------------------------------------------------
-
     private fun scaffoldProject(baseDir: VirtualFile, projectName: String) {
-        write(baseDir, "pyproject.toml", pyprojectToml(projectName))
-
-        val srcDir = VfsUtil.createDirectoryIfMissing(baseDir, "src")
-        if (srcDir != null) {
-            write(srcDir, "main.by", mainByContent())
+        for ((relativePath, content) in BasedPythonProjectScaffold.files(projectName)) {
+            val subdirectory = relativePath.substringBeforeLast('/', "")
+            val dir = if (subdirectory.isEmpty()) baseDir
+            else VfsUtil.createDirectoryIfMissing(baseDir, subdirectory) ?: continue
+            val name = relativePath.substringAfterLast('/')
+            val file = dir.findChild(name) ?: dir.createChildData(this, name)
+            VfsUtil.saveText(file, content)
         }
-
-        write(baseDir, ".gitignore", gitignoreContent())
-        write(baseDir, "README.md", readmeContent(projectName))
     }
+}
 
-    private fun write(dir: VirtualFile, name: String, content: String) {
-        var file = dir.findChild(name)
-        if (file == null) {
-            file = dir.createChildData(this, name)
-        }
-        VfsUtil.saveText(file, content)
-    }
+/**
+ * The files a new basedpython project starts with, by path relative to the project root.
+ *
+ * Every one of them has to be accepted as-is by the tools the README tells the user to run next:
+ * `uv sync` reads the pyproject strictly, and `buff check` / `buff format --check` refuse a
+ * configuration with an unknown key and report a scaffold that is not laid out the way they want —
+ * so a new project that failed either would greet the user with an error they did not cause.
+ * `BasedPythonProjectScaffoldLiveTest` runs them.
+ */
+internal object BasedPythonProjectScaffold {
 
+    fun files(projectName: String): Map<String, String> = linkedMapOf(
+        "pyproject.toml" to pyprojectToml(projectName),
+        "src/main.by" to mainByContent(),
+        ".gitignore" to gitignoreContent(),
+        "README.md" to readmeContent(projectName),
+    )
+
+    // No `[build-system]`: this is an application, and a build backend would make `uv sync` try to
+    // build and install it as a package — which fails, because `src/main.by` is not a package.
+    //
+    // `[dependency-groups]` is the standard (PEP 735) table uv reads development dependencies from;
+    // `[tool.uv.dev-dependencies]` is a *list* under uv's own table, and uv rejects it as a table.
+    //
+    // Lint options sit under `[tool.ruff.lint]` and format options under `[tool.ruff.format]`:
+    // `buff` rejects `quote-style` at the top level as an unknown field.
     private fun pyprojectToml(projectName: String): String = """
 [project]
 name = "$projectName"
@@ -88,35 +103,33 @@ description = ""
 requires-python = ">=3.10"
 dependencies = []
 
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
-
-[tool.uv.dev-dependencies]
+[dependency-groups]
 dev = ["basedpython"]
 
 [tool.ruff]
 line-length = 88
 target-version = "py310"
+
+[tool.ruff.lint]
 select = ["E", "F", "W", "I"]
 ignore = []
-quote-style = "double"
 
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
-""".trimIndent()
+""".trimStart()
 
     private fun mainByContent(): String = """
 # basedpython hello-world
 # Demonstrates data class syntax (a basedpython extension over Python)
+
 
 data class Point:
     x: float
     y: float
 
     def distance_to_origin(self) -> float:
-        return (self.x ** 2 + self.y ** 2) ** 0.5
+        return (self.x**2 + self.y**2) ** 0.5
 
 
 def greet(name: str) -> str:
@@ -127,7 +140,7 @@ if __name__ == "__main__":
     p = Point(x=3.0, y=4.0)
     print(greet("world"))
     print(f"Distance from origin: {p.distance_to_origin()}")
-""".trimIndent()
+""".trimStart()
 
     private fun gitignoreContent(): String = """
 # Python
@@ -156,7 +169,7 @@ build/
 
 # uv lock
 .uv/
-""".trimIndent()
+""".trimStart()
 
     private fun readmeContent(projectName: String): String = """
 # $projectName
@@ -193,5 +206,5 @@ $projectName/
 ## Config
 
 Edit `[tool.ruff]` in `pyproject.toml` to configure lint/format rules.
-""".trimIndent()
+""".trimStart()
 }
