@@ -6,13 +6,16 @@ import dev.basedpython.pycharm.env.ByEnvironmentKind
 
 /**
  * Common option fields shared by all `by` run configurations.
- * Persisted by IntelliJ via reflective getter/setter scan on this RunConfigurationOptions subclass.
+ * Persisted through the stored properties declared below: the serializer and `copyFrom` (and so
+ * `clone()`) see only those, so a field kept anywhere else is lost on restart and on every clone.
  */
 open class ByCommonOptions : RunConfigurationOptions() {
     private val workingDirProp = string("").provideDelegate(this, "workingDir")
     private val extraArgsProp = string("").provideDelegate(this, "extraArgs")
     private val pythonVersionProp = string("").provideDelegate(this, "pythonVersion")
     private val environmentProp = string("").provideDelegate(this, "environment")
+    private val envVarsProp = map<String, String>().provideDelegate(this, "envVars")
+    private val passParentEnvProp = property(true).provideDelegate(this, "passParentEnv")
 
     var workingDir: String
         get() = workingDirProp.getValue(this) ?: ""
@@ -48,11 +51,12 @@ open class ByCommonOptions : RunConfigurationOptions() {
         get() = ByEnvironmentKind.fromId(environment)
         set(v) { environment = if (v == ByEnvironmentKind.AUTO) "" else v.id }
 
-    // env vars are not persisted via StoredProperty (no map support);
-    // EnvironmentVariablesComponent handles its own (de)serialization at the editor level
-    // and `ByCommandLineState` reads from these in-memory fields.
-    var envVars: MutableMap<String, String> = linkedMapOf()
-    var passParentEnv: Boolean = true
+    var envVars: MutableMap<String, String>
+        get() = envVarsProp.getValue(this)
+        set(v) { envVarsProp.setValue(this, v) }
+    var passParentEnv: Boolean
+        get() = passParentEnvProp.getValue(this)
+        set(v) { passParentEnvProp.setValue(this, v) }
 }
 
 class ByRunOptions : ByCommonOptions() {

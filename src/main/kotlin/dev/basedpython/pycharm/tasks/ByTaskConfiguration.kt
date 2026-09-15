@@ -39,6 +39,8 @@ class ByTaskOptions : RunConfigurationOptions() {
     private val extraArgsProp = string("").provideDelegate(this, "extraArgs")
     private val workingDirProp = string("").provideDelegate(this, "workingDir")
     private val allFilesProp = property(true).provideDelegate(this, "allFiles")
+    private val envVarsProp = map<String, String>().provideDelegate(this, "envVars")
+    private val passParentEnvProp = property(true).provideDelegate(this, "passParentEnv")
 
     /** The runner's id — see `ByTaskRunner`; an unknown one degrades rather than failing to load. */
     var runner: String
@@ -84,10 +86,12 @@ class ByTaskOptions : RunConfigurationOptions() {
         get() = workingDirProp.getValue(this) ?: ""
         set(v) { workingDirProp.setValue(this, v) }
 
-    // As in ByCommonOptions: no StoredProperty supports a map, and EnvironmentVariablesComponent
-    // does its own (de)serialisation at the editor level.
-    var envVars: MutableMap<String, String> = linkedMapOf()
-    var passParentEnv: Boolean = true
+    var envVars: MutableMap<String, String>
+        get() = envVarsProp.getValue(this)
+        set(v) { envVarsProp.setValue(this, v) }
+    var passParentEnv: Boolean
+        get() = passParentEnvProp.getValue(this)
+        set(v) { passParentEnvProp.setValue(this, v) }
 }
 
 class ByTaskConfiguration(project: Project, factory: ConfigurationFactory, name: String) :
