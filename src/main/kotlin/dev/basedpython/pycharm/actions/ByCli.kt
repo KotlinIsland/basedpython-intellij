@@ -4,7 +4,9 @@ import dev.basedpython.pycharm.env.ByLaunch
 import dev.basedpython.pycharm.lsp.BasedPythonBinaries
 import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.execution.process.ProcessOutput
-import com.intellij.execution.util.ExecUtil
+import com.intellij.openapi.progress.runBlockingMaybeCancellable
+import dev.basedpython.pycharm.run.runCapturing
+import kotlin.time.Duration.Companion.milliseconds
 import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
 import com.intellij.openapi.project.Project
@@ -110,13 +112,15 @@ internal object ByCli {
 
     /**
      * Runs [cmd]. A [timeoutMs] kills the process when it elapses and comes back with whatever was
-     * printed until then and [ProcessOutput.isTimeout] set; without one the call waits forever,
-     * which is right for a command that only reads (`transpile`, `explain`) and wrong for one that
-     * executes the user's code.
+     * printed until then and [ProcessOutput.isTimeout] set; without one the call waits for the
+     * process to end.
+     *
+     * Either way it can be cancelled: under a progress indicator, pressing Cancel kills the process
+     * (and what it started) and the cancellation is rethrown, where `ExecUtil.execAndGetOutput`
+     * would have gone on waiting for a process nobody could stop.
      */
-    private fun execute(cmd: GeneralCommandLine, timeoutMs: Int?): ProcessOutput =
-        if (timeoutMs == null) ExecUtil.execAndGetOutput(cmd)
-        else ExecUtil.execAndGetOutput(cmd, timeoutMs)
+    internal fun execute(cmd: GeneralCommandLine, timeoutMs: Int?): ProcessOutput =
+        runBlockingMaybeCancellable { runCapturing(cmd, timeoutMs?.milliseconds) }
 
     fun notifyBinaryMissing(project: Project, name: String) {
         NotificationGroupManager.getInstance()

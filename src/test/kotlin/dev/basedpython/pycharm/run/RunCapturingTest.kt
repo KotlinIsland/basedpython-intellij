@@ -51,5 +51,15 @@ class RunCapturingTest {
         assertFalse(alive(childPid), "the build's own children must not outlive a cancel")
     }
 
+    @Test
+    fun `a timeout kills the process and keeps what it printed`() = runBlocking {
+        val started = System.nanoTime()
+        val output = runCapturing(GeneralCommandLine("sh", "-c", "echo early; sleep 600"), 1.seconds)
+
+        assertTrue(output.isTimeout)
+        assertEquals("early\n", output.stdout)
+        assertTrue(System.nanoTime() - started < 30.seconds.inWholeNanoseconds)
+    }
+
     private fun alive(pid: Long) = ProcessHandle.of(pid).map { it.isAlive }.orElse(false)
 }

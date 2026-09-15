@@ -21,6 +21,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.async
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 
 /**
@@ -101,8 +103,11 @@ internal class ByBuildService(private val project: Project, private val scope: C
  *
  * `CapturingProcessHandler.runProcess` blocks its thread with no way in, so a build started from
  * there outlived every Cancel it was given.
+ *
+ * A [timeout] destroys the process when it elapses and returns what was printed until then, with
+ * [ProcessOutput.isTimeout] set.
  */
-internal suspend fun runCapturing(cmd: GeneralCommandLine): ProcessOutput {
+internal suspend fun runCapturing(cmd: GeneralCommandLine, timeout: Duration? = null): ProcessOutput {
     val handler = KillableProcessHandler(cmd)
     handler.setShouldKillProcessSoftly(false)
     handler.setShouldDestroyProcessRecursively(true)
@@ -116,7 +121,8 @@ internal suspend fun runCapturing(cmd: GeneralCommandLine): ProcessOutput {
     })
     handler.startNotify()
     try {
-        exited.await()
+        if (timeout == null) exited.await()
+        else if (withTimeoutOrNull(timeout) { exited.await() } == null) output.setTimeout()
     } finally {
         if (!handler.isProcessTerminated) handler.destroyProcess()
     }
