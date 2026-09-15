@@ -19,9 +19,10 @@ import javax.swing.JComponent
  *
  * ### The two halves are written by different things
  *
- * The metadata fields end up as an edit to this module's own `pyproject.toml`, made by the plugin,
- * because uv has no command that sets a project's version. The dependency checkboxes end up as
- * `uv add --package` / `uv remove --package`, because uv does — and doing those by hand would mean
+ * The version ends up as `uv version --package`; the description and `requires-python` end up as an
+ * edit to this module's own `pyproject.toml`, made by the plugin, because uv has no command that
+ * sets either. The dependency checkboxes end up as `uv add --package` / `uv remove --package`,
+ * because uv has those too — and doing them by hand would mean
  * writing the `[tool.uv.sources] … { workspace = true }` entry that makes a sibling resolve locally,
  * which is uv's job and is easy to get subtly wrong. See [TomlEdits] for where that line is drawn.
  *

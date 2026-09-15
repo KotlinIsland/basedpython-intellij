@@ -155,8 +155,9 @@ internal object EnvTreeRows {
      * True when [project] is a path dependency whose directory `members` names and `exclude` also
      * names — see [EnvRow.Project.excluded].
      *
-     * Read against the manifest's own patterns, with the same matcher the module layout uses, so the
-     * two cannot disagree about whether a pattern covers a directory.
+     * Read against the manifest's own patterns with [UvWorkspace.matches]. uv's member listing
+     * cannot answer this one — an excluded directory is simply absent from it, the same as one no
+     * pattern ever named.
      */
     fun excluded(status: EnvStatus, project: EnvProject): Boolean {
         if (project.role != EnvProjectRole.LOCAL) return false

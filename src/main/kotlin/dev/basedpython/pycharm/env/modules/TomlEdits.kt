@@ -13,8 +13,8 @@ import dev.basedpython.pycharm.tasks.ByTomlSection
  *
  * - **taking a `members` entry back out**, because uv adds one and never removes one, so a module
  *   deleted from disk stays listed in the root manifest,
- * - **setting a project's own metadata** — version, description, `requires-python` — which uv reads
- *   and never writes.
+ * - **setting a project's description and `requires-python`** — uv has a command that writes a
+ *   project's version (`uv version`, which [ModuleOperations] uses) and none for these.
  *
  * ### Why it edits text rather than re-emitting the document
  *

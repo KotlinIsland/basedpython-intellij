@@ -91,6 +91,27 @@ sealed interface EnvOp {
     ) : EnvOp
 
     /**
+     * The directories of the project's modules, as the manager itself resolves them.
+     *
+     * Asked of the manager rather than worked out from the manifest's `members` globs, because it is
+     * the manager's rule and the plugin's copy of it is a second opinion: uv's matching admits
+     * directories — `build`, dot-directories — that any hand-written walk has to decide about, and
+     * a module the manager has and the view does not, or the reverse, is a module some command will
+     * act on that nobody can see. Must not modify the project, like [Tree]. The output goes through
+     * [EnvBackend.moduleLayout].
+     */
+    data object ListModules : EnvOp
+
+    /**
+     * Set [module]'s own version to [version] — the project's, when [module] is null — and touch
+     * nothing else: not the lock file, not the environment.
+     *
+     * Only the manifest, because editing a module's metadata is not a sync; the environment view
+     * reports the drift it leaves, as it does for every other manifest edit.
+     */
+    data class SetVersion(val version: String, val module: String? = null) : EnvOp
+
+    /**
      * The declared dependency graph, grouped by where each requirement is declared.
      *
      * Must not modify the project. That is a real constraint rather than a note: the obvious command
@@ -219,20 +240,21 @@ interface EnvBackend {
     fun packageIndex(projectRoot: Path): PackageIndex? = null
 
     /**
-     * How the project at [projectRoot] is divided into modules, or null when this manager has no
-     * notion of dividing one.
+     * How the project at [projectRoot] is divided into modules, from the stdout of
+     * [EnvOp.ListModules] — or null when this manager has no notion of dividing one, or could not
+     * say.
      *
-     * Reads the filesystem, like [claims] and [environmentRoot] and for the same reason: the answer
-     * is a property of the project on this disk, not of the manager, and there is nothing to run a
-     * process about. It must not *write* — this is called from a background refresh, and a scan that
-     * edits the user's manifests is the thing [EnvOp.Tree] documents at length not to do.
+     * Which directories are modules is the manager's answer, in [listing]; what each one declares is
+     * read from its manifest here, like [claims] and [environmentRoot] read the filesystem. It must
+     * not *write* — this is called from a background refresh, and a scan that edits the user's
+     * manifests is the thing [EnvOp.Tree] documents at length not to do.
      *
      * Null and [ModuleLayout.EMPTY] are different answers. Null is "this manager does not do
      * modules", and hides the structure UI outright; an empty layout is "it does, and this project
      * has none yet", which is the ordinary state of every single-package project and the one the
      * *New module* button acts on.
      */
-    fun moduleLayout(projectRoot: Path): ModuleLayout? = null
+    fun moduleLayout(projectRoot: Path, listing: String): ModuleLayout? = null
 
     /** The installed packages, from the stdout of [EnvOp.ListPackages]. */
     fun parsePackages(stdout: String): List<EnvPackage>

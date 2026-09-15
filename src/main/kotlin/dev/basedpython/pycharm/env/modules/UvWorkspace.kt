@@ -1,52 +1,48 @@
 package dev.basedpython.pycharm.env.modules
 
 import java.nio.file.FileSystems
-import java.nio.file.FileVisitResult
 import java.nio.file.Files
 import java.nio.file.Path
-import java.nio.file.SimpleFileVisitor
-import java.nio.file.attribute.BasicFileAttributes
 
 /**
- * Reading a uv workspace off the disk.
+ * A uv workspace, as uv lists it.
  *
- * The root `pyproject.toml` names its members as globs relative to the root — a literal
- * `libs/thing`, a star under `packages`, a `**` — and every directory one of them matches that
- * holds a `pyproject.toml` is a module. That is uv's rule, and it is implemented here rather than
- * approximated, because the two ways of approximating it are both wrong in a way the user would
- * see: listing every nested `pyproject.toml` invents modules uv does not have (a vendored copy, a
- * test fixture), and listing only the literal entries loses every project a glob covers, which is
- * most of them.
+ * Which directories are members is uv's decision, and it is taken from uv: `uv workspace list
+ * --paths` ([dev.basedpython.pycharm.env.manager.EnvOp.ListModules]) is the member list uv itself
+ * resolves every other command against. This used to be a glob walk of the plugin's own, and it
+ * disagreed with uv in exactly the cases nobody would think to check — a star under `packages` admits
+ * `packages/build` and `packages/.hidden` to uv, and the walk pruned both — which left modules uv
+ * would build, lock and install invisible in the structure page.
  *
- * ### Cost
- *
- * Bounded by the patterns, not by the repository. A pattern is split at its first wildcard and the
- * walk starts from the literal part, no deeper than the pattern's remaining segments — so a star
- * under `packages` reads one directory listing, and only a `**` walks a tree. Directories that cannot
- * hold a module the user meant are pruned outright ([PRUNED]); an environment directory alone is
- * tens of thousands of files, and every one of them would be visited on a scan that runs whenever a
- * manifest is saved.
+ * What is read here is what uv's listing does not carry: each module's own manifest — its name,
+ * version and dependencies — and the root's `members` and `exclude` entries, which removing a module
+ * has to edit.
  */
 internal object UvWorkspace {
 
     /**
-     * The structure at [projectRoot], or null when there is no project there at all.
+     * The structure at [projectRoot], given the directories uv listed as its members, or null when
+     * there is no project there at all.
      *
      * Null and empty are different answers and both are reachable: null is "no `pyproject.toml`", so
      * there is nothing to show and nothing to create a module in, while a layout with a root and no
      * members is an ordinary single-package project — which is exactly the project the *New module*
      * button turns into a workspace.
+     *
+     * uv prints canonical paths, and the project root the IDE was handed need not be one — a
+     * checkout under a symlinked directory, or `/tmp` on macOS. Each listed directory is therefore
+     * placed relative to the root's real path and resolved back against [projectRoot], so every
+     * module lives under the same spelling of the project the rest of the IDE uses.
      */
-    fun read(projectRoot: Path): ModuleLayout? {
+    fun read(projectRoot: Path, listed: List<Path>): ModuleLayout? {
         val rootManifest = manifestAt(projectRoot) ?: return null
         val patterns = rootManifest.workspaceMembers
-        val excludes = rootManifest.workspaceExclude
+        val realRoot = runCatching { projectRoot.toRealPath() }.getOrDefault(projectRoot)
 
-        val members = patterns
-            .flatMap { expand(projectRoot, it) }
+        val members = listed
+            .map { directory -> underProject(projectRoot, realRoot, directory) }
             .distinct()
             .filter { it != projectRoot }
-            .filterNot { directory -> excludes.any { matches(projectRoot, directory, it) } }
             .mapNotNull { directory ->
                 val manifest = manifestAt(directory) ?: return@mapNotNull null
                 if (!manifest.isProject) return@mapNotNull null
@@ -59,8 +55,15 @@ internal object UvWorkspace {
                 ?.let { module(projectRoot, projectRoot, it, patterns) },
             members = members,
             memberPatterns = patterns,
-            excludePatterns = excludes,
+            excludePatterns = rootManifest.workspaceExclude,
         )
+    }
+
+    /** [directory], as uv printed it, re-expressed under [projectRoot] when it lies inside it. */
+    private fun underProject(projectRoot: Path, realRoot: Path, directory: Path): Path {
+        val real = runCatching { directory.toRealPath() }.getOrDefault(directory)
+        if (!real.startsWith(realRoot)) return directory
+        return projectRoot.resolve(realRoot.relativize(real).toString()).normalize()
     }
 
     /** The manifest in [directory], or null when it has none or it could not be read. */
@@ -96,81 +99,13 @@ internal object UvWorkspace {
     }
 
     /**
-     * The directories [pattern] matches under [projectRoot].
-     *
-     * Split at the first wildcard: everything before it is resolved as a path and everything after
-     * it decides how deep the walk goes. A pattern with no wildcard at all is a single directory and
-     * costs one `stat`.
-     */
-    private fun expand(projectRoot: Path, pattern: String): List<Path> {
-        val normalized = normalizePattern(pattern)
-        if (normalized.isEmpty()) return emptyList()
-        val segments = normalized.split('/')
-        val literal = segments.takeWhile { !isWildcard(it) }
-        val base = literal.fold(projectRoot) { path, segment -> path.resolve(segment) }
-        if (!Files.isDirectory(base)) return emptyList()
-        if (literal.size == segments.size) return listOf(base)
-
-        val rest = segments.drop(literal.size)
-        // `**` crosses directories, so its depth is not knowable from the pattern; everything else
-        // is exactly one directory level per remaining segment.
-        val depth = if (rest.any { it.contains("**") }) MAX_DEPTH else rest.size
-        return walk(base, depth).filter { matches(projectRoot, it, normalized) }
-    }
-
-    /** Directories under [base], at most [depth] levels down, with [PRUNED] never entered. */
-    private fun walk(base: Path, depth: Int): List<Path> {
-        val found = mutableListOf<Path>()
-        runCatching {
-            Files.walkFileTree(
-                base,
-                emptySet(),
-                depth,
-                object : SimpleFileVisitor<Path>() {
-                    override fun preVisitDirectory(dir: Path, attrs: BasicFileAttributes): FileVisitResult {
-                        if (dir == base) return FileVisitResult.CONTINUE
-                        val name = dir.fileName?.toString().orEmpty()
-                        if (isPruned(name)) return FileVisitResult.SKIP_SUBTREE
-                        found.add(dir)
-                        return FileVisitResult.CONTINUE
-                    }
-
-                    /**
-                     * The deepest level arrives here, directories included.
-                     *
-                     * `walkFileTree` stops descending at `maxDepth` and hands everything at that
-                     * depth to this method — so for the commonest pattern of all, one wildcard under
-                     * a directory, *every* candidate comes through here and none through
-                     * [preVisitDirectory]. Reading only that one would have found no members at all.
-                     */
-                    override fun visitFile(file: Path, attrs: BasicFileAttributes): FileVisitResult {
-                        val name = file.fileName?.toString().orEmpty()
-                        if (attrs.isDirectory && !isPruned(name)) found.add(file)
-                        return FileVisitResult.CONTINUE
-                    }
-
-                    /** A tree that cannot be read is not a tree with no modules in it; it is skipped. */
-                    override fun visitFileFailed(file: Path, exc: java.io.IOException): FileVisitResult =
-                        FileVisitResult.SKIP_SUBTREE
-                },
-            )
-        }
-        return found
-    }
-
-    /** True when [directory] is what [pattern] describes, relative to [projectRoot]. */
-    private fun matches(projectRoot: Path, directory: Path, pattern: String): Boolean {
-        val relative = relativePath(projectRoot, directory).ifEmpty { return false }
-        return matches(relative, pattern)
-    }
-
-    /**
      * Glob matching, on `/`-separated relative paths.
      *
-     * The platform's own matcher, whose glob syntax is the one uv's is: `*` stays inside a directory
-     * level and `**` crosses them. Paths are rebuilt from the relative string rather than passed
-     * through as filesystem paths so that a pattern written with `/` — the only separator uv accepts
-     * — matches on Windows too.
+     * Not how members are found — uv answers that, see [read]. This is for the one question uv's
+     * listing cannot answer, whether an `exclude` entry names a directory `members` also names. The
+     * platform's own matcher: `*` stays inside a directory level and `**` crosses them. Paths are
+     * rebuilt from the relative string rather than passed through as filesystem paths so that a
+     * pattern written with `/` — the only separator uv accepts — matches on Windows too.
      */
     fun matches(relativePath: String, pattern: String): Boolean {
         val normalized = normalizePattern(pattern)
@@ -195,23 +130,6 @@ internal object UvWorkspace {
     fun normalizePattern(pattern: String): String =
         pattern.trim().removePrefix("./").trim('/').trim()
 
-    private fun isPruned(name: String): Boolean = name in PRUNED || name.startsWith('.')
-
     /** What a `pyproject.toml` is called. Named once so the scan and the watcher cannot disagree. */
     const val MANIFEST: String = "pyproject.toml"
-
-    /**
-     * Directories a workspace member is never found in, and which are expensive to walk.
-     *
-     * `.venv` is the one that matters — it holds a `pyproject.toml` for every installed package that
-     * ships one — but the rest are all directories a `**` pattern would otherwise descend into for
-     * no possible result. Dot-directories are pruned as a class for the same reason; a member kept
-     * inside one is not something uv's own documentation contemplates.
-     */
-    private val PRUNED: Set<String> = setOf(
-        "node_modules", "__pycache__", "site-packages", "venv", "out", "dist", "build", "target",
-    )
-
-    /** How deep a `**` is allowed to go. Deep enough for any real layout, bounded against a symlink loop. */
-    private const val MAX_DEPTH = 8
 }

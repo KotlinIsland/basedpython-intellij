@@ -47,8 +47,15 @@ class UvModuleLiveTest {
         ?.let { Path.of(it) }
         ?.takeIf { Files.isExecutable(it) }
 
+    /** The layout the plugin reads: uv's own member listing, through the backend. */
+    private fun layout(uv: Path, dir: Path): ModuleLayout? {
+        val (exit, output) = run(uv, dir, EnvOp.ListModules, mergeStderr = false)
+        assertEquals(0, exit, "uv workspace list: $output")
+        return UvBackend.moduleLayout(dir, output)
+    }
+
     /** Runs one of the backend's own commands and returns (exit code, stdout + stderr). */
-    private fun run(uv: Path, dir: Path, op: EnvOp): Pair<Int, String> {
+    private fun run(uv: Path, dir: Path, op: EnvOp, mergeStderr: Boolean = true): Pair<Int, String> {
         val command = requireNotNull(UvBackend.command(op)) { "uv cannot express $op" }
         val process = ProcessBuilder(listOf(uv.toString()) + command.args)
             .directory(dir.toFile())
@@ -57,7 +64,8 @@ class UvModuleLiveTest {
                 environment()["UV_NO_CONFIG"] = "1"
                 environment().remove("VIRTUAL_ENV")
             }
-            .redirectErrorStream(true)
+            .redirectErrorStream(mergeStderr)
+            .apply { if (!mergeStderr) redirectError(ProcessBuilder.Redirect.DISCARD) }
             .start()
         val output = process.inputStream.bufferedReader().readText()
         assertTrue(
@@ -87,7 +95,7 @@ class UvModuleLiveTest {
             """.trimIndent(),
         )
 
-        val before = checkNotNull(UvWorkspace.read(dir))
+        val before = checkNotNull(layout(uv, dir))
         assertEquals("root", before.root?.name)
         assertFalse(before.isWorkspace, "a project with no members is not a workspace yet")
 
@@ -100,7 +108,7 @@ class UvModuleLiveTest {
         assertEquals(0, initExit, "uv init: $initOutput")
 
         // uv listed it without being asked to, which is the whole reason the plugin does not.
-        val listed = checkNotNull(UvWorkspace.read(dir))
+        val listed = checkNotNull(layout(uv, dir))
         assertEquals(listOf("alpha"), listed.members.map { it.name })
         assertEquals("packages/alpha", listed.byName("alpha")?.relativePath)
         assertEquals(
@@ -132,7 +140,7 @@ class UvModuleLiveTest {
         )
         assertEquals(0, secondExit, "uv init beta: $secondOutput")
 
-        val globbed = checkNotNull(UvWorkspace.read(dir))
+        val globbed = checkNotNull(layout(uv, dir))
         assertEquals(listOf("alpha", "beta"), globbed.members.map { it.name })
         assertNull(
             globbed.byName("beta")?.memberEntry,
@@ -147,7 +155,7 @@ class UvModuleLiveTest {
         )
         assertEquals(0, addExit, "uv add --package alpha beta: $addOutput")
 
-        val wired = checkNotNull(UvWorkspace.read(dir))
+        val wired = checkNotNull(layout(uv, dir))
         assertEquals(
             listOf("alpha"),
             wired.dependents("beta").map { it.name },
@@ -170,6 +178,59 @@ class UvModuleLiveTest {
             EnvOp.Remove(listOf("beta"), EnvDependencyTarget.Main, module = "alpha"),
         )
         assertEquals(0, removeExit, "uv remove --package alpha beta: $removeOutput")
-        assertTrue(checkNotNull(UvWorkspace.read(dir)).dependents("beta").isEmpty())
+        assertTrue(checkNotNull(layout(uv, dir)).dependents("beta").isEmpty())
+    }
+
+    /**
+     * The disagreement that moved member discovery to uv: a star under `packages` admits `build`
+     * and dot-directories, and the plugin's own walk used to prune both.
+     */
+    @Test
+    fun `the layout has exactly the members uv has`(@TempDir dir: Path) {
+        val uv = uv()
+        assumeTrue(uv != null, "set $UV to a uv binary to run this")
+        requireNotNull(uv)
+
+        Files.writeString(
+            dir.resolve(UvWorkspace.MANIFEST),
+            "[project]\nname = \"root\"\nversion = \"0.1.0\"\n\n[tool.uv.workspace]\nmembers = [\"packages/*\"]\n",
+        )
+        for ((path, name) in listOf("packages/alpha" to "alpha", "packages/build" to "bld", "packages/.hidden" to "hid")) {
+            Files.createDirectories(dir.resolve(path))
+            Files.writeString(
+                dir.resolve(path).resolve(UvWorkspace.MANIFEST),
+                "[project]\nname = \"$name\"\nversion = \"0.1.0\"\n",
+            )
+        }
+        // No manifest: a directory the glob matches and uv does not count.
+        Files.createDirectories(dir.resolve("packages/empty"))
+
+        val layout = checkNotNull(layout(uv, dir))
+        assertEquals(setOf("alpha", "bld", "hid"), layout.members.map { it.name }.toSet())
+        assertEquals("root", layout.root?.name)
+        assertFalse(Files.exists(dir.resolve("uv.lock")), "listing the modules wrote no lock file")
+    }
+
+    /** `uv version --frozen` edits the one line and creates neither a lock nor an environment. */
+    @Test
+    fun `setting a module's version touches only its manifest`(@TempDir dir: Path) {
+        val uv = uv()
+        assumeTrue(uv != null, "set $UV to a uv binary to run this")
+        requireNotNull(uv)
+
+        Files.writeString(
+            dir.resolve(UvWorkspace.MANIFEST),
+            "[project]\nname = \"root\"\nversion = \"0.1.0\"\n\n[tool.uv.workspace]\nmembers = [\"packages/alpha\"]\n",
+        )
+        Files.createDirectories(dir.resolve("packages/alpha"))
+        val manifest = dir.resolve("packages/alpha").resolve(UvWorkspace.MANIFEST)
+        Files.writeString(manifest, "[project]\nname = \"alpha\"\n# kept\nversion = \"0.1.0\"\n")
+
+        val (exit, output) = run(uv, dir, EnvOp.SetVersion("0.2.0", module = "alpha"))
+        assertEquals(0, exit, "uv version: $output")
+
+        assertEquals("[project]\nname = \"alpha\"\n# kept\nversion = \"0.2.0\"\n", Files.readString(manifest))
+        assertFalse(Files.exists(dir.resolve("uv.lock")))
+        assertFalse(Files.exists(dir.resolve(".venv")))
     }
 }

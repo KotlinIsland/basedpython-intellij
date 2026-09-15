@@ -10,11 +10,12 @@ import java.nio.file.Files
 import java.nio.file.Path
 
 /**
- * Which directories are modules, read off a real (temporary) project.
+ * A layout built from uv's member listing and the manifests on a real (temporary) disk.
  *
- * A temp directory rather than a mocked filesystem, because what is being checked is the part that
- * touches the disk: glob expansion, exclusion, and the pruning that keeps a scan from walking a
- * `.venv`. The manifests are the shortest ones uv would accept.
+ * Which directories are members is uv's answer and is handed in here as a list, the way
+ * `uv workspace list --paths` prints it; [UvModuleLiveTest] checks that answer against a real uv.
+ * What is checked here is everything read *around* it: manifests, the root, `members` entries, and
+ * who depends on whom. The manifests are the shortest ones uv would accept.
  */
 class UvWorkspaceTest {
 
@@ -39,22 +40,30 @@ class UvWorkspaceTest {
         build-backend = "uv_build"
     """
 
+    /** What uv printed: the listed directories, one absolute path each. */
+    private fun listed(vararg relative: String): List<Path> =
+        relative.map { if (it.isEmpty()) root else root.resolve(it) }
+
     @Test
     fun `a directory with no manifest is not a project`() {
-        assertNull(UvWorkspace.read(root))
+        assertNull(UvWorkspace.read(root, emptyList()))
     }
 
     @Test
     fun `a single-package project is a layout with a root and no members`() {
         manifest("", member("solo"))
-        val layout = checkNotNull(UvWorkspace.read(root))
+        val layout = checkNotNull(UvWorkspace.read(root, listed("")))
         assertEquals("solo", layout.root?.name)
         assertTrue(layout.members.isEmpty())
         assertFalse(layout.isWorkspace)
     }
 
+    /**
+     * Every directory uv lists is a member — including the two a hand-written walk used to prune,
+     * and which uv's star under `packages` admits: `build` and a dot-directory.
+     */
     @Test
-    fun `a glob picks up every directory under it that has a manifest`() {
+    fun `every directory uv lists is a member, and the root is not one of them`() {
         manifest(
             "",
             """
@@ -67,14 +76,35 @@ class UvWorkspaceTest {
             """,
         )
         manifest("packages/alpha", member("alpha"))
-        manifest("packages/beta", member("beta"))
-        // No manifest: a directory somebody made and has not initialised is not a member.
-        Files.createDirectories(root.resolve("packages/gamma"))
+        manifest("packages/build", member("bld"))
+        manifest("packages/.hidden", member("hid"))
 
-        val layout = checkNotNull(UvWorkspace.read(root))
-        assertEquals(listOf("alpha", "beta"), layout.members.map { it.name })
-        assertEquals(listOf("packages/alpha", "packages/beta"), layout.members.map { it.relativePath })
+        val layout = checkNotNull(
+            UvWorkspace.read(root, listed("packages/alpha", "packages/build", "packages/.hidden", "")),
+        )
+        assertEquals("root", layout.root?.name)
+        assertEquals(listOf("hid", "alpha", "bld"), layout.members.map { it.name })
+        assertEquals(
+            listOf("packages/.hidden", "packages/alpha", "packages/build"),
+            layout.members.map { it.relativePath },
+        )
         assertTrue(layout.isWorkspace)
+    }
+
+    /**
+     * uv prints canonical paths; the IDE's project root need not be one. Modules must come back
+     * under the root the IDE was given, or every relative path and every `members` entry is wrong.
+     */
+    @Test
+    fun `a project opened through a symlink keeps its own spelling`(@TempDir elsewhere: Path) {
+        manifest("", member("root"))
+        manifest("packages/alpha", member("alpha"))
+        val link = Files.createSymbolicLink(elsewhere.resolve("link"), root)
+
+        val layout = checkNotNull(UvWorkspace.read(link, listOf(root.toRealPath().resolve("packages/alpha"))))
+        val alpha = checkNotNull(layout.byName("alpha"))
+        assertEquals(link.resolve("packages/alpha"), alpha.root)
+        assertEquals("packages/alpha", alpha.relativePath)
     }
 
     /**
@@ -96,53 +126,9 @@ class UvWorkspaceTest {
         manifest("packages/alpha", member("alpha"))
         manifest("tools/lint", member("lint"))
 
-        val layout = checkNotNull(UvWorkspace.read(root))
+        val layout = checkNotNull(UvWorkspace.read(root, listed("packages/alpha", "tools/lint", "")))
         assertNull(layout.byName("alpha")?.memberEntry)
         assertEquals("tools/lint", layout.byName("lint")?.memberEntry)
-    }
-
-    @Test
-    fun `an excluded directory is not a member`() {
-        manifest(
-            "",
-            """
-            [project]
-            name = "root"
-
-            [tool.uv.workspace]
-            members = ["packages/*"]
-            exclude = ["packages/scratch"]
-            """,
-        )
-        manifest("packages/alpha", member("alpha"))
-        manifest("packages/scratch", member("scratch"))
-
-        val layout = checkNotNull(UvWorkspace.read(root))
-        assertEquals(listOf("alpha"), layout.members.map { it.name })
-    }
-
-    /**
-     * Every installed distribution that ships its own `pyproject.toml` sits under `.venv`, so a
-     * recursive pattern that walked it would report a project's dependencies as its modules.
-     */
-    @Test
-    fun `a recursive pattern does not descend into the environment`() {
-        manifest(
-            "",
-            """
-            [project]
-            name = "root"
-
-            [tool.uv.workspace]
-            members = ["**"]
-            """,
-        )
-        manifest("packages/alpha", member("alpha"))
-        manifest(".venv/lib/python3.12/site-packages/httpx", member("httpx"))
-        manifest("out/generated", member("generated"))
-
-        val layout = checkNotNull(UvWorkspace.read(root))
-        assertEquals(listOf("alpha"), layout.members.map { it.name })
     }
 
     @Test
@@ -161,7 +147,7 @@ class UvWorkspaceTest {
         manifest("packages/alpha", member("alpha", """["beta"]"""))
         manifest("packages/beta", member("beta"))
 
-        val layout = checkNotNull(UvWorkspace.read(root))
+        val layout = checkNotNull(UvWorkspace.read(root, listed("packages/alpha", "packages/beta", "")))
         assertEquals(listOf("alpha"), layout.dependents("beta").map { it.name })
         assertEquals(listOf("root"), layout.dependents("alpha").map { it.name })
         assertTrue(layout.dependents("root").isEmpty())
@@ -183,12 +169,12 @@ class UvWorkspaceTest {
         )
         manifest("packages/my-lib", member("my-lib"))
 
-        val layout = checkNotNull(UvWorkspace.read(root))
+        val layout = checkNotNull(UvWorkspace.read(root, listed("packages/my-lib", "")))
         assertEquals(listOf("root"), layout.dependents("my-lib").map { it.name })
     }
 
     @Test
-    fun `glob matching follows the same rules uv's does`() {
+    fun `glob matching keeps a star inside one directory level`() {
         assertTrue(UvWorkspace.matches("packages/alpha", "packages/*"))
         assertFalse(UvWorkspace.matches("packages/alpha/nested", "packages/*"))
         assertTrue(UvWorkspace.matches("packages/alpha/nested", "packages/**"))

@@ -157,10 +157,14 @@ internal class ModulesConfigurable(private val project: Project) : SearchableCon
         val modules = status.modules
         model.setModules(modules?.all.orEmpty(), modules)
         val text = when {
-            status.backend == null || modules == null ->
+            status.backend == null ->
                 BasedPythonBundle.message("modules.note.unmanaged")
+            // Before the missing layout, which is what a missing tool produces: the modules are the
+            // tool's own listing, so without it there is nothing to show and this is the reason.
             status.toolPath == null ->
-                BasedPythonBundle.message("modules.note.toolMissing", status.backend?.displayName.orEmpty())
+                BasedPythonBundle.message("modules.note.toolMissing", status.backend.displayName)
+            modules == null ->
+                BasedPythonBundle.message("modules.note.unmanaged")
             !modules.isWorkspace ->
                 BasedPythonBundle.message("modules.note.single")
             else ->

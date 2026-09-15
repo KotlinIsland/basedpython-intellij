@@ -111,6 +111,20 @@ object UvBackend : EnvBackend {
                 listOf("--vcs", "none", "--no-pin-python"),
         )
 
+        // `workspace list`, not `workspace metadata`: measured against uv 0.12.13, `metadata` locks the
+        // project and writes `uv.lock` when there is none, and `list` reads the manifests and writes
+        // nothing. `--paths` because a module is found by its directory, and a name would have to be
+        // matched back to one. The root is listed too when it is a project of its own.
+        EnvOp.ListModules -> EnvCommand(listOf("workspace", "list", "--paths"), isQuery = true)
+
+        // `--frozen` edits `version` and nothing else: without it uv re-locks and then syncs, which
+        // is a resolve — and possibly an interpreter download — off the back of typing a version
+        // number into a dialog. Measured against 0.12.13: the manifest changes, and neither
+        // `uv.lock` nor `.venv` is created.
+        is EnvOp.SetVersion -> EnvCommand(
+            listOf("version") + moduleFlags(op.module) + listOf("--frozen", op.version),
+        )
+
         // `--frozen` is load-bearing, not an optimisation. Without it `uv tree` re-locks the project
         // and writes `uv.lock` — verified against 0.12.3 on a project that had none — which would
         // make merely opening a project edit the user's repository, and make every save of
@@ -177,12 +191,22 @@ object UvBackend : EnvBackend {
     }
 
     /**
-     * The project's modules, read from `[tool.uv.workspace]` and the manifests it points at.
+     * The project's modules: the directories `uv workspace list --paths` printed, one per line, and
+     * the manifests in them.
      *
      * Answered for every uv project, not only for ones that already have members: a single-package
-     * project is a workspace with none, and it is the project the *New module* action turns into one.
+     * project is a workspace with none — uv lists just the root — and it is the project the *New
+     * module* action turns into one.
      */
-    override fun moduleLayout(projectRoot: Path): ModuleLayout? = UvWorkspace.read(projectRoot)
+    override fun moduleLayout(projectRoot: Path, listing: String): ModuleLayout? =
+        UvWorkspace.read(
+            projectRoot,
+            listing.lineSequence()
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+                .mapNotNull { runCatching { Paths.get(it) }.getOrNull() }
+                .toList(),
+        )
 
     /**
      * `uv pip list --format json` — an array of `{name, version, editable_project_location?}`.

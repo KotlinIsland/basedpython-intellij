@@ -237,11 +237,11 @@ internal class EnvService(
             environment = readEnvironment(backend, envRoot),
             drift = EnvDrift.UNKNOWN,
             packages = emptyList(),
-            // Before the early return below, deliberately. A project's modules are readable from its
-            // manifests alone, and the state that most needs them read is the one that returns
+            // Before the early return below, deliberately. A project's modules need the tool but not
+            // the environment, and the state that most needs them read is the one that returns
             // early: a workspace whose environment has not been created yet is exactly when someone
             // opens the structure page to add the module they are about to sync.
-            modules = readModules(backend, root),
+            modules = tool?.let { readModules(backend, root) },
         )
         if (tool == null || base.environment == null) return base
         return base.copy(
@@ -304,19 +304,33 @@ internal class EnvService(
     }
 
     /**
-     * The project's modules, or null when the backend does not divide projects into any.
+     * The project's modules as they are on disk now, or null when the backend does not divide
+     * projects into any — or could not say which it has.
      *
-     * Wrapped, because this walks directories the user controls: a `members` glob pointing at a
-     * symlink loop or a directory the IDE cannot read must degrade to "no modules" rather than take
-     * the whole scan — and with it the environment view — down.
+     * Asks the backend's tool for the member list ([EnvOp.ListModules]) and reads the manifests it
+     * names. Public, and blocking, for the module operations: every step of a gesture that renames
+     * or rewires modules has to act on the layout as the previous step left it, not on the one the
+     * last scan saw. Call off the EDT.
+     *
+     * A listing that fails — a member manifest uv cannot parse, say — is logged and answered with
+     * null: the workspace is unloadable by every uv command until it is fixed, and showing a partial
+     * list of its modules would offer operations that could only fail.
      */
-    private fun readModules(backend: EnvBackend, root: Path): ModuleLayout? =
-        try {
-            backend.moduleLayout(root)
+    fun readModules(backend: EnvBackend, root: Path): ModuleLayout? {
+        val command = backend.command(EnvOp.ListModules) ?: return null
+        val result = EnvRunner.run(project, backend, command, root)
+        if (!result.isSuccess) {
+            BasedPythonLog.getInstance(project).warn("could not list the project's modules: ${result.failureMessage()}")
+            return null
+        }
+        return try {
+            backend.moduleLayout(root, result.stdout)
         } catch (e: Exception) {
+            if (e is java.util.concurrent.CancellationException) throw e
             BasedPythonLog.getInstance(project).warn("could not read the project's modules: $e")
             null
         }
+    }
 
     private fun readDrift(backend: EnvBackend, root: Path): EnvDrift {
         val command = backend.command(EnvOp.CheckSync) ?: return EnvDrift.UNKNOWN

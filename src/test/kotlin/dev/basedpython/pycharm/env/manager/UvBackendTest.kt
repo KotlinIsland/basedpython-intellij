@@ -176,6 +176,42 @@ class UvBackendTest {
     }
 
     /**
+     * `list`, not `metadata` — measured against uv 0.12.13, `uv workspace metadata` writes `uv.lock`
+     * into a project that has none, and this runs on every refresh.
+     */
+    @Test
+    fun `modules are listed by path, with the command that writes nothing`() {
+        val command = requireNotNull(UvBackend.command(EnvOp.ListModules))
+        assertEquals(listOf("workspace", "list", "--paths"), command.args)
+        assertTrue(command.isQuery)
+    }
+
+    /** `--frozen`, or setting a version number re-locks and syncs the environment. */
+    @Test
+    fun `a version is set without re-locking, on the module it belongs to`() {
+        assertEquals(listOf("version", "--frozen", "1.2.0"), args(EnvOp.SetVersion("1.2.0")))
+        assertEquals(
+            listOf("version", "--package", "alpha", "--frozen", "1.2.0"),
+            args(EnvOp.SetVersion("1.2.0", module = "alpha")),
+        )
+    }
+
+    /**
+     * The layout is uv's listing, read line by line — a trailing newline and blank lines are not
+     * directories.
+     */
+    @Test
+    fun `the module layout is read from uv's listing`(@TempDir dir: Path) {
+        Files.writeString(dir.resolve("pyproject.toml"), "[project]\nname = \"root\"\n\n[tool.uv.workspace]\nmembers = [\"packages/*\"]\n")
+        Files.createDirectories(dir.resolve("packages/alpha"))
+        Files.writeString(dir.resolve("packages/alpha/pyproject.toml"), "[project]\nname = \"alpha\"\n")
+
+        val layout = requireNotNull(UvBackend.moduleLayout(dir, "${dir.resolve("packages/alpha")}\n\n$dir\n"))
+        assertEquals("root", layout.root?.name)
+        assertEquals(listOf("alpha"), layout.members.map { it.name })
+    }
+
+    /**
      * The flag this exists for. Without it `uv pip list` reports whatever `VIRTUAL_ENV` names, which
      * in an IDE launched from an activated shell is a different project's environment.
      */
@@ -205,6 +241,8 @@ class UvBackendTest {
         assertTrue(requireNotNull(UvBackend.command(EnvOp.CheckSync)).isQuery)
         assertTrue(requireNotNull(UvBackend.command(EnvOp.ListPackages(null))).isQuery)
         assertTrue(requireNotNull(UvBackend.command(EnvOp.ListPythons)).isQuery)
+        assertTrue(requireNotNull(UvBackend.command(EnvOp.ListModules)).isQuery)
+        assertFalse(requireNotNull(UvBackend.command(EnvOp.SetVersion("1.0"))).isQuery)
         assertFalse(requireNotNull(UvBackend.command(EnvOp.Sync)).isQuery)
         assertFalse(requireNotNull(UvBackend.command(EnvOp.Add(listOf("httpx")))).isQuery)
     }

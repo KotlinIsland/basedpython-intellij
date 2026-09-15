@@ -21,9 +21,10 @@ import java.nio.file.Path
  *
  * Every step that uv has a command for is uv's: `uv init` scaffolds the module *and* lists it in the
  * project's manifest, `uv add`/`uv remove` wire a module into its siblings and write the
- * `[tool.uv.sources] … { workspace = true }` entry that makes the dependency resolve locally. Only
- * what uv has no command for is done by hand, and there is exactly one such thing — un-listing a
- * module ([TomlEdits]) — because uv adds a `members` entry and never takes one away.
+ * `[tool.uv.sources] … { workspace = true }` entry that makes the dependency resolve locally, and
+ * `uv version` sets a module's version. Only what uv has no command for is done by hand
+ * ([TomlEdits]): un-listing a module, because uv adds a `members` entry and never takes one away,
+ * and the rest of a module's metadata — its description and its `requires-python`.
  *
  * ### What none of this does
  *
@@ -146,9 +147,14 @@ internal object ModuleOperations {
                 ?.let { newName -> rename(project, backend, root, module, newName, indicator) ?: return@runInBackground }
                 ?: module
 
+            val version = edit.version?.trim()?.takeIf { it.isNotEmpty() }
+            if (version != null && version != target.version) {
+                val set = EnvOperations.runBlockingOp(project, backend, EnvOp.SetVersion(version, module = target.name))
+                if (!set) return@runInBackground
+            }
             writeMetadata(project, target.root.resolve(UvWorkspace.MANIFEST), edit)
 
-            val layout = backend.moduleLayout(root) ?: return@runInBackground
+            val layout = service.readModules(backend, root) ?: return@runInBackground
             val wanted = edit.dependents.map(ModuleNames::normalize).toSet()
 
             for (dependent in layout.dependents(target.name)) {
@@ -206,7 +212,7 @@ internal object ModuleOperations {
             BasedPythonBundle.message("modules.progress.removing", module.name),
             extraFiles = listOf(module.root),
         ) { indicator ->
-            val layout = backend.moduleLayout(root) ?: return@runInBackground
+            val layout = service.readModules(backend, root) ?: return@runInBackground
             for (dependent in layout.dependents(module.name)) {
                 indicator.text = BasedPythonBundle.message("modules.progress.unwiring", module.name, dependent.name)
                 for (target in dependent.dependsOn(module.name)) {
@@ -262,7 +268,7 @@ internal object ModuleOperations {
         }
 
         // 2. Un-declare it everywhere, while the workspace still resolves.
-        val dependents = backend.moduleLayout(root)?.dependents(module.name).orEmpty()
+        val dependents = EnvService.getInstance(project).readModules(backend, root)?.dependents(module.name).orEmpty()
         for (dependent in dependents) {
             indicator.text = BasedPythonBundle.message("modules.progress.unwiring", module.name, dependent.name)
             for (declaredIn in dependent.dependsOn(module.name)) {
@@ -305,7 +311,7 @@ internal object ModuleOperations {
             )
         }
 
-        return backend.moduleLayout(root)?.byName(newName)
+        return EnvService.getInstance(project).readModules(backend, root)?.byName(newName)
     }
 
     /**
@@ -358,14 +364,17 @@ internal object ModuleOperations {
 
     // ---- the parts uv has no command for ------------------------------------
 
-    /** Rewrites the module's own `[project]` metadata, when [edit] actually changes any of it. */
+    /**
+     * Rewrites the module's own `[project]` metadata that uv has no command for, when [edit]
+     * actually changes any of it. The version is not among it: `uv version` sets that, and
+     * [EditModuleDialog] does not let one be cleared.
+     */
     private fun writeMetadata(project: Project, manifest: Path, edit: ModuleEdit) {
         val original = runCatching { Files.readString(manifest) }.getOrElse {
             report(project, BasedPythonBundle.message("modules.failed.manifest", manifest.toString(), it.message.orEmpty()))
             return
         }
         var updated = original
-        updated = TomlEdits.setString(updated, PROJECT, "version", edit.version)
         updated = TomlEdits.setString(updated, PROJECT, "description", edit.description)
         updated = TomlEdits.setString(updated, PROJECT, "requires-python", edit.requiresPython)
         if (updated == original) return
