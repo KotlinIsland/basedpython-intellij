@@ -174,13 +174,28 @@ class ByTaskConfiguration(project: Project, factory: ConfigurationFactory, name:
                 cmd.withEnvironment(launch.env)
                 cmd.withEnvironment(options.envVars)
 
-                val handler = KillableColoredProcessHandler(cmd)
+                val handler = taskProcessHandler(cmd)
                 ProcessTerminatedListener.attach(handler)
                 handler.addProcessListener(OutcomeListener(project, taskKey()))
                 return handler
             }
         }
 }
+
+/**
+ * The handler a task runs under, set up so Stop stops the task.
+ *
+ * The runner is never the process doing the work: pre-commit, prek and lefthook start every hook as
+ * a child, and `pw` is a shell script in front of all of it. The platform's default destroys only
+ * the process it started, which measurably leaves a running hook behind, orphaned, still writing
+ * into the repository. So the whole tree is destroyed, on the first Stop rather than after a
+ * soft-kill round addressed to the runner alone — as for the `by` configurations.
+ */
+internal fun taskProcessHandler(cmd: GeneralCommandLine): KillableColoredProcessHandler =
+    KillableColoredProcessHandler(cmd).apply {
+        setShouldKillProcessSoftly(false)
+        setShouldDestroyProcessRecursively(true)
+    }
 
 /**
  * Reports what a run did back to the task view.
