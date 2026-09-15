@@ -284,16 +284,11 @@ class BasedPythonBundleTest {
             "notification.byOutdated.content",
             "notification.welcome.title",
             "notification.welcome.content",
-            "refactoring.invalidIdentifier",
-            "refactoring.extractMethod.title",
-            "refactoring.extractMethod.prompt",
-            "refactoring.extractVariable.title",
-            "refactoring.extractVariable.prompt",
-            "refactoring.introduceConstant.title",
-            "refactoring.introduceConstant.prompt",
-            "refactoring.inlineVariable.title",
-            "refactoring.inlineVariable.placeCaret",
-            "refactoring.inlineVariable.cannotInline",
+            "refactoring.by.refused",
+            "refactoring.by.notHere",
+            "refactoring.by.notApplied",
+            "refactoring.by.noServer",
+            "refactoring.by.changed",
             "runConfig.buildBeforeRun.name",
             "runConfig.buildBeforeRun.binaryMissing",
             "runConfig.buildBeforeRun.failed",
@@ -360,8 +355,6 @@ class BasedPythonBundleTest {
         // notification.lspBinaryMissing.title=basedpython: ''{0}'' not found
         assertEquals("basedpython: 'by' not found", msg("notification.lspBinaryMissing.title", "by"))
         assertEquals("basedpython: 'buff' language server stopped", msg("notification.lspCrashed.title", "buff"))
-        assertEquals("'x y' is not a valid identifier.", msg("refactoring.invalidIdentifier", "x y"))
-        assertTrue(msg("refactoring.inlineVariable.cannotInline", "n").startsWith("Cannot inline 'n':"))
     }
 
     @Test

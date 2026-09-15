@@ -236,10 +236,10 @@ lexical colour only. Don't reintroduce guessed semantic colour; fix the LSP path
 ## 10. Inspections / intentions (local, no LSP)
 - [x] Spellchecking in strings/comments/identifiers
 - [x] TODO/FIXME comment scanning → TODO tool window
-- [x] Intention: add type annotation
-- [x] Intention: convert `def` → `data class` / `class def`
-- [x] Intention: add `?.` / `??` null-safety
-- [x] Intention: convert mutable default arg
+- [x] Add return annotation — a `by` code action (`refactor.rewrite.returnAnnotation`) in Alt+Enter: the type ty infers, spelled as the file writes types, with the imports it needs
+- [x] Convert to / from `data class` — `by` code actions (`refactor.rewrite.toDataClass` / `fromDataClass`), refused for enums, protocols, existing data classes and classes whose instances would not fit in slots
+- [x] `?.` null-safety — the quick fix `by` attaches to an attribute read that only `None` lacks
+- [x] Mutable default args — nothing to flag: basedpython re-evaluates non-scalar defaults per call, and buff's `B006` is off for `.by` for the same reason
 - [x] Intention: anonymous tuple → NamedTuple expand preview
 - [x] Unresolved-binary inspection w/ quick fix to settings
 - [x] **`print(…)` → log point** (`inspections.logpoint`) — the counterpart of Kotlin's "'println' call can be replaced with a logpoint": a weak warning on a `print` statement whose quick fix deletes the call and leaves a log point in the gap it occupied. The log point is an `INTER_LINE` breakpoint, which is what makes it a swap rather than a move: the platform anchors such a breakpoint to the line *below* the gap and paints it between the two, so it appears exactly where the call was — the same result Kotlin's fix produces, reached through `XLineBreakpointAdditionalInfo` rather than through the IDE's logpoints modules. Its expression is the call's argument, its suspend policy `NONE`
@@ -250,8 +250,7 @@ lexical colour only. Don't reintroduce guessed semantic colour; fix the LSP path
 ## 11. Refactoring
 - [x] Rename (LSP rename — Shift+F6, enabled on `by`)
 - [~] Safe delete — delegated to the `by` LSP at runtime: rename/find-references/go-to-definition are LSP-backed (§142 toggles), so deleting a symbol after an LSP reference check is available. A native IDE SafeDelete dialog (usage preview + conflict detection) needs a local cross-file symbol resolver the plugin intentionally does NOT duplicate (the LSP is the source of truth); building one would re-implement a Python resolver
-- [x] Extract variable / method / constant — all three done (selection-driven): refactoring.ExtractVariableAction, IntroduceConstantAction, ExtractMethodAction (pure ExtractMethodLogic: nearest-enclosing-def insertion, body re-indentation, optional trailing-return heuristic)
-- [x] Inline variable — refactoring.InlineVariableAction (text-heuristic; bails on multiple/blank/multi-line assignments)
+- [x] Extract variable / function (method) / constant, inline variable — `by` code actions (`refactor.extract.*`, `refactor.inline.variable`) worked out on the semantic index, offered in Alt+Enter by the platform's LSP client and, with the server's reason when refused, from Refactor | … (by) (`lsp.refactor.ByRefactoringAction`)
 - [~] Change signature — requires whole-program symbol resolution to rewrite every call site; delegated to the `by` LSP (rename + references are enabled). A native Change Signature dialog needs a local resolver the plugin intentionally defers to the LSP rather than duplicating
 - [~] Move file/symbol + update imports — moving a file is supported by the platform; auto-rewriting import statements across the project needs cross-file symbol resolution, delegated to the `by` LSP (which updates references on rename). Native move-with-import-update needs a local resolver the plugin defers to the LSP
 

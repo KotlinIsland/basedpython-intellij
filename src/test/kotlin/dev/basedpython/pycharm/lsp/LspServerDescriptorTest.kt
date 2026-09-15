@@ -1,6 +1,7 @@
 package dev.basedpython.pycharm.lsp
 
 import com.intellij.platform.lsp.api.customization.LspCallHierarchyDisabled
+import com.intellij.platform.lsp.api.customization.LspCodeActionsSupport
 import com.intellij.platform.lsp.api.customization.LspCodeLensDisabled
 import com.intellij.platform.lsp.api.customization.LspCompletionDisabled
 import com.intellij.platform.lsp.api.customization.LspDocumentColorDisabled
@@ -183,6 +184,17 @@ class LspServerDescriptorTest {
     assertNotSame(LspCompletionDisabled, c.completionCustomizer)
     assertNotSame(LspFindReferencesDisabled, c.findReferencesCustomizer)
     assertNotSame(LspRenameDisabled, c.renameCustomizer)
+  }
+
+  @Test
+  fun `by's refactorings reach Alt+Enter as intentions`() {
+    // `by`'s refactorings are code actions that are not quick fixes. The platform only asks for
+    // those, and lists them in Alt+Enter, through a code actions customizer that supports
+    // intention actions — the only place Inline Variable, Extract Function and the rest now live.
+    val c = byDescriptor().lspCustomization.codeActionsCustomizer
+    assertTrue(c is LspCodeActionsSupport, "code actions must not be disabled for by: $c")
+    assertTrue((c as LspCodeActionsSupport).intentionActionsSupport)
+    assertTrue(c.quickFixesSupport)
   }
 
   // ---------------------------------------------------------------------------

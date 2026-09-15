@@ -200,14 +200,6 @@
         <localInspection
             language="basedpython"
             groupName="basedpython"
-            displayName="Mutable default argument"
-            shortName="BasedPythonMutableDefaultArg"
-            enabledByDefault="true"
-            level="WEAK WARNING"
-            implementationClass="dev.basedpython.pycharm.inspections.MutableDefaultArgInspection"/>
-        <localInspection
-            language="basedpython"
-            groupName="basedpython"
             displayName="by binary not configured"
             shortName="BasedPythonBinaryNotConfigured"
             enabledByDefault="true"
@@ -221,26 +213,6 @@
             enabledByDefault="true"
             level="WEAK WARNING"
             implementationClass="dev.basedpython.pycharm.inspections.logpoint.PrintToLogpointInspection"/>
-        <intentionAction>
-            <language>basedpython</language>
-            <className>dev.basedpython.pycharm.inspections.intentions.AddReturnTypeIntention</className>
-            <category>basedpython</category>
-        </intentionAction>
-        <intentionAction>
-            <language>basedpython</language>
-            <className>dev.basedpython.pycharm.inspections.intentions.ConvertToDataClassIntention</className>
-            <category>basedpython</category>
-        </intentionAction>
-        <intentionAction>
-            <language>basedpython</language>
-            <className>dev.basedpython.pycharm.inspections.intentions.ConvertFromDataClassIntention</className>
-            <category>basedpython</category>
-        </intentionAction>
-        <intentionAction>
-            <language>basedpython</language>
-            <className>dev.basedpython.pycharm.inspections.intentions.WrapNullSafeIntention</className>
-            <category>basedpython</category>
-        </intentionAction>
         <intentionAction>
             <language>basedpython</language>
             <className>dev.basedpython.pycharm.inspections.intentions.ExplainNamedTupleIntention</className>
@@ -620,30 +592,23 @@
             <add-to-group group-id="basedpython.ActionGroup" anchor="after" relative-to-action="basedpython.env.Show"/>
         </action>
 
-        <!-- ===== Wave 11: local refactorings (§115) ===== -->
-        <action id="dev.basedpython.pycharm.refactoring.ExtractVariable"
-                class="dev.basedpython.pycharm.refactoring.ExtractVariableAction">
-            <add-to-group group-id="basedpython.ActionGroup" anchor="last"/>
-            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+        <!-- by's refactorings, asked for explicitly: the same code actions Alt+Enter offers, with the
+             server's reason when one does not apply -->
+        <action id="basedpython.refactor.InlineVariable"
+                class="dev.basedpython.pycharm.lsp.refactor.ByInlineVariableAction">
+            <add-to-group group-id="RefactoringMenu" anchor="last"/>
         </action>
-        <action id="dev.basedpython.pycharm.refactoring.IntroduceConstant"
-                class="dev.basedpython.pycharm.refactoring.IntroduceConstantAction">
-            <add-to-group group-id="basedpython.ActionGroup" anchor="last"/>
-            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+        <action id="basedpython.refactor.ExtractVariable"
+                class="dev.basedpython.pycharm.lsp.refactor.ByExtractVariableAction">
+            <add-to-group group-id="RefactoringMenu" anchor="last"/>
         </action>
-
-        <!-- ===== Wave 12: inline variable (§117) ===== -->
-        <action id="dev.basedpython.pycharm.refactoring.InlineVariable"
-                class="dev.basedpython.pycharm.refactoring.InlineVariableAction">
-            <add-to-group group-id="basedpython.ActionGroup" anchor="last"/>
-            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+        <action id="basedpython.refactor.IntroduceConstant"
+                class="dev.basedpython.pycharm.lsp.refactor.ByIntroduceConstantAction">
+            <add-to-group group-id="RefactoringMenu" anchor="last"/>
         </action>
-
-        <!-- ===== Wave 15: extract method (§115) ===== -->
-        <action id="dev.basedpython.pycharm.refactoring.ExtractMethod"
-                class="dev.basedpython.pycharm.refactoring.ExtractMethodAction">
-            <add-to-group group-id="basedpython.ActionGroup" anchor="last"/>
-            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+        <action id="basedpython.refactor.ExtractFunction"
+                class="dev.basedpython.pycharm.lsp.refactor.ByExtractFunctionAction">
+            <add-to-group group-id="RefactoringMenu" anchor="last"/>
         </action>
 
         <!-- ===== Wave 12: download prebuilt binaries (§58) ===== -->
