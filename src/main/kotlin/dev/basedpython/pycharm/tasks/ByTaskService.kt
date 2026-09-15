@@ -9,9 +9,9 @@ import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
 import dev.basedpython.pycharm.ui.log.BasedPythonLog
+import dev.basedpython.pycharm.util.Debounced
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.nio.file.Files
@@ -19,6 +19,7 @@ import java.nio.file.Path
 import java.nio.file.Paths
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * The tasks a project's hook configurations declare, and what the last run said about them.
@@ -84,8 +85,18 @@ internal class ByTaskService(
     /** Guards against a second scan while one is in flight. */
     private val running = AtomicBoolean(false)
 
-    /** The pending debounced re-scan, if a configuration file has changed recently. */
-    private var syncJob: Job? = null
+    /**
+     * Re-scans once the configuration has stopped changing; see [scheduleSync].
+     *
+     * One coroutine reading a conflated channel rather than a job handle replaced on every change:
+     * [scheduleSync] is called from the VFS listener and a retry could land from a scan's own
+     * thread, and two threads swapping one unsynchronised handle could each leave a timer running.
+     */
+    private val sync = Debounced(scope, SYNC_DELAY) {
+        // A scan already in flight may have read the file before it changed; wait it out and scan
+        // again rather than drop the change.
+        while (!refresh()) delay(SYNC_DELAY)
+    }
 
     /** Registers [listener], called on the EDT after every [state] change, until [parent] is disposed. */
     fun addListener(parent: Disposable, listener: () -> Unit) {
@@ -111,13 +122,7 @@ internal class ByTaskService(
      * right after the user's own save is one scan, not two, and short enough that a hook added to
      * the file appears while the user is still looking at it.
      */
-    fun scheduleSync() {
-        syncJob?.cancel()
-        syncJob = scope.launch {
-            delay(SYNC_DELAY_MILLIS)
-            if (!refresh()) scheduleSync()
-        }
-    }
+    fun scheduleSync() = sync.request()
 
     /** Re-scans, unless a scan is already in flight; true when this call started one. */
     fun refresh(): Boolean {
@@ -197,7 +202,7 @@ internal class ByTaskService(
         fun getInstance(project: Project): ByTaskService = project.service()
 
         /** How long the configuration has to stop changing before re-scanning. */
-        private const val SYNC_DELAY_MILLIS = 500L
+        private val SYNC_DELAY = 500.milliseconds
 
         private const val ALL_FILES_KEY = "basedpython.tasks.allFiles"
     }

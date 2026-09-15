@@ -2,6 +2,7 @@ package dev.basedpython.pycharm.tasks
 
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.startup.ProjectActivity
+import com.intellij.openapi.util.io.FileUtil
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.openapi.vfs.newvfs.BulkFileListener
@@ -12,6 +13,7 @@ import com.intellij.openapi.vfs.newvfs.events.VFileDeleteEvent
 import com.intellij.openapi.vfs.newvfs.events.VFileEvent
 import com.intellij.openapi.vfs.newvfs.events.VFileMoveEvent
 import com.intellij.openapi.vfs.newvfs.events.VFilePropertyChangeEvent
+import com.intellij.util.PathUtil
 
 /**
  * Keeps the task view in step with the files it reads.
@@ -36,30 +38,36 @@ internal class ByTaskSyncActivity : ProjectActivity {
             VirtualFileManager.VFS_CHANGES,
             object : BulkFileListener {
                 override fun after(events: List<VFileEvent>) {
-                    if (events.any(::isConfigChange)) service.scheduleSync()
+                    val base = project.basePath ?: return
+                    if (touchesTaskConfig(events.flatMap(::eventPaths), base)) service.scheduleSync()
                 }
             },
         )
     }
-
-    /**
-     * True when [event] touched a file a scan reads.
-     *
-     * Matched on the name alone, so a `pyproject.toml` in a subdirectory triggers a scan of the
-     * root one. That costs a handful of file reads and keeps this from having to reason about
-     * content roots; the alternative — comparing full paths — would also have to handle a project
-     * base that is a symlink, which is where such comparisons quietly stop matching.
-     */
-    private fun isConfigChange(event: VFileEvent): Boolean {
-        val path = when (event) {
-            is VFileContentChangeEvent, is VFileCreateEvent, is VFileDeleteEvent,
-            is VFileMoveEvent, is VFileCopyEvent,
-            -> event.path
-            // A rename arrives as a property change, and renaming a file *to* one of these names is
-            // exactly the kind of change that adds tasks.
-            is VFilePropertyChangeEvent -> event.path.takeIf { event.propertyName == VirtualFile.PROP_NAME }
-            else -> null
-        } ?: return false
-        return ByTaskScan.isConfigFile(path.substringAfterLast('/'))
-    }
 }
+
+/**
+ * The paths [event] names, before and after: a rename or a move *to* one of the configuration names
+ * adds tasks as surely as a rename away from one removes them.
+ */
+internal fun eventPaths(event: VFileEvent): List<String> = when (event) {
+    is VFileContentChangeEvent, is VFileCreateEvent, is VFileDeleteEvent, is VFileCopyEvent -> listOf(event.path)
+    is VFileMoveEvent -> listOf(event.oldPath, event.newPath)
+    is VFilePropertyChangeEvent ->
+        if (event.propertyName == VirtualFile.PROP_NAME) listOf(event.oldPath, event.newPath) else emptyList()
+    else -> emptyList()
+}
+
+/**
+ * True when one of [paths] is a file a scan of the project at [basePath] reads.
+ *
+ * The VFS topic is application-wide — every project's listener hears every project's changes — and
+ * a scan reads a fixed list of names *at the project root*, so that is what has to match: the name
+ * and the directory. Matching the name alone rescanned every open project whenever any of them
+ * saved a `pyproject.toml`, and whenever one in a subdirectory changed.
+ */
+internal fun touchesTaskConfig(paths: List<String>, basePath: String): Boolean =
+    paths.any { path ->
+        ByTaskScan.isConfigFile(PathUtil.getFileName(path)) &&
+            FileUtil.pathsEqual(PathUtil.getParentPath(path), FileUtil.toSystemIndependentName(basePath))
+    }
