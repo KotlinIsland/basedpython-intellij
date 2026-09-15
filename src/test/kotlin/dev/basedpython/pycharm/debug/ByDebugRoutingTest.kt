@@ -89,31 +89,28 @@ class ByDebugRoutingTest {
         val previous = settings.debugBackend
         try {
             settings.debugBackend = ByDebugBackend.BPD
-            val arguments = try {
-                provider().getLaunchArguments(project, configuration())
-            } catch (refused: Exception) {
-                // no `bpd` on this machine is a refusal by design — and it is the *setting* being
-                // read that this test is about, which a refusal naming bpd already proves
-                assertTrue(
-                    refused.message.orEmpty().contains("bpd"),
-                    "a bpd session with no bpd should say so: ${refused.message}",
-                )
-                return
-            }
+            // no refusal for a machine with no `bpd` the IDE can see: the wrapper also looks beside
+            // the interpreter `by run` chooses, which nothing knows yet
+            val arguments = provider().getLaunchArguments(project, configuration())
             assertEquals(
                 DapStartRequest.Launch,
                 arguments.request,
                 "bpd is an adapter that starts programs, so this is a real launch",
             )
-            // `by run` has not chosen the program yet — the module when the configuration names
-            // none, what follows it, the directory the runner is in — so nothing here may guess
-            // at it. The descriptor fills it in from the wrapper's record before the request goes
+            // `by run` has not chosen the program yet — the interpreter, the module when the
+            // configuration names none, what follows it, the directory the runner is in — so
+            // nothing here may guess at it. The descriptor fills them in from the wrapper's record
+            // before the request goes
             assertEquals(
                 null,
                 arguments.arguments["program"],
                 "the provider named a program before `by run` had chosen one",
             )
-            assertNotNull(arguments.arguments["python"], "bpd has to be told which interpreter to run")
+            assertEquals(
+                null,
+                arguments.arguments["python"],
+                "the provider named an interpreter before `by run` had chosen one",
+            )
         } finally {
             settings.debugBackend = previous
         }

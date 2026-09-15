@@ -13,6 +13,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.util.io.FileUtil
 import com.intellij.util.net.NetUtils
+import dev.basedpython.pycharm.debug.bpd.ByBpdExecutable
 import dev.basedpython.pycharm.debug.bpd.ByBpdWrapper
 import dev.basedpython.pycharm.debug.bpd.ByDebugBackend
 import dev.basedpython.pycharm.env.Executables
@@ -44,20 +45,19 @@ class ByDebugSetup(
      *
      * The two backends put entirely different things in [bootstrapDir] and reach the debuggee in
      * entirely different ways — one through `PYTHONPATH` and a `sitecustomize.py`, the other
-     * through `PYTHON` and a wrapper — so every later step has to know which one it is looking at.
+     * through `by run --launcher` and a wrapper — so every later step has to know which one it is
+     * looking at.
      */
     val backend: ByDebugBackend = ByDebugBackend.DEBUGPY,
     /**
-     * The `bpd` binary, when [backend] is [ByDebugBackend.BPD].
+     * The `bpd`s the IDE found beside `by` and on `PATH`, when [backend] is [ByDebugBackend.BPD].
      *
-     * Resolved at setup rather than at launch, because setup is the first moment that can refuse:
-     * a session with no `bpd` should never get as far as running the program.
+     * Not the one the session uses: the wrapper chooses between these and the one beside the
+     * interpreter `by run` picks, which is not known until `by run` has picked it.
      */
-    val bpd: Path? = null,
-    /** The interpreter `by run` would have used, for the wrapper to pass a version probe to. */
-    val python: String? = null,
+    val bpd: ByBpdExecutable.Found? = null,
 ) {
-    /** The script `PYTHON` is pointed at, for a [ByDebugBackend.BPD] session. */
+    /** The script `by run --launcher` is pointed at, for a [ByDebugBackend.BPD] session. */
     val wrapper: Path get() = wrapperOf(bootstrapDir)
 
     /** Remove [bootstrapDir] and everything the session wrote into it. */
@@ -88,11 +88,11 @@ class ByDebugSetup(
          * `bpd` cannot be handed the program from outside. `by run` transpiles into a temp
          * directory, writes `_by_sourcemap.py` beside the generated python, and deletes the tree
          * when the program ends — so the map lives exactly as long as the program, and the only
-         * way for a debugger to be in the picture is to *be* the interpreter `by run` starts. See
+         * way for a debugger to be in the picture is to *be* the process `by run` starts. See
          * [ByBpdWrapper].
          */
         @Throws(ExecutionException::class)
-        fun forBpd(bpd: Path, python: String): ByDebugSetup {
+        fun forBpd(bpd: ByBpdExecutable.Found): ByDebugSetup {
             if (!ByBpdWrapper.isSupported(System.getProperty("os.name").orEmpty())) {
                 throw ExecutionException(BasedPythonBundle.message("debug.bpd.error.unsupported"))
             }
@@ -117,7 +117,6 @@ class ByDebugSetup(
                 infoFile = dir.resolve("bpd-record"),
                 backend = ByDebugBackend.BPD,
                 bpd = bpd,
-                python = python,
             )
         }
 

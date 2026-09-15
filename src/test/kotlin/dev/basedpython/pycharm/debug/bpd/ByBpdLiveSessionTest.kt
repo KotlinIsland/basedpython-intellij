@@ -46,13 +46,6 @@ class ByBpdLiveSessionTest {
         ?.let { Path.of(it) }
         ?.takeIf { Files.isExecutable(it) }
 
-    private fun executable(dir: Path, name: String, body: String): Path {
-        val script = dir.resolve(name)
-        Files.writeString(script, "#!/bin/sh\n$body\n")
-        script.toFile().setExecutable(true)
-        return script
-    }
-
     @Test
     fun `a real by run starts a real bpd that this plugin can speak DAP to`(@TempDir dir: Path) {
         val by = binary(BY)
@@ -78,15 +71,17 @@ class ByBpdLiveSessionTest {
         val record = dir.resolve("record")
         val port = java.net.ServerSocket(0).use { it.localPort }
 
-        val byRun = ProcessBuilder(by.toString(), "run", "demo")
+        // the interpreter is `by run`'s to choose: a project with no environment of its own takes
+        // `PYTHON`, and the wrapper is only ever handed what `by run` chose
+        val byRun = ProcessBuilder(by.toString(), "run", "--launcher", wrapper.toString(), "demo")
             .directory(dir.toFile())
             .redirectErrorStream(true)
             .redirectOutput(dir.resolve("by-run.log").toFile())
             .apply {
-                environment()["PYTHON"] = wrapper.toString()
-                environment()[ByBpdWrapper.ENV_PYTHON] =
-                    executable(dir, "python", """exec $python "${'$'}@"""").toString()
+                environment().remove("VIRTUAL_ENV")
+                environment()["PYTHON"] = python
                 environment()[ByBpdWrapper.ENV_BPD] = bpd.toString()
+                environment()[ByBpdWrapper.ENV_BPD_FALLBACK] = ""
                 environment()[ByBpdWrapper.ENV_PORT] = port.toString()
                 environment()[ByBpdWrapper.ENV_RECORD] = record.toString()
             }
@@ -120,8 +115,10 @@ class ByBpdLiveSessionTest {
                 )
 
                 // and the program, launched with what `by run` recorded rather than what the IDE
-                // could have guessed: the runner by the path `by run` named, and its arguments
-                val arguments = connection.record.launchArguments(mapOf("python" to python, "stopOnEntry" to false))
+                // could have guessed: the interpreter `by run` chose, the runner by the path it
+                // named, and its arguments
+                assertEquals(python, connection.record.python, "the record names the interpreter `by run` chose")
+                val arguments = connection.record.launchArguments(mapOf("stopOnEntry" to false))
                 send(connection.output, 2, "launch", arguments)
                 send(connection.output, 3, "configurationDone", emptyMap())
                 val seen = Executors.newSingleThreadExecutor().let { reader ->

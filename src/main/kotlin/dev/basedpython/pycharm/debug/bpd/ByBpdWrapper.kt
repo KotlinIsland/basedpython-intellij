@@ -1,41 +1,43 @@
 package dev.basedpython.pycharm.debug.bpd
 
 /**
- * The interpreter `by run` is pointed at when `bpd` is the backend.
+ * The launcher `by run` starts the program through when `bpd` is the backend.
  *
  * ## Why there is a wrapper at all
  *
  * `by run` transpiles the project into a temp directory, writes `_by_sourcemap.py` beside the
- * generated python, and then runs `$PYTHON _by_runner.py <module>` — tearing the whole tree down
+ * generated python, and then runs `<python> _by_runner.py <module>` — tearing the whole tree down
  * when that process ends. So the map exists for exactly as long as the program does, and the only
- * way for a debugger to be in the picture is to *be* the interpreter `by run` starts.
+ * way for a debugger to be in the picture is to be the process `by run` starts.
  *
  * ## How the IDE gets in
  *
- * By naming this script on `by run`'s own command line, as `--python`. That used to be the
- * `PYTHON` environment variable instead, and it is worth writing down why it moved: `by` now
- * resolves the project's environment first and reads `$PYTHON` only *below* that discovery, so in
- * any project with a `.venv` beside its `pyproject.toml` — which is every project this is for —
- * the variable was never consulted and the wrapper never ran. The program then ran to completion
- * with no adapter behind it and no breakpoint ever bound. `--python` is the one rung above
- * discovery. The variable is still set, for a `by` old enough to prefer it.
+ * By naming this script on `by run`'s command line as `--launcher`. `by run` chooses the
+ * interpreter exactly as it would for a plain run, probes its version itself, and then starts
+ * `<launcher> <python> _by_runner.py <module> <args...>` — once, for the program. So the wrapper is
+ * handed the interpreter rather than having to know it, and never sees the version probe.
+ *
+ * It used to be `--python` instead, which put the wrapper in the interpreter's place: that switched
+ * `by run`'s own discovery off, so the IDE had to guess the interpreter the run would have used and
+ * hand it on, and the wrapper had to tell the probe apart from the program by its arguments.
  *
  * The debugpy backend reaches its interpreter differently, through `PYTHONPATH` and a
- * `sitecustomize.py`, because it runs *inside* an interpreter rather than in place of one.
+ * `sitecustomize.py`, because it runs *inside* an interpreter rather than in front of one.
  *
  * ## Why it cannot simply `exec bpd`
  *
- * `by run` calls `$PYTHON` twice and only one of the calls is the program:
+ * `bpd dap` is a debug adapter, and what starts a program is the `launch` request its client sends.
+ * So the wrapper records what it was asked to run — the interpreter, the arguments and the working
+ * directory, none of which the IDE can know before `by run` has chosen them — and then serves DAP.
  *
- * 1. `$PYTHON -c "import sys; print(...)"`, to find out which version to emit code for. A wrapper
- *    that answered that with anything else would make `by run` target a python that is not the one
- *    running the program — so it is passed straight through to the real interpreter
- * 2. `$PYTHON _by_runner.py <module> <args...>`, which is the program
+ * ## Which `bpd`
  *
- * The second is the one `bpd` serves, and it does not run it directly: `bpd dap` is a debug
- * adapter, and what starts a program is the `launch` request its client sends. So the wrapper
- * records what it was asked to run — the arguments and the working directory, neither of which the
- * IDE can know before `by run` has chosen a temp directory — and then serves DAP.
+ * The one beside the `by` the run starts when the IDE found one there ([ENV_BPD]), else the one
+ * beside the interpreter `by run` chose — the environment's `bin`, where `uv add --dev` puts it for
+ * a uv project, whose launch names no directory of its own — else the one the IDE found on `PATH`
+ * ([ENV_BPD_FALLBACK]). The middle answer is only knowable here, which is why the order is decided
+ * here rather than in [ByBpdExecutable]. When there is none at all the wrapper records that
+ * ([NO_BPD_PREFIX]) and exits without starting the program.
  *
  * ## The record is lines, not json
  *
@@ -49,17 +51,20 @@ package dev.basedpython.pycharm.debug.bpd
  */
 object ByBpdWrapper {
 
-    /** The real interpreter, for the calls that are not the program. */
-    const val ENV_PYTHON: String = "BASEDPYTHON_BPD_PYTHON"
-
     /** The port `bpd dap` should listen on. */
     const val ENV_PORT: String = "BASEDPYTHON_BPD_PORT"
 
     /** The file the wrapper writes its record to, and `bpd` its announcement. */
     const val ENV_RECORD: String = "BASEDPYTHON_BPD_RECORD"
 
-    /** The `bpd` executable. */
+    /** The `bpd` beside the `by` the run starts, when there is one. Preferred over every other. */
     const val ENV_BPD: String = "BASEDPYTHON_BPD"
+
+    /** The `bpd` on the IDE's `PATH`, for when there is none beside `by` or the interpreter. */
+    const val ENV_BPD_FALLBACK: String = "BASEDPYTHON_BPD_FALLBACK"
+
+    /** The prefix on the line naming the interpreter `by run` chose. */
+    const val PYTHON_PREFIX: String = "python "
 
     /** The prefix on the line naming the directory `by run` chose. */
     const val CWD_PREFIX: String = "cwd "
@@ -67,55 +72,75 @@ object ByBpdWrapper {
     /** The prefix on each line naming one argument of the program. */
     const val ARG_PREFIX: String = "arg "
 
+    /** The prefix on the line saying no `bpd` was found, and which interpreter it was looked for beside. */
+    const val NO_BPD_PREFIX: String = "nobpd "
+
     /**
      * The wrapper, as a POSIX shell script.
      *
      * Deliberately `sh` rather than `bash`: it runs on whatever the user's machine has. Written
-     * here rather than shipped as a resource because it is four decisions long and reads better
-     * beside the reasons for them.
+     * here rather than shipped as a resource because it is a handful of decisions long and reads
+     * better beside the reasons for them.
      */
     fun script(): String = SCRIPT
-        .replace("@PYTHON@", ENV_PYTHON)
         .replace("@PORT@", ENV_PORT)
         .replace("@RECORD@", ENV_RECORD)
+        .replace("@BPD_FALLBACK@", ENV_BPD_FALLBACK)
         .replace("@BPD@", ENV_BPD)
+        .replace("@PYTHON@", PYTHON_PREFIX.trim())
         .replace("@CWD@", CWD_PREFIX.trim())
         .replace("@ARG@", ARG_PREFIX.trim())
+        .replace("@NOBPD@", NO_BPD_PREFIX.trim())
 
     /**
-     * Whether this operating system can be pointed at a shell script as its interpreter.
+     * Whether this operating system can start a shell script as the launcher.
      *
-     * Windows cannot: `by run` starts `$PYTHON` with `CreateProcess`, which runs an executable
-     * rather than asking a shell to interpret a shebang. Refusing by name beats producing a
-     * session that fails somewhere less obvious.
+     * Windows cannot: `by run` starts its launcher with `CreateProcess`, which runs an executable
+     * rather than asking a shell to interpret a shebang. Refusing by name beats producing a session
+     * that fails somewhere less obvious.
      */
     fun isSupported(osName: String): Boolean = !osName.lowercase().startsWith("windows")
 
     private val SCRIPT = """
         #!/bin/sh
-        # Written by the basedpython plugin. `by run` runs this as its interpreter — see
-        # dev.basedpython.pycharm.debug.bpd.ByBpdWrapper for why it exists.
+        # Written by the basedpython plugin. `by run --launcher` starts the program through this —
+        # see dev.basedpython.pycharm.debug.bpd.ByBpdWrapper for why it exists.
         set -e
 
-        # `by run` probes the interpreter before it emits any code, and that question is about the
-        # real interpreter. Answering it any other way would make `by run` target the wrong python.
-        case "$1" in
-          -c|-m|-V|--version|-h|--help)
-            exec "${'$'}@PYTHON@" "$@"
-            ;;
-        esac
+        # `by run` names the interpreter it chose first, then the program.
+        python="$1"
+        shift
 
-        # Anything else is the program. Stand where the runner is before anything else: bpd
-        # inherits this directory and the `launch` request names the program relative to it. `by
-        # run` used to start the program *in* the tree it transpiled into and name the runner
-        # relative to that; it now runs from the project root and names it absolutely, which put
-        # the program somewhere `_by_runner.py` no longer resolved. `dirname` of a bare
-        # `_by_runner.py` is `.`, so this is the same tree under either `by`.
+        # Which bpd: beside `by`, else beside the interpreter, else on the IDE's PATH. A bare
+        # interpreter name has no directory to look in, and `dirname` would answer `.`, which is
+        # wherever this happens to be standing.
+        bpd="${'$'}@BPD@"
+        if [ -z "${'$'}bpd" ]; then
+          case "${'$'}python" in
+            */*)
+              if [ -f "$(dirname "${'$'}python")/bpd" ]; then
+                bpd="$(dirname "${'$'}python")/bpd"
+              fi
+              ;;
+          esac
+        fi
+        if [ -z "${'$'}bpd" ]; then
+          bpd="${'$'}@BPD_FALLBACK@"
+        fi
+        if [ -z "${'$'}bpd" ]; then
+          printf '@NOBPD@ %s\n' "${'$'}python" > "${'$'}@RECORD@"
+          exit 127
+        fi
+
+        # Stand where the runner is before anything else: bpd inherits this directory and the
+        # `launch` request names the program relative to it. `by run` runs from the project root and
+        # names the runner absolutely; `dirname` of a bare `_by_runner.py` is `.`, so either works.
         cd "$(dirname "$1")"
 
-        # Record it: the IDE cannot know the temp directory `by run` chose, and it sends these
-        # back as the `launch` request.
+        # Record it: the IDE cannot know the interpreter or the temp directory `by run` chose, and
+        # it sends these back as the `launch` request.
         {
+          printf '@PYTHON@ %s\n' "${'$'}python"
           printf '@CWD@ %s\n' "${'$'}PWD"
           for arg in "$@"; do
             printf '@ARG@ %s\n' "${'$'}arg"
@@ -123,6 +148,6 @@ object ByBpdWrapper {
         } > "${'$'}@RECORD@"
 
         # bpd's announcement lands on the line below. Appending is what keeps both.
-        exec "${'$'}@BPD@" dap --listen "${'$'}@PORT@" >> "${'$'}@RECORD@"
+        exec "${'$'}bpd" dap --listen "${'$'}@PORT@" >> "${'$'}@RECORD@"
     """.trimIndent() + "\n"
 }

@@ -6,9 +6,9 @@ import com.intellij.openapi.diagnostic.Logger
 /**
  * What [ByBpdWrapper] and `bpd` between them wrote to the record file.
  *
- * Two things the IDE cannot know before `by run` has started: **what to launch**, because the temp
- * directory is chosen inside `by run`, and **where to connect**, because the port `bpd` really
- * bound and the token it minted are decided in the adapter process.
+ * Two things the IDE cannot know before `by run` has started: **what to launch**, because the
+ * interpreter and the temp directory are chosen inside `by run`, and **where to connect**, because
+ * the port `bpd` really bound and the token it minted are decided in the adapter process.
  *
  * Parsing is pure and total: every way the file can be incomplete answers [Incomplete] naming what
  * was missing, rather than a null the caller has to guess about. A debug session that will not
@@ -19,6 +19,8 @@ sealed interface ByBpdRecord {
 
     /** Everything is here and the session can start. */
     data class Ready(
+        /** The interpreter `by run` chose, which bpd starts the program on. */
+        val python: String,
         /** The directory `by run` transpiled into, and the program's working directory. */
         val cwd: String,
         /** `_by_runner.py`, the module, and whatever the user passed after it. */
@@ -32,16 +34,17 @@ sealed interface ByBpdRecord {
     ) : ByBpdRecord {
 
         /**
-         * The `launch` request's arguments: [base], with the program and its arguments as `by run`
-         * really asked for them.
+         * The `launch` request's arguments: [base], with the interpreter, the program and its
+         * arguments as `by run` really chose them.
          *
          * Taken from here rather than from the run configuration, because only `by run` knows them:
-         * it chooses the module when the configuration names none (`run.main`), decides what goes
-         * after the runner, and names the runner by a path in a directory it has only just made. A
-         * launch request built from the configuration was a second guess at all three.
+         * it discovers the interpreter, chooses the module when the configuration names none
+         * (`run.main`), decides what goes after the runner, and names the runner by a path in a
+         * directory it has only just made. A launch request built from the configuration was a
+         * second guess at all four.
          */
         fun launchArguments(base: Map<String, Any?>): Map<String, Any?> =
-            base + mapOf(PROGRAM to argv.first(), ARGS to argv.drop(1))
+            base + mapOf(PYTHON to python, PROGRAM to argv.first(), ARGS to argv.drop(1))
     }
 
     /**
@@ -52,11 +55,18 @@ sealed interface ByBpdRecord {
      */
     data class Incomplete(val why: String) : ByBpdRecord
 
+    /**
+     * The wrapper found no `bpd` — not beside `by`, not beside [python], not on `PATH` — and exited
+     * without starting the program. Final, unlike [Incomplete]: nothing more will be written.
+     */
+    data class NoBpd(val python: String) : ByBpdRecord
+
     companion object {
 
         private val LOG = Logger.getInstance(ByBpdRecord::class.java)
 
         /** The `bpd_dap::Configuration` keys [Ready.launchArguments] fills in. */
+        const val PYTHON: String = "python"
         const val PROGRAM: String = "program"
         const val ARGS: String = "args"
 
@@ -93,12 +103,19 @@ sealed interface ByBpdRecord {
          * [Incomplete] and the caller polls again, not a failure.
          */
         fun parse(text: String): ByBpdRecord {
+            var python: String? = null
             var cwd: String? = null
             val argv = mutableListOf<String>()
             var announcement: String? = null
 
             for (line in text.lineSequence()) {
                 when {
+                    line.startsWith(ByBpdWrapper.NO_BPD_PREFIX) ->
+                        return NoBpd(line.removePrefix(ByBpdWrapper.NO_BPD_PREFIX))
+
+                    line.startsWith(ByBpdWrapper.PYTHON_PREFIX) ->
+                        python = line.removePrefix(ByBpdWrapper.PYTHON_PREFIX)
+
                     line.startsWith(ByBpdWrapper.CWD_PREFIX) ->
                         cwd = line.removePrefix(ByBpdWrapper.CWD_PREFIX)
 
@@ -114,6 +131,9 @@ sealed interface ByBpdRecord {
                 return Incomplete(
                     "the wrapper has not said which directory `by run` transpiled into yet",
                 )
+            }
+            if (python == null) {
+                return Incomplete("the wrapper has not said which interpreter `by run` chose yet")
             }
             if (argv.isEmpty()) {
                 return Incomplete("the wrapper recorded no program to run")
@@ -135,6 +155,7 @@ sealed interface ByBpdRecord {
 
             return try {
                 Ready(
+                    python = python,
                     cwd = cwd,
                     argv = argv,
                     host = json.get("host").asString,

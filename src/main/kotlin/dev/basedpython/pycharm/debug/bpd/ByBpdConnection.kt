@@ -139,6 +139,10 @@ class ByBpdConnection private constructor(
                 when (val parsed = read(record)) {
                     is ByBpdRecord.Ready -> return parsed
                     is ByBpdRecord.Incomplete -> last = parsed.why
+                    // the wrapper has exited and said why; waiting on would only wait out the clock
+                    is ByBpdRecord.NoBpd -> throw ExecutionException(
+                        BasedPythonBundle.message("debug.bpd.error.notFound", parsed.python),
+                    )
                     null -> Unit
                 }
                 if (debuggee?.isProcessTerminated == true) {

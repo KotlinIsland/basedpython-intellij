@@ -141,26 +141,19 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
                 commandLine.pythonPathPrefix += setup.bootstrapDir.toString()
             }
 
-            // bpd is reached by *being* the interpreter `by run` starts rather than by running
-            // inside it, so the wrapper goes where `by` looks for an interpreter. See
+            // bpd is reached by *being* the process `by run` starts rather than by running inside
+            // it, so the wrapper is `by run`'s launcher: `by run` chooses the interpreter as it
+            // would for a plain run and hands it to the wrapper in front of the program. See
             // `ByBpdWrapper` for why that is the only place a debugger fits.
             ByDebugBackend.BPD -> {
-                // `--python` rather than `$PYTHON`, and this is the difference between a session
-                // that stops and one that does not: `by run` resolves the project's own
-                // environment ahead of the variable, so in a project with a `.venv` the variable
-                // was never read, the wrapper never ran, and the program ran to completion with
-                // no adapter behind it. The variable stays for a `by` old enough to prefer it —
-                // where both are understood, the flag is the one that wins.
-                commandLine.infrastructureArgs += listOf(BY_PYTHON_FLAG, setup.wrapper.toString())
-                commandLine.infrastructureEnv[ENV_PYTHON] = setup.wrapper.toString()
-                commandLine.infrastructureEnv[ByBpdWrapper.ENV_PYTHON] =
-                    setup.python ?: DEFAULT_PYTHON
+                commandLine.infrastructureArgs += listOf(BY_LAUNCHER_FLAG, setup.wrapper.toString())
                 commandLine.infrastructureEnv[ByBpdWrapper.ENV_PORT] = setup.port.toString()
                 commandLine.infrastructureEnv[ByBpdWrapper.ENV_RECORD] = setup.infoFile.toString()
-                commandLine.infrastructureEnv[ByBpdWrapper.ENV_BPD] =
-                    setup.bpd?.toString() ?: throw ExecutionException(
-                        BasedPythonBundle.message("debug.bpd.error.notFound"),
-                    )
+                // empty rather than absent, so a variable of the same name in the IDE's own
+                // environment cannot stand in for an answer the IDE did not give
+                commandLine.infrastructureEnv[ByBpdWrapper.ENV_BPD] = setup.bpd?.besideBy?.toString().orEmpty()
+                commandLine.infrastructureEnv[ByBpdWrapper.ENV_BPD_FALLBACK] =
+                    setup.bpd?.onPath?.toString().orEmpty()
             }
         }
     }
@@ -387,14 +380,8 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
 
         private const val LOCALHOST = "127.0.0.1"
 
-        /** What `by run` reads the interpreter out of, below its own environment discovery. */
-        private const val ENV_PYTHON = "PYTHON"
-
-        /** What `by run` reads the interpreter out of *above* its environment discovery. */
-        private const val BY_PYTHON_FLAG = "--python"
-
-        /** What `by run` falls back to when `PYTHON` names nothing. */
-        private const val DEFAULT_PYTHON = "python3"
+        /** What `by run` starts the program through, in front of the interpreter it chose. */
+        private const val BY_LAUNCHER_FLAG = "--launcher"
         private const val PYDEVD_DISABLE_FILE_VALIDATION = "PYDEVD_DISABLE_FILE_VALIDATION"
 
         /** The bootstrap only writes its report once the port is open, so this is a formality. */

@@ -285,26 +285,29 @@ data-flow analysis is seeded from.
 ### Why bpd needs a wrapper
 
 `by run` transpiles into a temp directory, writes `_by_sourcemap.py` beside the generated Python,
-runs `$PYTHON _by_runner.py <module>` **with that directory as the working directory**, and deletes
-the tree when the program ends. The map lives exactly as long as the program does. So bpd cannot be
-handed the program from outside — it has to *be* the interpreter `by run` starts, which is what
-bpd's own source-mapping page concluded.
+runs `<python> _by_runner.py <module>`, and deletes the tree when the program ends. The map lives
+exactly as long as the program does. So bpd cannot be handed the program from outside — it has to
+*be* the process `by run` starts, which is what bpd's own source-mapping page concluded.
 
-The IDE controls the environment of `by run` and nothing else, which leaves `PYTHON`. The wrapper
-has two jobs, because `by run` calls `$PYTHON` twice:
+`by run --launcher <wrapper>` is how it gets there. `by run` discovers the interpreter exactly as it
+does for a plain run, probes its version itself, and starts `<wrapper> <python> _by_runner.py
+<module> <args…>` once, for the program. The wrapper records the interpreter, the directory the
+runner is in and the arguments, then starts `bpd dap --listen`; the IDE reads the record and sends it
+back as the `launch` request. The IDE never names an interpreter: it used to put the wrapper in
+`--python`'s place, which switched `by run`'s discovery off and left the IDE guessing which
+interpreter the run would have used.
 
-1. `$PYTHON -c "import sys; print(…)"`, to decide which Python version to emit code for. **Passed
-   straight through to the real interpreter** — answering it any other way would make `by run` emit
-   code for a python that is not the one running it
-2. `$PYTHON _by_runner.py <module>`, which is the program. Recorded, then `bpd dap --listen` is
-   started; the IDE reads the record and sends it back as the `launch` request
+Which `bpd`: the one beside the `by` the run starts, else the one beside the interpreter `by run`
+chose (a uv project's `.venv/bin`), else the one on `PATH`. The middle one is only knowable once
+`by run` has chosen, so the wrapper applies the order; with none at all it records that and exits
+before the program starts, and the session reports it.
 
 The record is lines rather than JSON: quoting a path into JSON from `sh` needs `sed` and gets a
 backslash subtly wrong, and a line needs no quoting at all. bpd's own announcement — where it bound
 and the token to present — is appended below it, so one file carries everything.
 
-**Windows is refused by name.** `by run` starts `$PYTHON` with `CreateProcess`, which runs an
-executable rather than honouring a shebang, so a shell script cannot be the interpreter there.
+**Windows is refused by name.** `by run` starts its launcher with `CreateProcess`, which runs an
+executable rather than honouring a shebang, so a shell script cannot be the launcher there.
 Switch the backend to debugpy, or run under WSL.
 
 ## What bpd tells us that DAP has no field for

@@ -3,7 +3,7 @@ package dev.basedpython.pycharm.debug.bpd
 import dev.basedpython.pycharm.env.ByEnvironmentKind
 import dev.basedpython.pycharm.env.ByLaunch
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertNotEquals
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.condition.DisabledOnOs
 import org.junit.jupiter.api.condition.OS
@@ -12,10 +12,11 @@ import java.nio.file.Files
 import java.nio.file.Path
 
 /**
- * Which `bpd` a session gets: the one installed with the toolchain the run uses.
+ * Which `bpd` the IDE can find before the run: the one installed with the toolchain the run uses.
  *
- * Only the answers that come from the launch are asserted; the last resort is whatever `PATH` holds
- * on the machine running the suite, which no test here controls.
+ * Only the answers that come from the launch are asserted; the one on `PATH` is whatever the
+ * machine running the suite holds, which no test here controls. The one beside the interpreter is
+ * the wrapper's to find — see [ByBpdWrapperExecutionTest].
  */
 @DisabledOnOs(OS.WINDOWS, disabledReason = "the bpd backend is refused on Windows by name")
 class ByBpdExecutableTest {
@@ -31,13 +32,11 @@ class ByBpdExecutableTest {
         ByLaunch(exe = exe, prependArgs = emptyList(), env = emptyMap(), venvRoot = null, kind = kind)
 
     @Test
-    fun `a bpd beside the by the run starts is the one used`(@TempDir dir: Path) {
+    fun `a bpd beside the by the run starts is found`(@TempDir dir: Path) {
         val by = executable(dir.resolve("toolchain/by"))
         val bpd = executable(dir.resolve("toolchain/bpd"))
-        executable(dir.resolve("env/bin/bpd"))
-        val python = executable(dir.resolve("env/bin/python"))
 
-        assertEquals(bpd, ByBpdExecutable.resolve(launch(by, ByEnvironmentKind.AUTO), python))
+        assertEquals(bpd, ByBpdExecutable.find(launch(by, ByEnvironmentKind.AUTO)).besideBy)
     }
 
     /**
@@ -46,14 +45,18 @@ class ByBpdExecutableTest {
      * is in the environment the program runs on.
      */
     @Test
-    fun `a uv launch finds bpd in the environment rather than beside uv`(@TempDir dir: Path) {
+    fun `nothing beside uv is taken for the bpd beside by`(@TempDir dir: Path) {
         val uv = executable(dir.resolve("tools/uv"))
-        val besideUv = executable(dir.resolve("tools/bpd"))
-        val inEnvironment = executable(dir.resolve("project/.venv/bin/bpd"))
-        val python = executable(dir.resolve("project/.venv/bin/python"))
+        executable(dir.resolve("tools/bpd"))
 
-        val found = ByBpdExecutable.resolve(launch(uv, ByEnvironmentKind.UV), python)
-        assertNotEquals(besideUv, found, "the bpd beside uv is not this project's")
-        assertEquals(inEnvironment, found)
+        assertNull(ByBpdExecutable.find(launch(uv, ByEnvironmentKind.UV)).besideBy)
+    }
+
+    @Test
+    fun `a by with no bpd beside it has none there`(@TempDir dir: Path) {
+        val by = executable(dir.resolve("toolchain/by"))
+
+        assertNull(ByBpdExecutable.find(launch(by, ByEnvironmentKind.AUTO)).besideBy)
+        assertNull(ByBpdExecutable.find(null).besideBy)
     }
 }

@@ -25,6 +25,7 @@ class ByBpdRecordTest {
     fun `a finished record carries what to launch and where to connect`() {
         val record = ByBpdRecord.parse(
             """
+            python /project/.venv/bin/python3
             cwd /tmp/by-build-1
             arg _by_runner.py
             arg demo
@@ -33,6 +34,7 @@ class ByBpdRecordTest {
             """.trimIndent(),
         )
         val ready = assertInstanceOf(ByBpdRecord.Ready::class.java, record)
+        assertEquals("/project/.venv/bin/python3", ready.python)
         assertEquals("/tmp/by-build-1", ready.cwd)
         assertEquals(listOf("_by_runner.py", "demo", "--verbose"), ready.argv)
         assertEquals(51234, ready.port)
@@ -41,9 +43,10 @@ class ByBpdRecordTest {
     }
 
     /**
-     * The program bpd is told to launch is the one `by run` handed the wrapper — the runner by the
-     * path `by run` gave it, then everything after — and not the run configuration's idea of it. A
-     * configuration that names no module runs `run.main`, which only `by run` reads.
+     * The program bpd is told to launch is the one `by run` handed the wrapper — the interpreter
+     * `by run` discovered, the runner by the path `by run` gave it, then everything after — and not
+     * the IDE's idea of any of it. A configuration that names no module runs `run.main`, which only
+     * `by run` reads, and the interpreter is whatever `by run`'s own discovery chose.
      */
     @Test
     fun `the launch request names what by run asked for, over what the provider knew`() {
@@ -51,6 +54,7 @@ class ByBpdRecordTest {
             ByBpdRecord.Ready::class.java,
             ByBpdRecord.parse(
                 """
+                python /project/.venv/bin/python3
                 cwd /tmp/by-build-1
                 arg /tmp/by-build-1/_by_runner.py
                 arg app.main
@@ -61,18 +65,31 @@ class ByBpdRecordTest {
         )
         assertEquals(
             mapOf(
-                "python" to "/project/.venv/bin/python",
                 "stopOnEntry" to false,
+                "python" to "/project/.venv/bin/python3",
                 "program" to "/tmp/by-build-1/_by_runner.py",
                 "args" to listOf("app.main", "--verbose"),
             ),
-            ready.launchArguments(mapOf("python" to "/project/.venv/bin/python", "stopOnEntry" to false)),
+            ready.launchArguments(mapOf("stopOnEntry" to false)),
         )
     }
 
     @Test
+    fun `a record with no interpreter is not yet ready`() {
+        val record = ByBpdRecord.parse("cwd /tmp/x\narg _by_runner.py\n$announcement\n")
+        val incomplete = assertInstanceOf(ByBpdRecord.Incomplete::class.java, record)
+        assertTrue(incomplete.why.contains("interpreter"), incomplete.why)
+    }
+
+    @Test
+    fun `a wrapper that found no bpd says so, naming the interpreter it looked beside`() {
+        val record = ByBpdRecord.parse("nobpd /project/.venv/bin/python3\n")
+        assertEquals(ByBpdRecord.NoBpd("/project/.venv/bin/python3"), record)
+    }
+
+    @Test
     fun `the wrapper's half without bpd's is not yet rather than broken`() {
-        val record = ByBpdRecord.parse("cwd /tmp/x\narg _by_runner.py\n")
+        val record = ByBpdRecord.parse("python python3\ncwd /tmp/x\narg _by_runner.py\n")
         val incomplete = assertInstanceOf(ByBpdRecord.Incomplete::class.java, record)
         assertTrue(incomplete.why.contains("listening"), incomplete.why)
     }
@@ -86,7 +103,7 @@ class ByBpdRecordTest {
     @Test
     fun `an announcement missing a field names every field rather than the first`() {
         val record = ByBpdRecord.parse(
-            "cwd /tmp/x\narg _by_runner.py\n{\"listening\":{\"host\":\"127.0.0.1\",\"port\":1}}\n",
+            "python python3\ncwd /tmp/x\narg _by_runner.py\n{\"listening\":{\"host\":\"127.0.0.1\",\"port\":1}}\n",
         )
         val incomplete = assertInstanceOf(ByBpdRecord.Incomplete::class.java, record)
         assertTrue(incomplete.why.contains("token"), incomplete.why)
@@ -95,9 +112,10 @@ class ByBpdRecordTest {
     @Test
     fun `a path with a space survives, because the record is lines rather than a split`() {
         val record = ByBpdRecord.parse(
-            "cwd /tmp/a b/c\narg _by_runner.py\narg my module\n$announcement\n",
+            "python /tmp/a b/.venv/bin/python3\ncwd /tmp/a b/c\narg _by_runner.py\narg my module\n$announcement\n",
         )
         val ready = assertInstanceOf(ByBpdRecord.Ready::class.java, record)
+        assertEquals("/tmp/a b/.venv/bin/python3", ready.python)
         assertEquals("/tmp/a b/c", ready.cwd)
         assertEquals(listOf("_by_runner.py", "my module"), ready.argv)
     }
@@ -181,12 +199,6 @@ class ByDebugBackendTest {
 /** The script `by run` is pointed at. */
 class ByBpdWrapperTest {
 
-    @Test
-    fun `a version probe is passed through to the real interpreter`() {
-        val script = ByBpdWrapper.script()
-        assertTrue(script.contains("-c|-m|-V|--version"), script)
-        assertTrue(script.contains("exec \"\$${ByBpdWrapper.ENV_PYTHON}\""), script)
-    }
 
     @Test
     fun `the record is truncated and the announcement appended, so both survive`() {
@@ -198,7 +210,9 @@ class ByBpdWrapperTest {
     @Test
     fun `the prefixes the script writes are the ones the parser reads`() {
         val script = ByBpdWrapper.script()
+        assertTrue(script.contains("'${ByBpdWrapper.PYTHON_PREFIX}%s\\n'"), script)
         assertTrue(script.contains("'${ByBpdWrapper.CWD_PREFIX}%s\\n'"), script)
+        assertTrue(script.contains("'${ByBpdWrapper.NO_BPD_PREFIX}%s\\n'"), script)
         assertTrue(script.contains("'${ByBpdWrapper.ARG_PREFIX}%s\\n'"), script)
     }
 

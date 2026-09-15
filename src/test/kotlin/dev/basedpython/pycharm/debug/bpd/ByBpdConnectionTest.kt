@@ -15,6 +15,7 @@ import java.nio.file.Path
 import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.TimeUnit
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
 /**
@@ -58,6 +59,7 @@ class ByBpdConnectionTest {
         Files.writeString(
             file,
             """
+            python python3
             cwd ${dir.toAbsolutePath()}
             arg _by_runner.py
             arg demo
@@ -88,7 +90,7 @@ class ByBpdConnectionTest {
         // the wrapper wrote its half and `bpd` never announced — a real failure mode, and the
         // message is the only thing the user gets
         val file = dir.resolve("record")
-        Files.writeString(file, "cwd /tmp/x\narg _by_runner.py\n")
+        Files.writeString(file, "python python3\ncwd /tmp/x\narg _by_runner.py\n")
 
         val failed = assertThrows<ExecutionException> {
             runBlocking { ByBpdConnection.open(file, debuggee = null, timeout = 300.milliseconds) }
@@ -100,12 +102,28 @@ class ByBpdConnectionTest {
     }
 
     @Test
+    fun `a wrapper that found no bpd is reported at once, naming the interpreter it looked beside`(@TempDir dir: Path) {
+        // the wrapper has exited and nothing more will be written, so waiting out the timeout
+        // would be three minutes of a spinner in front of a sentence that was already there
+        val file = dir.resolve("record")
+        Files.writeString(file, "nobpd /project/.venv/bin/python3\n")
+
+        val failed = assertThrows<ExecutionException> {
+            runBlocking { ByBpdConnection.open(file, debuggee = null, timeout = 10.minutes) }
+        }
+        assertTrue(
+            failed.message.orEmpty().contains("/project/.venv/bin/python3"),
+            "the refusal should name where bpd was looked for: ${failed.message}",
+        )
+    }
+
+    @Test
     fun `a port nothing is listening on is refused by name`(@TempDir dir: Path) {
         val free = ServerSocket(0, 1, InetAddress.getLoopbackAddress()).use { it.localPort }
         val file = dir.resolve("record")
         Files.writeString(
             file,
-            "cwd /tmp/x\narg _by_runner.py\n" +
+            "python python3\ncwd /tmp/x\narg _by_runner.py\n" +
                 """{"listening":{"host":"127.0.0.1","port":$free,"header":"x-bpd-token","token":"t"}}""" + "\n",
         )
 
