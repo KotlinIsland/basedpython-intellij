@@ -79,6 +79,24 @@ internal object ByCli {
         )
     }
 
+    /**
+     * The `by` command [runDetailed] would run, for a caller that runs it itself — under its own
+     * cancellation, say. Null, having said so, when the binary cannot be located.
+     */
+    fun commandLine(
+        project: Project,
+        vararg args: String,
+        cwd: Path? = null,
+        contextFile: VirtualFile? = null,
+    ): GeneralCommandLine? {
+        val launch = BasedPythonBinaries.launchBy(project, contextFile)
+        if (launch == null) {
+            notifyBinaryMissing(project, "by")
+            return null
+        }
+        return commandLine(launch, args.toList(), cwd)
+    }
+
     /** Run `buff` with [args]. Returns `null` if the binary cannot be located. */
     fun runBuff(
         project: Project,

@@ -8,11 +8,14 @@ import com.intellij.ui.content.ContentFactory
 import dev.basedpython.pycharm.lang.dialect.BasedPythonProjectDetector
 
 /**
- * Backs the "basedpython Tests" tool window (registered in plugin.xml) with [ByTestNodePanel].
+ * Backs the "basedpython Tests" tool window with [ByTestNodePanel].
  *
- * Only offered to projects that are actually basedpython: the view's one source of data is
- * `by run pytest --collect-only`, so a project with no `by` to run has nothing to show and no
- * business growing a stripe button for it.
+ * Registered in `basedpython-testrunner.xml`, not `plugin.xml`: everything the window does with a
+ * test — run it, debug it, show how it did — goes through the pytest configuration, which is built
+ * on the SM test runner, so without that plugin the window would be a list of buttons that throw.
+ *
+ * Only offered to projects that are actually basedpython: its data is `by`'s, so a project with no
+ * `by` has nothing to show and no business growing a stripe button for it.
  */
 // No compiler bridges to the deprecated `isApplicable` / `isDoNotActivateOnStart` defaults.
 @JvmDefaultWithoutCompatibility
@@ -28,7 +31,7 @@ internal class ByTestNodeToolWindowFactory : ToolWindowFactory, DumbAware {
         content.setDisposer(panel)
         toolWindow.contentManager.addContent(content)
         toolWindow.setAdditionalGearActions(panel.gearActions())
-        // Opening the window is the request to collect; nothing runs `by` before that.
-        ByTestNodeService.getInstance(project).refreshIfNeeded()
+        // What the server already knows; pytest itself is only run from the window's own button.
+        ByTestNodeService.getInstance(project).showStatic()
     }
 }

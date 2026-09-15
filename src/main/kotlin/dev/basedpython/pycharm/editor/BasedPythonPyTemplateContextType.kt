@@ -18,8 +18,8 @@ import dev.basedpython.pycharm.lang.dialect.BasedPythonSources
  * That is the whole point of it. Some boilerplate is boilerplate only where the interpreter runs
  * what was written: in a `.by`, basedpython generates the `if __name__ == "__main__"` guard from
  * `def main`, and a hand-written one *stops* it doing so — see
- * [dev.basedpython.pycharm.run.main.ByMainSignature.invokesMain], which is what turns off the
- * generated argument parser, the gutter run icon and the argument form.
+ * `by/entryPoint`'s `moduleInvokesMain` ([dev.basedpython.pycharm.run.model.ByEntryPoint]), which is
+ * what turns off the generated argument parser and the argument form.
  */
 class BasedPythonPyTemplateContextType : TemplateContextType("basedpython .py") {
     override fun isInContext(context: TemplateActionContext): Boolean {

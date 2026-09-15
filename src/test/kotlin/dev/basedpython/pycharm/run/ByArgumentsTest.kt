@@ -125,4 +125,10 @@ class ByArgumentsTest {
     fun `a run with no program arguments is just the module`() {
         assertEquals(listOf("pkg.main"), runSubcommandArgs(ByRunOptions().apply { module = "pkg.main" }))
     }
+
+    /** `by run` with no module runs the project's `run.main`; an empty string would name a module. */
+    @Test
+    fun `a run with no module passes none`() {
+        assertEquals(emptyList<String>(), runSubcommandArgs(ByRunOptions().apply { module = "  " }))
+    }
 }

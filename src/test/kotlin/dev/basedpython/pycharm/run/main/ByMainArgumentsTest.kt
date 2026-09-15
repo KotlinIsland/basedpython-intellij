@@ -1,5 +1,6 @@
 package dev.basedpython.pycharm.run.main
 
+import dev.basedpython.pycharm.run.model.ByReplies
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
@@ -15,10 +16,8 @@ import org.junit.jupiter.api.Test
  */
 class ByMainArgumentsTest {
 
-    private fun main(signature: String): ByMainFunction {
-        val lines = listOf("def main($signature): ...")
-        return ByMainSignature.find({ lines[it] }, lines.size)!!
-    }
+    /** `def main([signature])` as `by` reads it; see [ByReplies]. */
+    private fun main(signature: String): ByMainFunction = ByReplies.main(signature)
 
     @Test
     fun `values are written by name`() {

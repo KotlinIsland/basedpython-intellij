@@ -1,9 +1,7 @@
 package dev.basedpython.pycharm.debug.dfa
 
-import com.intellij.codeHighlighting.Pass
 import com.intellij.openapi.editor.markup.HighlighterLayer
 import com.intellij.testFramework.PlatformTestUtil
-import com.intellij.testFramework.fixtures.impl.CodeInsightTestFixtureImpl
 import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.settings.BasedPythonSettings
@@ -59,25 +57,9 @@ class ByDataFlowPassTest {
     private fun drawn() = fixture.editor.markupModel.allHighlighters
         .filter { it.textAttributesKey?.externalName?.startsWith("BASEDPYTHON_DATA_FLOW") == true }
 
-    /**
-     * One daemon run over the fixture's file.
-     *
-     * `fixture.doHighlighting()` would be the obvious call and it fails here for a reason that has
-     * nothing to do with this feature: `ByTestNodeService` collects a project's tests on a
-     * background thread and asks the daemon to restart when the answer arrives, and in a fixture
-     * that lands inside this very run rather than seconds later as it does in a live IDE. The
-     * daemon asserts on a restart during highlighting, so this is the escape hatch its own message
-     * names.
-     *
-     * The line-markers pass is skipped for the other half of the same reason. Its contributors ask
-     * `ByTestNodeService` to collect the project's tests, and the fixture's project is shared
-     * across the whole suite — so running it here leaves that service collecting for whichever test
-     * runs next. Nothing this test asserts comes from a gutter icon.
-     */
+    /** One daemon run over the fixture's file. */
     private fun highlight() {
-        CodeInsightTestFixtureImpl.instantiateAndRun(
-            fixture.file, fixture.editor, intArrayOf(Pass.LINE_MARKERS), true,
-        )
+        fixture.doHighlighting()
     }
 
     private fun configure(text: String = source, found: List<ByDataFlowFinding> = findings()) {

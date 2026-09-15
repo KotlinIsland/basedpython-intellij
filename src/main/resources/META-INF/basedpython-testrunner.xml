@@ -14,6 +14,10 @@
   may only be instantiated where that interface exists. So do the test configuration type and the
   producer that makes its configurations: the configuration they create runs under the SM test
   runner, and registered from plugin.xml they were loaded whether or not that runner exists.
+
+  And so do the two views of a project's tests. The gutter icon runs a test through that producer,
+  and the test tree runs, debugs and reports on tests through that configuration type — which
+  `ConfigurationTypeUtil` cannot find, and throws for, where this file was not loaded.
 -->
 <idea-plugin>
     <extensions defaultExtensionNs="com.intellij">
@@ -22,6 +26,15 @@
         <!-- Precedence against the `by run` and `by check` producers is decided in code, not by
              registration order; see ByRunFromFileProducer. -->
         <runConfigurationProducer implementation="dev.basedpython.pycharm.run.ByTestFromFileProducer"/>
+        <runLineMarkerContributor
+            language="basedpython"
+            implementationClass="dev.basedpython.pycharm.run.testmarker.ByTestRunLineMarkerContributor"/>
+        <!-- The project's tests, the counterpart of the run window's results tree: which tests
+             exist, before anything has run. -->
+        <toolWindow id="basedpython Tests"
+                    anchor="right"
+                    icon="/icons/basedpythonTests.svg"
+                    factoryClass="dev.basedpython.pycharm.run.test.node.ByTestNodeToolWindowFactory"/>
     </extensions>
 
     <projectListeners>

@@ -2,9 +2,9 @@ package dev.basedpython.pycharm.run
 
 import dev.basedpython.pycharm.lsp.BasedPythonBinaries
 import dev.basedpython.pycharm.run.main.ByMainArguments
-import dev.basedpython.pycharm.run.main.ByMainModules
 import dev.basedpython.pycharm.run.main.ByMissingArgumentsHint
 import dev.basedpython.pycharm.run.main.promptForArguments
+import dev.basedpython.pycharm.run.model.ByProgramModel
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.execution.Executor
 import com.intellij.execution.configurations.ConfigurationFactory
@@ -26,9 +26,27 @@ class ByRunConfiguration(project: Project, factory: ConfigurationFactory, name: 
     override fun getConfigurationEditor(): SettingsEditor<out RunConfigurationBase<ByRunOptions>> =
         ByRunSettingsEditor(project)
 
+    /**
+     * A blank module is `by run` with no module, which runs the project's configured `run.main`.
+     *
+     * So it is only an error where `by run` would refuse it: when the server has said the project
+     * configures no `run.main` — while it has said nothing yet, the run is let through to report
+     * for itself — or when there are program arguments, because `by run` reads its first argument
+     * as the module and there is no spelling that hands arguments to `run.main`.
+     */
     override fun checkConfiguration() {
         if (options.module.isBlank()) {
-            throw RuntimeConfigurationException("Module is required (e.g. mypkg.main)")
+            if (options.programArgs.isNotBlank()) {
+                throw RuntimeConfigurationException(
+                    "Name the module to pass program arguments: `by run` reads its first argument as the module",
+                )
+            }
+            val main = ByProgramModel.getInstance(project).configuredMain()
+            if (main.known && main.module == null) {
+                throw RuntimeConfigurationException(
+                    "Module is required: this project configures no `run.main` (e.g. mypkg.main)",
+                )
+            }
         }
         if (!BasedPythonBinaries.isByAvailable(project)) {
             throw RuntimeConfigurationException("by binary not found — set path in Settings | basedpython")
@@ -77,7 +95,7 @@ class ByRunConfiguration(project: Project, factory: ConfigurationFactory, name: 
         // Nothing can answer a dialog in these, and a run that hangs on one is worse than a run
         // that fails with the error the program itself would print.
         if (application.isUnitTestMode || application.isHeadlessEnvironment) return true
-        val main = ByMainModules.mainFor(project, options.module)
+        val main = ByProgramModel.getInstance(project).mainForWaiting(options.module, READING_MAIN)
         if (!ByMainArguments.needed(main, options.programArgs)) return true
 
         var proceed = false
@@ -90,14 +108,19 @@ class ByRunConfiguration(project: Project, factory: ConfigurationFactory, name: 
         }
         return proceed
     }
+
+    private companion object {
+        const val READING_MAIN = "Reading main's parameters"
+    }
 }
 
 /**
  * What follows `by run`: the module, then the program's own arguments.
  *
- * The order is the CLI's: `by run` takes exactly one positional — the module — and forwards
- * everything after it to the program as `sys.argv[1:]`, which for a module with a `main` function
- * is that function's parameters. Splitting is shell-like, so `--name "two words"` is two arguments.
+ * The order is the CLI's: `by run` takes one optional positional — the module, the project's
+ * `run.main` when it is left out — and forwards everything after it to the program as
+ * `sys.argv[1:]`, which for a module with a `main` function is that function's parameters. Splitting
+ * is shell-like, so `--name "two words"` is two arguments.
  */
 internal fun runSubcommandArgs(options: ByRunOptions): List<String> =
-    listOf(options.module.trim()) + ParametersListUtil.parse(options.programArgs)
+    listOfNotNull(options.module.trim().ifBlank { null }) + ParametersListUtil.parse(options.programArgs)

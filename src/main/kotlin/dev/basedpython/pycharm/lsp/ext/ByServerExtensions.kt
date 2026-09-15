@@ -136,7 +136,134 @@ interface ByServerExtensions {
      */
     @JsonRequest("by/buildOutput")
     fun buildOutput(args: ByBuildOutputParams): CompletableFuture<ByBuildOutput?>
+
+    /**
+     * How a module runs as a program: its top-level `main` as the transpiler reads it, and its
+     * hand-written `__main__` guards — see [dev.basedpython.pycharm.run.model.ByProgramModel].
+     *
+     * **Why the server.** Which `main` counts, whether the module already calls it, which parameters
+     * the command line fills and how each is spelled are decisions of the transpiler pass that
+     * generates the entry point and its argument parser. The answer is that pass's own reading, so it
+     * cannot drift from what `by run` then does — as a regex over the source did, on a generic
+     * `def main[T](…)` and on a `main(` at the start of a docstring line.
+     *
+     * Asked by file URI rather than by open document: a run configuration names a module, and the
+     * file behind it is usually not open. A `null` answer means no project holds the file.
+     */
+    @JsonRequest("by/entryPoint")
+    fun entryPoint(args: ByEntryPointParams): CompletableFuture<ByEntryPointResponse?>
+
+    /**
+     * The tests pytest would collect, from the checker's static model of pytest's collection
+     * rules — for one file, or for every file of every project.
+     *
+     * **Why not `pytest --collect-only`.** Collecting imports every test module, which runs its
+     * top-level code; an editor drawing a gutter icon must not execute user code on the user's
+     * behalf. **Why not `textDocument/documentSymbol`.** Whether a declaration is collected depends
+     * on nesting, inheritance, constructors and fixtures — not on anything a symbol outline carries.
+     */
+    @JsonRequest("by/testItems")
+    fun testItems(args: ByTestItemsParams): CompletableFuture<ByTestItemsResponse?>
+
+    /**
+     * The module names `by run` runs each project file under, the project's configured `run.main`,
+     * and optionally one name resolved to its file — all as `by run` itself resolves them.
+     */
+    @JsonRequest("by/runModules")
+    fun runModules(args: ByRunModulesParams): CompletableFuture<ByRunModulesResponse?>
 }
+
+/** Field names are the wire format of `ty_server`'s `EntryPointParams`, which is `deny_unknown_fields`. */
+data class ByEntryPointParams(val uri: String)
+
+/** How a module runs. */
+data class ByEntryPointResponse(
+    /** The module's last top-level `main`, when it is a `.by` basedpython generates an entry point for. */
+    val main: ByMainFunctionReply? = null,
+    /** The hand-written `if __name__ == "__main__":` headers. */
+    val guards: List<Range> = emptyList(),
+)
+
+data class ByMainFunctionReply(
+    val nameRange: Range? = null,
+    val isAsync: Boolean = false,
+    /** The transpiler appends the guard that calls it. */
+    val entryPoint: Boolean = false,
+    val isPrivate: Boolean = false,
+    /** The module calls `main` itself, so no argument parser is generated. */
+    val moduleInvokesMain: Boolean = false,
+    /** The required parameter the command line cannot supply, which stops `main` being an entry point. */
+    val blockedBy: String? = null,
+    /** Every parameter but the variadics, in declared order. */
+    val parameters: List<ByMainParameterReply> = emptyList(),
+    /** The converter unclaimed arguments pass through, when a leading `*rest` asks for them. */
+    val extraArguments: String? = null,
+    val docstring: String? = null,
+)
+
+data class ByMainParameterReply(
+    val name: String? = null,
+    /** `positional`, `any` or `keyword`. */
+    val kind: String? = null,
+    val required: Boolean = false,
+    val annotation: String? = null,
+    val default: String? = null,
+    /** How the generated parser registers it; null when the command line cannot fill it. */
+    val cli: ByCliParameterReply? = null,
+)
+
+data class ByCliParameterReply(
+    /** `str`, `int`, `float`, `Path`, `pathlib.Path`; null for a flag pair. */
+    val converter: String? = null,
+    val choices: List<String>? = null,
+    val flags: List<String> = emptyList(),
+    val negativeFlags: List<String> = emptyList(),
+)
+
+/**
+ * One file, or — with [uri] null — every file of every project. Field names are the wire format of
+ * `ty_server`'s `TestItemsParams`, which is `deny_unknown_fields`.
+ */
+data class ByTestItemsParams(val uri: String? = null)
+
+data class ByTestItemsResponse(val files: List<ByTestFileReply> = emptyList())
+
+data class ByTestFileReply(
+    val uri: String? = null,
+    val tests: List<ByTestItemReply> = emptyList(),
+)
+
+data class ByTestItemReply(
+    val name: String? = null,
+    /** `class` or `function`. */
+    val kind: String? = null,
+    /** The node id after the file: `TestA::test_b`. */
+    val id: String? = null,
+    val range: Range? = null,
+    val selectionRange: Range? = null,
+    val unittest: Boolean = false,
+    val children: List<ByTestItemReply> = emptyList(),
+)
+
+/** Field names are the wire format of `ty_server`'s `RunModulesParams`, which is `deny_unknown_fields`. */
+data class ByRunModulesParams(val module: String? = null)
+
+data class ByRunModulesResponse(val projects: List<ByRunModulesProjectReply> = emptyList())
+
+data class ByRunModulesProjectReply(
+    val root: String? = null,
+    /** The configured `run.main`. */
+    val main: ByRunModuleReply? = null,
+    /** [ByRunModulesParams.module], resolved. */
+    val requested: ByRunModuleReply? = null,
+    val modules: List<ByRunModuleReply> = emptyList(),
+)
+
+/** A module name and the file it runs; [uri] is null when the name resolves to nothing `by run` stages. */
+data class ByRunModuleReply(
+    val module: String? = null,
+    val uri: String? = null,
+)
 
 /**
  * The path to place, as a URI.

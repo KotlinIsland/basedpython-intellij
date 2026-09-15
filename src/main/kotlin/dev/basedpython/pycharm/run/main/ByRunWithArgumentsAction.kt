@@ -13,9 +13,9 @@ import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
 import com.intellij.openapi.project.Project
-import com.intellij.psi.PsiDocumentManager
 import dev.basedpython.pycharm.run.ByRunConfiguration
 import dev.basedpython.pycharm.run.ByRunFromFileProducer
+import dev.basedpython.pycharm.run.model.ByProgramModel
 
 /**
  * Asks for [main]'s arguments, and writes what the user gave to [configuration].
@@ -88,20 +88,23 @@ internal class ByRunWithArgumentsAction : AnAction(TEXT, DESCRIPTION, AllIcons.A
      * [Location.DATA_KEY] first: the gutter wraps every action it is given in a
      * `LineMarkerActionWrapper`, whose whole job is to put the marked element's location in the
      * data context — the editor's own `PSI_FILE` is the fallback for every other place.
+     *
+     * The answer the gutter was drawn from, never a fresh request: `update` runs on every pass over
+     * the popup, and an action that waits on a process there holds the popup open.
      */
     private fun mainAt(e: AnActionEvent): ByMainFunction? {
         val project = e.project ?: return null
         val file = e.getData(Location.DATA_KEY)?.psiElement?.containingFile
             ?: e.getData(CommonDataKeys.PSI_FILE)
             ?: return null
-        if (file.virtualFile?.extension != BY_EXTENSION) return null
-        val document = PsiDocumentManager.getInstance(project).getDocument(file) ?: return null
-        return ByMainModules.mainIn(document)?.takeIf { it.takesArguments }
+        val virtualFile = file.viewProvider.virtualFile
+        return ByProgramModel.getInstance(project).cachedEntryPoint(virtualFile)
+            ?.commandLine
+            ?.takeIf { it.takesArguments }
     }
 
     private companion object {
         const val TEXT = "Run with Arguments…"
         const val DESCRIPTION = "Fill in main's parameters, then run"
-        const val BY_EXTENSION = "by"
     }
 }

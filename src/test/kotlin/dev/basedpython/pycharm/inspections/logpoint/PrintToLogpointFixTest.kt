@@ -32,9 +32,7 @@ import org.junit.jupiter.api.Test
  * at the same moment, and looks like the log point wandered onto the next statement.
  *
  * The inspection is run directly rather than through `getAllQuickFixes()`, which would run the whole
- * daemon: line markers on a `.by` file ask `ByTestNodeService` what pytest collected, and the state
- * change that provokes restarts the daemon from under the highlighting pass the fixture asserts is
- * undisturbed. Nothing to do with this fix, and not worth a daemon in the loop to test it.
+ * daemon — every pass over the file — for the one inspection's result this is about.
  */
 @TestFixtures
 @RunInEdt(writeIntent = true)

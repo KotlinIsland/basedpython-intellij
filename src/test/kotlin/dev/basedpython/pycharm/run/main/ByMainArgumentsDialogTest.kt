@@ -3,6 +3,7 @@ package dev.basedpython.pycharm.run.main
 import com.intellij.openapi.util.Disposer
 import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
+import dev.basedpython.pycharm.run.model.ByReplies
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -22,10 +23,8 @@ class ByMainArgumentsDialogTest {
 
     private val fixture by codeInsightFixture()
 
-    private fun main(signature: String): ByMainFunction {
-        val lines = listOf("def main($signature):", "    ...")
-        return ByMainSignature.find({ lines[it] }, lines.size)!!
-    }
+    /** `def main([signature])` as `by` reads it; see [ByReplies]. */
+    private fun main(signature: String): ByMainFunction = ByReplies.main(signature)
 
     private fun dialog(
         signature: String,

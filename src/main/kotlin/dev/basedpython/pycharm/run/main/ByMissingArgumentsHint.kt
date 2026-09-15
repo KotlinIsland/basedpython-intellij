@@ -14,6 +14,7 @@ import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Key
 import dev.basedpython.pycharm.run.ByRunConfiguration
+import dev.basedpython.pycharm.run.model.ByProgramModel
 
 /**
  * Turns a run that died for want of arguments into one click that supplies them.
@@ -51,16 +52,21 @@ internal class ByMissingArgumentsHint(
             override fun processTerminated(event: ProcessEvent) {
                 if (!missing) return
                 val view = console ?: return
-                ApplicationManager.getApplication().invokeLater { offer(view) }
+                val project = configuration.project
+                // The signature is the server's to read, which is a wait: done here, on a thread
+                // that may wait, and only the console write goes to the EDT.
+                ApplicationManager.getApplication().executeOnPooledThread {
+                    if (project.isDisposed) return@executeOnPooledThread
+                    val main = ByProgramModel.getInstance(project).mainFor(configuration.options.module)
+                        ?: return@executeOnPooledThread
+                    ApplicationManager.getApplication().invokeLater({ offer(view, main) }, project.disposed)
+                }
             }
         })
     }
 
     /** Adds the offer under argparse's own complaint, which has already named what is missing. */
-    private fun offer(view: ConsoleView) {
-        val project = configuration.project
-        if (project.isDisposed) return
-        val main = ByMainModules.mainFor(project, configuration.options.module) ?: return
+    private fun offer(view: ConsoleView, main: ByMainFunction) {
         if (!main.takesArguments) return
         view.print("\n", ConsoleViewContentType.SYSTEM_OUTPUT)
         view.printHyperlink(LINK, HyperlinkInfo { rerun(it, main) })

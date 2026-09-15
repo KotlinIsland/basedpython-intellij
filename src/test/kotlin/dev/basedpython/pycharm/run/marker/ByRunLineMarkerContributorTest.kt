@@ -5,6 +5,8 @@ import com.intellij.psi.PsiElement
 import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.run.main.ByRunWithArgumentsAction
+import dev.basedpython.pycharm.run.model.ByProgramModel
+import dev.basedpython.pycharm.run.model.ByReplies
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -31,11 +33,19 @@ class ByRunLineMarkerContributorTest {
 
     private data class Marker(val info: RunLineMarkerContributor.Info?, val element: PsiElement)
 
-    /** The gutter's verdict on the first leaf of [source]'s first line. */
-    private fun markerFor(source: String): Marker {
+    /**
+     * The gutter's verdict on the first leaf of [line] of [source], given what `by` answered about
+     * that source ([ByReplies]) — or, with [known] false, before it has answered anything.
+     */
+    private fun markerFor(source: String, line: Int = 0, known: Boolean = true): Marker {
         // A fresh path per call: the fixture's project is shared across the tests in this class.
         val file = fixture.addFileToProject("pkg/main${index++}.by", source)
-        val element = requireNotNull(file.findElementAt(0)) { "no leaf at the start of $source" }
+        if (known) {
+            ByProgramModel.getInstance(fixture.project)
+                .rememberEntryPoint(file.virtualFile, ByReplies.entryPoint(source))
+        }
+        val offset = source.lines().take(line).sumOf { it.length + 1 }
+        val element = requireNotNull(file.findElementAt(offset)) { "no leaf on line $line of $source" }
         return Marker(ByRunLineMarkerContributor().getInfo(element), element)
     }
 
@@ -96,6 +106,35 @@ class ByRunLineMarkerContributorTest {
         assertEquals("Run with by", marker.tooltip)
     }
 
+    /** A generic `main` is still `main`: the transpiler generates its guard and its parser alike. */
+    @Test
+    fun `a generic main is an entry point with arguments`() {
+        val marker = markerFor("def main[T](name: str):\n    print(name)\n")
+        assertNotNull(marker.info)
+        assertTrue(marker.offersArguments)
+    }
+
+    /** `main(` at the start of a docstring line is prose, not the module calling its entry point. */
+    @Test
+    fun `a main call written in a docstring leaves the command line alone`() {
+        val marker = markerFor("\"\"\"\nmain(x) runs it\n\"\"\"\n\ndef main(name: str):\n    print(name)\n", line = 4)
+        assertNotNull(marker.info)
+        assertTrue(marker.offersArguments)
+        assertNull(markerFor("\"\"\"\nmain(x) runs it\n\"\"\"\n\ndef main(name: str):\n    print(name)\n", line = 1).info)
+    }
+
+    /** `private` renames `main`, so nothing runs it. */
+    @Test
+    fun `a private main gets no icon`() {
+        assertNull(markerFor("private def main(a: int):\n    print(a)\n").info)
+    }
+
+    /** Nothing is guessed while `by` has said nothing — the icon follows its answer. */
+    @Test
+    fun `no answer from by draws no icon`() {
+        assertNull(markerFor("def main():\n    print(1)\n", known = false).info)
+    }
+
     /**
      * A plain `.py` is run by the interpreter exactly as written, so a bare `def main(…)` is a
      * function nothing calls — basedpython's generated guard and argument parser are a `.by` thing.
@@ -123,6 +162,8 @@ class ByRunLineMarkerContributorTest {
     /** [markerFor]'s `.py` twin. */
     private fun pyMarkerFor(source: String): Marker {
         val file = fixture.addFileToProject("pkg/plain${index++}.py", source)
+        ByProgramModel.getInstance(fixture.project)
+            .rememberEntryPoint(file.virtualFile, ByReplies.entryPoint(source, extension = "py"))
         val element = requireNotNull(file.findElementAt(0)) { "no leaf at the start of $source" }
         return Marker(ByRunLineMarkerContributor().getInfo(element), element)
     }

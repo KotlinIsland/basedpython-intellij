@@ -34,11 +34,12 @@ import javax.swing.tree.TreePath
 import javax.swing.tree.TreeSelectionModel
 
 /**
- * The "basedpython Tests" tool window: the test tree as `--collect-only` reports it, with the
- * actions that make it useful — run, debug, and jump to the source.
+ * The "basedpython Tests" tool window: the project's tests — as `by` reads them statically, or as
+ * a `--collect-only` the user asked for reported them — with the actions that make it useful: run,
+ * debug, and jump to the source.
  *
- * A *collected* tree first: what tests exist, available before anything has run and without running
- * anything. It then carries the outcome of whatever has run since — from any run, since
+ * What tests exist first, available before anything has run and without running anything. It then
+ * carries the outcome of whatever has run since — from any run, since
  * [ByTestRunStateListener] listens to the SM runner rather than to this view's own buttons — so the
  * question "did that pass" is answered where the tests are listed, not only in the run window.
  */
@@ -160,10 +161,11 @@ internal class ByTestNodePanel(private val project: Project) :
     /**
      * The text shown when the tree has no rows.
      *
-     * A collection that ran and found nothing is the case worth spelling out: "no tests" is a
+     * A pytest collection that ran and found nothing is the case worth spelling out: "no tests" is a
      * conclusion the user has every right to disbelieve, since they can run `pytest --collect-only`
      * themselves and see some. So that state offers the output that produced it, which carries the
-     * command, its working directory and pytest's own rootdir line.
+     * command, its working directory and pytest's own rootdir line. Every empty state offers to run
+     * that collection, since it is never run unasked.
      */
     private fun renderEmptyText(state: ByTestNodeService.State) {
         val text = tree.emptyText
@@ -172,10 +174,10 @@ internal class ByTestNodePanel(private val project: Project) :
             text.setText(BasedPythonBundle.message("testNodes.collecting"))
             return
         }
-        val collected = state is ByTestNodeService.State.Collected
+        val collected = state is ByTestNodeService.State.Collected && state.fromPytest
         // "No tests" and "no tests you asked to see" are different answers, and offering Refresh
         // for the second would send the user chasing a collection that is working fine.
-        val filteredOut = collected && (collectedTree?.testCount ?: 0) > 0
+        val filteredOut = state is ByTestNodeService.State.Collected && (collectedTree?.testCount ?: 0) > 0
         if (filteredOut) {
             text.setText(BasedPythonBundle.message("testNodes.empty.filtered"))
             text.appendLine(

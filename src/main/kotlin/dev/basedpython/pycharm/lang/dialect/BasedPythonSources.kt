@@ -32,11 +32,11 @@ object BasedPythonSources {
     const val PY: String = BasedPythonFileTypeOverrider.OVERRIDABLE_EXTENSION
 
     /**
-     * The extensions a module name can resolve to, in the order `by run` resolves them.
+     * The extensions of the modules `by run` stages and runs.
      *
-     * `.by` first, and that is the real precedence rather than a preference: `by run` transpiles
-     * `main.by` into its temp directory and makes that directory `sys.path[0]`, so where `main.by`
-     * and `main.py` both exist the generated module shadows the plain one.
+     * Not an order of precedence: where `main.by` and `main.py` both exist, `by run` refuses to stage
+     * the two onto one `main.py` rather than letting either shadow the other. Which file a module name
+     * means is `by/runModules`' answer.
      */
     val MODULE_EXTENSIONS: List<String> = listOf(BY, PY)
 
@@ -62,15 +62,4 @@ object BasedPythonSources {
      */
     fun hasGeneratedEntryPoint(file: VirtualFile?): Boolean =
         file?.extension.equals(BY, ignoreCase = true)
-
-    /**
-     * [name] without whichever of [MODULE_EXTENSIONS] it ends in, or null when it ends in none.
-     *
-     * Null rather than the name unchanged: a caller building a module name out of a path needs to
-     * know that the file was not a module at all.
-     */
-    fun withoutModuleExtension(name: String): String? =
-        MODULE_EXTENSIONS.firstNotNullOfOrNull { extension ->
-            name.removeSuffix(".$extension").takeIf { it != name }
-        }
 }

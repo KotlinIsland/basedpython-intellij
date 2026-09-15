@@ -1,19 +1,18 @@
 package dev.basedpython.pycharm.run
 
+import dev.basedpython.pycharm.run.model.ByProgramModel
+import dev.basedpython.pycharm.run.model.innermostAt
 import dev.basedpython.pycharm.run.test.ByTestConfiguration
 import dev.basedpython.pycharm.run.test.ByTestConfigurationType
-import dev.basedpython.pycharm.run.test.ByTestDeclarations
-import dev.basedpython.pycharm.run.test.node.ByTestLookup
 import dev.basedpython.pycharm.run.test.tree.ByTestSources
 import com.intellij.execution.actions.ConfigurationContext
 import com.intellij.execution.actions.ConfigurationFromContext
 import com.intellij.execution.actions.LazyRunConfigurationProducer
 import com.intellij.execution.configurations.ConfigurationFactory
-import com.intellij.openapi.editor.Document
 import com.intellij.openapi.util.Ref
-import com.intellij.openapi.util.TextRange
 import com.intellij.psi.PsiDocumentManager
 import com.intellij.psi.PsiElement
+import com.intellij.psi.PsiFile
 
 /**
  * Right-click a `.by` test file (or click the "Run test" gutter icon) → produce a configuration
@@ -69,12 +68,21 @@ class ByTestFromFileProducer : LazyRunConfigurationProducer<ByTestConfiguration>
 }
 
 /**
- * Builds the pytest target for [context], or null when the context is not a `.by` test
- * declaration. Returns `<relpath>`, `<relpath>::test_name`, or `<relpath>::Class::test_name`,
- * with the path still naming the `.by` source.
+ * Builds the pytest target for [context], or null when the context holds no test. Returns
+ * `<relpath>`, `<relpath>::test_name`, or `<relpath>::Class::test_name`, with the path still naming
+ * the `.by` source.
  *
- * Which declarations count as tests is [ByTestLookup]'s verdict, the same one the gutter icons are
- * drawn from — see there for why the two cannot be allowed to disagree.
+ * Which declarations are tests is `by/testItems`' answer ([ByProgramModel]), the same one the gutter
+ * icons are drawn from: an icon whose producer declined would leave a green arrow that runs the
+ * whole module through the plain `by run` producer instead.
+ *
+ * A context inside a test — its `def` line, which is where the gutter icon puts it, or anywhere in
+ * its body — targets the innermost test or class around it. Any other context in a file that holds
+ * tests — the file in the project view, a line between tests — targets the whole file.
+ *
+ * Never waits for the server, since a producer runs inside a read action while a menu is built: a
+ * position inside the file is answered from the answer held for the document's current revision,
+ * and the file as a whole from the project-wide answer, which holds files nobody has opened.
  */
 private fun testTargetFor(context: ConfigurationContext): String? {
     val element = context.psiLocation ?: return null
@@ -82,30 +90,23 @@ private fun testTargetFor(context: ConfigurationContext): String? {
         ?: element.containingFile?.virtualFile
         ?: return null
     if (file.extension != "by") return null
-
-    // The whole file is the target when the context is not inside a declaration — right-clicking
-    // the file in the project view, or a context with no document behind it.
+    val model = ByProgramModel.getInstance(context.project)
     val relPath = ByTestSources.relativePath(context.project, file) ?: file.path
 
-    val document = PsiDocumentManager.getInstance(context.project)
-        .getDocument(element.containingFile ?: return relPath)
-        ?: return relPath
+    val psiFile = element.containingFile
+    val document = psiFile?.let { PsiDocumentManager.getInstance(context.project).getDocument(it) }
     val offset = element.textRange.startOffset
-    if (offset >= document.textLength) return relPath
-
-    val declaration = ByTestDeclarations.declarationAt(
-        lineText = { line -> lineText(document, line) },
-        lineCount = document.lineCount,
-        line = document.getLineNumber(offset),
-    ) ?: return null
-    if (ByTestLookup.verdict(context.project, file, declaration) is ByTestLookup.Verdict.NotATest) {
-        return null
+    if (element !is PsiFile && document != null && offset < document.textLength) {
+        val items = model.cachedTestItems(file) ?: return null
+        if (items.isEmpty()) return null
+        val line = document.getLineNumber(offset)
+        val item = items.innermostAt(line, offset - document.getLineStartOffset(line))
+            ?: return relPath
+        return relPath + "::" + item.symbols.joinToString("::")
     }
-    return relPath + "::" + declaration.symbols.joinToString("::")
-}
 
-private fun lineText(document: Document, line: Int): String {
-    val start = document.getLineStartOffset(line)
-    val end = document.getLineEndOffset(line)
-    return document.getText(TextRange(start, end))
+    val holdsTests = model.cachedTestItems(file)?.isNotEmpty()
+        ?: model.projectTests()?.let { it.byFile[file]?.isNotEmpty() ?: false }
+        ?: return null
+    return relPath.takeIf { holdsTests }
 }

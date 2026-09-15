@@ -11,15 +11,17 @@ import dev.basedpython.pycharm.lang.dialect.BasedPythonSources
 import dev.basedpython.pycharm.run.main.ByMainArgumentHistory
 import dev.basedpython.pycharm.run.main.ByMainArguments
 import dev.basedpython.pycharm.run.main.ByMainFunction
-import dev.basedpython.pycharm.run.main.ByMainSignature
 import dev.basedpython.pycharm.run.main.ByRunWithArgumentsAction
-import dev.basedpython.pycharm.run.main.lineTextAt
-import dev.basedpython.pycharm.run.moduleNameFor
+import dev.basedpython.pycharm.run.model.ByProgramModel
 
 /**
- * Puts a green "run" gutter icon on `if __name__ == "__main__":` lines and top-level
- * `def main(` / `async def main(` declarations in `.by` files. Clicking runs the file's
+ * Puts a green "run" gutter icon on a module's `if __name__ == "__main__":` lines and on the
+ * top-level `def main` basedpython makes its entry point. Clicking runs the file's
  * `by run <module>` configuration via [dev.basedpython.pycharm.run.ByRunFromFileProducer].
+ *
+ * Which lines those are is `by/entryPoint`'s answer ([ByProgramModel.entryPoint]), read off the
+ * transpiler's own reading of the module — not a pattern over the line's text, which a generic
+ * `def main[T](…)` or a `main(` at the start of a docstring line was enough to fool.
  *
  * A `main` with parameters is a program with a command-line interface — basedpython turns the
  * signature into one — so the popup also offers [ByRunWithArgumentsAction], for changing arguments
@@ -29,9 +31,8 @@ import dev.basedpython.pycharm.run.moduleNameFor
  * difference is otherwise only visible after the run: arguments to fill, arguments already
  * remembered, or a `main` that is no entry point at all.
  *
- * The PSI is flat (token leaves only), so detection is done against the raw document line
- * text. To avoid duplicate icons, a non-null [Info] is returned only for the FIRST leaf of
- * the matching line.
+ * The PSI is flat (token leaves only), so a line is marked on its first non-whitespace leaf and
+ * no other, which is what keeps one line from collecting an icon per token.
  */
 class ByRunLineMarkerContributor : RunLineMarkerContributor() {
 
@@ -40,7 +41,8 @@ class ByRunLineMarkerContributor : RunLineMarkerContributor() {
         if (element.firstChild != null) return null
 
         val file = element.containingFile ?: return null
-        if (!BasedPythonSources.isOwnedSource(file.virtualFile)) return null
+        val virtualFile = file.virtualFile ?: return null
+        if (!BasedPythonSources.isOwnedSource(virtualFile)) return null
 
         val document: Document =
             PsiDocumentManager.getInstance(element.project).getDocument(file) ?: return null
@@ -49,26 +51,21 @@ class ByRunLineMarkerContributor : RunLineMarkerContributor() {
         if (offset >= document.textLength) return null
         val lineNumber = document.getLineNumber(offset)
         val lineStart = document.getLineStartOffset(lineNumber)
-        val lineText = document.lineTextAt(lineNumber)
-
-        // A `def main(` line is an entry point only where basedpython generates the guard that calls
-        // it. In a plain `.py` the interpreter runs what is written, so an unguarded `main` is a
-        // function nothing calls — an icon there would offer to run a program that does nothing.
-        val isDefinition = BasedPythonSources.hasGeneratedEntryPoint(file.virtualFile) &&
-            ByMainSignature.MAIN_DEF.containsMatchIn(lineText)
-        if (!isDefinition && !ByMainSignature.MAIN_GUARD.matches(lineText)) return null
+        val lineText = document.charsSequence.subSequence(lineStart, document.getLineEndOffset(lineNumber))
 
         // Only the first non-whitespace leaf of the line gets the icon.
-        val firstContentOffset = lineStart + lineText.indexOfFirst { !it.isWhitespace() }
-        if (offset != firstContentOffset) return null
+        if (offset != lineStart + lineText.indexOfFirst { !it.isWhitespace() }) return null
+
+        // A `def main` is marked only where basedpython generates the guard that calls it — the
+        // server reports no `main` for a plain `.py`, whose interpreter runs what is written, so an
+        // unguarded `main` there is a function nothing calls.
+        val entryPoint = ByProgramModel.getInstance(element.project).entryPoint(virtualFile) ?: return null
+        val isDefinition = entryPoint.mainLine == lineNumber
+        if (!isDefinition && lineNumber !in entryPoint.guardLines) return null
 
         // A module that invokes `main` itself keeps its own entry point: basedpython generates no
         // argument parser for it, so there is nothing here to fill in.
-        val main = if (isDefinition && !ByMainSignature.invokesMain(document::lineTextAt, document.lineCount)) {
-            ByMainSignature.at(document::lineTextAt, document.lineCount, lineNumber)
-        } else {
-            null
-        }
+        val main = entryPoint.commandLine.takeIf { isDefinition }
         val remembered = main?.let { remembered(element, it) }
 
         return Info(AllIcons.RunConfigurations.TestState.Run, actions(main)) { tooltip(main, remembered) }
@@ -81,7 +78,7 @@ class ByRunLineMarkerContributor : RunLineMarkerContributor() {
     private fun remembered(element: PsiElement, main: ByMainFunction): String? {
         if (!main.takesArguments) return null
         val file = element.containingFile?.virtualFile ?: return null
-        val module = moduleNameFor(element.project, file) ?: return null
+        val module = ByProgramModel.getInstance(element.project).moduleName(file) ?: return null
         val last = ByMainArgumentHistory.last(element.project, module) ?: return null
         return last.takeIf { ByMainArguments.missing(main, it).isEmpty() }
     }

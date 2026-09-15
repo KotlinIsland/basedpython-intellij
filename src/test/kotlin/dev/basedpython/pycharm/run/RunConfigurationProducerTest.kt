@@ -8,6 +8,8 @@ import com.intellij.psi.PsiFile
 import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.run.main.ByMainArgumentHistory
+import dev.basedpython.pycharm.run.model.ByProgramModel
+import dev.basedpython.pycharm.run.model.ByReplies
 import dev.basedpython.pycharm.run.test.ByTestConfiguration
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -37,6 +39,25 @@ class RunConfigurationProducerTest {
         return ConfigurationContext(element)
     }
 
+    private val model get() = ByProgramModel.getInstance(project)
+
+    /**
+     * Adds a file whose module name `by run` resolves to [module] — the answer `by/runModules` gives,
+     * put in as though the server had just given it. Which name a file has is the server's to decide
+     * (`run_modules_resolve_as_by_run_does` in `ty_server`); what is under test here is that the
+     * producer builds its configuration from that answer.
+     */
+    private fun addModule(path: String, text: String, module: String): PsiFile =
+        fixture.addFileToProject(path, text).also { model.rememberModuleNames(mapOf(it.virtualFile to module)) }
+
+    /** Adds a test file, with the tests `by/testItems` finds in [text] ([ByReplies]) already known. */
+    private fun addTestFile(path: String, text: String): PsiFile =
+        fixture.addFileToProject(path, text).also {
+            val items = ByReplies.testItems(text)
+            model.rememberTestItems(it.virtualFile, items)
+            model.rememberProjectTests(it.virtualFile, items)
+        }
+
     private inline fun <reified T : RunConfigurationProducer<*>> producer(): T =
         RunConfigurationProducer.getInstance(T::class.java)
 
@@ -57,10 +78,7 @@ class RunConfigurationProducerTest {
 
     @Test
     fun `by run producer builds module name from by file`() {
-        val file = fixture.addFileToProject(
-            "pkg/main.by",
-            "if __name__ == \"__main__\":\n    main()\n",
-        )
+        val file = addModule("pkg/main.by", "if __name__ == \"__main__\":\n    main()\n", "pkg.main")
         val fromContext = producer<ByRunFromFileProducer>()
             .createConfigurationFromContext(contextFor(file))
         assertNotNull(fromContext, "by run producer should produce a configuration for a .by file")
@@ -74,7 +92,7 @@ class RunConfigurationProducerTest {
         // This is what keeps the argument prompt to once per program: the gutter's plain Run picks
         // up the arguments the form was last given, instead of starting bare and failing again.
         ByMainArgumentHistory.remember(project, "seeded.main", "--name bob")
-        val file = fixture.addFileToProject("seeded/main.by", "def main(name: str):\n    print(name)\n")
+        val file = addModule("seeded/main.by", "def main(name: str):\n    print(name)\n", "seeded.main")
         val fromContext = producer<ByRunFromFileProducer>()
             .createConfigurationFromContext(contextFor(file))
         assertNotNull(fromContext, "by run producer should produce a configuration for a .by file")
@@ -90,6 +108,7 @@ class RunConfigurationProducerTest {
     @Test
     fun `by run producer ignores a py file it does not own`() {
         val file = fixture.configureByText("main.py", "print(1)\n")
+        model.rememberModuleNames(mapOf(file.virtualFile to "main"))
         val fromContext = producer<ByRunFromFileProducer>()
             .createConfigurationFromContext(contextFor(file))
         assertNull(fromContext, "by run producer should not fire on a .py it does not own")
@@ -101,7 +120,7 @@ class RunConfigurationProducerTest {
      */
     @Test
     fun `by run producer builds a module name from an owned py file`() = asBasedPythonProject {
-        val file = fixture.addFileToProject("pkg/script.py", "print(1)\n")
+        val file = addModule("pkg/script.py", "print(1)\n", "pkg.script")
         val fromContext = producer<ByRunFromFileProducer>()
             .createConfigurationFromContext(contextFor(file))
         assertNotNull(fromContext, "by run producer should produce a configuration for an owned .py")
@@ -109,21 +128,20 @@ class RunConfigurationProducerTest {
     }
 
     /**
-     * `twin.by` and `twin.py` are one module name for two files, and `by run` resolves it to the
-     * transpiled one — its temp directory is `sys.path[0]`. A configuration produced from the `.py`
-     * would run the `.by` instead, so the `.py` declines and the `.by` keeps the name.
+     * A file the server lists no module name for — one of two files that build to one module, say —
+     * is one a configuration produced from would run the other file of. So it produces nothing.
      */
     @Test
-    fun `a py shadowed by a by of the same name produces nothing`() = asBasedPythonProject {
-        fixture.addFileToProject("twin.by", "print(1)\n")
-        val shadowed = fixture.addFileToProject("twin.py", "print(2)\n")
+    fun `a file by run names nothing produces nothing`() = asBasedPythonProject {
+        addModule("twin.py", "print(1)\n", "twin")
+        val unnamed = fixture.addFileToProject("twin.by", "print(2)\n")
         assertNull(
-            producer<ByRunFromFileProducer>().createConfigurationFromContext(contextFor(shadowed)),
-            "the shadowed .py should not offer to run the .by beside it",
+            producer<ByRunFromFileProducer>().createConfigurationFromContext(contextFor(unnamed)),
+            "a file with no name of its own should not offer to run the file that holds it",
         )
         assertNotNull(
             producer<ByRunFromFileProducer>()
-                .createConfigurationFromContext(contextFor(fixture.addFileToProject("other.by", "x = 1\n"))),
+                .createConfigurationFromContext(contextFor(addModule("other.by", "x = 1\n", "other"))),
             "the .by itself is unaffected",
         )
     }
@@ -151,10 +169,7 @@ class RunConfigurationProducerTest {
 
     @Test
     fun `the pytest producer targets a top-level test function`() {
-        val file = fixture.addFileToProject(
-            "test_thing.by",
-            "def test_addition():\n    assert 1 + 1 == 2\n",
-        )
+        val file = addTestFile("test_thing.by", "def test_addition():\n    assert 1 + 1 == 2\n")
         val fromContext = producer<ByTestFromFileProducer>()
             .createConfigurationFromContext(contextFor(file))
         assertNotNull(fromContext, "the pytest producer should fire on a `def test_…` line")
@@ -171,10 +186,7 @@ class RunConfigurationProducerTest {
 
     @Test
     fun `the pytest producer qualifies a method with its enclosing class`() {
-        val file = fixture.addFileToProject(
-            "test_thing.by",
-            "class TestMath:\n    def test_add(self):\n        assert True\n",
-        )
+        val file = addTestFile("test_thing.by", "class TestMath:\n    def test_add(self):\n        assert True\n")
         // Anchor the context on the `def test_add` line (second line).
         val offset = file.text.indexOf("def test_add")
         val element = file.findElementAt(offset) ?: file
@@ -189,19 +201,57 @@ class RunConfigurationProducerTest {
     }
 
     @Test
-    fun `the pytest producer ignores non-test lines`() {
-        val file = fixture.addFileToProject("plain.by", "x = 1\n")
+    fun `the pytest producer ignores a file with no tests`() {
+        val file = addTestFile("test_plain.by", "x = 1\n")
         val fromContext = producer<ByTestFromFileProducer>()
             .createConfigurationFromContext(contextFor(file))
-        assertNull(fromContext, "the pytest producer should not fire on a non-test line")
+        assertNull(fromContext, "the pytest producer should not fire where there is no test")
+        assertNull(
+            producer<ByTestFromFileProducer>().createConfigurationFromContext(ConfigurationContext(file)),
+            "nor on the file as a whole",
+        )
+    }
+
+    /**
+     * Right-clicking a test file anywhere outside a test — its imports, or the file itself in the
+     * project view — runs the whole file, rather than falling through to `by run tests.test_math`.
+     */
+    @Test
+    fun `a test file outside any test is run whole`() {
+        val source =
+            "import pytest\n\nclass TestA:\n    def test_one(self):\n        assert True\n\n" +
+                "def outer():\n    def test_inner():\n        assert False\n\ndef test_top():\n    assert True\n"
+        val file = addTestFile("tests/test_whole.by", source)
+        for (context in listOf(contextFor(file), ConfigurationContext(file))) {
+            val config = producer<ByTestFromFileProducer>().createConfigurationFromContext(context)
+                ?.configuration as? ByTestConfiguration
+            assertNotNull(config, "a test file should be runnable as a whole")
+            assertTrue(config!!.options.paths.endsWith("test_whole.by"), "paths was '${config.options.paths}'")
+        }
+    }
+
+    /**
+     * A `def test_…` nested in a function is not a test pytest collects, whatever class came before
+     * it — so a context inside it is inside the enclosing function, which is no test, and the file is
+     * what runs.
+     */
+    @Test
+    fun `a test nested in a function is not qualified with the class above it`() {
+        val source =
+            "import pytest\n\nclass TestA:\n    def test_one(self):\n        assert True\n\n" +
+                "def outer():\n    def test_inner():\n        assert False\n\ndef test_top():\n    assert True\n"
+        val file = addTestFile("tests/test_nested.by", source)
+        val element = file.findElementAt(source.indexOf("test_inner"))!!
+        val config = producer<ByTestFromFileProducer>().createConfigurationFromContext(ConfigurationContext(element))
+            ?.configuration as? ByTestConfiguration
+        assertNotNull(config)
+        assertTrue(config!!.options.paths.endsWith("test_nested.by"), "paths was '${config.options.paths}'")
+        assertFalse(config.options.paths.contains("TestA"), "paths was '${config.options.paths}'")
     }
 
     @Test
     fun `gutter context on a test line resolves to a test config`() {
-        val file = fixture.addFileToProject(
-            "test_thing.by",
-            "def test_addition():\n    assert 1 + 1 == 2\n",
-        )
+        val file = addTestFile("test_thing.by", "def test_addition():\n    assert 1 + 1 == 2\n")
         val context = contextFor(file)
         val produced = RunConfigurationProducer.getProducers(project)
             .mapNotNull { it.createConfigurationFromContext(context)?.configuration }
@@ -223,7 +273,7 @@ class RunConfigurationProducerTest {
 
     @Test
     fun `by run takes precedence over by check on a plain by file`() {
-        val file = fixture.addFileToProject("pkg/app.by", "x = 1\n")
+        val file = addModule("pkg/app.by", "x = 1\n", "pkg.app")
         val context = contextFor(file)
         val run = producer<ByRunFromFileProducer>().createConfigurationFromContext(context)
         val check = producer<ByCheckFromFileProducer>().createConfigurationFromContext(context)
@@ -242,7 +292,7 @@ class RunConfigurationProducerTest {
 
     @Test
     fun `precedence between run and check is not mutual`() {
-        val file = fixture.addFileToProject("pkg/other.by", "x = 1\n")
+        val file = addModule("pkg/other.by", "x = 1\n", "pkg.other")
         val context = contextFor(file)
         val run = producer<ByRunFromFileProducer>().createConfigurationFromContext(context)
         val check = producer<ByCheckFromFileProducer>().createConfigurationFromContext(context)
@@ -293,10 +343,8 @@ class RunConfigurationProducerTest {
 
     @Test
     fun `by run yields to the pytest producer so the chain holds`() {
-        val file = fixture.addFileToProject(
-            "test_chain.by",
-            "def test_x():\n    assert True\n",
-        )
+        val file = addTestFile("test_chain.by", "def test_addition():\n    assert 1 + 1 == 2\n")
+        model.rememberModuleNames(mapOf(file.virtualFile to "test_chain"))
         val context = contextFor(file)
         val run = producer<ByRunFromFileProducer>().createConfigurationFromContext(context)
         val test = producer<ByTestFromFileProducer>().createConfigurationFromContext(context)

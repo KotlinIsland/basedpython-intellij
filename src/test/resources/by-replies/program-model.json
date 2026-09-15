@@ -1,0 +1,1363 @@
+{
+ "entryPoints": [
+  {
+   "extension": "by",
+   "reply": {
+    "guards": [],
+    "main": {
+     "blockedBy": null,
+     "docstring": null,
+     "entryPoint": true,
+     "extraArguments": null,
+     "isAsync": false,
+     "isPrivate": false,
+     "moduleInvokesMain": false,
+     "nameRange": {
+      "end": {
+       "character": 8,
+       "line": 0
+      },
+      "start": {
+       "character": 4,
+       "line": 0
+      }
+     },
+     "parameters": [
+      {
+       "annotation": "int",
+       "cli": {
+        "choices": null,
+        "converter": "int",
+        "flags": [
+         "--a"
+        ],
+        "negativeFlags": []
+       },
+       "default": "1",
+       "kind": "any",
+       "name": "a",
+       "required": false
+      }
+     ]
+    }
+   },
+   "source": "def main(a: int = 1): ...\n"
+  },
+  {
+   "extension": "by",
+   "reply": {
+    "guards": [],
+    "main": {
+     "blockedBy": null,
+     "docstring": null,
+     "entryPoint": true,
+     "extraArguments": null,
+     "isAsync": false,
+     "isPrivate": false,
+     "moduleInvokesMain": false,
+     "nameRange": {
+      "end": {
+       "character": 8,
+       "line": 0
+      },
+      "start": {
+       "character": 4,
+       "line": 0
+      }
+     },
+     "parameters": [
+      {
+       "annotation": "int",
+       "cli": {
+        "choices": null,
+        "converter": "int",
+        "flags": [
+         "--a"
+        ],
+        "negativeFlags": []
+       },
+       "default": null,
+       "kind": "any",
+       "name": "a",
+       "required": true
+      }
+     ]
+    }
+   },
+   "source": "def main(a: int): ...\n"
+  },
+  {
+   "extension": "by",
+   "reply": {
+    "guards": [],
+    "main": {
+     "blockedBy": null,
+     "docstring": null,
+     "entryPoint": true,
+     "extraArguments": null,
+     "isAsync": false,
+     "isPrivate": false,
+     "moduleInvokesMain": false,
+     "nameRange": {
+      "end": {
+       "character": 8,
+       "line": 0
+      },
+      "start": {
+       "character": 4,
+       "line": 0
+      }
+     },
+     "parameters": [
+      {
+       "annotation": "int",
+       "cli": {
+        "choices": null,
+        "converter": "int",
+        "flags": [
+         "--a"
+        ],
+        "negativeFlags": []
+       },
+       "default": null,
+       "kind": "any",
+       "name": "a",
+       "required": true
+      },
+      {
+       "annotation": "int",
+       "cli": {
+        "choices": null,
+        "converter": "int",
+        "flags": [
+         "--b"
+        ],
+        "negativeFlags": []
+       },
+       "default": "2",
+       "kind": "keyword",
+       "name": "b",
+       "required": false
+      }
+     ]
+    }
+   },
+   "source": "def main(a: int, *, b: int = 2): ...\n"
+  },
+  {
+   "extension": "by",
+   "reply": {
+    "guards": [],
+    "main": {
+     "blockedBy": null,
+     "docstring": null,
+     "entryPoint": true,
+     "extraArguments": null,
+     "isAsync": false,
+     "isPrivate": false,
+     "moduleInvokesMain": false,
+     "nameRange": {
+      "end": {
+       "character": 8,
+       "line": 0
+      },
+      "start": {
+       "character": 4,
+       "line": 0
+      }
+     },
+     "parameters": [
+      {
+       "annotation": "int",
+       "cli": {
+        "choices": null,
+        "converter": "int",
+        "flags": [
+         "--count"
+        ],
+        "negativeFlags": []
+       },
+       "default": null,
+       "kind": "any",
+       "name": "count",
+       "required": true
+      }
+     ]
+    }
+   },
+   "source": "def main(count: int): ...\n"
+  },
+  {
+   "extension": "by",
+   "reply": {
+    "guards": [],
+    "main": {
+     "blockedBy": "db",
+     "docstring": null,
+     "entryPoint": false,
+     "extraArguments": null,
+     "isAsync": false,
+     "isPrivate": false,
+     "moduleInvokesMain": false,
+     "nameRange": {
+      "end": {
+       "character": 8,
+       "line": 0
+      },
+      "start": {
+       "character": 4,
+       "line": 0
+      }
+     },
+     "parameters": [
+      {
+       "annotation": "Db",
+       "cli": null,
+       "default": null,
+       "kind": "any",
+       "name": "db",
+       "required": true
+      }
+     ]
+    }
+   },
+   "source": "def main(db: Db): ...\n"
+  },
+  {
+   "extension": "by",
+   "reply": {
+    "guards": [],
+    "main": {
+     "blockedBy": null,
+     "docstring": null,
+     "entryPoint": true,
+     "extraArguments": null,
+     "isAsync": false,
+     "isPrivate": false,
+     "moduleInvokesMain": false,
+     "nameRange": {
+      "end": {
+       "character": 8,
+       "line": 0
+      },
+      "start": {
+       "character": 4,
+       "line": 0
+      }
+     },
+     "parameters": [
+      {
+       "annotation": "str",
+       "cli": {
+        "choices": null,
+        "converter": "str",
+        "flags": [
+         "--expr"
+        ],
+        "negativeFlags": []
+       },
+       "default": null,
+       "kind": "any",
+       "name": "expr",
+       "required": true
+      }
+     ]
+    }
+   },
+   "source": "def main(expr: str): ...\n"
+  },
+  {
+   "extension": "by",
+   "reply": {
+    "guards": [],
+    "main": {
+     "blockedBy": null,
+     "docstring": null,
+     "entryPoint": true,
+     "extraArguments": null,
+     "isAsync": false,
+     "isPrivate": false,
+     "moduleInvokesMain": false,
+     "nameRange": {
+      "end": {
+       "character": 8,
+       "line": 0
+      },
+      "start": {
+       "character": 4,
+       "line": 0
+      }
+     },
+     "parameters": [
+      {
+       "annotation": "str",
+       "cli": {
+        "choices": null,
+        "converter": "str",
+        "flags": [
+         "--name"
+        ],
+        "negativeFlags": []
+       },
+       "default": null,
+       "kind": "any",
+       "name": "name",
+       "required": true
+      }
+     ]
+    }
+   },
+   "source": "def main(name: str): ...\n"
+  },
+  {
+   "extension": "by",
+   "reply": {
+    "guards": [],
+    "main": {
+     "blockedBy": null,
+     "docstring": null,
+     "entryPoint": true,
+     "extraArguments": null,
+     "isAsync": false,
+     "isPrivate": false,
+     "moduleInvokesMain": false,
+     "nameRange": {
+      "end": {
+       "character": 8,
+       "line": 0
+      },
+      "start": {
+       "character": 4,
+       "line": 0
+      }
+     },
+     "parameters": [
+      {
+       "annotation": "str",
+       "cli": {
+        "choices": null,
+        "converter": "str",
+        "flags": [
+         "--name"
+        ],
+        "negativeFlags": []
+       },
+       "default": null,
+       "kind": "any",
+       "name": "name",
+       "required": true
+      },
+      {
+       "annotation": "int",
+       "cli": {
+        "choices": null,
+        "converter": "int",
+        "flags": [
+         "--count"
+        ],
+        "negativeFlags": []
+       },
+       "default": "1",
+       "kind": "any",
+       "name": "count",
+       "required": false
+      }
+     ]
+    }
+   },
+   "source": "def main(name: str, count: int = 1): ...\n"
+  },
+  {
+   "extension": "by",
+   "reply": {
+    "guards": [],
+    "main": {
+     "blockedBy": null,
+     "docstring": null,
+     "entryPoint": true,
+     "extraArguments": null,
+     "isAsync": false,
+     "isPrivate": false,
+     "moduleInvokesMain": false,
+     "nameRange": {
+      "end": {
+       "character": 8,
+       "line": 0
+      },
+      "start": {
+       "character": 4,
+       "line": 0
+      }
+     },
+     "parameters": [
+      {
+       "annotation": "str",
+       "cli": {
+        "choices": null,
+        "converter": "str",
+        "flags": [
+         "--name"
+        ],
+        "negativeFlags": []
+       },
+       "default": null,
+       "kind": "any",
+       "name": "name",
+       "required": true
+      },
+      {
+       "annotation": "int",
+       "cli": {
+        "choices": null,
+        "converter": "int",
+        "flags": [
+         "--count"
+        ],
+        "negativeFlags": []
+       },
+       "default": "1",
+       "kind": "any",
+       "name": "count",
+       "required": false
+      },
+      {
+       "annotation": "Path",
+       "cli": {
+        "choices": null,
+        "converter": "Path",
+        "flags": [
+         "--out-dir",
+         "--out_dir"
+        ],
+        "negativeFlags": []
+       },
+       "default": "Path('.')",
+       "kind": "any",
+       "name": "out_dir",
+       "required": false
+      },
+      {
+       "annotation": "bool",
+       "cli": {
+        "choices": null,
+        "converter": null,
+        "flags": [
+         "--verbose"
+        ],
+        "negativeFlags": [
+         "--no-verbose"
+        ]
+       },
+       "default": "False",
+       "kind": "any",
+       "name": "verbose",
+       "required": false
+      }
+     ]
+    }
+   },
+   "source": "def main(name: str, count: int = 1, out_dir: Path = Path('.'), verbose: bool = False): ...\n"
+  },
+  {
+   "extension": "by",
+   "reply": {
+    "guards": [],
+    "main": {
+     "blockedBy": null,
+     "docstring": null,
+     "entryPoint": true,
+     "extraArguments": null,
+     "isAsync": false,
+     "isPrivate": false,
+     "moduleInvokesMain": false,
+     "nameRange": {
+      "end": {
+       "character": 8,
+       "line": 0
+      },
+      "start": {
+       "character": 4,
+       "line": 0
+      }
+     },
+     "parameters": [
+      {
+       "annotation": "str",
+       "cli": {
+        "choices": null,
+        "converter": "str",
+        "flags": [
+         "--name"
+        ],
+        "negativeFlags": []
+       },
+       "default": null,
+       "kind": "any",
+       "name": "name",
+       "required": true
+      },
+      {
+       "annotation": "int",
+       "cli": {
+        "choices": null,
+        "converter": "int",
+        "flags": [
+         "--count"
+        ],
+        "negativeFlags": []
+       },
+       "default": "1",
+       "kind": "any",
+       "name": "count",
+       "required": false
+      },
+      {
+       "annotation": "Path",
+       "cli": {
+        "choices": null,
+        "converter": "Path",
+        "flags": [
+         "--out-dir",
+         "--out_dir"
+        ],
+        "negativeFlags": []
+       },
+       "default": "Path('.')",
+       "kind": "any",
+       "name": "out_dir",
+       "required": false
+      },
+      {
+       "annotation": "bool",
+       "cli": {
+        "choices": null,
+        "converter": null,
+        "flags": [
+         "--verbose"
+        ],
+        "negativeFlags": [
+         "--no-verbose"
+        ]
+       },
+       "default": "False",
+       "kind": "any",
+       "name": "verbose",
+       "required": false
+      },
+      {
+       "annotation": "Db",
+       "cli": null,
+       "default": "x()",
+       "kind": "any",
+       "name": "db",
+       "required": false
+      }
+     ]
+    }
+   },
+   "source": "def main(name: str, count: int = 1, out_dir: Path = Path('.'), verbose: bool = False, db: Db = x()): ...\n"
+  },
+  {
+   "extension": "by",
+   "reply": {
+    "guards": [],
+    "main": {
+     "blockedBy": null,
+     "docstring": null,
+     "entryPoint": true,
+     "extraArguments": null,
+     "isAsync": false,
+     "isPrivate": false,
+     "moduleInvokesMain": false,
+     "nameRange": {
+      "end": {
+       "character": 8,
+       "line": 0
+      },
+      "start": {
+       "character": 4,
+       "line": 0
+      }
+     },
+     "parameters": [
+      {
+       "annotation": "str",
+       "cli": {
+        "choices": null,
+        "converter": "str",
+        "flags": [
+         "--name"
+        ],
+        "negativeFlags": []
+       },
+       "default": null,
+       "kind": "any",
+       "name": "name",
+       "required": true
+      },
+      {
+       "annotation": "float",
+       "cli": {
+        "choices": null,
+        "converter": "float",
+        "flags": [
+         "--ratio"
+        ],
+        "negativeFlags": []
+       },
+       "default": "1.0",
+       "kind": "any",
+       "name": "ratio",
+       "required": false
+      }
+     ]
+    }
+   },
+   "source": "def main(name: str, ratio: float = 1.0): ...\n"
+  },
+  {
+   "extension": "by",
+   "reply": {
+    "guards": [],
+    "main": {
+     "blockedBy": null,
+     "docstring": null,
+     "entryPoint": true,
+     "extraArguments": null,
+     "isAsync": false,
+     "isPrivate": false,
+     "moduleInvokesMain": false,
+     "nameRange": {
+      "end": {
+       "character": 8,
+       "line": 0
+      },
+      "start": {
+       "character": 4,
+       "line": 0
+      }
+     },
+     "parameters": [
+      {
+       "annotation": "Path",
+       "cli": {
+        "choices": null,
+        "converter": "Path",
+        "flags": [
+         "--out-dir",
+         "--out_dir"
+        ],
+        "negativeFlags": []
+       },
+       "default": null,
+       "kind": "any",
+       "name": "out_dir",
+       "required": true
+      }
+     ]
+    }
+   },
+   "source": "def main(out_dir: Path): ...\n"
+  },
+  {
+   "extension": "by",
+   "reply": {
+    "guards": [],
+    "main": {
+     "blockedBy": null,
+     "docstring": null,
+     "entryPoint": true,
+     "extraArguments": null,
+     "isAsync": false,
+     "isPrivate": false,
+     "moduleInvokesMain": false,
+     "nameRange": {
+      "end": {
+       "character": 8,
+       "line": 0
+      },
+      "start": {
+       "character": 4,
+       "line": 0
+      }
+     },
+     "parameters": [
+      {
+       "annotation": "float",
+       "cli": {
+        "choices": null,
+        "converter": "float",
+        "flags": [
+         "--ratio"
+        ],
+        "negativeFlags": []
+       },
+       "default": null,
+       "kind": "any",
+       "name": "ratio",
+       "required": true
+      }
+     ]
+    }
+   },
+   "source": "def main(ratio: float): ...\n"
+  },
+  {
+   "extension": "by",
+   "reply": {
+    "guards": [],
+    "main": {
+     "blockedBy": null,
+     "docstring": null,
+     "entryPoint": true,
+     "extraArguments": null,
+     "isAsync": false,
+     "isPrivate": false,
+     "moduleInvokesMain": false,
+     "nameRange": {
+      "end": {
+       "character": 8,
+       "line": 0
+      },
+      "start": {
+       "character": 4,
+       "line": 0
+      }
+     },
+     "parameters": [
+      {
+       "annotation": "bool",
+       "cli": {
+        "choices": null,
+        "converter": null,
+        "flags": [
+         "--verbose"
+        ],
+        "negativeFlags": [
+         "--no-verbose"
+        ]
+       },
+       "default": "False",
+       "kind": "any",
+       "name": "verbose",
+       "required": false
+      }
+     ]
+    }
+   },
+   "source": "def main(verbose: bool = False): ...\n"
+  },
+  {
+   "extension": "by",
+   "reply": {
+    "guards": [],
+    "main": {
+     "blockedBy": null,
+     "docstring": null,
+     "entryPoint": true,
+     "extraArguments": null,
+     "isAsync": false,
+     "isPrivate": false,
+     "moduleInvokesMain": false,
+     "nameRange": {
+      "end": {
+       "character": 8,
+       "line": 0
+      },
+      "start": {
+       "character": 4,
+       "line": 0
+      }
+     },
+     "parameters": [
+      {
+       "annotation": "bool",
+       "cli": {
+        "choices": null,
+        "converter": null,
+        "flags": [
+         "--verbose"
+        ],
+        "negativeFlags": [
+         "--no-verbose"
+        ]
+       },
+       "default": "False",
+       "kind": "any",
+       "name": "verbose",
+       "required": false
+      },
+      {
+       "annotation": "int",
+       "cli": {
+        "choices": null,
+        "converter": "int",
+        "flags": [
+         "--count"
+        ],
+        "negativeFlags": []
+       },
+       "default": "1",
+       "kind": "any",
+       "name": "count",
+       "required": false
+      }
+     ]
+    }
+   },
+   "source": "def main(verbose: bool = False, count: int = 1): ...\n"
+  },
+  {
+   "extension": "by",
+   "reply": {
+    "guards": [],
+    "main": {
+     "blockedBy": null,
+     "docstring": null,
+     "entryPoint": true,
+     "extraArguments": null,
+     "isAsync": false,
+     "isPrivate": false,
+     "moduleInvokesMain": false,
+     "nameRange": {
+      "end": {
+       "character": 8,
+       "line": 0
+      },
+      "start": {
+       "character": 4,
+       "line": 0
+      }
+     },
+     "parameters": [
+      {
+       "annotation": "int",
+       "cli": {
+        "choices": null,
+        "converter": "int",
+        "flags": [
+         "--a"
+        ],
+        "negativeFlags": []
+       },
+       "default": null,
+       "kind": "any",
+       "name": "a",
+       "required": true
+      }
+     ]
+    }
+   },
+   "source": "def main(a: int):\n    print(a)\n"
+  },
+  {
+   "extension": "by",
+   "reply": {
+    "guards": [],
+    "main": {
+     "blockedBy": null,
+     "docstring": null,
+     "entryPoint": true,
+     "extraArguments": null,
+     "isAsync": false,
+     "isPrivate": false,
+     "moduleInvokesMain": false,
+     "nameRange": {
+      "end": {
+       "character": 8,
+       "line": 0
+      },
+      "start": {
+       "character": 4,
+       "line": 0
+      }
+     },
+     "parameters": [
+      {
+       "annotation": "str",
+       "cli": {
+        "choices": null,
+        "converter": "str",
+        "flags": [
+         "--name"
+        ],
+        "negativeFlags": []
+       },
+       "default": "\"world\"",
+       "kind": "any",
+       "name": "name",
+       "required": false
+      }
+     ]
+    }
+   },
+   "source": "def main(name: str = \"world\"):\n    print(name)\n"
+  },
+  {
+   "extension": "by",
+   "reply": {
+    "guards": [],
+    "main": {
+     "blockedBy": null,
+     "docstring": null,
+     "entryPoint": true,
+     "extraArguments": null,
+     "isAsync": false,
+     "isPrivate": false,
+     "moduleInvokesMain": false,
+     "nameRange": {
+      "end": {
+       "character": 8,
+       "line": 0
+      },
+      "start": {
+       "character": 4,
+       "line": 0
+      }
+     },
+     "parameters": []
+    }
+   },
+   "source": "def main():\n    print(1)\n"
+  },
+  {
+   "extension": "by",
+   "reply": {
+    "guards": [],
+    "main": {
+     "blockedBy": "db",
+     "docstring": null,
+     "entryPoint": false,
+     "extraArguments": null,
+     "isAsync": false,
+     "isPrivate": false,
+     "moduleInvokesMain": false,
+     "nameRange": {
+      "end": {
+       "character": 8,
+       "line": 0
+      },
+      "start": {
+       "character": 4,
+       "line": 0
+      }
+     },
+     "parameters": [
+      {
+       "annotation": "Database",
+       "cli": null,
+       "default": null,
+       "kind": "any",
+       "name": "db",
+       "required": true
+      }
+     ]
+    }
+   },
+   "source": "def main(db: Database):\n    print(db)\n"
+  },
+  {
+   "extension": "by",
+   "reply": {
+    "guards": [],
+    "main": {
+     "blockedBy": null,
+     "docstring": null,
+     "entryPoint": false,
+     "extraArguments": null,
+     "isAsync": false,
+     "isPrivate": false,
+     "moduleInvokesMain": true,
+     "nameRange": {
+      "end": {
+       "character": 8,
+       "line": 0
+      },
+      "start": {
+       "character": 4,
+       "line": 0
+      }
+     },
+     "parameters": [
+      {
+       "annotation": "int",
+       "cli": {
+        "choices": null,
+        "converter": "int",
+        "flags": [
+         "--a"
+        ],
+        "negativeFlags": []
+       },
+       "default": null,
+       "kind": "any",
+       "name": "a",
+       "required": true
+      }
+     ]
+    }
+   },
+   "source": "def main(a: int):\n    print(a)\n\nmain(1)\n"
+  },
+  {
+   "extension": "by",
+   "reply": {
+    "guards": [
+     {
+      "end": {
+       "character": 25,
+       "line": 0
+      },
+      "start": {
+       "character": 0,
+       "line": 0
+      }
+     }
+    ],
+    "main": null
+   },
+   "source": "if __name__ == \"__main__\":\n    main()\n"
+  },
+  {
+   "extension": "by",
+   "reply": {
+    "guards": [],
+    "main": {
+     "blockedBy": null,
+     "docstring": null,
+     "entryPoint": true,
+     "extraArguments": null,
+     "isAsync": false,
+     "isPrivate": false,
+     "moduleInvokesMain": false,
+     "nameRange": {
+      "end": {
+       "character": 8,
+       "line": 0
+      },
+      "start": {
+       "character": 4,
+       "line": 0
+      }
+     },
+     "parameters": [
+      {
+       "annotation": "str",
+       "cli": {
+        "choices": null,
+        "converter": "str",
+        "flags": [
+         "--name"
+        ],
+        "negativeFlags": []
+       },
+       "default": null,
+       "kind": "any",
+       "name": "name",
+       "required": true
+      }
+     ]
+    }
+   },
+   "source": "def main[T](name: str):\n    print(name)\n"
+  },
+  {
+   "extension": "by",
+   "reply": {
+    "guards": [],
+    "main": {
+     "blockedBy": null,
+     "docstring": null,
+     "entryPoint": true,
+     "extraArguments": null,
+     "isAsync": false,
+     "isPrivate": false,
+     "moduleInvokesMain": false,
+     "nameRange": {
+      "end": {
+       "character": 8,
+       "line": 4
+      },
+      "start": {
+       "character": 4,
+       "line": 4
+      }
+     },
+     "parameters": [
+      {
+       "annotation": "str",
+       "cli": {
+        "choices": null,
+        "converter": "str",
+        "flags": [
+         "--name"
+        ],
+        "negativeFlags": []
+       },
+       "default": null,
+       "kind": "any",
+       "name": "name",
+       "required": true
+      }
+     ]
+    }
+   },
+   "source": "\"\"\"\nmain(x) runs it\n\"\"\"\n\ndef main(name: str):\n    print(name)\n"
+  },
+  {
+   "extension": "by",
+   "reply": {
+    "guards": [],
+    "main": {
+     "blockedBy": null,
+     "docstring": null,
+     "entryPoint": false,
+     "extraArguments": null,
+     "isAsync": false,
+     "isPrivate": true,
+     "moduleInvokesMain": false,
+     "nameRange": {
+      "end": {
+       "character": 16,
+       "line": 0
+      },
+      "start": {
+       "character": 12,
+       "line": 0
+      }
+     },
+     "parameters": [
+      {
+       "annotation": "int",
+       "cli": {
+        "choices": null,
+        "converter": "int",
+        "flags": [
+         "--a"
+        ],
+        "negativeFlags": []
+       },
+       "default": null,
+       "kind": "any",
+       "name": "a",
+       "required": true
+      }
+     ]
+    }
+   },
+   "source": "private def main(a: int):\n    print(a)\n"
+  },
+  {
+   "extension": "py",
+   "reply": {
+    "guards": [],
+    "main": null
+   },
+   "source": "def main(a: int):\n    print(a)\n"
+  },
+  {
+   "extension": "py",
+   "reply": {
+    "guards": [
+     {
+      "end": {
+       "character": 25,
+       "line": 0
+      },
+      "start": {
+       "character": 0,
+       "line": 0
+      }
+     }
+    ],
+    "main": null
+   },
+   "source": "if __name__ == \"__main__\":\n    main()\n"
+  }
+ ],
+ "testItems": [
+  {
+   "source": "def test_addition():\n    assert 1 + 1 == 2\n",
+   "tests": [
+    {
+     "children": [],
+     "id": "test_addition",
+     "kind": "function",
+     "name": "test_addition",
+     "range": {
+      "end": {
+       "character": 21,
+       "line": 1
+      },
+      "start": {
+       "character": 0,
+       "line": 0
+      }
+     },
+     "selectionRange": {
+      "end": {
+       "character": 17,
+       "line": 0
+      },
+      "start": {
+       "character": 4,
+       "line": 0
+      }
+     },
+     "unittest": false
+    }
+   ]
+  },
+  {
+   "source": "class TestMath:\n    def test_add(self):\n        assert True\n",
+   "tests": [
+    {
+     "children": [
+      {
+       "children": [],
+       "id": "TestMath::test_add",
+       "kind": "function",
+       "name": "test_add",
+       "range": {
+        "end": {
+         "character": 19,
+         "line": 2
+        },
+        "start": {
+         "character": 4,
+         "line": 1
+        }
+       },
+       "selectionRange": {
+        "end": {
+         "character": 16,
+         "line": 1
+        },
+        "start": {
+         "character": 8,
+         "line": 1
+        }
+       },
+       "unittest": false
+      }
+     ],
+     "id": "TestMath",
+     "kind": "class",
+     "name": "TestMath",
+     "range": {
+      "end": {
+       "character": 19,
+       "line": 2
+      },
+      "start": {
+       "character": 0,
+       "line": 0
+      }
+     },
+     "selectionRange": {
+      "end": {
+       "character": 14,
+       "line": 0
+      },
+      "start": {
+       "character": 6,
+       "line": 0
+      }
+     },
+     "unittest": false
+    }
+   ]
+  },
+  {
+   "source": "x = 1\n",
+   "tests": []
+  },
+  {
+   "source": "import pytest\n\nclass TestA:\n    def test_one(self):\n        assert True\n\ndef outer():\n    def test_inner():\n        assert False\n\ndef test_top():\n    assert True\n",
+   "tests": [
+    {
+     "children": [
+      {
+       "children": [],
+       "id": "TestA::test_one",
+       "kind": "function",
+       "name": "test_one",
+       "range": {
+        "end": {
+         "character": 19,
+         "line": 4
+        },
+        "start": {
+         "character": 4,
+         "line": 3
+        }
+       },
+       "selectionRange": {
+        "end": {
+         "character": 16,
+         "line": 3
+        },
+        "start": {
+         "character": 8,
+         "line": 3
+        }
+       },
+       "unittest": false
+      }
+     ],
+     "id": "TestA",
+     "kind": "class",
+     "name": "TestA",
+     "range": {
+      "end": {
+       "character": 19,
+       "line": 4
+      },
+      "start": {
+       "character": 0,
+       "line": 2
+      }
+     },
+     "selectionRange": {
+      "end": {
+       "character": 11,
+       "line": 2
+      },
+      "start": {
+       "character": 6,
+       "line": 2
+      }
+     },
+     "unittest": false
+    },
+    {
+     "children": [],
+     "id": "test_top",
+     "kind": "function",
+     "name": "test_top",
+     "range": {
+      "end": {
+       "character": 15,
+       "line": 11
+      },
+      "start": {
+       "character": 0,
+       "line": 10
+      }
+     },
+     "selectionRange": {
+      "end": {
+       "character": 12,
+       "line": 10
+      },
+      "start": {
+       "character": 4,
+       "line": 10
+      }
+     },
+     "unittest": false
+    }
+   ]
+  }
+ ]
+}

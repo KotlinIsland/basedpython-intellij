@@ -106,9 +106,8 @@ class LiveTemplateContextTest {
      * `CompletionLookupArrangerImpl.getExactMatches` returns it as the sole exact match, so
      * `main` + Enter took the guard rather than the server's `main`. The second is that taking it
      * was wrong anyway: basedpython generates the `__main__` guard from `def main`, and a
-     * hand-written one makes [dev.basedpython.pycharm.run.main.ByMainSignature.invokesMain] true,
-     * which turns off the generated argument parser, the `def main(` gutter icon and the argument
-     * form. The template did not just win the wrong race, it wrote the wrong thing.
+     * hand-written one is a module that invokes `main` itself (`by/entryPoint`'s
+     * `moduleInvokesMain`), which turns off the generated argument parser and the argument form. The template did not just win the wrong race, it wrote the wrong thing.
      */
     @Test
     fun `the guard template is not offered in a by file`() {

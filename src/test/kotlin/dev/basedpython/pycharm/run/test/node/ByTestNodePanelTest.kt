@@ -20,9 +20,9 @@ import javax.swing.JComponent
  * The node view's Swing side, under a real platform: that the panel builds, that its toolbar
  * carries actions that survive an update, and that the tree it wraps is there to be filled.
  *
- * Nothing here runs `by`. A panel starts on [ByTestNodeService.State.Idle] and collects only when
- * something asks it to, which is the tool window factory's job and not the constructor's — so this
- * stays a test of the wiring, while what a collection turns into is [ByTestNodesTest]'s subject.
+ * Nothing here runs `by`. A panel shows what [ByTestNodeService] holds and collects with pytest only
+ * when its own action is used — so this stays a test of the wiring, while what a collection turns
+ * into is [ByTestNodesTest]'s subject.
  */
 @TestFixtures
 @RunInEdt(writeIntent = true)
@@ -56,12 +56,21 @@ class ByTestNodePanelTest {
         }
     }
 
+    /**
+     * Building the panel runs nothing: it shows what the service already holds — nothing, or the
+     * server's static answer another test in this shared project left behind — and never a pytest
+     * collection nobody asked for.
+     */
     @Test
-    fun `an uncollected project shows an empty tree, having run nothing`() {
+    fun `opening the panel runs nothing`() {
         withPanel { panel ->
             val tree = checkNotNull(find(panel, Tree::class.java))
-            assertEquals(0, tree.model.getChildCount(tree.model.root))
-            assertEquals(ByTestNodeService.State.Idle, ByTestNodeService.getInstance(fixture.project).state)
+            val service = ByTestNodeService.getInstance(fixture.project)
+            val state = service.state
+            assertTrue(state !is ByTestNodeService.State.Collecting, "state was $state")
+            assertTrue((state as? ByTestNodeService.State.Collected)?.fromPytest != true, "state was $state")
+            assertTrue(service.lastRuns.isEmpty(), "ran ${service.lastRuns}")
+            if (state == ByTestNodeService.State.Idle) assertEquals(0, tree.model.getChildCount(tree.model.root))
         }
     }
 

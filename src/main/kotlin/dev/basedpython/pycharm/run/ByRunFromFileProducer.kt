@@ -6,15 +6,13 @@ import com.intellij.execution.actions.ConfigurationContext
 import com.intellij.execution.actions.ConfigurationFromContext
 import com.intellij.execution.actions.LazyRunConfigurationProducer
 import com.intellij.execution.configurations.ConfigurationFactory
-import com.intellij.openapi.module.ModuleUtilCore
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.roots.ProjectFileIndex
 import com.intellij.openapi.util.Ref
-import com.intellij.openapi.vfs.VfsUtilCore
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiElement
 import dev.basedpython.pycharm.lang.dialect.BasedPythonSources
 import dev.basedpython.pycharm.run.main.ByMainArgumentHistory
+import dev.basedpython.pycharm.run.model.ByProgramModel
 
 /** Right-click a basedpython source file → produce a `by run <module>` configuration. */
 class ByRunFromFileProducer : LazyRunConfigurationProducer<ByRunConfiguration>() {
@@ -89,32 +87,15 @@ internal fun moduleNameFor(context: ConfigurationContext, file: VirtualFile): St
     moduleNameFor(context.project, file)
 
 /**
- * The module name `by run` would be given for [file], or null when it sits under no root — or when
- * a sibling would win the name.
+ * The module name `by run` would be given for [file], or null when no name runs it — or when that is
+ * not known yet.
  *
- * Both `.by` and `.py` are modules `by run` can start, and `main.by` beside `main.py` is one module
- * name for two files: `by run` transpiles the `.by` into its temp directory and makes that directory
- * `sys.path[0]`, so the generated module shadows the plain one. Offering to run the shadowed file
- * would be offering to run the other one, so the `.py` is declined and the `.by` keeps the name.
+ * `by/runModules`' answer ([ByProgramModel.moduleName]): the project resolver's reading of the
+ * module roots `by run` stages, one file per name. Where two files would build to one module —
+ * `main.by` at the project root beside `src/main.by`, `twin.by` beside `twin.py` — only the one the
+ * resolver finds first is named, and `by run` refuses to stage the pair until one is renamed.
+ *
+ * Never waits: a producer calls this inside a read action while a menu is being built.
  */
-internal fun moduleNameFor(project: Project, file: VirtualFile): String? {
-    if (isShadowedByGeneratedModule(file)) return null
-    val index = ProjectFileIndex.getInstance(project)
-    val root = index.getSourceRootForFile(file)
-        ?: index.getContentRootForFile(file)
-        ?: ModuleUtilCore.findModuleForFile(file, project)?.let { m ->
-            // fallback: module root via ModuleRootManager
-            com.intellij.openapi.roots.ModuleRootManager.getInstance(m).contentRoots.firstOrNull()
-        }
-        ?: project.basePath?.let { com.intellij.openapi.vfs.LocalFileSystem.getInstance().findFileByPath(it) }
-        ?: return null
-    val rel = VfsUtilCore.getRelativePath(file, root, '/') ?: return null
-    val noExt = BasedPythonSources.withoutModuleExtension(rel) ?: return null
-    if (noExt.isBlank()) return null
-    return noExt.replace('/', '.')
-}
-
-/** True when [file] is a `.py` with a `.by` of the same module name beside it. */
-private fun isShadowedByGeneratedModule(file: VirtualFile): Boolean =
-    file.extension.equals(BasedPythonSources.PY, ignoreCase = true) &&
-        file.parent?.findChild("${file.nameWithoutExtension}.${BasedPythonSources.BY}") != null
+internal fun moduleNameFor(project: Project, file: VirtualFile): String? =
+    ByProgramModel.getInstance(project).moduleName(file)

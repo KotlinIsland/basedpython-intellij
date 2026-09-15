@@ -286,13 +286,9 @@
         <runLineMarkerContributor
             language="basedpython"
             implementationClass="dev.basedpython.pycharm.run.marker.ByRunLineMarkerContributor"/>
-        <!-- The test configuration type is registered in basedpython-testrunner.xml. -->
-        <!-- The collected test tree (by run pytest, collect-only), the counterpart of the run
-             window's results tree: which tests exist, before anything has run. -->
-        <toolWindow id="basedpython Tests"
-                    anchor="right"
-                    icon="/icons/basedpythonTests.svg"
-                    factoryClass="dev.basedpython.pycharm.run.test.node.ByTestNodeToolWindowFactory"/>
+        <!-- The test configuration type, the pytest producer, the test gutter icons and the test
+             tree are registered in basedpython-testrunner.xml: all of them run tests through a
+             configuration built on the SM test runner. -->
 
         <!-- The stubs `by` extracts from its own binary and navigates into: library files the
              IDE would otherwise see as loose writable files outside the project, so Reader Mode
@@ -337,9 +333,6 @@
             order="before line"/>
 
         <!-- ===== Wave 6: cheap platform wins ===== -->
-        <runLineMarkerContributor
-            language="basedpython"
-            implementationClass="dev.basedpython.pycharm.run.testmarker.ByTestRunLineMarkerContributor"/>
         <fileIndentOptionsProvider
             implementation="dev.basedpython.pycharm.editor.indent.BasedPythonFileIndentOptionsProvider"/>
 
@@ -391,9 +384,10 @@
         <bundledColorScheme path="/colorSchemes/BasedPythonLight"/>
         <postStartupActivity
             implementation="dev.basedpython.pycharm.lsp.reload.BasedPythonLspReloadActivity"/>
-        <!-- Collects the test tree on open, and again when the project's sources change. -->
+        <!-- Asks `by` again how the project's modules run and which tests they hold whenever the
+             project's own sources or configuration change. Runs nothing. -->
         <postStartupActivity
-            implementation="dev.basedpython.pycharm.run.test.node.ByTestSyncActivity"/>
+            implementation="dev.basedpython.pycharm.run.model.ByProgramModelSyncActivity"/>
 
         <!-- ===== Wave 9: log tool window ===== -->
         <toolWindow id="basedpython"

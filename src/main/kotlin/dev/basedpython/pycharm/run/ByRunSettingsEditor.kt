@@ -10,7 +10,7 @@ import com.intellij.openapi.ui.TextFieldWithBrowseButton
 import com.intellij.ui.components.JBTextField
 import com.intellij.util.ui.FormBuilder
 import dev.basedpython.pycharm.run.main.ByMainArgumentsDialog
-import dev.basedpython.pycharm.run.main.ByMainModules
+import dev.basedpython.pycharm.run.model.ByProgramModel
 import javax.swing.JComponent
 import javax.swing.JPanel
 
@@ -82,7 +82,8 @@ class ByRunSettingsEditor(private val project: Project) : SettingsEditor<ByRunCo
      */
     private fun editProgramArgs() {
         val module = moduleField.text.trim()
-        val main = module.takeIf { it.isNotBlank() }?.let { ByMainModules.mainFor(project, it) }
+        val main = module.takeIf { it.isNotBlank() }
+            ?.let { ByProgramModel.getInstance(project).mainForWaiting(it, "Reading main's parameters") }
         if (main == null || !main.takesArguments) {
             Messages.showInfoMessage(project, unavailable(module, main == null), "Program Arguments")
             return
