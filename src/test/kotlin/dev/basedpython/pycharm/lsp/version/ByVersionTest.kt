@@ -60,4 +60,17 @@ class ByVersionTest {
         assertTrue(ByVersion.parse("1.0.0")!! > ByVersion.parse("0.99.99")!!)
         assertEquals(ByVersion.parse("0.0.1"), ByVersion.parse("0.0.1a9"))
     }
+
+    /**
+     * What the check reads is the running server's `serverInfo.version`, which a `by` built from
+     * source fills with the version of the ruff it forked from — captured from a `by server` built
+     * on 2026-09-15.
+     */
+    @Test
+    fun `the check reads a server's reported version and warns only below the floor`() {
+        assertNull(ByVersionCheck.outdated("ruff/0.16.6+528 (e317fa789 2026-09-11)"))
+        assertNull(ByVersionCheck.outdated("0.0.1a9"))
+        assertNull(ByVersionCheck.outdated(null), "a server that reports no version is not outdated")
+        assertEquals(ByVersion(0, 0, 0), ByVersionCheck.outdated("0.0.0"))
+    }
 }

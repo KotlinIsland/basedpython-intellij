@@ -337,8 +337,6 @@
             order="before line"/>
 
         <!-- ===== Wave 6: cheap platform wins ===== -->
-        <postStartupActivity
-            implementation="dev.basedpython.pycharm.lsp.version.ByVersionCheckActivity"/>
         <runLineMarkerContributor
             language="basedpython"
             implementationClass="dev.basedpython.pycharm.run.testmarker.ByTestRunLineMarkerContributor"/>
@@ -472,6 +470,12 @@
         <listener
             class="dev.basedpython.pycharm.lsp.inlay.ByInlayAuditListener"
             topic="com.intellij.codeInsight.daemon.DaemonCodeAnalyzer$DaemonListener"/>
+
+        <!-- Warns about a `by` older than the plugin supports, by the version the running server
+             reports for itself. -->
+        <listener
+            class="dev.basedpython.pycharm.lsp.version.ByVersionCheck"
+            topic="dev.basedpython.pycharm.lsp.ByLspLifecycleListener"/>
     </projectListeners>
 
     <applicationListeners>

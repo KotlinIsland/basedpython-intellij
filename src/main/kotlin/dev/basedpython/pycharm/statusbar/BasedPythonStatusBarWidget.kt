@@ -4,7 +4,6 @@ import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.DefaultActionGroup
-import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.options.ShowSettingsUtil
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.popup.JBPopupFactory
@@ -26,9 +25,6 @@ internal class BasedPythonStatusBarWidget(private val project: Project) :
 
     private var statusBar: StatusBar? = null
 
-    @Volatile private var byVersion: String? = null
-    @Volatile private var buffVersion: String? = null
-
     override fun ID(): String = WIDGET_ID
 
     override fun getPresentation(): WidgetPresentation = this
@@ -37,16 +33,12 @@ internal class BasedPythonStatusBarWidget(private val project: Project) :
         this.statusBar = statusBar
         // Subscribe to Stream B's LSP listener if present.
         subscribeToLspEvents()
-        refreshVersions()
+        refresh()
     }
 
-    /** Resolve binary versions off the EDT, cache them, then repaint the widget tooltip. */
-    private fun refreshVersions() {
-        ApplicationManager.getApplication().executeOnPooledThread {
-            byVersion = dev.basedpython.pycharm.env.BasedPythonVersions.byVersion(project)
-            buffVersion = dev.basedpython.pycharm.env.BasedPythonVersions.buffVersion(project)
-            ApplicationManager.getApplication().invokeLater { update() }
-        }
+    /** Has the binaries looked for again off the EDT, then repaints. See [LspServerStateService]. */
+    private fun refresh() {
+        LspServerStateService.getInstance(project).refresh { update() }
     }
 
     override fun dispose() {
@@ -72,12 +64,17 @@ internal class BasedPythonStatusBarWidget(private val project: Project) :
         return buildString {
             append("basedpython LSP\n")
             append("  by:   ").append(stateWord(snap.byLight, snap.byPath))
-            byVersion?.let { append("  v").append(it) }
-            append("  (").append(snap.byPath ?: "not found").append(")\n")
+            snap.byVersion?.let { append("  ").append(it) }
+            append("  (").append(where(snap, snap.byPath)).append(")\n")
             append("  buff: ").append(stateWord(snap.buffLight, snap.buffPath))
-            buffVersion?.let { append("  v").append(it) }
-            append("  (").append(snap.buffPath ?: "not found").append(")")
+            snap.buffVersion?.let { append("  ").append(it) }
+            append("  (").append(where(snap, snap.buffPath)).append(")")
         }
+    }
+
+    private fun where(snap: ServerSnapshot, path: String?) = when {
+        !snap.resolved -> "looking…"
+        else -> path ?: "not found"
     }
 
     /**
@@ -120,9 +117,9 @@ internal class BasedPythonStatusBarWidget(private val project: Project) :
     }
 
     /**
-     * Repaint when a server starts or stops. The widget reads live state from
-     * [LspServerStateService] on each paint, so this only needs to trigger the repaint — there is
-     * no state to mirror here.
+     * Repaint when a server starts or stops. The widget reads live server state from
+     * [LspServerStateService] on each paint; what a start or stop can also change is which binary
+     * resolves (a restart is how a changed setting takes effect), so that is looked for again first.
      *
      * Was the platform's `LspServerManagerListener`, which is `@ApiStatus.Internal`; see
      * [ByLspLifecycleListener]. That one fired on every state change, this one only on the two
@@ -135,11 +132,8 @@ internal class BasedPythonStatusBarWidget(private val project: Project) :
         project.messageBus.connect(this).subscribe(
             ByLspLifecycleListener.TOPIC,
             object : ByLspLifecycleListener {
-                override fun serverInitialized(serverName: String) = repaint()
-                override fun serverStopped(serverName: String, shutdownNormally: Boolean) = repaint()
-                private fun repaint() {
-                    ApplicationManager.getApplication().invokeLater { update() }
-                }
+                override fun serverInitialized(serverName: String) = refresh()
+                override fun serverStopped(serverName: String, shutdownNormally: Boolean) = refresh()
             },
         )
     }
@@ -148,8 +142,7 @@ internal class BasedPythonStatusBarWidget(private val project: Project) :
         val mgr = LspClientManager.getInstance(project)
         mgr.stopAndRestartClientsIfNeeded(ByLspServerSupportProvider::class.java)
         mgr.stopAndRestartClientsIfNeeded(BuffLspServerSupportProvider::class.java)
-        update()
-        refreshVersions()
+        refresh()
     }
 
     private fun showLogs() {
