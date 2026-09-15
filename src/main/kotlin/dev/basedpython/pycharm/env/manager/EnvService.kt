@@ -29,9 +29,10 @@ import java.util.concurrent.atomic.AtomicBoolean
  *
  * More than the task view's and less than the test view's, which is why it sits between them on
  * ceremony: it re-runs on project open and when a manifest changes (debounced), but never on a
- * timer. A full refresh is two `stat`s and a small text file for the environment itself, plus two
- * short-lived processes — a package list and a drift probe — and both of those are skipped entirely
- * when there is no environment to ask about. The expensive one is the drift probe, which resolves
+ * timer. A full refresh is two `stat`s and a small text file for the environment itself, the tool's
+ * module listing — skipped when the tool is missing — and three short-lived processes — a package
+ * list, the dependency tree and a drift probe — all skipped entirely when there is no environment
+ * to ask about. The expensive one is the drift probe, which resolves
  * against the lock file and can touch the network on a cold cache; it is the reason a refresh is
  * debounced rather than run on every keystroke in `pyproject.toml`.
  *

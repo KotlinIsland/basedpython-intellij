@@ -41,12 +41,13 @@ data class EnvStatus(
      */
     val graph: EnvDependencyGraph = EnvDependencyGraph.EMPTY,
     /**
-     * How the project is divided into modules, or null when the backend has no notion of that.
+     * How the project is divided into modules, or null when the backend has no notion of that or
+     * its tool could not say.
      *
-     * Read on every refresh — a few manifests, no processes — and carried here rather than scanned
-     * by the structure page itself, so that the page, the tool window and the next command all
-     * describe the same instant. Null hides the structure UI; an empty layout is an ordinary
-     * single-package project. See [EnvBackend.moduleLayout].
+     * Read on every refresh — the tool's member listing and a few manifests — and carried here
+     * rather than scanned by the structure page itself, so that the page, the tool window and the
+     * next command all describe the same instant. Null hides the structure UI; an empty layout is an
+     * ordinary single-package project. See [EnvBackend.moduleLayout].
      */
     val modules: ModuleLayout? = null,
     /**
