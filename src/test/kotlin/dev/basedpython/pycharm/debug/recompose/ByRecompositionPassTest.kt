@@ -2,13 +2,18 @@ package dev.basedpython.pycharm.debug.recompose
 
 import com.intellij.codeHighlighting.Pass
 import com.intellij.openapi.editor.markup.HighlighterLayer
+import com.intellij.openapi.util.Disposer
 import com.intellij.testFramework.PlatformTestUtil
 import com.intellij.testFramework.fixtures.impl.CodeInsightTestFixtureImpl
 import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
+import com.intellij.testFramework.replaceService
 import dev.basedpython.pycharm.debug.dfa.ByDataFlowVerdictRenderer
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -194,5 +199,34 @@ class ByRecompositionPassTest {
         service.sessionEnded(older)
         settle()
         assertEquals(2, drawn().size, "the older session's end must not clear the current one")
+    }
+
+    /**
+     * What unloading the plugin does to the session: disposes it. Every label carries a renderer of
+     * ours, and one left in an editor that outlives the plugin pins its class loader.
+     */
+    @Test
+    fun `disposing the session takes down every label the pass drew`() {
+        val parent = Disposer.newDisposable("a recompositions session of this test's own")
+        val scope = CoroutineScope(SupervisorJob())
+        try {
+            val own = ByRecompositionSession(fixture.project, scope)
+            Disposer.register(parent, own)
+            fixture.project.replaceService(ByRecompositionSession::class.java, own, parent)
+            BasedPythonSettings.getInstance(fixture.project).debuggerRecompositions = true
+            fixture.configureByText("counter.by", source)
+            own.sessionStarted(Silent)
+            own.paused(Silent)
+            own.publish(Silent, answer(fixture.file.virtualFile.path))
+            settle()
+            assertEquals(2, drawn().size)
+        } finally {
+            Disposer.dispose(parent)
+            scope.cancel()
+        }
+        assertEquals(
+            emptyList<Any?>(),
+            fixture.editor.markupModel.allHighlighters.mapNotNull { it.customRenderer as? ByDataFlowVerdictRenderer },
+        )
     }
 }

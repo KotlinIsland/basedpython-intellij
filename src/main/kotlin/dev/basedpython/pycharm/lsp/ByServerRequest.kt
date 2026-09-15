@@ -3,6 +3,7 @@ package dev.basedpython.pycharm.lsp
 import com.intellij.openapi.diagnostic.ControlFlowException
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.platform.lsp.api.LspClient
+import kotlinx.coroutines.withTimeoutOrNull
 import org.eclipse.lsp4j.services.LanguageServer
 import java.util.concurrent.CancellationException
 import java.util.concurrent.CompletableFuture
@@ -62,6 +63,28 @@ internal fun <R : Any> LspClient.askBy(
     timeoutMs: Int = LspClient.DEFAULT_REQUEST_TIMEOUT_MS,
     request: (LanguageServer) -> CompletableFuture<R?>,
 ): ByAnswer<R> = answering(what) { sendRequestSync(timeoutMs, request) }
+
+/**
+ * [askBy] for a coroutine: suspends rather than blocks, and stops waiting the moment the caller is
+ * cancelled — which a blocked thread outside any progress indicator cannot be told.
+ *
+ * No answer within [timeoutMs] is [ByAnswer.Failed], as it is for [askBy]; only a cancellation of
+ * the caller itself propagates.
+ */
+internal suspend fun <R : Any> LspClient.awaitBy(
+    what: String,
+    timeoutMs: Long = LspClient.DEFAULT_REQUEST_TIMEOUT_MS.toLong(),
+    request: (LanguageServer) -> CompletableFuture<R?>,
+): ByAnswer<R> = withTimeoutOrNull(timeoutMs) {
+    try {
+        sendRequest(request)?.let { ByAnswer.Answer(it) } ?: ByAnswer.None
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        LOG.warn("$what request to `by` failed", e)
+        ByAnswer.Failed
+    }
+} ?: ByAnswer.Failed.also { LOG.info("$what request to `by` got no answer within $timeoutMs ms") }
 
 /**
  * [askBy] without the server, so that the rule above can be stated in a test rather than only in a

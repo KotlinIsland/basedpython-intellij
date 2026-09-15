@@ -5,10 +5,10 @@ import com.intellij.openapi.diagnostic.Logger
 import com.intellij.platform.dap.xdebugger.DefaultDapXStackFrame
 import com.intellij.xdebugger.frame.XStackFrame
 import dev.basedpython.pycharm.debug.ByDebugProtocolServer
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withTimeoutOrNull
+import dev.basedpython.pycharm.debug.recompose.ByRecompositionRequests
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.future.await
-import java.util.concurrent.CompletionException
+import kotlinx.coroutines.withTimeoutOrNull
 
 private val LOG = Logger.getInstance(ByDataFlowRequests::class.java)
 
@@ -28,40 +28,45 @@ object ByDataFlowRequests {
      * the adapter does not implement the request, or it did not answer in time. None of them is
      * worth reporting to the user — a debugpy session simply has no facts, and the feature draws
      * nothing rather than complaining about a debugger that is working fine.
+     *
+     * Suspends rather than blocks, so the stop that asked can cancel it when the program moves on.
      */
-    fun facts(frame: XStackFrame, names: List<String>, timeoutMs: Long): JsonObject? {
+    suspend fun facts(frame: XStackFrame, names: List<String>, timeoutMs: Long): JsonObject? {
         val dap = frame as? DefaultDapXStackFrame ?: return null
         val id = dap.frame.id
 
-        return runBlocking {
-            withTimeoutOrNull(timeoutMs) {
-                try {
-                    dap.commandProcessor.submitCommandAsync {
-                        val server = server as? ByDebugProtocolServer ?: return@submitCommandAsync null
-                        server.facts(
-                            ByFactsArguments(
-                                frameId = id,
-                                names = names,
-                                // Deeper than the default would be paying for paths nobody wrote.
-                                // `self.config.timeout` is three, and source a person is reading
-                                // does not go much past it
-                                limit = ByFactsLimit(depth = 3),
-                            ),
-                        ).await()
-                    }.await()
-                } catch (e: CompletionException) {
+        return withTimeoutOrNull(timeoutMs) {
+            try {
+                dap.commandProcessor.submitCommandAsync {
+                    val server = server as? ByDebugProtocolServer ?: return@submitCommandAsync null
+                    server.facts(
+                        ByFactsArguments(
+                            frameId = id,
+                            names = names,
+                            // Deeper than the default would be paying for paths nobody wrote.
+                            // `self.config.timeout` is three, and source a person is reading
+                            // does not go much past it
+                            limit = ByFactsLimit(depth = 3),
+                        ),
+                    ).await()
+                }.await()
+            } catch (e: CancellationException) {
+                // The stop was left, or the timeout came: neither is a failure of the request
+                throw e
+            } catch (e: Exception) {
+                if (ByRecompositionRequests.refusalOf(e) != null) {
                     // The ordinary case, and not an error: an adapter that does not implement the
-                    // request answers `unknown command`, which lsp4j raises here. debugpy is one
+                    // request answers `unknown command` as an error response. debugpy is one
                     LOG.debug("the debug adapter does not answer bpd/facts", e)
-                    null
-                } catch (e: Exception) {
+                } else {
                     LOG.warn("bpd/facts failed", e)
-                    null
                 }
+                null
             }
         }
     }
 }
+
 
 /**
  * The `bpd/facts` request body.

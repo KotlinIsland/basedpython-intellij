@@ -1,24 +1,21 @@
 package dev.basedpython.pycharm.debug.dfa
 
-import com.google.gson.JsonObject
-import com.intellij.openapi.application.ApplicationManager
-import com.intellij.openapi.application.ReadAction
-import com.intellij.openapi.diagnostic.Logger
-import com.intellij.openapi.editor.Document
+import com.intellij.openapi.Disposable
+import com.intellij.openapi.application.readAction
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.xdebugger.XDebugProcess
 import com.intellij.xdebugger.XDebugSession
 import com.intellij.xdebugger.XDebugSessionListener
 import com.intellij.xdebugger.XDebuggerManagerListener
+import com.intellij.xdebugger.frame.XStackFrame
 import dev.basedpython.pycharm.lang.BasedPythonFileType
-import dev.basedpython.pycharm.lsp.askBy
+import dev.basedpython.pycharm.lsp.awaitBy
 import dev.basedpython.pycharm.lsp.byServerFor
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import org.eclipse.lsp4j.TextDocumentIdentifier
-
-private val LOG = Logger.getInstance(ByDataFlowListener::class.java)
 
 /** How long the debuggee and the server each get before a stop is given up on. */
 private const val FACTS_TIMEOUT_MS = 2_000
@@ -49,13 +46,24 @@ private const val ANALYSIS_TIMEOUT_MS = 2_000
  */
 class ByDataFlowListener : XDebuggerManagerListener {
 
+    /**
+     * Watches every session, whatever the setting says now: it is read at each stop, so turning it
+     * on mid-session starts the questions at the next stop and turning it off stops them.
+     *
+     * The watcher lives no longer than the data-flow service, so a session still running when the
+     * plugin is unloaded does not keep a listener of ours, and no longer than the session, so the
+     * service does not keep every session it ever watched.
+     */
     override fun processStarted(debugProcess: XDebugProcess) {
         val session = debugProcess.session
-        if (!BasedPythonSettings.getInstance(session.project).debuggerDataFlow) return
-        session.addSessionListener(StopWatcher(session))
+        val watching = Disposer.newDisposable(ByDataFlowSession.getInstance(session.project), "basedpython data flow watcher")
+        session.addSessionListener(StopWatcher(session, watching), watching)
     }
 
-    private class StopWatcher(private val session: XDebugSession) : XDebugSessionListener {
+    private class StopWatcher(
+        private val session: XDebugSession,
+        private val lifetime: Disposable,
+    ) : XDebugSessionListener {
 
         override fun sessionPaused() = onStop()
 
@@ -64,66 +72,60 @@ class ByDataFlowListener : XDebuggerManagerListener {
 
         override fun sessionResumed() = forget()
 
-        override fun sessionStopped() = forget()
+        override fun sessionStopped() {
+            forget()
+            Disposer.dispose(lifetime)
+        }
 
         private fun forget() {
             ByDataFlowSession.getInstance(session.project).clear()
         }
 
+        /**
+         * Reads where the program is *here*, on the thread the stop is reported on. Asked later from
+         * another thread, the session could already be at the next stop, and the question would be
+         * about one stop and its answer drawn at another.
+         */
         private fun onStop() {
             val project = session.project
-            val position = session.currentPosition ?: return forget()
+            val data = ByDataFlowSession.getInstance(project)
+            if (!BasedPythonSettings.getInstance(project).debuggerDataFlow) return data.clear()
+            val position = session.currentPosition ?: return data.clear()
             val file = position.file
-            if (file.fileType !is BasedPythonFileType) return forget()
+            if (file.fileType !is BasedPythonFileType) return data.clear()
+            val frame = session.currentStackFrame ?: return data.clear()
+            val line = position.line + 1
 
-            // Everything below reaches two other processes, so none of it may run on the EDT. The
-            // stop itself is reported on it
-            ApplicationManager.getApplication().executeOnPooledThread {
-                val found = try {
-                    analyse(project, file, position.line + 1)
-                } catch (e: Exception) {
-                    LOG.warn("data flow at a stop in ${file.name} failed", e)
-                    emptyList()
-                }
-                ByDataFlowSession.getInstance(project).publish(file, found)
-            }
+            // Everything the analysis does reaches two other processes, so none of it runs here: a
+            // frame selection is reported on the EDT
+            data.stopped(file) { analyse(project, file, line, frame) }
         }
 
         /** Ask the debugger, then ask the server what the answer settles. */
-        private fun analyse(project: Project, file: VirtualFile, line: Int): List<ByDataFlowFinding> {
-            val document = ReadAction.computeBlocking<Document?, RuntimeException> {
-                FileDocumentManager.getInstance().getDocument(file)
-            } ?: return emptyList()
-
-            val below = ReadAction.computeBlocking<Int, RuntimeException> {
-                if (line - 1 in 0 until document.lineCount) document.getLineStartOffset(line - 1) else -1
+        private suspend fun analyse(
+            project: Project,
+            file: VirtualFile,
+            line: Int,
+            frame: XStackFrame,
+        ): List<ByDataFlowFinding> {
+            val names = readAction {
+                val document = FileDocumentManager.getInstance().getDocument(file) ?: return@readAction null
+                if (line - 1 !in 0 until document.lineCount) return@readAction null
+                ByDataFlowNames.below(document.immutableCharSequence, document.getLineStartOffset(line - 1))
             }
-            if (below < 0) return emptyList()
+            if (names.isNullOrEmpty()) return emptyList()
 
-            val text = ReadAction.computeBlocking<CharSequence, RuntimeException> { document.charsSequence }
-            val names = ByDataFlowNames.below(text, below)
-            if (names.isEmpty()) return emptyList()
-
-            val facts = askDebugger(names) ?: return emptyList()
+            // `null` when the adapter does not answer it, which is every debugpy session — that is
+            // the ordinary case and not a failure worth reporting
+            val facts = ByDataFlowRequests.facts(frame, names, FACTS_TIMEOUT_MS.toLong()) ?: return emptyList()
             val observations = ByDataFlowFacts.observationsOf(facts)
             if (observations.isEmpty()) return emptyList()
 
             return askServer(project, file, line, observations)
         }
 
-        /**
-         * `bpd/facts` for the frame the user is looking at.
-         *
-         * `null` when the adapter does not answer it, which is every debugpy session — that is the
-         * ordinary case and not a failure worth reporting.
-         */
-        private fun askDebugger(names: List<String>): JsonObject? {
-            val frame = session.currentStackFrame ?: return null
-            return ByDataFlowRequests.facts(frame, names, FACTS_TIMEOUT_MS.toLong())
-        }
-
         /** `by/dataFlowAt`, with what the debugger proved. */
-        private fun askServer(
+        private suspend fun askServer(
             project: Project,
             file: VirtualFile,
             line: Int,
@@ -136,10 +138,9 @@ class ByDataFlowListener : XDebuggerManagerListener {
                 line = line,
                 observations = observations,
             )
-            return server.askBy("by/dataFlowAt", ANALYSIS_TIMEOUT_MS) {
+            return server.awaitBy("by/dataFlowAt", ANALYSIS_TIMEOUT_MS.toLong()) {
                 (it as ByDataFlowServer).dataFlowAt(params)
             }.value.orEmpty()
         }
     }
-
 }

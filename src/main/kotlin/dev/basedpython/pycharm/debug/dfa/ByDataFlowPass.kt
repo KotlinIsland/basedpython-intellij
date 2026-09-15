@@ -7,10 +7,8 @@ import com.intellij.codeHighlighting.TextEditorHighlightingPassRegistrar
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.markup.HighlighterLayer
 import com.intellij.openapi.editor.markup.HighlighterTargetArea
-import com.intellij.openapi.editor.markup.RangeHighlighter
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.util.Key
 import com.intellij.psi.PsiFile
 import dev.basedpython.pycharm.lang.BasedPythonLanguage
 import dev.basedpython.pycharm.settings.BasedPythonSettings
@@ -46,9 +44,6 @@ class ByDataFlowPassFactory : TextEditorHighlightingPassFactory, TextEditorHighl
         return ByDataFlowPass(file.project, editor, file)
     }
 }
-
-/** What this pass drew last time, so it can take it down before drawing again. */
-private val DRAWN: Key<List<RangeHighlighter>> = Key.create("basedpython.dataflow.drawn")
 
 /**
  * The layer the findings are drawn at, and it has to be this high.
@@ -88,13 +83,10 @@ private class ByDataFlowPass(
     }
 
     override fun doApplyInformationToEditor() {
+        val marks = ByDataFlowSession.getInstance(myProject).marks
+        marks.clear(editor)
+        if (found.isEmpty()) return
         val markup = editor.markupModel
-        editor.getUserData(DRAWN)?.forEach(markup::removeHighlighter)
-
-        if (found.isEmpty()) {
-            editor.putUserData(DRAWN, null)
-            return
-        }
 
         // How far along each line's margin the next verdict starts, in characters. A line with two
         // decided conditions on it — `a if p else (b if q else c)` — would otherwise draw both
@@ -137,7 +129,7 @@ private class ByDataFlowPass(
                 else -> null
             }
         }
-        editor.putUserData(DRAWN, drawn)
+        marks.replace(editor, drawn)
     }
 }
 

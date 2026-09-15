@@ -1,5 +1,7 @@
 package dev.basedpython.pycharm.debug.recompose
 
+import com.intellij.openapi.Disposable
+import com.intellij.openapi.util.Disposer
 import com.intellij.xdebugger.XDebugProcess
 import com.intellij.xdebugger.XDebugSessionListener
 import com.intellij.xdebugger.XDebuggerManagerListener
@@ -39,7 +41,11 @@ class ByRecompositionListener : XDebuggerManagerListener {
         val service = ByRecompositionSession.getInstance(session.project)
         val link = ByRecompositionRequests(dap.dapDebugSession.commandProcessor)
         service.sessionStarted(link)
-        session.addSessionListener(StopWatcher(service, link))
+        // Owned by the service as well as the session, so a session outliving the plugin does not
+        // keep a listener of ours; released when the session stops, so the service does not keep
+        // every session it ever watched
+        val watching = Disposer.newDisposable(service, "basedpython recompositions watcher")
+        session.addSessionListener(StopWatcher(service, link, watching), watching)
     }
 
     /**
@@ -51,12 +57,16 @@ class ByRecompositionListener : XDebuggerManagerListener {
     private class StopWatcher(
         private val service: ByRecompositionSession,
         private val link: ByRecompositionLink,
+        private val lifetime: Disposable,
     ) : XDebugSessionListener {
 
         override fun sessionPaused() = service.paused(link)
 
         override fun sessionResumed() = service.resumed(link)
 
-        override fun sessionStopped() = service.sessionEnded(link)
+        override fun sessionStopped() {
+            service.sessionEnded(link)
+            Disposer.dispose(lifetime)
+        }
     }
 }

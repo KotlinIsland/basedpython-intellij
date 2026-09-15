@@ -10,7 +10,6 @@ import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.Logger
-import com.intellij.openapi.editor.EditorFactory
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.project.Project
@@ -20,6 +19,7 @@ import com.intellij.openapi.util.io.FileUtil
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiManager
 import dev.basedpython.pycharm.debug.ByDebugProtocolServer
+import dev.basedpython.pycharm.debug.ByEditorMarks
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import dev.basedpython.pycharm.util.BasedPythonBundle
 import kotlinx.coroutines.CancellationException
@@ -161,7 +161,14 @@ internal class ByRecompositionSession(
     /** Sentences already logged or announced this session, so each is said once. */
     private val reported = HashSet<String>()
 
-    /** Nothing to release: this exists so listeners can be tied to the service's lifetime. */
+    /**
+     * What the pass drew, as the pass's own record of it. A child of this service, so the labels
+     * are taken down when the plugin goes rather than left in editors that pin it; see
+     * [dev.basedpython.pycharm.debug.ByEditorMarks].
+     */
+    internal val marks = ByEditorMarks(this)
+
+    /** The marks are released as a child; this is otherwise what listeners are tied to the lifetime of. */
     override fun dispose() = Unit
 
     private val enabled: Boolean
@@ -552,10 +559,10 @@ internal class ByRecompositionSession(
             if (project.isDisposed) return@invokeLater
             if (cleared.isNotEmpty()) {
                 val documents = FileDocumentManager.getInstance()
-                for (editor in EditorFactory.getInstance().allEditors) {
+                for (editor in marks.editors()) {
                     if (editor.project != project) continue
                     val file = documents.getFile(editor.document) ?: continue
-                    if (normalise(file.path) in cleared) ByRecompositionMarks.clear(editor)
+                    if (normalise(file.path) in cleared) marks.clear(editor)
                 }
             }
             val psi = PsiManager.getInstance(project)

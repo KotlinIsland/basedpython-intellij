@@ -20,6 +20,7 @@ import dev.basedpython.pycharm.lsp.inlay.ByHintMode
 import dev.basedpython.pycharm.lsp.inlay.ByPushKey
 import dev.basedpython.pycharm.lsp.reload.BasedPythonLspReloader
 import dev.basedpython.pycharm.debug.bpd.ByDebugBackend
+import dev.basedpython.pycharm.debug.dfa.ByDataFlowSession
 import dev.basedpython.pycharm.debug.recompose.ByRecompositionSession
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import dev.basedpython.pycharm.util.BasedPythonBundle
@@ -327,11 +328,13 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
         val handlingChanged = pyFileHandlingCombo.selectedItem != s.pyFileHandling
         s.pyFileHandling = pyFileHandlingCombo.selectedItem as? PyFileHandling ?: PyFileHandling.AUTO
         s.debugBackend = debugBackendCombo.selectedItem as? ByDebugBackend ?: ByDebugBackend.BPD
+        val dataFlowChanged = debuggerDataFlow.isSelected != s.debuggerDataFlow
         s.debuggerDataFlow = debuggerDataFlow.isSelected
         val recompositionsChanged = debuggerRecompositions.isSelected != s.debuggerRecompositions
         s.debuggerRecompositions = debuggerRecompositions.isSelected
-        // Off must take the margin labels of a stopped session down now: the pass that would have
-        // removed them no longer runs once the factory declines, so the service removes them itself
+        // Off must take what a stopped session drew down now: the pass that would have removed it
+        // no longer runs once the factory declines, so each service removes its marks itself
+        if (dataFlowChanged) ByDataFlowSession.getInstance(project).settingChanged()
         if (recompositionsChanged) ByRecompositionSession.getInstance(project).settingChanged()
         // File types are cached per file; without this, open .py editors keep the old one.
         if (handlingChanged) fireFileTypesChange()
