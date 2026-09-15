@@ -13,8 +13,8 @@ import java.nio.file.Path
 /**
  * Runs `by build` in [root] for an action that needs one file of the output, and waits for it.
  *
- * In [root] because `by build` writes its output relative to where it runs, and [root] is the
- * project root `by/buildOutput` named for the file the action is about. Through [ByBuildService],
+ * [root] is the project root `by/buildOutput` named for the file the action is about, so the build
+ * is of that project and writes where `by/buildOutput` said it would. Through [ByBuildService],
  * so the build waits its turn behind a watch-mode build of the same tree rather than writing over
  * it.
  *

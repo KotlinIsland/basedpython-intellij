@@ -296,9 +296,9 @@ data class ByBuildOutputParams(val uri: String)
 
 /** A path's place in its project's build. Every path is absolute. */
 data class ByBuildOutput(
-    /** Where `by build` has to run for [buildDirectory] to be where it writes. */
+    /** The project root: the project a `by build` run anywhere inside it builds. */
     val projectRoot: String? = null,
-    /** Where `by build`, run at [projectRoot] with no `--out`, writes the project. */
+    /** Where `by build`, run anywhere in the project with no `--out`, writes the project. */
     val buildDirectory: String? = null,
     /** For a `.by` or `.byi` the build is made of, the file it is written to. */
     val generated: String? = null,
