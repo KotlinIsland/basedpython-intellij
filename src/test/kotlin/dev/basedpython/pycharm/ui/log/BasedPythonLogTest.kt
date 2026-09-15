@@ -3,6 +3,11 @@ package dev.basedpython.pycharm.ui.log
 import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import com.intellij.execution.ui.ConsoleViewContentType
+import com.intellij.openapi.util.Disposer
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Test
@@ -45,6 +50,36 @@ class BasedPythonLogTest {
         assertNotNull(console)
         // Subsequent lines go straight to the console.
         log.serverOutput("buff", "INFO Registering workspace", isError = false)
+    }
+
+    /** A console is a disposable, and one nobody disposes outlives the project it printed for. */
+    @Test
+    fun `the console is disposed with the log`() {
+        val parent = Disposer.newDisposable()
+        try {
+            // The log is a project service and goes with the project; stand in for it with a
+            // disposable of our own rather than disposing the shared light project's service.
+            val stand = BasedPythonLog(fixture.project)
+            Disposer.register(parent, stand)
+            val console = stand.getOrCreateConsole()
+            assertFalse(Disposer.isDisposed(console))
+            Disposer.dispose(parent)
+            assertTrue(Disposer.isDisposed(console))
+        } finally {
+            if (!Disposer.isDisposed(parent)) Disposer.dispose(parent)
+        }
+    }
+
+    @Test
+    fun `lines held before the window opens are bounded, newest kept`() {
+        val pending = PendingLines(capacity = 3)
+        for (i in 1..5) pending.add("line $i\n", ConsoleViewContentType.NORMAL_OUTPUT)
+
+        val (dropped, lines) = pending.drain()
+
+        assertEquals(2, dropped)
+        assertEquals(listOf("line 3\n", "line 4\n", "line 5\n"), lines.map { it.first })
+        assertEquals(0 to emptyList<Pair<String, ConsoleViewContentType>>(), pending.drain())
     }
 
     @Test
