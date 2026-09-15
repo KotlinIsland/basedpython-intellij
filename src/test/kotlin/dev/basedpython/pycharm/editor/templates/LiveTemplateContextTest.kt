@@ -8,8 +8,6 @@ import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.lang.dialect.BasedPythonSources
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
-import dev.basedpython.pycharm.testFramework.letContentHashingFinish
-import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -62,10 +60,6 @@ class LiveTemplateContextTest {
         val state = TemplateManagerImpl.getTemplateState(editor) ?: return
         WriteCommandAction.runWriteCommandAction(fixture.project) { state.gotoEnd(false) }
     }
-
-    /** See [letContentHashingFinish]: every test here expands a template, and that edits a document. */
-    @AfterEach
-    fun letTheEditSettle() = letContentHashingFinish()
 
     @Test
     fun `both bundled template sets load`() {

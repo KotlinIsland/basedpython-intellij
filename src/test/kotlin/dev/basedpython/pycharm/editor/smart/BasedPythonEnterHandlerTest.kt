@@ -4,9 +4,7 @@ import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.lsp.outline.OutlineSpec
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
-import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
-import dev.basedpython.pycharm.testFramework.letContentHashingFinish
 
 /**
  * Enter in a real editor, with `by`'s outline of the text put in by hand.
@@ -20,9 +18,6 @@ import dev.basedpython.pycharm.testFramework.letContentHashingFinish
 class BasedPythonEnterHandlerTest {
 
     private val fixture by codeInsightFixture()
-
-    @AfterEach
-    fun letTheEditSettle() = letContentHashingFinish()
 
     private fun enter(before: String, after: String, outline: (OutlineSpec.Suite.() -> Unit)?) {
         fixture.configureByText("a.by", before)

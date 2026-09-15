@@ -388,6 +388,16 @@ tasks {
     }
   }
 
+  // Code Provenance hashes every document a test edits, and the first hash of a JVM extracts lz4's
+  // native library to the temp directory and loads it: seconds on macOS, where a freshly written
+  // dylib is assessed before it may load, and more on a loaded machine. A pool thread doing that
+  // outlives the edit that started it, so whichever test edited a document first failed the
+  // fixture's thread-leak check for the platform's lazy initialisation. The plugin records how code
+  // was written for AI analytics and nothing here touches it.
+  prepareTestSandbox {
+    disabledPlugins.add("com.intellij.code.provenance")
+  }
+
   // One zip per platform, distinguishable in build/distributions and as a release asset.
   buildPlugin {
     archiveClassifier = bundledPlatform.orElse("")

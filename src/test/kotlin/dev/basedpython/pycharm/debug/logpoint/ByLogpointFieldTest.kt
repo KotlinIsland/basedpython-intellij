@@ -11,8 +11,6 @@ import com.intellij.xdebugger.evaluation.EvaluationMode
 import dev.basedpython.pycharm.debug.ByLineBreakpointType
 import dev.basedpython.pycharm.lang.BasedPythonLanguage
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
-import dev.basedpython.pycharm.testFramework.letContentHashingFinish
-import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotEquals
@@ -52,10 +50,6 @@ class ByLogpointFieldTest {
         )
         return breakpoints.addLineBreakpoint(type, fixture.file.virtualFile.url, line, null, info)
     }
-
-    /** See [letContentHashingFinish]: the re-indent test edits a document, and the platform notices. */
-    @AfterEach
-    fun letTheEditSettle() = letContentHashingFinish()
 
     private fun editor() = fixture.editor as EditorEx
 

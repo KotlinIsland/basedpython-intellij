@@ -5,8 +5,6 @@ import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.lsp.outline.OutlineSpec
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
-import dev.basedpython.pycharm.testFramework.letContentHashingFinish
-import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
 
 /**
@@ -17,9 +15,6 @@ import org.junit.jupiter.api.Test
 class BasedPythonStatementMoverTest {
 
     private val fixture by codeInsightFixture()
-
-    @AfterEach
-    fun letTheEditSettle() = letContentHashingFinish()
 
     private fun move(
         down: Boolean,

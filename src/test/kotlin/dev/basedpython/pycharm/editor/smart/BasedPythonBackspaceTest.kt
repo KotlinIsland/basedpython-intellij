@@ -4,8 +4,6 @@ import com.intellij.openapi.actionSystem.IdeActions
 import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
-import dev.basedpython.pycharm.testFramework.letContentHashingFinish
-import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
 
 /**
@@ -22,9 +20,6 @@ import org.junit.jupiter.api.Test
 class BasedPythonBackspaceTest {
 
     private val fixture by codeInsightFixture()
-
-    @AfterEach
-    fun letTheEditSettle() = letContentHashingFinish()
 
     private fun backspace(before: String, after: String) {
         fixture.configureByText("a.by", before)

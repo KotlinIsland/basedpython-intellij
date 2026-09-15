@@ -5,8 +5,6 @@ import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.lsp.ByLspLifecycleListener
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
-import dev.basedpython.pycharm.testFramework.letContentHashingFinish
-import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
@@ -24,9 +22,6 @@ class ByRenderedDocsRefresherTest {
     private val fixture by codeInsightFixture()
 
     private val refresher get() = fixture.project.service<ByRenderedDocsRefresher>()
-
-    @AfterEach
-    fun waitForHashing() = letContentHashingFinish()
 
     @Test
     fun `a file the server has not answered for is stale`() {

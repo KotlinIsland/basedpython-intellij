@@ -16,8 +16,6 @@ import dev.basedpython.pycharm.debug.logpoint.ByLogpoints
 import dev.basedpython.pycharm.debug.ByLineBreakpointType
 import dev.basedpython.pycharm.lsp.outline.OutlineSpec
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
-import dev.basedpython.pycharm.testFramework.letContentHashingFinish
-import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -64,10 +62,6 @@ class PrintToLogpointFixTest {
     private fun problems(): Array<ProblemDescriptor> =
         PrintToLogpointInspection()
             .checkFile(fixture.file, InspectionManager.getInstance(fixture.project), false)
-
-    /** See [letContentHashingFinish]: every test here edits a document, and the platform notices. */
-    @AfterEach
-    fun letTheEditSettle() = letContentHashingFinish()
 
     @Test
     fun `the call is gone and what replaces it is a log point`() {

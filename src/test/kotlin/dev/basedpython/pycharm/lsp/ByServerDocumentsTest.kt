@@ -19,7 +19,6 @@ import com.intellij.testFramework.PsiTestUtil
 import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
-import dev.basedpython.pycharm.testFramework.letContentHashingFinish
 import org.eclipse.lsp4j.DidChangeTextDocumentParams
 import org.eclipse.lsp4j.DidCloseTextDocumentParams
 import org.eclipse.lsp4j.DidOpenTextDocumentParams
@@ -53,7 +52,6 @@ class ByServerDocumentsTest {
 
     @AfterEach
     fun cleanUp() {
-        letContentHashingFinish()
         roots.forEach { PsiTestUtil.removeContentEntry(fixture.module, it) }
         temp.toFile().deleteRecursively()
     }
