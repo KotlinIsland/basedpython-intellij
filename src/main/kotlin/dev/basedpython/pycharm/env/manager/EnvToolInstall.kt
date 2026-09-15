@@ -1,5 +1,6 @@
 package dev.basedpython.pycharm.env.manager
 
+import com.intellij.openapi.diagnostic.ControlFlowException
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.util.io.Decompressor
@@ -8,6 +9,7 @@ import dev.basedpython.pycharm.env.Executables
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
+import java.util.concurrent.CancellationException
 
 /**
  * Installing a backend's own tool, so a machine without uv is one click rather than one web search
@@ -85,6 +87,9 @@ internal object EnvToolInstall {
                 deleteRecursively(work)
             }
         } catch (e: Exception) {
+            // A cancelled download is the user pressing stop, not an install that failed: it goes on
+            // up to the task, which ends quietly, rather than into an error notification.
+            if (e is ControlFlowException || e is CancellationException) throw e
             LOG.warn("Failed to install ${backend.executableName}", e)
             Outcome.Failed(e.message ?: e.javaClass.simpleName)
         }
