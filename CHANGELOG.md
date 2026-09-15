@@ -565,6 +565,42 @@
 
 ### Fixed
 
+- *Optimize Imports* no longer freezes the IDE while `buff` works: the edit is asked for before the
+  platform's write action on the EDT rather than inside it, and Cancel cancels the request. Cleanup
+  edits (optimize imports, fix all on save and on commit) are dropped rather than applied when the
+  document changed after they were asked for — `buff` now stamps each edit with the document
+  version it was computed against. The commit-time fixes run as a suspending commit check and save
+  only the files they rewrote.
+
+- *Show Transpiled Python* keeps one diff current in place while it is open and stops watching the
+  source when it is closed; it used to open a new diff window on every refresh, and keep opening
+  them after the first was closed.
+
+- *Convert .by → .py* / *.py → .by* ask before replacing an existing file, write through the VFS,
+  and are undone in one step.
+
+- Cancel stops the `by` / `buff` command an action is running. *Diff api.lock* reads the regenerated
+  lockfile from `by generate-api-file --stdout`, so it no longer leaves a new `api.lock` behind or
+  restores the old one behind open editors.
+
+- New projects get a `pyproject.toml` that uv and `buff` accept (`[dependency-groups]`,
+  `[tool.ruff.lint]`, no build backend for an application) and a `src/main.by` `buff format`
+  leaves alone.
+
+- *Explain Rule* works for every diagnostic that names its rule, `by`'s kebab-case codes included:
+  it is a fix on the diagnostic, carrying the code the server sent.
+
+- A project stops costing a directory listing and a `pyproject.toml` read on every file created
+  anywhere, and its `.py` files are retyped when editing `pyproject.toml`, adding or removing a
+  marker, or importing settings changes whether it is basedpython.
+
+- The log tool window holds only the latest 2000 lines of server output until it is opened, and its
+  console is disposed with the project. `pyproject.toml` completion offers each `buff` table only
+  its own keys.
+
+- Projects that never chose follow the IDE-wide *Enable by / buff* defaults. The LSP trace level,
+  minimum Python version and module facet settings, none of which reached anything, are gone.
+
 - Debugging a `.by` program on 2026.3 no longer ends in an `AbstractMethodError` the first time an
   adapter sends `invalidated`. 263 gave `DapEventConsumer` an `invalidated` method, and the consumer
   that publishes source maps wrapped the platform's with Kotlin's `by delegate`, which writes
