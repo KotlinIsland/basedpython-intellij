@@ -114,9 +114,12 @@ internal class ByLspServerSupportProvider : LspIntegrationProvider {
     if (!shouldServe(project, file)) return
     val settings = BasedPythonSettings.getInstance(project)
     if (!settings.byEnabled) return
-    // `file` makes resolution content-root-aware, so a per-module `.venv` wins over the
-    // workspace-level one (FEATURES.md §186) for the server too, not just for `ByCli`.
-    val launch = BasedPythonBinaries.launchBy(project, file)
+    // Resolved for the project, not for `file`. The descriptor is project-wide, so the platform
+    // keeps whichever one started first and ignores the rest: resolving from the file's content
+    // root would make the whole project's server run from the `.venv` of whichever module happened
+    // to have a file opened first. One server serves every module, so it resolves the way the
+    // project does.
+    val launch = BasedPythonBinaries.launchBy(project)
     if (launch == null) {
       LOG.warn("`by` binary not found — skipping LSP startup for ${file.path}")
       BasedPythonNotifications.warnBinaryMissing(project, "by")
@@ -247,7 +250,8 @@ internal class BuffLspServerSupportProvider : LspIntegrationProvider {
     if (!shouldServe(project, file)) return
     val settings = BasedPythonSettings.getInstance(project)
     if (!settings.buffEnabled) return
-    val launch = BasedPythonBinaries.launchBuff(project, file)
+    // For the project rather than `file`, for the same reason as `by`'s above.
+    val launch = BasedPythonBinaries.launchBuff(project)
     if (launch == null) {
       LOG.warn("`buff` binary not found — skipping LSP startup for ${file.path}")
       BasedPythonNotifications.warnBinaryMissing(project, "buff")
