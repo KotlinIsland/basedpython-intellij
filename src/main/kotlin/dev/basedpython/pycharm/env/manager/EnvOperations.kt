@@ -219,25 +219,32 @@ internal object EnvOperations {
              */
             override fun run(indicator: ProgressIndicator) {
                 try {
-                    service.busyWhile { body(indicator) }
+                    // The busy stretch ends with a scan of the environment — however the body
+                    // ended, since a cancelled `uv sync` has usually already installed some of what
+                    // it resolved.
+                    service.busyWhile {
+                        try {
+                            body(indicator)
+                        } finally {
+                            // In a finally, and off the EDT, because a cancelled or failed command
+                            // has usually already written something — a `uv add` that failed to
+                            // resolve has still edited `pyproject.toml` — and the editor must not be
+                            // left showing the file as it was before. Inside the busy stretch, so
+                            // the watcher's request for these very changes is recognised as served
+                            // by the scan the stretch ends with rather than scanned for again.
+                            if (backend != null && root != null) {
+                                EnvFiles.refreshAfterOperation(backend, root, extraFiles)
+                            }
+                        }
+                    }
                 } finally {
-                    // In a finally, and off the EDT, because a cancelled or failed command has
-                    // usually already written something — a `uv add` that failed to resolve has
-                    // still edited `pyproject.toml` — and the editor must not be left showing the
-                    // file as it was before.
-                    if (backend != null && root != null) EnvFiles.refreshAfterOperation(backend, root, extraFiles)
                     // However the gesture ended, nothing is still installing.
                     service.clearProgress()
                 }
             }
 
-            /**
-             * Runs whether the task succeeded, failed or was cancelled — which is the point. A
-             * cancelled `uv sync` has usually already installed some of what it resolved, so the
-             * view must be re-read rather than left showing the state from before.
-             */
+            /** Runs whether the task succeeded, failed or was cancelled — which is the point. */
             override fun onFinished() {
-                service.refresh()
                 afterEnvironmentChanged(project)
             }
         })

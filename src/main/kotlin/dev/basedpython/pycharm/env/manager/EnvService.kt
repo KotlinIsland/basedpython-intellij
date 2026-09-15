@@ -9,6 +9,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
 import dev.basedpython.pycharm.env.modules.ModuleLayout
 import dev.basedpython.pycharm.ui.log.BasedPythonLog
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -53,30 +54,31 @@ internal class EnvService(
     var status: EnvStatus = EnvStatus.unknown(basePath())
         private set
 
+    /** Which scans run when — see [EnvRefreshQueue] for the rules. */
+    private val refreshes = EnvRefreshQueue(::startScan)
+
     /**
      * True while a refresh or an operation is in flight, so the view can disable what must not run
      * twice.
-     *
-     * A depth counter rather than a flag, because the two overlap by design: a gesture ends by
-     * refreshing, and a refresh can be running when a gesture starts. With a flag, whichever
-     * finished first would clear it and re-enable a *Sync* button while the sync was still going.
      */
-    private val busyDepth = java.util.concurrent.atomic.AtomicInteger()
-
-    val busy: Boolean get() = busyDepth.get() > 0
+    val busy: Boolean get() = refreshes.busy
 
     /**
-     * Marks the service busy for the duration of [block], on the calling thread.
+     * Marks an operation in flight for the duration of [block], on the calling thread, and scans
+     * once it is over.
      *
      * How [EnvOperations] keeps a whole multi-step gesture — install, create, sync — reading as one
-     * busy stretch rather than three.
+     * busy stretch rather than three, with no scan reading the environment halfway through it and
+     * exactly one reading it afterwards, however the gesture ended.
      */
     fun <T> busyWhile(block: () -> T): T {
-        setBusy(true)
+        refreshes.operationStarted()
+        fire()
         return try {
             block()
         } finally {
-            setBusy(false)
+            refreshes.operationFinished()
+            fire()
         }
     }
 
@@ -85,8 +87,8 @@ internal class EnvService(
 
     private val listeners = CopyOnWriteArrayList<Listener>()
 
-    /** Guards against a second refresh while one is in flight. */
-    private val refreshing = AtomicBoolean(false)
+    /** Set by the first request for a scan, so [refreshIfNeeded] asks once rather than per caller. */
+    private val everRequested = AtomicBoolean(false)
 
     /**
      * What each package is doing while an operation runs.
@@ -140,8 +142,9 @@ internal class EnvService(
         Disposer.register(parent) { listeners -= registered }
     }
 
+    /** Scans unless something already has, or already asked to. */
     fun refreshIfNeeded() {
-        if (!scanned) refresh()
+        if (!everRequested.get()) refresh()
     }
 
     /**
@@ -153,20 +156,37 @@ internal class EnvService(
      * the new state without a Refresh.
      */
     fun scheduleRefresh() {
-        syncJob?.cancel()
-        syncJob = scope.launch {
-            delay(REFRESH_DELAY_MILLIS)
-            if (!refresh()) scheduleRefresh()
+        // Stamped now, when the file changed, rather than when the delay is up: a scan that starts
+        // in between — the one an operation ends with — has read this change already.
+        val changedAt = refreshes.noteChange()
+        synchronized(this) {
+            syncJob?.cancel()
+            syncJob = scope.launch {
+                delay(REFRESH_DELAY_MILLIS)
+                refreshes.requestIfStale(changedAt)
+            }
         }
     }
 
-    /** Re-reads, unless a read is already in flight; true when this call started one. */
-    fun refresh(): Boolean {
-        if (!refreshing.compareAndSet(false, true)) return false
-        setBusy(true)
+    /**
+     * Re-reads — now, or as soon as the scan or operation in flight has finished.
+     *
+     * Never dropped: see [EnvRefreshQueue].
+     */
+    fun refresh() {
+        everRequested.set(true)
+        refreshes.request()
+    }
+
+    /** One scan, on the IO dispatcher, reporting back to [refreshes] however it ends. */
+    private fun startScan() {
+        everRequested.set(true)
+        fire()
         scope.launch(Dispatchers.IO) {
             try {
                 setStatus(scan())
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 // Reading another tool's output and another tool's files; anything it throws is
                 // about one project's configuration and must not take the service down.
@@ -174,11 +194,10 @@ internal class EnvService(
                 setStatus(EnvStatus.unknown(basePath()).copy(error = e.message ?: e.toString()))
             } finally {
                 scanned = true
-                refreshing.set(false)
-                setBusy(false)
+                refreshes.scanFinished()
+                fire()
             }
         }
-        return true
     }
 
     /**
@@ -314,11 +333,6 @@ internal class EnvService(
 
     private fun setStatus(next: EnvStatus) {
         status = next
-        fire()
-    }
-
-    private fun setBusy(value: Boolean) {
-        if (value) busyDepth.incrementAndGet() else busyDepth.decrementAndGet()
         fire()
     }
 
