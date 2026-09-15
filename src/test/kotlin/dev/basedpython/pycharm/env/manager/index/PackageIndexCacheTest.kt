@@ -1,9 +1,13 @@
 package dev.basedpython.pycharm.env.manager.index
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.io.TempDir
+import java.nio.file.Files
+import java.nio.file.Path
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
@@ -18,6 +22,10 @@ import java.util.concurrent.atomic.AtomicInteger
  * download already in flight instead of being told there is none.
  */
 class PackageIndexCacheTest {
+
+    /** Every cache in this class lives here, never under the real `~/.basedpython/cache`. */
+    @TempDir
+    lateinit var root: Path
 
     /** An index whose catalogue takes a controllable amount of time to arrive. */
     private class SlowIndex(
@@ -50,7 +58,7 @@ class PackageIndexCacheTest {
         val started = CountDownLatch(1)
         val release = CountDownLatch(1)
         val index = SlowIndex("shared-${System.nanoTime()}", started, release)
-        val cache = PackageIndexCache()
+        val cache = PackageIndexCache(root)
 
         val first = cache.refreshCatalogue(index)
         assertTrue(started.await(10, TimeUnit.SECONDS), "the download should have started")
@@ -64,21 +72,19 @@ class PackageIndexCacheTest {
         assertEquals(true, first.get(10, TimeUnit.SECONDS))
         assertEquals(1, index.fetches.get(), "9.5 MB is fetched once, however many callers ask")
         assertTrue(cache.names(index).contains("httpx"))
-        cache.clear(index)
     }
 
     /** Once it has landed, nothing is fetched again. */
     @Test
     fun `a fresh catalogue is not downloaded twice`() {
         val index = SlowIndex("fresh-${System.nanoTime()}")
-        val cache = PackageIndexCache()
+        val cache = PackageIndexCache(root)
 
         cache.refreshCatalogue(index).get(10, TimeUnit.SECONDS)
         assertTrue(cache.isCatalogueFresh(index))
 
         assertEquals(false, cache.refreshCatalogue(index).get(10, TimeUnit.SECONDS))
         assertEquals(1, index.fetches.get())
-        cache.clear(index)
     }
 
     /**
@@ -94,23 +100,91 @@ class PackageIndexCacheTest {
             override fun fetchDetailsDocument(name: String): String? = null
             override fun parseDetails(name: String, document: String): PackageDetails? = null
         }
-        val cache = PackageIndexCache()
+        val cache = PackageIndexCache(root)
 
         assertEquals(false, cache.refreshCatalogue(index).get(10, TimeUnit.SECONDS))
         assertTrue(cache.names(index).startingWith("http").isEmpty())
-        cache.clear(index)
     }
 
     /** A failed attempt must not poison the next one. */
     @Test
     fun `a refresh can be retried after one fails`() {
         val index = SlowIndex("retry-${System.nanoTime()}")
-        val cache = PackageIndexCache()
+        val cache = PackageIndexCache(root)
 
         cache.refreshCatalogue(index).get(10, TimeUnit.SECONDS)
         // Forcing goes again even though the catalogue is fresh.
         assertEquals(true, cache.refreshCatalogue(index, force = true).get(10, TimeUnit.SECONDS))
         assertEquals(2, index.fetches.get())
-        cache.clear(index)
+    }
+
+    /**
+     * A download that dies halfway leaves the previous catalogue — and its age — as they were.
+     *
+     * The writer used to commit on close, so the names read before the connection dropped replaced
+     * the catalogue under a fresh timestamp, and the week-long TTL then kept the fragment in place.
+     */
+    @Test
+    fun `a download that fails midway keeps the previous catalogue and does not look fresh`() {
+        val id = "midway"
+        val complete = SlowIndex(id)
+        val cache = PackageIndexCache(root)
+        assertEquals(true, cache.refreshCatalogue(complete).get(10, TimeUnit.SECONDS))
+        val catalogue = root.resolve(id).resolve("catalogue.txt")
+        val stale = java.nio.file.attribute.FileTime.fromMillis(System.currentTimeMillis() - 30L * 24 * 60 * 60 * 1000)
+        Files.setLastModifiedTime(catalogue, stale)
+
+        val dropped = object : PackageIndex {
+            override val id: String = id
+            override val displayName: String = "dropped"
+            override fun fetchNames(consumer: (String) -> Unit) {
+                consumer("aaa-partial")
+                error("connection reset")
+            }
+            override fun fetchDetailsDocument(name: String): String? = null
+            override fun parseDetails(name: String, document: String): PackageDetails? = null
+        }
+
+        assertEquals(false, cache.refreshCatalogue(dropped).get(10, TimeUnit.SECONDS))
+        assertTrue(cache.names(dropped).contains("httpx"), "the old catalogue survives")
+        assertTrue(cache.names(dropped).startingWith("aaa").isEmpty(), "and the fragment was not written")
+        assertEquals(stale, Files.getLastModifiedTime(catalogue))
+        assertFalse(cache.isCatalogueFresh(dropped), "so the next Add fetches it again")
+    }
+
+    /** Disposal abandons a download in flight rather than leaving plugin code running after unload. */
+    @Test
+    fun `disposing abandons a download in flight without writing it`() {
+        val started = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val stopped = java.util.concurrent.CompletableFuture<Throwable?>()
+        val index = object : PackageIndex {
+            override val id: String = "disposed"
+            override val displayName: String = id
+            override fun fetchNames(consumer: (String) -> Unit) {
+                started.countDown()
+                release.await(10, TimeUnit.SECONDS)
+                try {
+                    listOf("httpx", "requests").forEach(consumer)
+                    stopped.complete(null)
+                } catch (e: Throwable) {
+                    stopped.complete(e)
+                    throw e
+                }
+            }
+            override fun fetchDetailsDocument(name: String): String? = null
+            override fun parseDetails(name: String, document: String): PackageDetails? = null
+        }
+        val cache = PackageIndexCache(root)
+
+        val refresh = cache.refreshCatalogue(index)
+        assertTrue(started.await(10, TimeUnit.SECONDS))
+        cache.dispose()
+        release.countDown()
+
+        assertTrue(refresh.isCancelled, "the caller's future is cancelled")
+        val thrown = stopped.get(10, TimeUnit.SECONDS)
+        assertTrue(thrown is java.util.concurrent.CancellationException, "the next name stops the download: $thrown")
+        assertFalse(Files.exists(root.resolve("disposed").resolve("catalogue.txt")), "nothing was committed")
     }
 }

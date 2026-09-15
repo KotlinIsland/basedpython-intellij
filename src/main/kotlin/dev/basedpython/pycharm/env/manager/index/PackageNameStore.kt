@@ -145,21 +145,27 @@ internal class PackageNameStore(private val file: Path) {
 
         /** Writes a catalogue from names already in hand. */
         fun write(file: Path, names: Iterable<String>) {
-            Writer(file).use { writer -> names.forEach(writer::add) }
+            Writer(file).use { writer ->
+                names.forEach(writer::add)
+                writer.commit()
+            }
         }
     }
 
     /**
-     * Accumulates names and writes the sorted catalogue on [close].
+     * Accumulates names and writes the sorted catalogue on [commit].
      *
      * The sort needs every name at once, which is the one moment this feature costs real memory: a
      * transient spike during a refresh that happens about once a week, rather than a permanent cost.
      * An `ArrayList` rather than a sorted set for exactly that reason — the per-entry overhead of a
      * tree is what would make the spike hurt.
      *
-     * The file is written to a sibling and moved into place, so a catalogue interrupted halfway
-     * through a 12 MB write is never the one that gets read. Closing without adding anything writes
-     * nothing at all, which keeps a failed fetch from replacing a good catalogue with an empty one.
+     * Writing is [commit], and only [commit]. [close] discards whatever was accumulated, so a writer
+     * in a `use` block whose fetch threw halfway leaves the catalogue on disk exactly as it was:
+     * committing on close would swap in the first part of the index under a fresh timestamp, and a
+     * catalogue that fresh is not fetched again for a week. The file is written to a sibling and
+     * moved into place, so a reader never sees a half-written one either; and a commit with nothing
+     * added writes nothing, which keeps an empty answer from replacing a good catalogue.
      */
     class Writer(private val file: Path) : AutoCloseable {
 
@@ -174,7 +180,8 @@ internal class PackageNameStore(private val file: Path) {
         /** How many names have been accepted so far. */
         val count: Int get() = lines.size
 
-        override fun close() {
+        /** Sorts what was added and moves it into place as the catalogue. */
+        fun commit() {
             if (lines.isEmpty()) return
             lines.sort()
             Files.createDirectories(file.parent)
@@ -190,6 +197,11 @@ internal class PackageNameStore(private val file: Path) {
                 }
             }
             Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING)
+            close()
+        }
+
+        /** Drops everything accumulated without writing it — see the class documentation. */
+        override fun close() {
             lines.clear()
             lines.trimToSize()
         }

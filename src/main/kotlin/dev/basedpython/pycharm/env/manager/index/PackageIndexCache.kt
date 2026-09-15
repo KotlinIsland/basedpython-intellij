@@ -4,9 +4,11 @@ import com.intellij.openapi.Disposable
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.Logger
+import com.intellij.util.concurrency.AppExecutorUtil
 import dev.basedpython.pycharm.env.download.ByBinaryDownloadPlan
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.concurrent.CancellationException
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
 
@@ -37,9 +39,30 @@ import java.util.concurrent.ConcurrentHashMap
  * The dialog is fully usable while it downloads; completion simply lights up when it is ready.
  */
 @Service(Service.Level.APP)
-internal class PackageIndexCache : Disposable {
+internal class PackageIndexCache internal constructor(
+    /** Where every index's cache lives — [root] in production, a temporary directory in a test. */
+    private val root: Path,
+) : Disposable {
 
-    override fun dispose() = Unit
+    constructor() : this(root())
+
+    /**
+     * Set once the plugin is unloading or the IDE is closing.
+     *
+     * A catalogue download is seconds of plugin code on a pooled thread, and nothing about
+     * unloading a plugin stops a thread it started. So the download checks this between names and
+     * abandons the work: nothing is committed, and the thread leaves plugin code at the next name
+     * rather than when the whole index has arrived.
+     */
+    @Volatile
+    private var disposed = false
+
+    override fun dispose() {
+        disposed = true
+        refreshes.values.forEach { it.cancel(false) }
+        refreshes.clear()
+        details.clear()
+    }
 
     /**
      * The in-flight catalogue download per index, so two dialogs never both fetch 9.5 MB — and, more
@@ -84,19 +107,41 @@ internal class PackageIndexCache : Disposable {
     fun isRefreshing(index: PackageIndex): Boolean =
         refreshes[index.id]?.isDone == false
 
+    /**
+     * Downloads the catalogue on the platform's pooled executor, committing it only once every name
+     * has arrived.
+     *
+     * The commit is explicit rather than left to the writer's `close`: a connection dropped halfway
+     * throws out of [PackageIndex.fetchNames], and the fragment read by then must not become the
+     * catalogue — see [PackageNameStore.Writer].
+     */
     private fun startRefresh(index: PackageIndex): CompletableFuture<Boolean> =
-        CompletableFuture.supplyAsync {
-            try {
-                PackageNameStore.Writer(namesFile(index)).use { writer ->
-                    index.fetchNames(writer::add)
-                    LOG.info("package catalogue for ${index.displayName}: ${writer.count} names")
+        CompletableFuture.supplyAsync(
+            {
+                try {
+                    PackageNameStore.Writer(namesFile(index)).use { writer ->
+                        index.fetchNames { name ->
+                            checkNotDisposed()
+                            writer.add(name)
+                        }
+                        checkNotDisposed()
+                        LOG.info("package catalogue for ${index.displayName}: ${writer.count} names")
+                        writer.commit()
+                    }
+                    true
+                } catch (_: CancellationException) {
+                    false
+                } catch (e: Exception) {
+                    LOG.warn("could not refresh the package catalogue for ${index.displayName}", e)
+                    false
                 }
-                true
-            } catch (e: Exception) {
-                LOG.warn("could not refresh the package catalogue for ${index.displayName}", e)
-                false
-            }
-        }
+            },
+            AppExecutorUtil.getAppExecutorService(),
+        )
+
+    private fun checkNotDisposed() {
+        if (disposed) throw CancellationException("the package index cache was disposed")
+    }
 
     /**
      * What the index knows about [name] — from memory, then disk, then the network.
@@ -143,7 +188,7 @@ internal class PackageIndexCache : Disposable {
     private fun key(index: PackageIndex, name: String) =
         index.id + "/" + PackageNameStore.normalise(name)
 
-    private fun directory(index: PackageIndex): Path = root().resolve(index.id)
+    private fun directory(index: PackageIndex): Path = root.resolve(index.id)
 
     private fun namesFile(index: PackageIndex): Path = directory(index).resolve("catalogue.txt")
 

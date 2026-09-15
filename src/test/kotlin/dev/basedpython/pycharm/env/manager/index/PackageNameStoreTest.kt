@@ -161,9 +161,34 @@ class PackageNameStoreTest {
     fun `writing no names leaves an existing catalogue alone`(@TempDir dir: Path) {
         val file = dir.resolve("catalogue.txt")
         PackageNameStore.write(file, listOf("httpx"))
-        PackageNameStore.Writer(file).use { /* nothing added */ }
+        PackageNameStore.Writer(file).use { it.commit() }
 
         assertEquals(listOf("httpx"), PackageNameStore(file).startingWith("httpx"))
+    }
+
+    /**
+     * A fetch that throws partway through leaves the old catalogue — and its old timestamp — alone.
+     *
+     * Closing used to write: a `use` block unwinding from a dropped connection committed the names
+     * read so far, stamped fresh, and the week-long TTL then kept that fragment in place.
+     */
+    @Test
+    fun `a writer closed without committing writes nothing`(@TempDir dir: Path) {
+        val file = dir.resolve("catalogue.txt")
+        PackageNameStore.write(file, listOf("httpx", "requests"))
+        val stamp = java.nio.file.attribute.FileTime.fromMillis(1_000_000_000L)
+        Files.setLastModifiedTime(file, stamp)
+
+        runCatching {
+            PackageNameStore.Writer(file).use { writer ->
+                writer.add("aaa-partial")
+                error("connection reset")
+            }
+        }
+
+        assertEquals(listOf("httpx"), PackageNameStore(file).startingWith("httpx"))
+        assertTrue(PackageNameStore(file).startingWith("aaa").isEmpty())
+        assertEquals(stamp, Files.getLastModifiedTime(file))
     }
 
     /** A catalogue is only ever swapped in whole — a reader never sees a half-written file. */
