@@ -6,32 +6,34 @@ import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.command.WriteCommandAction
+import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.ui.MessageDialogBuilder
+import com.intellij.openapi.util.io.FileUtil
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.openapi.vfs.VirtualFile
-import dev.basedpython.pycharm.actions.ByCli
 import dev.basedpython.pycharm.util.BasedPythonBundle
 import dev.basedpython.pycharm.lang.BasedPythonFileType
+import java.nio.file.Path
 import java.nio.file.Paths
 
 // ---------------------------------------------------------------------------
 // "Convert .by → .py (in place)"
 //
-// Runs `by transpile <file>` and writes the result to an `out/` sibling at
+// Asks the `by` server for the file's python and writes it to an `out/` sibling at
 // <projectRoot>/out/<relPath>.py, creating the file if necessary.
 // ---------------------------------------------------------------------------
 
 /**
  * Action: "Convert .by → .py (in place)"
  *
- * Runs `by transpile <currentFile>`, then writes the Python output to the
- * corresponding `out/<relPath>.py` file (creating it if necessary).  Opens
- * the result in the editor.
+ * Transpiles the current file through the `by` server, then writes the Python output to the
+ * corresponding `out/<relPath>.py` file (creating it if necessary). Opens the result in the editor.
  */
 class ConvertByToPyAction : AnAction() {
 
@@ -63,11 +65,9 @@ class ConvertByToPyAction : AnAction() {
                     val relStr = relPath.toString().replaceFirst(Regex("\\.by$", RegexOption.IGNORE_CASE), ".py")
                     val outPath = base.resolve("out").resolve(relStr)
 
-                    ApplicationManager.getApplication().invokeLater {
-                        WriteCommandAction.runWriteCommandAction(project, "Convert .by → .py", null, {
-                            writeTextToPath(project, outPath, pyContent)
-                        })
-                    }
+                    ApplicationManager.getApplication().invokeLater({
+                        writeConvertedAndOpen(project, outPath, pyContent, "Convert .by → .py")
+                    }, project.disposed)
                 }
             },
         )
@@ -80,15 +80,15 @@ class ConvertByToPyAction : AnAction() {
 // ---------------------------------------------------------------------------
 // "Convert .py → .by (in place)"
 //
-// Runs `by transpile --reverse <file>` and writes the result to a `.by` sibling
-// in the same directory as the source .py file.
+// Asks the `by` server to reverse the file and writes the result to a `.by` sibling in the same
+// directory as the source .py file.
 // ---------------------------------------------------------------------------
 
 /**
  * Action: "Convert .py → .by (in place)"
  *
- * Runs `by transpile --reverse <currentFile>` and writes the basedpython output
- * to a `.by` sibling file next to the source `.py`.  Opens the result in the editor.
+ * Reverse-transpiles the current file through the `by` server and writes the basedpython output to
+ * a `.by` sibling file next to the source `.py`. Opens the result in the editor.
  */
 class ConvertPyToByAction : AnAction() {
 
@@ -117,11 +117,9 @@ class ConvertPyToByAction : AnAction() {
                     ) ?: return
                     val byPath = filePath.parent.resolve(file.nameWithoutExtension + ".by")
 
-                    ApplicationManager.getApplication().invokeLater {
-                        WriteCommandAction.runWriteCommandAction(project, "Convert .py → .by", null, {
-                            writeTextToPath(project, byPath, byContent)
-                        })
-                    }
+                    ApplicationManager.getApplication().invokeLater({
+                        writeConvertedAndOpen(project, byPath, byContent, "Convert .py → .by")
+                    }, project.disposed)
                 }
             },
         )
@@ -131,34 +129,62 @@ class ConvertPyToByAction : AnAction() {
 }
 
 // ---------------------------------------------------------------------------
-// Shared helper: write text to a (possibly new) path via VFS
+// Shared helper: write the converted source through the VFS, as one undoable command
 // ---------------------------------------------------------------------------
 
+/** [writeConvertedSource], asking before it replaces a file that exists, then opening the result. */
+private fun writeConvertedAndOpen(project: Project, path: Path, content: String, commandName: String) {
+    val written = writeConvertedSource(project, path, content, commandName) { existing ->
+        MessageDialogBuilder
+            .yesNo(
+                BasedPythonBundle.message("convert.overwrite.title", existing.name),
+                BasedPythonBundle.message("convert.overwrite.message", existing.presentableUrl),
+            )
+            .yesText(BasedPythonBundle.message("convert.overwrite.button"))
+            .ask(project)
+    } ?: return
+    FileEditorManager.getInstance(project).openFile(written, true)
+}
+
 /**
- * Writes [content] to [path] using the IntelliJ VFS so that document listeners fire correctly.
- * Must be called inside a WriteCommandAction / WriteAction.
+ * Writes [content] to [path] and returns the file, or null when nothing was written.
+ *
+ * A target that already exists is only replaced when [confirmOverwrite] says so — it may well be a
+ * hand-written file, and a conversion is no reason to lose it without asking.
+ *
+ * Everything goes through the VFS inside one write command: the missing directories, the file, and
+ * the text, which is set on the file's document. So the IDE sees the change as it happens rather
+ * than on some later refresh, and the whole conversion is one step of *Undo*. Writing to disk
+ * directly, as this used to when the directory was not yet known to the VFS, did neither.
  */
-private fun writeTextToPath(project: Project, path: java.nio.file.Path, content: String) {
-    // Ensure parent directories exist on disk
-    java.nio.file.Files.createDirectories(path.parent)
+internal fun writeConvertedSource(
+    project: Project,
+    path: Path,
+    content: String,
+    commandName: String,
+    confirmOverwrite: (VirtualFile) -> Boolean,
+): VirtualFile? {
+    val existing = LocalFileSystem.getInstance().refreshAndFindFileByNioFile(path)
+    if (existing != null && !confirmOverwrite(existing)) return null
 
-    val parentVf = LocalFileSystem.getInstance().refreshAndFindFileByNioFile(path.parent)
-        ?: run {
-            // Fall back to direct write if VFS can't find the dir
-            java.nio.file.Files.writeString(path, content)
-            return
+    return WriteCommandAction.writeCommandAction(project)
+        .withName(commandName)
+        .compute<VirtualFile?, RuntimeException> {
+            val document = existing?.let { FileDocumentManager.getInstance().getDocument(it) }
+            if (existing != null && document != null) {
+                // Through the document, which is what undo records; saving follows the IDE's own
+                // rules, actions on save included.
+                document.setText(content)
+                FileDocumentManager.getInstance().saveDocument(document)
+                return@compute existing
+            }
+            val target = existing ?: run {
+                val parent = VfsUtil.createDirectoryIfMissing(FileUtil.toSystemIndependentName(path.parent.toString()))
+                    ?: return@compute null
+                parent.createChildData(project, path.fileName.toString())
+            }
+            // A file created in this command: undoing the command deletes it, content and all.
+            VfsUtil.saveText(target, content)
+            target
         }
-
-    val fileName = path.fileName.toString()
-    val existing = parentVf.findChild(fileName)
-    val targetVf: VirtualFile = if (existing != null) {
-        existing
-    } else {
-        parentVf.createChildData(project, fileName)
-    }
-
-    VfsUtil.saveText(targetVf, content)
-
-    // Open the newly written file in the editor (still on EDT)
-    FileEditorManager.getInstance(project).openFile(targetVf, true)
 }
