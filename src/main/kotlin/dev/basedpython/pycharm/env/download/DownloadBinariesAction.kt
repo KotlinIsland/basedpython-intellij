@@ -22,7 +22,6 @@ import dev.basedpython.pycharm.util.BasedPythonBundle
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
-import java.security.MessageDigest
 import java.util.concurrent.CancellationException
 
 /**
@@ -135,7 +134,7 @@ class DownloadBinariesAction : AnAction() {
             HttpRequests.request(wheel.url).productNameAsUserAgent().saveToFile(archive.toFile(), indicator)
             indicator.checkCanceled()
 
-            val actual = sha256(archive)
+            val actual = Checksums.sha256(archive)
             check(actual == wheel.sha256) {
                 BasedPythonBundle.message("download.checksumMismatch", wheel.filename, wheel.sha256, actual)
             }
@@ -164,19 +163,6 @@ class DownloadBinariesAction : AnAction() {
         } finally {
             deleteRecursively(work)
         }
-    }
-
-    private fun sha256(file: Path): String {
-        val digest = MessageDigest.getInstance("SHA-256")
-        Files.newInputStream(file).use { input ->
-            val buffer = ByteArray(1 shl 16)
-            while (true) {
-                val read = input.read(buffer)
-                if (read < 0) break
-                digest.update(buffer, 0, read)
-            }
-        }
-        return digest.digest().joinToString("") { "%02x".format(it) }
     }
 
     /** Best-effort cleanup of the scratch directory; a leftover must not fail an install that worked. */

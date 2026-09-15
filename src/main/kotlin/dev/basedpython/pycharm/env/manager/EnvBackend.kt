@@ -314,6 +314,11 @@ data class EnvToolDownload(
     val memberSuffix: String,
     /** The file name to install it under. */
     val fileName: String,
+    /**
+     * Where the publisher's SHA-256 for [url] is, as a `sha256sum`-style file, or null when it
+     * publishes none. An install whose archive does not match it installs nothing.
+     */
+    val checksumUrl: String? = null,
 ) {
     enum class ArchiveKind { TAR_GZ, ZIP }
 }

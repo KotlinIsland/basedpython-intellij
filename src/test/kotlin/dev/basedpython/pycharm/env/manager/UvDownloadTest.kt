@@ -57,6 +57,15 @@ class UvDownloadTest {
         assertEquals("uv.exe", windows.fileName)
     }
 
+    /** uv publishes a `sha256sum` file beside every archive, and the install checks against it. */
+    @Test
+    fun `every archive is checked against the checksum published beside it`() {
+        for ((os, arch) in listOf("Mac OS X" to "aarch64", "Linux" to "amd64", "Windows 11" to "amd64")) {
+            val plan = UvDownload.plan(os, arch)!!
+            assertEquals("${plan.url}.sha256", plan.checksumUrl)
+        }
+    }
+
     /**
      * An unsupported platform returns null rather than guessing, so the UI can say "install it
      * yourself" instead of offering a button that downloads a 404.

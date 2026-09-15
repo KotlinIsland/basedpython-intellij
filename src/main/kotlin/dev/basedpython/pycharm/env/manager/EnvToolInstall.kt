@@ -6,6 +6,7 @@ import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.util.io.Decompressor
 import com.intellij.util.io.HttpRequests
 import dev.basedpython.pycharm.env.Executables
+import dev.basedpython.pycharm.env.download.Checksums
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
@@ -22,6 +23,8 @@ import java.util.concurrent.CancellationException
  * static binary with no dependencies and no install steps — the script's entire job is to pick the
  * right archive and unpack it, which is what this does, without handing an anonymous script the
  * user's shell.
+ *
+ * The archive is checked against the SHA-256 uv publishes beside it before anything is unpacked.
  *
  * The binary lands in `~/.basedpython/bin`, the same plugin-managed directory the `by` / `buff`
  * download uses. Nothing outside that directory is touched: no shell profile is edited, no `PATH` is
@@ -70,6 +73,19 @@ internal object EnvToolInstall {
                 val archive = work.resolve(plan.url.substringAfterLast('/'))
                 HttpRequests.request(plan.url).productNameAsUserAgent().saveToFile(archive.toFile(), indicator)
                 indicator?.checkCanceled()
+
+                plan.checksumUrl?.let { checksumUrl ->
+                    val published = Checksums.parseSha256File(
+                        HttpRequests.request(checksumUrl).productNameAsUserAgent().readString(indicator),
+                    ) ?: return Outcome.Failed("$checksumUrl holds no SHA-256")
+                    val actual = Checksums.sha256(archive)
+                    if (actual != published) {
+                        return Outcome.Failed(
+                            "${archive.fileName} does not match its published SHA-256 " +
+                                "(expected $published, got $actual); nothing was installed",
+                        )
+                    }
+                }
 
                 indicator?.text = "Unpacking ${backend.executableName}…"
                 val extracted = extract(archive, work, plan)

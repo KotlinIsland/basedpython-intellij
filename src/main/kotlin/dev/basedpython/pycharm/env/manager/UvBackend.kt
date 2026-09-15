@@ -340,11 +340,16 @@ object UvDownload : EnvToolInstaller {
         val windows = triple.contains("windows")
         // Windows releases are zipped and hold `uv.exe` at the archive root; the rest are tarballs
         // holding `uv-<triple>/uv`. Matching on the suffix covers both without hard-coding either.
+        val url = "$BASE_URL/uv-$triple${if (windows) ".zip" else ".tar.gz"}"
         return EnvToolDownload(
-            url = "$BASE_URL/uv-$triple${if (windows) ".zip" else ".tar.gz"}",
+            url = url,
             archive = if (windows) EnvToolDownload.ArchiveKind.ZIP else EnvToolDownload.ArchiveKind.TAR_GZ,
             memberSuffix = if (windows) "uv.exe" else "uv",
             fileName = if (windows) "uv.exe" else "uv",
+            // Published beside every archive. Both go through the same `latest` redirect; a release
+            // landing between the two requests reads as a mismatch and installs nothing, which is
+            // the right answer to a download that cannot be checked.
+            checksumUrl = "$url.sha256",
         )
     }
 
