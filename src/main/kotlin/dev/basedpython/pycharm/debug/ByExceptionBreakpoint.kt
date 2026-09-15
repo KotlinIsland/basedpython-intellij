@@ -138,15 +138,26 @@ private class ByExceptionBreakpointPanel :
  *
  * `DapXDebugProcess` registers a handler for *line* breakpoints only, so without this the type
  * above would be a checkbox that changed nothing — which is exactly what it was until now.
+ *
+ * What was registered is remembered per breakpoint, and exactly that is what an unregistration
+ * removes. Rebuilding it from the breakpoint instead removes nothing: the platform unregisters an
+ * edited breakpoint *after* the Breakpoints dialog has written the new flags into its properties,
+ * and the manager's set is keyed on filter and condition — so unticking "on raise" asked it to
+ * remove only `uncaught`, and `raised` went on stopping the program.
  */
 internal class ByExceptionBreakpointHandler(
     private val session: DapDebugSession,
 ) : XBreakpointHandler<XBreakpoint<ByExceptionBreakpointProperties>>(ByExceptionBreakpointType::class.java) {
 
+    private val registered = HashMap<XBreakpoint<ByExceptionBreakpointProperties>, List<DapExceptionBreakpoint>>()
+
     override fun registerBreakpoint(breakpoint: XBreakpoint<ByExceptionBreakpointProperties>) {
+        val added = breakpoint.toDapBreakpoints()
+        val replaced = synchronized(registered) { registered.put(breakpoint, added) }.orEmpty()
         session.commandProcessor.submitCommand {
             session.breakpointManager.run {
-                breakpoint.toDapBreakpoints().forEach { addExceptionBreakpoint(it) }
+                replaced.forEach { removeExceptionBreakpoint(it) }
+                added.forEach { addExceptionBreakpoint(it) }
             }
         }
     }
@@ -155,9 +166,10 @@ internal class ByExceptionBreakpointHandler(
         breakpoint: XBreakpoint<ByExceptionBreakpointProperties>,
         temporary: Boolean,
     ) {
+        val removed = synchronized(registered) { registered.remove(breakpoint) } ?: return
         session.commandProcessor.submitCommand {
             session.breakpointManager.run {
-                breakpoint.toDapBreakpoints().forEach { removeExceptionBreakpoint(it) }
+                removed.forEach { removeExceptionBreakpoint(it) }
             }
         }
     }
