@@ -135,6 +135,10 @@ internal class BySourceMapPublisher(
                 // `unknown command`, which costs nothing — it has no narration to switch off.
                 try {
                     byServer.understands(ByUnderstandsArguments(UNDERSTOOD_EVENTS)).await()
+                } catch (e: CancellationException) {
+                    // The session is going: nothing after this may be sent, least of all the
+                    // breakpoints and `configurationDone` that `initialized` releases
+                    throw e
                 } catch (e: Exception) {
                     LOG.debug("the debug adapter does not answer bpd/understands", e)
                 }
@@ -149,6 +153,8 @@ internal class BySourceMapPublisher(
                 for (mapping in mappings) {
                     try {
                         byServer.setPydevdSourceMap(mapping.toRequest()).await()
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         LOG.warn("setPydevdSourceMap failed for ${mapping.source}", e)
                     }

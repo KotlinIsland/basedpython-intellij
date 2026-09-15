@@ -1,5 +1,6 @@
 package dev.basedpython.pycharm.debug
 
+import com.intellij.platform.dap.CommandScope
 import com.intellij.platform.dap.DapCommandProcessor
 import com.intellij.platform.dap.DapEventConsumer
 import org.eclipse.lsp4j.debug.OutputEventArguments
@@ -9,6 +10,9 @@ import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
 import java.lang.reflect.Method
 import java.lang.reflect.Proxy
+import java.util.concurrent.CancellationException
+import java.util.concurrent.CompletableFuture
+import kotlinx.coroutines.runBlocking
 
 /**
  * The consumer [BySourceMapPublisher] hands the platform forwards every event it does not handle.
@@ -66,6 +70,27 @@ class BySourceMapPublisherTest {
         consumer.initialized()
         assertEquals(emptyList<Pair<String, List<Any?>>>(), calls)
         assertEquals(1, submitted.size)
+    }
+
+    /**
+     * `initialized` releases the breakpoints and `configurationDone`. A session cancelled while the
+     * command waits on the adapter is going away, and must not be told to run on.
+     */
+    @Test
+    fun `a cancelled wait for the adapter does not release the platform's initialized`() {
+        consumer.initialized()
+        val cancelled = CompletableFuture<Void?>().apply { cancel(false) }
+        val server = Proxy.newProxyInstance(
+            javaClass.classLoader,
+            arrayOf(ByDebugProtocolServer::class.java),
+        ) { _, method, _ -> if (method.name == "understands") cancelled else null } as ByDebugProtocolServer
+
+        @Suppress("UNCHECKED_CAST")
+        val command = submitted.single() as suspend CommandScope.() -> Unit
+        assertThrows(CancellationException::class.java) {
+            runBlocking { CommandScope(this, server).command() }
+        }
+        assertEquals(emptyList<Pair<String, List<Any?>>>(), calls, "the platform was told the adapter is initialized")
     }
 
     @Test

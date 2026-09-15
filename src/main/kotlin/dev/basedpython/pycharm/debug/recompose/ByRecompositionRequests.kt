@@ -3,6 +3,7 @@ package dev.basedpython.pycharm.debug.recompose
 import com.google.gson.JsonObject
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.platform.dap.DapCommandProcessor
+import com.intellij.util.concurrency.ThreadingAssertions
 import dev.basedpython.pycharm.debug.ByDebugProtocolServer
 import dev.basedpython.pycharm.util.BasedPythonBundle
 import kotlinx.coroutines.CancellationException
@@ -23,7 +24,7 @@ private const val TIMEOUT_MS = 2_000L
  *
  * An interface so [ByRecompositionSession] can be driven by a test without a debug adapter behind
  * it; [ByRecompositionRequests] is the one real implementation. Both calls block for up to the
- * timeout and are made off the EDT.
+ * timeout, and so are refused on the EDT.
  */
 internal interface ByRecompositionLink {
     /** `bpd/recompositions {}` — the ring as it stands. */
@@ -84,28 +85,31 @@ internal class ByRecompositionRequests(private val commandProcessor: DapCommandP
     private fun send(
         name: String,
         request: suspend (ByDebugProtocolServer) -> JsonObject?,
-    ): ByRecompositionAnswer = runBlocking {
-        withTimeoutOrNull(TIMEOUT_MS) {
-            try {
-                val body = commandProcessor.submitCommandAsync {
-                    val server = server as? ByDebugProtocolServer ?: return@submitCommandAsync null
-                    request(server)
-                }.await()
-                if (body == null) ByRecompositionAnswer.noBody() else ByRecompositionAnswer.Answered(body)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                val refusal = refusalOf(e)
-                if (refusal != null) {
-                    // bpd's own sentence, which the caller shows and logs once. Not an error: a
-                    // program that has no compose runtime is an ordinary program
-                    ByRecompositionAnswer.Refused(refusal)
-                } else {
-                    LOG.warn("$name failed", e)
-                    ByRecompositionAnswer.failed(e)
+    ): ByRecompositionAnswer {
+        ThreadingAssertions.assertBackgroundThread()
+        return runBlocking {
+            withTimeoutOrNull(TIMEOUT_MS) {
+                try {
+                    val body = commandProcessor.submitCommandAsync {
+                        val server = server as? ByDebugProtocolServer ?: return@submitCommandAsync null
+                        request(server)
+                    }.await()
+                    if (body == null) ByRecompositionAnswer.noBody() else ByRecompositionAnswer.Answered(body)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    val refusal = refusalOf(e)
+                    if (refusal != null) {
+                        // bpd's own sentence, which the caller shows and logs once. Not an error: a
+                        // program that has no compose runtime is an ordinary program
+                        ByRecompositionAnswer.Refused(refusal)
+                    } else {
+                        LOG.warn("$name failed", e)
+                        ByRecompositionAnswer.failed(e)
+                    }
                 }
-            }
-        } ?: ByRecompositionAnswer.timedOut()
+            } ?: ByRecompositionAnswer.timedOut()
+        }
     }
 
     companion object {
