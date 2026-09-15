@@ -22,7 +22,6 @@ import com.intellij.xdebugger.hotswap.SourceFileChangesListener
 import dev.basedpython.pycharm.debug.ByDebugProtocolServer
 import dev.basedpython.pycharm.debug.bpd.ByBpdRecord
 import dev.basedpython.pycharm.lang.dialect.BasedPythonSources
-import dev.basedpython.pycharm.lsp.ext.ByRestaged
 import dev.basedpython.pycharm.util.BasedPythonBundle
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -48,7 +47,7 @@ import java.nio.file.Path
  *
  * ## what pressing the button does
  *
- * One `bpd/replaceCode` per changed file. bpd compiles the file, walks the tree that comes out
+ * One `bpd/replaceCode` over every changed file. bpd compiles each file, walks the tree that comes out
  * against the tree the process is running, and applies the difference **only** where every one of
  * them is inside the body of a function that exists in both and takes the same arguments —
  * assigning `function.__code__` on every function object in the process that held the old code,
@@ -140,10 +139,11 @@ internal class ByHotSwapProvider(
      *
      * ## the route
      *
-     * Save; ask `by` what each file's slot in the running tree should now hold; write that into the
-     * tree, keeping what was replaced; then one `bpd/replaceCode` over the lot with `remap` set,
-     * because re-staging rewrote `_by_sourcemap.py` beside the generated python and every `.by`
-     * breakpoint is armed on a generated line that came out of the table it replaced.
+     * Save; ask `by`, in one request for the whole edit, what every file's slot in the running tree
+     * should now hold; write that into the tree — the modules, then the one `_by_sourcemap.py` that
+     * describes all of them — keeping what was replaced; then one `bpd/replaceCode` over the lot,
+     * with `remap` set when the map was rewritten, because every `.by` breakpoint is armed on a
+     * generated line that came out of the table it replaced. See [ByReload].
      *
      * Producing the bytes is `by`'s: it owns the transpiler, the line table and the digests, and a
      * debugger inventing any of those would be writing a map describing a file it guessed at.
@@ -171,9 +171,11 @@ internal class ByHotSwapProvider(
         // files. Saving is what makes those the same thing — see [saveEdits].
         saveEdits(changes)
 
-        // Gathered rather than said as it is found: one balloon naming everything that did not
-        // reload is a notification, and four of them are spam.
-        val notReloaded = mutableListOf<String>()
+        if (changes.isEmpty()) {
+            // Nothing to ask about, and `by` refuses an empty set — the process matches the source.
+            listener.onSuccessfulReload()
+            return
+        }
 
         val directory = recordFile?.let { ByBpdRecord.buildDirectoryOf(it) }
         if (directory == null) {
@@ -201,53 +203,46 @@ internal class ByHotSwapProvider(
             LOG.error("hot reload is running on the EDT; the LSP request below would freeze the IDE")
         }
 
-        // What each edited file's slot in the running tree should now hold, asked of `by` because
-        // producing those bytes is `by`'s: it owns the transpiler, the line table and the digests.
-        val staged = mutableListOf<ByRestagedFile>()
-        for (file in changes.sortedBy { it.path }) {
-            when (val answer = ByRestage.ask(project, file, directory)) {
-                null -> notReloaded += "${file.name}: the `by` language server did not answer"
-                else -> when {
-                    answer.refused != null -> notReloaded += refusalOf(file.name, answer)
-                    // The file already being what the tree holds is a different fact from nothing
-                    // being replaceable, and it is not a failure: an edit typed and typed back out
-                    // again lands here.
-                    !answer.changed -> Unit
-                    answer.generated == null || answer.content == null ->
-                        notReloaded += "${file.name}: the `by` language server answered without the bytes to write"
-                    else -> staged += ByRestagedFile(file, answer)
-                }
-            }
+        // What the edit's slots in the running tree should now hold, asked of `by` because producing
+        // those bytes is `by`'s: it owns the transpiler, the line table and the digests. One request
+        // for the whole set, because the tree has one `_by_sourcemap.py` and the answer has to be
+        // one map carrying every file's entry — see [ByRestage].
+        val plan = when (val asked = ByRestage.ask(project, changes.sortedBy { it.path }, directory)) {
+            ByRestage.Asked.NoAnswer ->
+                ByReload.Plan.Refused(listOf("nothing was reloaded: the `by` language server did not answer"))
+            ByRestage.Asked.SeveralServers -> ByReload.Plan.Refused(
+                listOf(
+                    "nothing was reloaded: the edited files are served by different `by` language " +
+                        "servers, and a running program is one build",
+                ),
+            )
+            is ByRestage.Asked.Answered -> ByReload.plan(asked.answer)
         }
 
-        // Nothing is written when anything refused. The set goes in together or not at all, for the
-        // reason bpd applies one that way: a tree holding half of an edit describes a program that
-        // never existed.
-        if (notReloaded.isNotEmpty()) {
-            tell(notReloaded)
-            listener.onFailure()
-            return
-        }
-        if (staged.isEmpty()) {
-            process.session.consoleView.say("every edited file already was the code the process is running")
-            // `onSuccessfulReload`, and it is the one place that is honest without anything having
-            // been replaced: the claim being made is that the process matches the source, and here
-            // it does.
-            listener.onSuccessfulReload()
-            return
+        val write = when (plan) {
+            // Nothing is written when anything refused. The set goes in together or not at all, for
+            // the reason bpd applies one that way: a tree holding half of an edit describes a program
+            // that never existed. `by` answers a set that way too, and names every file that stood
+            // in the way.
+            is ByReload.Plan.Refused -> {
+                tell(plan.reasons)
+                listener.onFailure()
+                return
+            }
+            ByReload.Plan.UpToDate -> {
+                process.session.consoleView.say("every edited file already was the code the process is running")
+                // `onSuccessfulReload`, and it is the one place that is honest without anything
+                // having been replaced: the claim being made is that the process matches the source,
+                // and here it does.
+                listener.onSuccessfulReload()
+                return
+            }
+            is ByReload.Plan.Write -> plan
         }
 
         val written = ByBuildTree()
         try {
-            for (one in staged) {
-                written.write(Path.of(one.restaged.generated!!), one.restaged.content!!)
-                // Rewritten whole beside the python it describes, and only for a file the build
-                // transpiled — a hand-written `.py` was copied into the tree, so nothing in the map
-                // is about it and `by` sends null.
-                one.restaged.sourcemap?.let {
-                    written.write(Path.of(directory, BY_SOURCEMAP), it)
-                }
-            }
+            ByReload.write(write, Path.of(directory), written)
         } catch (e: IOException) {
             LOG.warn("could not write the re-staged build", e)
             written.rollback()
@@ -272,12 +267,13 @@ internal class ByHotSwapProvider(
                 ByReplaced.parse(
                     server.replaceCode(
                         ByReplaceCodeArguments(
-                            files = staged.map { it.restaged.generated!! },
-                            // Re-staging rewrote `_by_sourcemap.py`, so every `.by` breakpoint is
-                            // armed on a generated line that came out of the table it replaced.
-                            // bpd installs the new one and translates them again, in the same
-                            // message, before it assigns any `__code__`.
-                            remap = true,
+                            files = write.replace,
+                            // Whether `_by_sourcemap.py` was just rewritten, which is a fact about
+                            // what was written above rather than a default: when it was, every `.by`
+                            // breakpoint is armed on a generated line that came out of the table it
+                            // replaced, and bpd installs the new one and translates them again, in
+                            // the same message, before it assigns any `__code__`.
+                            remap = write.sourcemap != null,
                         ),
                     ).await(),
                 )
@@ -310,7 +306,7 @@ internal class ByHotSwapProvider(
                 replaced == null -> "the debug adapter did not answer the request"
                 else -> "the debugger refused it — see the console for what stood in the way"
             }
-            notReloaded += "nothing was reloaded: $why"
+            val notReloaded = mutableListOf("nothing was reloaded: $why")
             if (stranded.isNotEmpty()) {
                 notReloaded += "and ${stranded.size} file(s) of the build could not be put back: " +
                     stranded.joinToString(", ") { it.fileName.toString() }
@@ -318,16 +314,6 @@ internal class ByHotSwapProvider(
             tell(notReloaded)
             listener.onFailure()
         }
-    }
-
-    /** One edited file and what `by` says its slot in the tree should now hold. */
-    private data class ByRestagedFile(val file: VirtualFile, val restaged: ByRestaged)
-
-    /** A refusal from `by`, with the checker's own sentences under it when that is the reason. */
-    private fun refusalOf(name: String, answer: ByRestaged): String {
-        val head = "$name: ${answer.refused}"
-        if (answer.diagnostics.isEmpty()) return head
-        return head + answer.diagnostics.joinToString("\n  ", prefix = "\n  ")
     }
 
     /**
@@ -421,13 +407,5 @@ internal class ByHotSwapProvider(
 
         /** The group registered in `plugin.xml`, which is the one every balloon of this plugin uses. */
         private const val NOTIFICATION_GROUP = "basedpython"
-
-        /**
-         * The map `by` writes beside the python it generated, named by `by_stage::sourcemap`.
-         *
-         * Spelled here because the plugin writes it: `by` answers with the whole new text of it and
-         * says nothing about where it goes, since it goes where it always was.
-         */
-        private const val BY_SOURCEMAP = "_by_sourcemap.py"
     }
 }

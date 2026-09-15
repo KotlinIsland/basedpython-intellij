@@ -52,24 +52,24 @@ interface ByServerExtensions {
     ): CompletableFuture<List<ByTranspilationNote>?>
 
     /**
-     * What one file's slot in a running build's tree should now contain.
+     * What every edited file's slot in a running build's tree should now contain, and the one
+     * `_by_sourcemap.py` describing them together.
      *
      * Asked of the server rather than of `by` on the command line, and the reason is measured: a
      * full build of a 97-file project takes 24.9 seconds, of which `by check` is 8.5. A subprocess
      * would pay project discovery and that whole check on every press of a button. The server has
-     * already paid both — it holds the project database, warm — so what is left is one file's emit.
+     * already paid both — it holds the project database, warm — so what is left is the edit's emit.
      *
      * It **writes nothing**. The answer is the bytes and where they go, and the caller writes them,
      * because the caller is the only one that can undo that write together with the debugger
      * request that follows it.
      *
-     * A `null` answer means the server declined — language services are off, or the document has no
-     * file behind it. A response carrying [ByRestaged.refused] means it looked and would not: a tree
-     * built by a different `by`, a `--compiled` build whose modules are native extensions with no
-     * `__code__` to assign, or a file that does not check.
+     * A response carrying [ByRestage.refusals] means it looked and would not: a tree built by a
+     * different `by`, a `--compiled` build whose modules are native extensions with no `__code__` to
+     * assign, a document with no file behind it, or a file that does not check.
      */
     @JsonRequest("by/transpileForBuild")
-    fun transpileForBuild(args: ByTranspileForBuildParams): CompletableFuture<ByRestaged?>
+    fun transpileForBuild(args: ByTranspileForBuildParams): CompletableFuture<ByRestage?>
 
     /**
      * Which assignments share an `=` column, so that drawing inlay hints does not take the column
@@ -184,13 +184,20 @@ data class ByAlignmentMember(
 )
 
 /**
- * Which file was edited, and which tree is running.
+ * Which files were edited, and which tree is running.
  *
  * Field names are the wire format and must match `ty_server`'s `TranspileForBuildParams`, which is
  * `deny_unknown_fields`.
  */
 data class ByTranspileForBuildParams(
-    val textDocument: TextDocumentIdentifier,
+    /**
+     * Every file of the edit, in one request.
+     *
+     * One because the tree has one `_by_sourcemap.py` for all of them: an answer about a single
+     * file can only carry the tree's map plus that file's entry, and writing several such answers
+     * keeps the last one's map and loses every other edit's line table.
+     */
+    val textDocuments: List<TextDocumentIdentifier>,
     /**
      * The build tree the program is running out of.
      *
@@ -201,23 +208,35 @@ data class ByTranspileForBuildParams(
 )
 
 /**
- * One file's slot in the tree, or why it will not be recomputed.
+ * What the edit's slots in the tree should now hold, or every reason they will not be recomputed.
  *
- * One type for both answers because the server sends one untagged shape: [refused] is set on a
- * refusal and [generated] on a success, and exactly one of them is.
+ * One type for both answers because the server sends one untagged shape: [refusals] is set on a
+ * refusal and [files] on a success, and exactly one of them is. A refusal is of the whole set — `by`
+ * hands back no bytes for part of an edit.
  */
+data class ByRestage(
+    /** One per distinct file asked about, in the order they were asked. */
+    val files: List<ByRestaged>? = null,
+    /**
+     * The full new text of `_by_sourcemap.py` with the entry of every transpiled file of the set
+     * moved, or null when nothing about the map changed.
+     *
+     * One text for the whole set and written once: it carries every file's entry, which is exactly
+     * what a map per file could not.
+     */
+    val sourcemap: String? = null,
+    /** Why the set will not be recomputed. Null when it was. */
+    val refusals: List<ByRestageRefusal>? = null,
+)
+
+/** One file's slot in the tree. */
 data class ByRestaged(
+    /** The file in the project this was produced from, as it was asked about. */
+    val source: String? = null,
     /** Where the bytes go: absolute, inside the build directory. */
     val generated: String? = null,
     /** The full text to write there. */
     val content: String? = null,
-    /**
-     * The full new text of `_by_sourcemap.py`, or null when nothing about the map changed.
-     *
-     * Null for every file the build copied rather than transpiled — a hand-written `.py` has no
-     * entry in the map, because nothing generated it.
-     */
-    val sourcemap: String? = null,
     /** sha-256 of the source this was produced from. */
     val byDigest: String? = null,
     /** sha-256 of [content]. */
@@ -229,7 +248,13 @@ data class ByRestaged(
      * nothing being replaceable and must not be shown as one.
      */
     val changed: Boolean = false,
-    /** Why it will not be recomputed, written for a user. Null when it was. */
+)
+
+/** One reason `by` refused the set. */
+data class ByRestageRefusal(
+    /** The file this is about, or null when it is about the tree and so about every file. */
+    val file: String? = null,
+    /** Why, written for a user. */
     val refused: String? = null,
     /** What the checker said, when that is why. */
     val diagnostics: List<String> = emptyList(),
