@@ -5,6 +5,7 @@ import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.impl.ActionToolbarImpl
 import com.intellij.openapi.actionSystem.impl.SimpleDataContext
 import com.intellij.openapi.util.Disposer
+import com.intellij.testFramework.PlatformTestUtil
 import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import com.intellij.ui.treeStructure.Tree
@@ -73,8 +74,10 @@ class ByTaskPanelTest {
     fun `every toolbar action updates with no selection`() {
         withPanel { panel ->
             val toolbar = panel.toolbar as ActionToolbarImpl
-            // The toolbar holds a group, not a list, until it is asked to present it.
-            toolbar.updateActionsImmediately()
+            // The toolbar holds a group, not a list, until an update has presented it. The update is
+            // asynchronous: it finishes inline only when every action's `update` fits the platform's
+            // 50 ms fast track, which a loaded machine or a first class load is enough to miss.
+            PlatformTestUtil.waitForFuture(toolbar.updateActionsAsync())
             val actions = toolbar.actions.filter { it.templateText != null }
             assertTrue(actions.size >= 5, "expected the toolbar's actions, got ${actions.map { it.templateText }}")
             val context = SimpleDataContext.getProjectContext(fixture.project)
