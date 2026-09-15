@@ -119,7 +119,12 @@ internal object EnvOperations {
             project,
             BasedPythonBundle.message("env.progress.adding", requirements.joinToString(", ")),
             manifestsOf(project, listOf(list)),
-        ) { runBlockingOp(project, backend, op) }
+        ) { indicator ->
+            // The "by not found" banner offers this on a machine that may not have uv yet.
+            if (!ensureTool(project, backend, indicator)) return@runInBackground
+            indicator.text = BasedPythonBundle.message("env.progress.adding", requirements.joinToString(", "))
+            runBlockingOp(project, backend, op)
+        }
     }
 
     /**
@@ -219,10 +224,25 @@ internal object EnvOperations {
         val backend = service.status.backend
         val root = service.status.projectRoot
 
-        // Before the command starts, and on the thread the action was invoked from: the command is
-        // about to read these files off disk, so anything still sitting unsaved in an editor has to
-        // reach disk first or it is silently overwritten.
-        if (backend != null && root != null) EnvFiles.saveBeforeOperation(project, backend, root, extraFiles)
+        // Claimed here, when the gesture is made, rather than when the task starts: every entry
+        // point — the tool window, the banner, the menu, the modules page — comes through this one
+        // function, so this is the one place that can promise a second uv never races the first.
+        if (!service.tryBeginOperation()) {
+            notify(project, title, BasedPythonBundle.message("env.busy"), NotificationType.WARNING)
+            return
+        }
+        val ended = java.util.concurrent.atomic.AtomicBoolean(false)
+        val end = { if (ended.compareAndSet(false, true)) service.endOperation() }
+
+        try {
+            // Before the command starts, and on the thread the action was invoked from: the command
+            // is about to read these files off disk, so anything still sitting unsaved in an editor
+            // has to reach disk first or it is silently overwritten.
+            if (backend != null && root != null) EnvFiles.saveBeforeOperation(project, backend, root, extraFiles)
+        } catch (e: Throwable) {
+            end()
+            throw e
+        }
 
         ProgressManager.getInstance().run(object : Task.Backgroundable(project, title, true) {
             /**
@@ -236,29 +256,32 @@ internal object EnvOperations {
                     // The busy stretch ends with a scan of the environment — however the body
                     // ended, since a cancelled `uv sync` has usually already installed some of what
                     // it resolved.
-                    service.busyWhile {
-                        try {
-                            body(indicator)
-                        } finally {
-                            // In a finally, and off the EDT, because a cancelled or failed command
-                            // has usually already written something — a `uv add` that failed to
-                            // resolve has still edited `pyproject.toml` — and the editor must not be
-                            // left showing the file as it was before. Inside the busy stretch, so
-                            // the watcher's request for these very changes is recognised as served
-                            // by the scan the stretch ends with rather than scanned for again.
-                            if (backend != null && root != null) {
-                                EnvFiles.refreshAfterOperation(backend, root, extraFiles)
-                            }
+                    try {
+                        body(indicator)
+                    } finally {
+                        // In a finally, and off the EDT, because a cancelled or failed command has
+                        // usually already written something — a `uv add` that failed to resolve has
+                        // still edited `pyproject.toml` — and the editor must not be left showing
+                        // the file as it was before. Before the operation ends, so the watcher's
+                        // request for these very changes is recognised as served by the scan the
+                        // operation ends with rather than scanned for again.
+                        if (backend != null && root != null) {
+                            EnvFiles.refreshAfterOperation(backend, root, extraFiles)
                         }
                     }
                 } finally {
+                    end()
                     // However the gesture ended, nothing is still installing.
                     service.clearProgress()
                 }
             }
 
-            /** Runs whether the task succeeded, failed or was cancelled — which is the point. */
+            /**
+             * Runs whether the task succeeded, failed or was cancelled — which is the point. Also
+             * ends the operation for a task cancelled before [run] was ever called.
+             */
             override fun onFinished() {
+                end()
                 afterEnvironmentChanged(project)
             }
         })

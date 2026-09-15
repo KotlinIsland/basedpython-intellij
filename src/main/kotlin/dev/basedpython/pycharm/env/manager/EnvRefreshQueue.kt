@@ -69,13 +69,24 @@ internal class EnvRefreshQueue(
         if (start) startScan()
     }
 
-    fun operationStarted() {
-        synchronized(lock) { operations++ }
+    /**
+     * Starts an operation unless one is already running; true when this call started it.
+     *
+     * One at a time, because two uv commands against the same environment race for its lock and
+     * its site-packages, and whichever loses fails with a message about a file lock rather than
+     * about what the user did. Asked when the gesture is made, not when its background task gets
+     * round to running, so two clicks in quick succession cannot both pass.
+     */
+    fun tryStartOperation(): Boolean = synchronized(lock) {
+        if (operations > 0) return false
+        operations++
+        true
     }
 
-    /** An operation ended — which always warrants a scan, once the last overlapping one has. */
+    /** An operation ended — which always warrants a scan. */
     fun operationFinished() {
         val start = synchronized(lock) {
+            check(operations > 0) { "an operation finished that never started" }
             operations--
             pending = true
             claimScan()

@@ -7,6 +7,7 @@ import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
+import com.intellij.ui.EditorNotifications
 import dev.basedpython.pycharm.env.modules.ModuleLayout
 import dev.basedpython.pycharm.ui.log.BasedPythonLog
 import kotlinx.coroutines.CancellationException
@@ -64,22 +65,20 @@ internal class EnvService(
     val busy: Boolean get() = refreshes.busy
 
     /**
-     * Marks an operation in flight for the duration of [block], on the calling thread, and scans
-     * once it is over.
+     * Claims the environment for one operation; false when another is already running.
      *
      * How [EnvOperations] keeps a whole multi-step gesture — install, create, sync — reading as one
-     * busy stretch rather than three, with no scan reading the environment halfway through it and
-     * exactly one reading it afterwards, however the gesture ended.
+     * busy stretch rather than three, with no second gesture's uv racing it, no scan reading the
+     * environment halfway through it, and exactly one scan reading it afterwards. Every true answer
+     * is paired with one [endOperation], however the gesture ended.
      */
-    fun <T> busyWhile(block: () -> T): T {
-        refreshes.operationStarted()
+    fun tryBeginOperation(): Boolean =
+        refreshes.tryStartOperation().also { if (it) fire() }
+
+    /** Ends the operation [tryBeginOperation] began, and scans. */
+    fun endOperation() {
+        refreshes.operationFinished()
         fire()
-        return try {
-            block()
-        } finally {
-            refreshes.operationFinished()
-            fire()
-        }
     }
 
     /** A listener, and the modality it is told in — see [addListener]. */
@@ -346,8 +345,15 @@ internal class EnvService(
     // ---- notification ------------------------------------------------------
 
     private fun setStatus(next: EnvStatus) {
+        val previous = status
         status = next
         fire()
+        // The "by not found" banner offers to install with the backend's tool, and decides whether
+        // to from this status — which before the first scan has no backend at all. A banner drawn
+        // then is re-asked once there is an answer.
+        if (previous.backend != next.backend || previous.toolPath != next.toolPath) {
+            EditorNotifications.getInstance(project).updateAllNotifications()
+        }
     }
 
     /**

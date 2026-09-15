@@ -48,7 +48,7 @@ class EnvRefreshQueueTest {
 
     @Test
     fun `nothing scans while an operation runs, and the operation ends with one scan`() {
-        queue.operationStarted()
+        check(queue.tryStartOperation())
         queue.request()
         assertEquals(0, started, "the environment is half-installed; reading it now is wrong")
         assertTrue(queue.busy)
@@ -63,7 +63,7 @@ class EnvRefreshQueueTest {
     @Test
     fun `an operation that ends while a scan is running is scanned for afterwards`() {
         queue.request()
-        queue.operationStarted()
+        check(queue.tryStartOperation())
         queue.operationFinished()
         assertEquals(1, started, "the scan that started before the operation is still running")
 
@@ -71,14 +71,15 @@ class EnvRefreshQueueTest {
         assertEquals(2, started, "so what the operation changed is read by a scan of its own")
     }
 
+    /** Two uv commands against one environment race for its lock; the second gesture is refused. */
     @Test
-    fun `overlapping operations scan once, after the last`() {
-        queue.operationStarted()
-        queue.operationStarted()
-        queue.operationFinished()
-        assertEquals(0, started)
+    fun `a second operation cannot start while one is running`() {
+        assertTrue(queue.tryStartOperation())
+        assertFalse(queue.tryStartOperation())
         queue.operationFinished()
         assertEquals(1, started)
+        queue.scanFinished()
+        assertTrue(queue.tryStartOperation(), "and can once it has finished")
     }
 
     /**
@@ -88,7 +89,7 @@ class EnvRefreshQueueTest {
      */
     @Test
     fun `a change a later scan has already read is not scanned for again`() {
-        queue.operationStarted()
+        check(queue.tryStartOperation())
         val changedAt = queue.noteChange()
         queue.operationFinished()
         assertEquals(1, started)

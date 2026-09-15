@@ -52,8 +52,12 @@ class ByMissingBannerProvider : EditorNotificationProvider {
 
         // Offered only where it can work. A project with no manifest has nothing for `uv add` to add
         // to, and the button would fail with a message about a missing `pyproject.toml` — the
-        // environment view is where that project is told what it actually needs.
-        if (EnvService.getInstance(project).status.backend != null) {
+        // environment view is where that project is told what it actually needs. A missing uv is
+        // not such a case: the gesture installs it first. Before the first scan there is no answer
+        // yet; the scan is asked for, and re-asks this banner when it has one.
+        val service = EnvService.getInstance(project)
+        service.refreshIfNeeded()
+        if (service.status.backend != null) {
             panel.createActionLabel(BasedPythonBundle.message("banner.byMissing.installWithUv")) {
                 // The toolchain is a development dependency: it builds and checks the project, and
                 // nothing that installs the project needs it. The root project's `dev`, with no

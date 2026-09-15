@@ -15,9 +15,10 @@ import dev.basedpython.pycharm.env.manager.EnvService
  * `uv sync` itself and do none of that, which is how a successful sync could leave the editor still
  * insisting the binary was missing.
  *
- * Enabled whenever a backend claims the project. Unlike before, that no longer includes projects
- * where the tool is absent — [EnvOperations.sync] would have nothing to run, and the tool window's
- * banner is where a missing uv gets offered an install.
+ * Enabled whenever a backend claims the project and nothing else is running against its environment.
+ * Unlike before, that no longer includes projects where the tool is absent — [EnvOperations.sync]
+ * would have nothing to run, and the tool window's banner is where a missing uv gets offered an
+ * install.
  */
 class UvSyncAction : AnAction() {
 
@@ -26,7 +27,7 @@ class UvSyncAction : AnAction() {
     override fun update(e: AnActionEvent) {
         val service = e.project?.let { EnvService.getInstance(it) }
         e.presentation.isEnabledAndVisible =
-            service != null && service.status.backend != null && service.status.toolPath != null
+            service != null && service.status.backend != null && service.status.toolPath != null && !service.busy
     }
 
     override fun actionPerformed(e: AnActionEvent) {
