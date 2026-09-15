@@ -467,7 +467,8 @@
 
         <!-- Catches a hint drawn twice. The daemon's finish is the only event that follows every way
              hints can change, and the pass has applied by then; it writes to the log only when
-             something is actually doubled. See lsp.inlay.ByInlayAudit. -->
+             something is actually doubled, and it looks only in internal mode. See
+             lsp.inlay.ByInlayAudit. -->
         <listener
             class="dev.basedpython.pycharm.lsp.inlay.ByInlayAuditListener"
             topic="com.intellij.codeInsight.daemon.DaemonCodeAnalyzer$DaemonListener"/>
