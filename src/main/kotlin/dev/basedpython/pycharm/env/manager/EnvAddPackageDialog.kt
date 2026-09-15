@@ -16,6 +16,7 @@ import com.intellij.ui.components.JBList
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.components.JBTextField
 import com.intellij.util.Alarm
+import com.intellij.util.concurrency.AppExecutorUtil
 import com.intellij.util.ui.FormBuilder
 import com.intellij.util.ui.JBUI
 import com.intellij.util.ui.UIUtil
@@ -160,6 +161,16 @@ internal class EnvAddPackageDialog(
      */
     private val alarm = Alarm(Alarm.ThreadToUse.SWING_THREAD, disposable)
 
+    /**
+     * Where the index is read: the catalogue file for the results list, the details cache for the
+     * package under the caret. One thread, in order, off the EDT — both are disk reads, and a disk
+     * that is slow for a moment must not become a text field that stops accepting keystrokes.
+     */
+    private val reader = AppExecutorUtil.createBoundedApplicationPoolExecutor("basedpython Add Package index", 1)
+
+    /** Bumped per results query, so an answer that arrives after a newer query was made is dropped. */
+    private var resultsGeneration = 0
+
     init {
         title = BasedPythonBundle.message("env.add.title")
         setOKButtonText(BasedPythonBundle.message("env.add.ok"))
@@ -298,9 +309,9 @@ internal class EnvAddPackageDialog(
     /**
      * Looks up whatever package the field currently names.
      *
-     * Only the *last* requirement on the line, since that is the one being typed. A cached answer is
-     * applied synchronously so a package looked up before does not flicker; only a genuine miss goes
-     * to the network.
+     * Only the *last* requirement on the line, since that is the one being typed. Off the EDT, the
+     * cache first: a package looked up before is rendered straight from it without a "looking up"
+     * flicker, and only a genuine miss says so and goes to the network.
      */
     private fun lookup() {
         val index = index ?: return
@@ -315,22 +326,24 @@ internal class EnvAddPackageDialog(
         describedPackage = name
 
         val cache = PackageIndexCache.getInstance()
-        cache.cachedDetailsFor(index, name)?.let {
-            renderDetails(it)
-            return
-        }
-
-        summaryLabel.text = BasedPythonBundle.message("env.add.lookingUp", name)
-        rebuildVersions(null)
         val modality = ModalityState.stateForComponent(field)
-        ApplicationManager.getApplication().executeOnPooledThread {
+        // The user may have typed on while any of this was in flight.
+        fun onEdt(action: () -> Unit) = ApplicationManager.getApplication().invokeLater(
+            { if (name.equals(describedPackage, ignoreCase = true)) action() },
+            modality,
+            { isDisposed },
+        )
+        reader.execute {
+            cache.cachedDetailsFor(index, name)?.let { cached ->
+                onEdt { renderDetails(cached) }
+                return@execute
+            }
+            onEdt {
+                summaryLabel.text = BasedPythonBundle.message("env.add.lookingUp", name)
+                rebuildVersions(null)
+            }
             val details = cache.detailsFor(index, name)
-            ApplicationManager.getApplication().invokeLater({
-                // The user may have typed on while this was in flight.
-                if (name.equals(describedPackage, ignoreCase = true)) {
-                    renderDetails(details ?: PackageDetails.unknown(name))
-                }
-            }, modality)
+            onEdt { renderDetails(details ?: PackageDetails.unknown(name)) }
         }
     }
 
@@ -399,23 +412,37 @@ internal class EnvAddPackageDialog(
     /**
      * Offers catalogue names as you type.
      *
-     * Queried straight off the sorted catalogue file — a prefix lookup is about twenty seeks — so
-     * this can answer on the completion thread without anything cached in memory. An index that has
-     * not been downloaded, or a project with none, simply offers nothing and the field stays plain
-     * free text.
-     */
-    /**
-     * Repopulates the results list from the catalogue.
-     *
-     * The model's contents are replaced rather than the component being rebuilt, so the list stays
-     * where it is instead of blinking — which is what a completion restart per keystroke did.
-     * Reading the catalogue is a handful of file seeks, so this runs inline as you type.
+     * Queried straight off the sorted catalogue file — a prefix lookup is about twenty seeks — with
+     * nothing cached in memory. Twenty seeks is still disk I/O, so the query runs on [reader] and only
+     * the newest answer is applied. An index that has not been downloaded, or a project with none,
+     * simply offers nothing and the field stays plain free text.
      */
     private fun refreshResults() {
         val index = index
-        val store = index?.let { PackageIndexCache.getInstance().names(it) }
-        val names = if (store == null) emptyList() else EnvPackageSearch.resultsFor(store, field.text)
+        val text = field.text
+        val generation = ++resultsGeneration
+        if (index == null) {
+            showResults(emptyList())
+            return
+        }
+        val modality = ModalityState.stateForComponent(field)
+        reader.execute {
+            val names = EnvPackageSearch.resultsFor(PackageIndexCache.getInstance().names(index), text)
+            ApplicationManager.getApplication().invokeLater(
+                { if (generation == resultsGeneration) showResults(names) },
+                modality,
+                { isDisposed },
+            )
+        }
+    }
 
+    /**
+     * Repopulates the results list with [names].
+     *
+     * The model's contents are replaced rather than the component being rebuilt, so the list stays
+     * where it is instead of blinking — which is what a completion restart per keystroke did.
+     */
+    private fun showResults(names: List<String>) {
         updatingField = true
         try {
             val previous = results.selectedValue
