@@ -266,12 +266,11 @@ internal class ByMainArgumentsDialog(
                 ?: return if (parameter.isRequired) error("${parameter.name} is required") else null
             // The annotation is the converter argparse is handed, so a value it cannot convert is
             // an error the program would report — earlier is better.
-            val number = text.replace("_", "")
             return when (parameter.type) {
                 ByCliType.INT ->
-                    if (number.toLongOrNull() == null) error("invalid int value: '$text'") else null
+                    if (!PythonNumbers.isInt(text)) error("invalid int value: '$text'") else null
                 ByCliType.FLOAT ->
-                    if (number.toDoubleOrNull() == null) error("invalid float value: '$text'") else null
+                    if (!PythonNumbers.isFloat(text)) error("invalid float value: '$text'") else null
                 else -> null
             }
         }

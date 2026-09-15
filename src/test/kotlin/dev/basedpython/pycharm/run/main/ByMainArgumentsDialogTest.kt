@@ -50,8 +50,8 @@ class ByMainArgumentsDialogTest {
 
     @Test
     fun `the command line it opens on is the one it gives back`() {
-        dialog("name: str, count: int = 1", "--name bob --count 3") {
-            assertEquals("--name bob --count 3", it.result().arguments)
+        dialog("name: str, count: int = 1", "--name=bob --count=3") {
+            assertEquals("--name=bob --count=3", it.result().arguments)
         }
     }
 
@@ -59,7 +59,7 @@ class ByMainArgumentsDialogTest {
     fun `a positional command line comes back named`() {
         // The form writes the spelling that survives a reordered signature; both reach `main`.
         dialog("name: str, count: int = 1", "bob 3") {
-            assertEquals("--name bob --count 3", it.result().arguments)
+            assertEquals("--name=bob --count=3", it.result().arguments)
         }
     }
 
@@ -88,6 +88,20 @@ class ByMainArgumentsDialogTest {
             val errors = it.problems()
             assertEquals(1, errors.size, errors.joinToString { error -> error.message })
             assertTrue(errors.first().message.contains("name is required"), errors.first().message)
+        }
+    }
+
+    @Test
+    fun `an int past 64 bits is an int`() {
+        dialog("count: int", "--count=9223372036854775808") {
+            assertEquals(emptyList<String>(), it.problems().map { error -> error.message })
+        }
+    }
+
+    @Test
+    fun `a float Kotlin would read but Python would not is refused`() {
+        dialog("ratio: float", "--ratio=1f") {
+            assertTrue(it.problems().single().message.contains("invalid float value"))
         }
     }
 

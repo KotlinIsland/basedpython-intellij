@@ -24,7 +24,7 @@ class ByMainArgumentsTest {
     fun `values are written by name`() {
         val main = main("name: str, count: int = 1")
         assertEquals(
-            listOf("--name", "bob", "--count", "3"),
+            listOf("--name=bob", "--count=3"),
             ByMainArguments.arguments(main, mapOf("name" to "bob", "count" to "3")),
         )
     }
@@ -32,7 +32,7 @@ class ByMainArgumentsTest {
     @Test
     fun `an omitted parameter says nothing at all`() {
         val main = main("name: str, count: int = 1")
-        assertEquals(listOf("--name", "bob"), ByMainArguments.arguments(main, mapOf("name" to "bob")))
+        assertEquals(listOf("--name=bob"), ByMainArguments.arguments(main, mapOf("name" to "bob")))
     }
 
     @Test
@@ -45,8 +45,60 @@ class ByMainArgumentsTest {
     @Test
     fun `an underscore is written as a dash`() {
         val main = main("out_dir: Path")
-        assertEquals(listOf("--out-dir", "/tmp/x y"), ByMainArguments.arguments(main, mapOf("out_dir" to "/tmp/x y")))
-        assertEquals("--out-dir \"/tmp/x y\"", ByMainArguments.format(main, mapOf("out_dir" to "/tmp/x y")))
+        assertEquals(listOf("--out-dir=/tmp/x y"), ByMainArguments.arguments(main, mapOf("out_dir" to "/tmp/x y")))
+        assertEquals("\"--out-dir=/tmp/x y\"", ByMainArguments.format(main, mapOf("out_dir" to "/tmp/x y")))
+    }
+
+    @Test
+    fun `a value that looks like an option is joined to its flag`() {
+        // argparse reads `--name -x` as two options and fails on `expected one argument`, and the
+        // same happens to `--ratio -1e3`, which is not what its negative-number pattern matches.
+        val main = main("name: str, ratio: float = 1.0")
+        val values = mapOf("name" to "-x", "ratio" to "-1e3")
+        assertEquals(listOf("--name=-x", "--ratio=-1e3"), ByMainArguments.arguments(main, values))
+        assertEquals(values, ByMainArguments.parse(main, ByMainArguments.format(main, values)))
+    }
+
+    @Test
+    fun `a value holding an equals sign keeps it`() {
+        // argparse and the reader both split at the first `=`.
+        val main = main("expr: str")
+        val values = mapOf("expr" to "a=b")
+        assertEquals(values, ByMainArguments.parse(main, ByMainArguments.format(main, values)))
+    }
+
+    /**
+     * Each case with what CPython's `int()` and `float()` said about it — measured on 3.9 and 3.14,
+     * which agree on every one.
+     */
+    @Test
+    fun `numbers are validated by Python's grammar, not Kotlin's`() {
+        val measured = listOf(
+            Triple("1", true, true), Triple("-1", true, true), Triple("+1", true, true),
+            Triple(" 7 ", true, true), Triple("\t8\n", true, true), Triple("007", true, true),
+            Triple("1_000", true, true), Triple("1__000", false, false), Triple("_1", false, false),
+            Triple("1_", false, false), Triple("9223372036854775808", true, true),
+            Triple("-99999999999999999999999", true, true), Triple("0x10", false, false),
+            Triple("1.0", false, true), Triple("1e3", false, true), Triple("٣", true, true),
+            Triple("", false, false), Triple("-", false, false), Triple("1 2", false, false),
+            Triple("1f", false, false), Triple("0x1p3", false, false), Triple("1.5", false, true),
+            Triple(".5", false, true), Triple("5.", false, true), Triple("1_0.5", false, true),
+            Triple("1e1_0", false, true), Triple("1e_10", false, false), Triple("inf", false, true),
+            Triple("-Infinity", false, true), Triple("NaN", false, true), Triple("+nan", false, true),
+            Triple("infinit", false, false), Triple("1.e3", false, true), Triple(".e3", false, false),
+            Triple("1e", false, false), Triple("1.5_", false, false), Triple("1.5e+3", false, true),
+            Triple("  -2.5E-3  ", false, true), Triple("0b1", false, false), Triple("1j", false, false),
+            Triple("١٢.٥", false, true), Triple("1 ", true, true),
+            Triple(" 1", true, true), Triple("- 1", false, false), Triple("+-1", false, false),
+            Triple("1._5", false, false), Triple("1_.5", false, false), Triple("iNfInItY", false, true),
+            Triple("1.5d", false, false), Triple("0", true, true), Triple("-0", true, true),
+            Triple("00_0", true, true), Triple("²", false, false), Triple("1​", false, false),
+        )
+        for ((text, int, float) in measured) {
+            val shown = text.map { if (it.code in 0x21..0x7e) "$it" else "\\u%04x".format(it.code) }.joinToString("")
+            assertEquals(int, PythonNumbers.isInt(text), "int('$shown')")
+            assertEquals(float, PythonNumbers.isFloat(text), "float('$shown')")
+        }
     }
 
     @Test

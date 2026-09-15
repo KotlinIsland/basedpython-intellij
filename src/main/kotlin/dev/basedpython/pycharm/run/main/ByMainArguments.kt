@@ -9,11 +9,15 @@ import com.intellij.util.execution.ParametersListUtil
  * default stand". A [ByCliType.BOOL] value is `"true"` or `"false"`, the two flags argparse
  * registers for it.
  *
- * Everything is written in the `--name value` form even for parameters that would take a positional
+ * Everything is written in the `--name=value` form even for parameters that would take a positional
  * slot. Both spellings reach `main` — a positional-only parameter is still handed over positionally
  * — and the named one survives a reordered signature, says what it is when read back out of the run
  * configuration, and never trips the "cannot be given without …" rule that a gap in the positional
  * run of arguments would.
+ *
+ * With the `=`, not as two words: argparse reads a word after `--name` that starts with `-` as the
+ * next option rather than as the value, so `--name -x` dies on `expected one argument` and so does
+ * `--ratio -1e3`. `--name=-x` is unambiguous.
  */
 internal object ByMainArguments {
 
@@ -24,8 +28,7 @@ internal object ByMainArguments {
             if (parameter.type == ByCliType.BOOL) {
                 add(if (value.toBoolean()) parameter.flag else parameter.negativeFlag)
             } else {
-                add(parameter.flag)
-                add(value)
+                add("${parameter.flag}=$value")
             }
         }
     }
@@ -108,4 +111,86 @@ internal object ByMainArguments {
      */
     fun needed(main: ByMainFunction?, text: String): Boolean =
         main != null && main.takesArguments && missing(main, text).isNotEmpty()
+}
+
+/**
+ * What Python's `int()` and `float()` accept — the converters argparse is handed for an `int` or
+ * `float` parameter — so the form rejects exactly what the program would.
+ *
+ * Not Kotlin's parsers, which disagree in both directions: `toLongOrNull` refuses any integer past
+ * 2^63 that Python takes happily, and `toDoubleOrNull` takes `1f` and `0x1p3`, which `float()`
+ * refuses. The grammar is Python's: surrounding whitespace, a sign, decimal digits (any Unicode
+ * decimal digit) with single underscores between them, and for `float` a fraction, an exponent, or
+ * `inf`, `infinity` and `nan` in any case.
+ */
+internal object PythonNumbers {
+
+    fun isInt(text: String): Boolean {
+        val (start, end) = stripped(text)
+        val digits = sign(text, start, end)
+        return digits(text, digits, end) == end
+    }
+
+    fun isFloat(text: String): Boolean {
+        val (start, end) = stripped(text)
+        var i = sign(text, start, end)
+        val word = text.substring(i, end)
+        if (SPECIAL.any { it.equals(word, ignoreCase = true) }) return true
+
+        val whole = digits(text, i, end)
+        if (whole >= 0) i = whole
+        if (i < end && text[i] == '.') {
+            val fraction = digits(text, i + 1, end)
+            i = when {
+                fraction >= 0 -> fraction
+                whole >= 0 -> i + 1
+                else -> return false
+            }
+        } else if (whole < 0) {
+            return false
+        }
+        if (i < end && (text[i] == 'e' || text[i] == 'E')) {
+            i = digits(text, sign(text, i + 1, end), end)
+            if (i < 0) return false
+        }
+        return i == end
+    }
+
+    private val SPECIAL = listOf("inf", "infinity", "nan")
+
+    /** Python's `str.isspace`: a space separator, or a character whose bidi class is WS, B or S. */
+    private fun isSpace(c: Char): Boolean =
+        Character.getType(c) == Character.SPACE_SEPARATOR.toInt() ||
+            when (Character.getDirectionality(c)) {
+                Character.DIRECTIONALITY_WHITESPACE,
+                Character.DIRECTIONALITY_PARAGRAPH_SEPARATOR,
+                Character.DIRECTIONALITY_SEGMENT_SEPARATOR,
+                -> true
+                else -> false
+            }
+
+    private fun stripped(text: String): Pair<Int, Int> {
+        var start = 0
+        var end = text.length
+        while (start < end && isSpace(text[start])) start++
+        while (end > start && isSpace(text[end - 1])) end--
+        return start to end
+    }
+
+    private fun sign(text: String, i: Int, end: Int): Int =
+        if (i < end && (text[i] == '+' || text[i] == '-')) i + 1 else i
+
+    /** The end of the digits starting at [i], underscores allowed between two of them; -1 for none. */
+    private fun digits(text: String, i: Int, end: Int): Int {
+        if (i >= end || !Character.isDigit(text[i])) return -1
+        var j = i + 1
+        while (j < end) {
+            j = when {
+                Character.isDigit(text[j]) -> j + 1
+                text[j] == '_' && j + 1 < end && Character.isDigit(text[j + 1]) -> j + 2
+                else -> break
+            }
+        }
+        return j
+    }
 }
