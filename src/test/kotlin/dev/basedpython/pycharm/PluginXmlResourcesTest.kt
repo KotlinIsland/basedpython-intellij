@@ -7,6 +7,7 @@ import dev.basedpython.pycharm.ui.log.BasedPythonLogNotifications
 import java.nio.file.FileSystemAlreadyExistsException
 import java.nio.file.FileSystems
 import java.nio.file.Files
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -85,6 +86,23 @@ class PluginXmlResourcesTest {
             missing.isEmpty(),
             "plugin.xml names classes that do not exist, so the platform will skip them: $missing",
         )
+    }
+
+    /**
+     * What is built on the SM test runner is registered only by the descriptor that loads when the
+     * runner does, so a product without it loses the test configuration rather than failing to
+     * load classes that need it.
+     */
+    @Test
+    fun `the test configuration is registered only where the test runner is`() {
+        val testRunnerXml = checkNotNull(javaClass.getResourceAsStream("/META-INF/basedpython-testrunner.xml")) {
+            "basedpython-testrunner.xml missing from the test classpath"
+        }.use { it.readBytes().decodeToString() }
+        for (name in listOf("dev.basedpython.pycharm.run.test.ByTestConfigurationType", "dev.basedpython.pycharm.run.ByTestFromFileProducer")) {
+            assertFalse("\"$name\"" in pluginXml, "$name is registered in plugin.xml, which loads without the test runner")
+            assertTrue("implementation=\"$name\"" in testRunnerXml, "$name is not registered in basedpython-testrunner.xml")
+            assertTrue(runCatching { Class.forName(name) }.isSuccess, "$name does not exist")
+        }
     }
 
     /**

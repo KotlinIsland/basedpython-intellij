@@ -11,9 +11,19 @@
   rather than lose its test tree. Nothing here needs to run where the interface does not exist.
 
   The listener below belongs here for the same reason: it implements an SM runner interface, so it
-  may only be instantiated where that interface exists.
+  may only be instantiated where that interface exists. So do the test configuration type and the
+  producer that makes its configurations: the configuration they create runs under the SM test
+  runner, and registered from plugin.xml they were loaded whether or not that runner exists.
 -->
 <idea-plugin>
+    <extensions defaultExtensionNs="com.intellij">
+        <configurationType
+            implementation="dev.basedpython.pycharm.run.test.ByTestConfigurationType"/>
+        <!-- Precedence against the `by run` and `by check` producers is decided in code, not by
+             registration order; see ByRunFromFileProducer. -->
+        <runConfigurationProducer implementation="dev.basedpython.pycharm.run.ByTestFromFileProducer"/>
+    </extensions>
+
     <projectListeners>
         <!-- Test outcomes for the node view's tree, from every run the SM runner reports —
              whichever button started it. -->

@@ -63,7 +63,8 @@
         <configurationType implementation="dev.basedpython.pycharm.run.BasedPythonRunConfigurationType"/>
         <runConfigurationProducer implementation="dev.basedpython.pycharm.run.ByRunFromFileProducer"/>
         <runConfigurationProducer implementation="dev.basedpython.pycharm.run.ByCheckFromFileProducer"/>
-        <runConfigurationProducer implementation="dev.basedpython.pycharm.run.ByTestFromFileProducer"/>
+        <!-- The pytest producer is in basedpython-testrunner.xml: its configuration is built on the
+             SM test runner. -->
 
         <!-- ===== Stream C2: source-mapped debugging (§64) =====
              `by run` writes `_by_sourcemap.py` next to its transpiled output; the bootstrap in
@@ -288,8 +289,7 @@
         <runLineMarkerContributor
             language="basedpython"
             implementationClass="dev.basedpython.pycharm.run.marker.ByRunLineMarkerContributor"/>
-        <configurationType
-            implementation="dev.basedpython.pycharm.run.test.ByTestConfigurationType"/>
+        <!-- The test configuration type is registered in basedpython-testrunner.xml. -->
         <!-- The collected test tree (by run pytest, collect-only), the counterpart of the run
              window's results tree: which tests exist, before anything has run. -->
         <toolWindow id="basedpython Tests"
