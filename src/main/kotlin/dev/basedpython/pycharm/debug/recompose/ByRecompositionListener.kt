@@ -39,7 +39,9 @@ class ByRecompositionListener : XDebuggerManagerListener {
         val session = debugProcess.session
 
         val service = ByRecompositionSession.getInstance(session.project)
-        val link = ByRecompositionRequests(dap.dapDebugSession.commandProcessor)
+        // The process's link rather than a new one: the events bpd pushes are filed under the link
+        // the client was made with, and a second link here would be a session its own events miss
+        val link = dap.recompositionLink
         service.sessionStarted(link)
         // Owned by the service as well as the session, so a session outliving the plugin does not
         // keep a listener of ours; released when the session stops, so the service does not keep

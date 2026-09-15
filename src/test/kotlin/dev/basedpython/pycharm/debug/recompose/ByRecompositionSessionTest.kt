@@ -122,6 +122,33 @@ class ByRecompositionSessionTest {
 
     // ---- the link guard --------------------------------------------------------
 
+    /**
+     * Two bpd sessions at once. The service follows the one that started last, and the events the
+     * other one's program is still pushing are that program's records, not this one's.
+     */
+    @Test
+    fun `a watch event from a session that is not the current one is dropped`() {
+        val older = Scripted()
+        service.sessionStarted(older)
+        val newer = start()
+        service.append(older, ByEvent(run(1, 5), droppedBefore = 3))
+        assertTrue(service.records.isEmpty(), "another session's events reached this one: ${service.records}")
+        service.append(newer, ByEvent(run(1, 5), 0))
+        assertEquals(listOf(run(1, 5)), service.records)
+    }
+
+    /** The same for the watch sent at the adapter's start: an older session's cannot confirm this one's. */
+    @Test
+    fun `the adapter of a session that is not the current one sends no watch`() {
+        service.setWatching(true)
+        val older = Scripted()
+        service.sessionStarted(older)
+        start()
+        runBlocking { service.adapterReady(older, refusing("not this session's adapter")) }
+        PlatformTestUtil.dispatchAllInvocationEventsInIdeEventQueue()
+        assertNull(live().watchProblem)
+    }
+
     @Test
     fun `a pull's answer landing after the session ended is dropped`() {
         val link = start()
@@ -223,7 +250,7 @@ class ByRecompositionSessionTest {
     fun `an init-time refusal of the watch is not the window's state, and the stop asks again`() {
         service.setWatching(true)
         val link = start(Scripted(pullAnswer = ByRecompositionAnswer.Answered(emptyAnswer())))
-        runBlocking { service.adapterReady(refusing("the program has not imported basedpython_ui.runtime, so there is no trace to read")) }
+        runBlocking { service.adapterReady(link, refusing("the program has not imported basedpython_ui.runtime, so there is no trace to read")) }
         PlatformTestUtil.dispatchAllInvocationEventsInIdeEventQueue()
         assertNull(live().refusal, "the init-time refusal became the window's state")
         assertEquals("the program has not imported basedpython_ui.runtime, so there is no trace to read", live().watchProblem)
@@ -278,7 +305,7 @@ class ByRecompositionSessionTest {
         val link = start()
         service.paused(link)
         assertEquals(0, link.pulls.get(), "a pull was sent with the setting off")
-        service.append(ByEvent(run(1, 5), 0))
+        service.append(link, ByEvent(run(1, 5), 0))
         assertTrue(service.records.isEmpty())
         assertTrue(live().paused)
     }
@@ -289,7 +316,7 @@ class ByRecompositionSessionTest {
     fun `the held list is bounded, and what was let go is counted`() {
         val link = start()
         val over = 10
-        for (i in 1..ByRecompositionSession.HELD_LIMIT + over) service.append(ByEvent(run(i.toLong(), i.toLong()), 0))
+        for (i in 1..ByRecompositionSession.HELD_LIMIT + over) service.append(link, ByEvent(run(i.toLong(), i.toLong()), 0))
         val held = service.records
         assertEquals(ByRecompositionSession.HELD_LIMIT, held.size)
         assertEquals((over + 1).toLong(), held.first().frame, "the oldest were let go")
@@ -310,8 +337,8 @@ class ByRecompositionSessionTest {
     @Test
     fun `a stream drop is kept as a gap where it happened, and a pull fills the frames it carries`() {
         val link = start()
-        service.append(ByEvent(run(3, 5), droppedBefore = 4))
-        service.append(ByEvent(record = null, droppedBefore = 2))
+        service.append(link, ByEvent(run(3, 5), droppedBefore = 4))
+        service.append(link, ByEvent(record = null, droppedBefore = 2))
         assertEquals(listOf(ByRecord.Gap(0, 3, 4), run(3, 5), ByRecord.Gap(0, 3, 2)), service.records)
         assertEquals(6L, ByRecompositionTree.droppedInStream(service.records))
 
@@ -323,11 +350,11 @@ class ByRecompositionSessionTest {
 
     @Test
     fun `the snapshot read is the same list until something changes`() {
-        start()
-        service.append(ByEvent(run(1, 5), 0))
+        val link = start()
+        service.append(link, ByEvent(run(1, 5), 0))
         val first = service.records
         assertTrue(first === service.records, "no change, no copy")
-        service.append(ByEvent(run(2, 5), 0))
+        service.append(link, ByEvent(run(2, 5), 0))
         assertTrue(first !== service.records)
         assertEquals(1, first.size, "a snapshot handed out never changes underneath")
     }

@@ -274,8 +274,8 @@ internal class ByRecompositionSession(
      * imported the runtime — watching is an interest in records to come. A bpd that refuses it
      * anyway is told again at the first stop ([paused]).
      */
-    suspend fun adapterReady(server: ByDebugProtocolServer) {
-        if (!enabled || !watching) return
+    suspend fun adapterReady(link: ByRecompositionLink, server: ByDebugProtocolServer) {
+        if (!enabled || !watching || this.link !== link) return
         val ticket = watchTickets.incrementAndGet()
         val answer = try {
             server.watchRecompositions(ByWatchRecompositionsArguments(on = true)).await()
@@ -292,7 +292,7 @@ internal class ByRecompositionSession(
                 ByRecompositionAnswer.failed(e)
             }
         }
-        takeWatch(link ?: return, ticket, answer)
+        takeWatch(link, ticket, answer)
     }
 
     // ---- what the window asks for ----------------------------------------
@@ -349,10 +349,14 @@ internal class ByRecompositionSession(
      *
      * A drop is kept as a [ByRecord.Gap] at the place it happened, filed under the frame of the
      * record that carried the count, so the tree can say so there and count it.
+     *
+     * Named by the [link] of the session that sent it, like every other call that carries a
+     * session's data: with two bpd sessions running, the one that is not current would otherwise
+     * write its program's records into the other's window.
      */
-    fun append(event: ByEvent) {
+    fun append(link: ByRecompositionLink, event: ByEvent) {
         synchronized(lock) {
-            if (link == null || !enabled) return
+            if (this.link !== link || !enabled) return
             val record = event.record
             if (event.droppedBefore > 0) {
                 val at = record ?: held.lastOrNull()

@@ -38,6 +38,8 @@ import dev.basedpython.pycharm.actions.ByCli
 import dev.basedpython.pycharm.debug.bpd.ByBpdConnection
 import dev.basedpython.pycharm.debug.bpd.ByBpdWrapper
 import dev.basedpython.pycharm.debug.bpd.ByDebugBackend
+import dev.basedpython.pycharm.debug.recompose.ByRecompositionLink
+import dev.basedpython.pycharm.debug.recompose.ByRecompositionRequests
 import dev.basedpython.pycharm.debug.recompose.ByRecompositionSession
 import dev.basedpython.pycharm.run.ByCommandLineState
 import dev.basedpython.pycharm.util.BasedPythonBundle
@@ -81,6 +83,17 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
 
     private var setup: ByDebugSetup? = null
     private var mappings: List<ByFileMapping> = emptyList()
+
+    /**
+     * This session's link to bpd's compose runtime: the identity every recomposition call of this
+     * session carries, so that with two sessions running one's records never reach the other's
+     * window. Made from the session's command processor by whichever of [createClient] and
+     * [createXDebugProcess] the platform calls first — both are handed it.
+     */
+    private var recompositionLink: ByRecompositionRequests? = null
+
+    private fun recompositionLinkFor(commandProcessor: DapCommandProcessor): ByRecompositionRequests =
+        synchronized(this) { recompositionLink ?: ByRecompositionRequests(commandProcessor).also { recompositionLink = it } }
 
     /** Adds `setPydevdSourceMap`; see [ByDebugProtocolServer]. */
     override val debugAdapterServerClass: Class<out IDebugProtocolServer> = ByDebugProtocolServer::class.java
@@ -204,22 +217,25 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
         executionResult: ExecutionResult?,
         commandProcessor: DapCommandProcessor,
         sessionScope: CoroutineScope,
-    ): DapClient = ByDapClient(
-        BySourceMapPublisher(
-            eventConsumer,
-            commandProcessor,
-            mappings,
-            // The compose runtime's trace is bpd's to read, so only a bpd session is told when the
-            // adapter is ready for a watch; debugpy would answer `unknown command`
-            onReady = { server ->
-                if (setup?.backend == ByDebugBackend.BPD) {
-                    ByRecompositionSession.getInstance(project).adapterReady(server)
-                }
-            },
-        ).consumer,
-        onMoved = { moved -> report(moved, executionResult) },
-        onRecomposed = { event -> ByRecompositionSession.getInstance(project).append(event) },
-    )
+    ): DapClient {
+        val link = recompositionLinkFor(commandProcessor)
+        return ByDapClient(
+            BySourceMapPublisher(
+                eventConsumer,
+                commandProcessor,
+                mappings,
+                // The compose runtime's trace is bpd's to read, so only a bpd session is told when
+                // the adapter is ready for a watch; debugpy would answer `unknown command`
+                onReady = { server ->
+                    if (setup?.backend == ByDebugBackend.BPD) {
+                        ByRecompositionSession.getInstance(project).adapterReady(link, server)
+                    }
+                },
+            ).consumer,
+            onMoved = { moved -> report(moved, executionResult) },
+            onRecomposed = { event -> ByRecompositionSession.getInstance(project).append(link, event) },
+        )
+    }
 
     /**
      * Puts what a jump or a restart really did on the run console.
@@ -272,6 +288,7 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
         // here is reading a file that does not exist. It is read when hot reload asks, by which
         // time the program is running and the record is complete.
         recordFile = setup?.infoFile,
+        recompositionLink = recompositionLinkFor(dapDebugSession.commandProcessor),
     )
 
     /**
@@ -408,6 +425,8 @@ internal class ByDapXDebugProcess(
      * Null for a session that is not one of `by run`'s.
      */
     val recordFile: java.nio.file.Path?,
+    /** What this session's recomposition requests are sent through, and known by. */
+    internal val recompositionLink: ByRecompositionLink,
 ) : DapXDebugProcess(
     session,
     dapDebugSession,
