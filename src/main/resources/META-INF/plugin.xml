@@ -629,12 +629,6 @@
             <add-to-group group-id="basedpython.ActionGroup" anchor="after" relative-to-action="basedpython.env.Show"/>
         </action>
 
-        <!-- ===== Wave 11: REPL console (§182) ===== -->
-        <action id="basedpython.OpenRepl"
-                class="dev.basedpython.pycharm.console.OpenBasedPythonReplAction">
-            <add-to-group group-id="basedpython.ActionGroup" anchor="last"/>
-        </action>
-
         <!-- ===== Wave 11: local refactorings (§115) ===== -->
         <action id="dev.basedpython.pycharm.refactoring.ExtractVariable"
                 class="dev.basedpython.pycharm.refactoring.ExtractVariableAction">

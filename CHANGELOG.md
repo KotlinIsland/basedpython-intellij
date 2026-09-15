@@ -117,8 +117,6 @@
   the server: **Extract Variable**, **Introduce Constant**, **Inline Variable**, and **Extract
   Method** — the last inserting into the nearest enclosing `def`, de-indenting the body and
   re-indenting it at its new depth.
-- **Open basedpython REPL** (*Tools | basedpython*): an interactive console running
-  `by repl`, falling back to `by run` where that subcommand is not there.
 - **Download prebuilt binaries**: fetches the `by` and `buff` for this OS and CPU into
   `~/.basedpython/bin` and points the settings at them, for a machine with no toolchain and no
   wish to build one.
