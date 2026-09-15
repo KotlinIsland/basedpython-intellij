@@ -11,8 +11,7 @@ import dev.basedpython.pycharm.lang.BasedPythonFile
  * Move Statement Up/Down support for basedpython (`.by`) files.
  *
  * The PSI for `.by` files is flat (token-only), so block ranges are computed
- * purely from the [Document] text using indentation, mirroring the logic in
- * [dev.basedpython.pycharm.structure.IndentScanner].
+ * purely from the [Document] text using indentation.
  *
  * Behavior:
  *  - With a selection, or when the caret line is a *block header* (a non-blank

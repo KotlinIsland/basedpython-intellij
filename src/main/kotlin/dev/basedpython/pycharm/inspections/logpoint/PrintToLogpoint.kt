@@ -215,6 +215,6 @@ object PrintToLogpoint {
         return lines
     }
 
-    /** Matches [dev.basedpython.pycharm.structure.IndentScanner], so the two agree on what a block is. */
+    /** How many columns a tab counts for when measuring indentation. */
     private const val TAB_WIDTH = 4
 }
