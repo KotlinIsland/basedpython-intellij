@@ -19,6 +19,7 @@ import dev.basedpython.pycharm.debug.logpoint.ByLogpointUndo
 import dev.basedpython.pycharm.debug.logpoint.ByLogpoints
 import dev.basedpython.pycharm.debug.logpoint.PlatformLogpointInfo
 import dev.basedpython.pycharm.lang.BasedPythonFile
+import dev.basedpython.pycharm.lsp.outline.ByOutlines
 
 /**
  * Offers to swap a debug `print(...)` for a log point, the way Kotlin offers it for `println`.
@@ -47,8 +48,9 @@ class PrintToLogpointInspection : LocalInspectionTool() {
         isOnTheFly: Boolean,
     ): Array<ProblemDescriptor> {
         if (file !is BasedPythonFile) return ProblemDescriptor.EMPTY_ARRAY
-        val text = file.text
-        return PrintToLogpoint.candidates(text).mapNotNull { candidate ->
+        val document = file.viewProvider.document ?: return ProblemDescriptor.EMPTY_ARRAY
+        val outline = ByOutlines.getInstance(file.project).forFile(file) ?: return ProblemDescriptor.EMPTY_ARRAY
+        return PrintToLogpoint.candidates(outline, document).mapNotNull { candidate ->
             val element = file.findElementAt(candidate.callOffset) ?: return@mapNotNull null
             manager.createProblemDescriptor(
                 element,
@@ -76,8 +78,11 @@ private class ReplaceWithLogpointFix : LocalQuickFix {
         val document = documentManager.getDocument(file) ?: return
 
         // Re-derived from the document rather than trusted from the descriptor: an inspection result
-        // can be acted on long after the highlight that produced it.
-        val candidate = PrintToLogpoint.at(document.charsSequence, element.textRange.startOffset) ?: return
+        // can be acted on long after the highlight that produced it. From the outline of the text as
+        // it is now, which is on hand whenever the inspection that offered this ran on this text; a
+        // fix pressed before `by` has caught up with an edit does nothing rather than guess.
+        val outline = ByOutlines.getInstance(project).current(document) ?: return
+        val candidate = PrintToLogpoint.at(outline, document, element.textRange.startOffset) ?: return
 
         val type = XDebuggerUtil.getInstance().findBreakpointType(ByLineBreakpointType::class.java) ?: return
         val breakpoints = XDebuggerManager.getInstance(project).breakpointManager
@@ -125,8 +130,14 @@ private class ReplaceWithLogpointFix : LocalQuickFix {
      */
     override fun generatePreview(project: Project, previewDescriptor: ProblemDescriptor): IntentionPreviewInfo {
         val element = previewDescriptor.psiElement ?: return IntentionPreviewInfo.EMPTY
-        val document = element.containingFile?.viewProvider?.document ?: return IntentionPreviewInfo.EMPTY
-        val candidate = PrintToLogpoint.at(document.charsSequence, element.textRange.startOffset)
+        val copy = element.containingFile ?: return IntentionPreviewInfo.EMPTY
+        val document = copy.viewProvider.document ?: return IntentionPreviewInfo.EMPTY
+        // The copy is the original's text under another name, and `by` has only been asked about
+        // the original — whose outline therefore places the call in the copy too.
+        val original = copy.originalFile
+        val originalDocument = original.viewProvider.document ?: return IntentionPreviewInfo.EMPTY
+        val outline = ByOutlines.getInstance(project).forFile(original) ?: return IntentionPreviewInfo.EMPTY
+        val candidate = PrintToLogpoint.at(outline, originalDocument, element.textRange.startOffset)
             ?: return IntentionPreviewInfo.EMPTY
         document.deleteString(candidate.lineStart, candidate.lineEndWithSeparator)
         return IntentionPreviewInfo.DIFF

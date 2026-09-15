@@ -22,6 +22,8 @@ import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiFile
 import dev.basedpython.pycharm.lang.BasedPythonLanguage
+import dev.basedpython.pycharm.lsp.outline.ByOutline
+import dev.basedpython.pycharm.lsp.outline.ByOutlines
 
 /**
  * Keeps every open `.by` editor's trim margins up to date, as a daemon pass.
@@ -48,7 +50,7 @@ class ByStringMarginPassFactory : TextEditorHighlightingPassFactory, TextEditorH
 
     override fun createHighlightingPass(file: PsiFile, editor: Editor): TextEditorHighlightingPass? {
         if (file.language != BasedPythonLanguage) return null
-        return ByStringMarginPass(file.project, editor)
+        return ByStringMarginPass(file, editor)
     }
 }
 
@@ -89,21 +91,24 @@ internal class ByStringMarginEditors : Disposable {
     /** The margin highlighters this service put in [editor], in document order. */
     fun drawnIn(editor: Editor): List<RangeHighlighter> = drawn[editor].orEmpty()
 
-    /** Replaces what is drawn in [editor] with a highlighter over each of [margins]' literals. */
-    fun redraw(editor: Editor, margins: List<StringMargin>) {
+    /**
+     * Replaces what is drawn in [editor] with a highlighter over each of [margins]' literals, each
+     * with a renderer carrying how much `by` strips from it.
+     */
+    fun redraw(editor: Editor, margins: List<ByOutline.StringPart>) {
         val markup = editor.markupModel
         drawn.remove(editor)?.forEach(markup::removeHighlighter)
         if (margins.isEmpty()) return
         drawn[editor] = margins.map { margin ->
             markup.addRangeHighlighter(
                 null,
-                margin.literalStart,
-                margin.literalEnd,
+                margin.range.startOffset,
+                margin.range.endOffset,
                 // Below everything else that draws itself: a margin is background, and it
                 // should never be what covers a caret row or a search hit.
                 HighlighterLayer.LAST,
                 HighlighterTargetArea.EXACT_RANGE,
-            ).also { (it as RangeHighlighterEx).setCustomRenderer(ByStringMarginRenderer) }
+            ).also { (it as RangeHighlighterEx).setCustomRenderer(ByStringMarginRenderer(margin.strippedIndent ?: 0)) }
         }
     }
 
@@ -147,14 +152,16 @@ internal class ByStringMarginEditors : Disposable {
     }
 }
 
-private class ByStringMarginPass(project: Project, private val editor: Editor) :
-    TextEditorHighlightingPass(project, editor.document, false) {
+private class ByStringMarginPass(private val file: PsiFile, private val editor: Editor) :
+    TextEditorHighlightingPass(file.project, editor.document, false) {
 
-    private var margins: List<StringMargin> = emptyList()
+    private var margins: List<ByOutline.StringPart> = emptyList()
 
     override fun doCollectInformation(progress: ProgressIndicator) {
-        // A snapshot, because this runs off the EDT while the document may be edited under it.
-        margins = StringMargins.marginsIn(document.immutableCharSequence)
+        // `by`'s answer for this revision, asked for and waited on here, off the EDT. No answer is
+        // no margins: what is stripped is the transpiler's call, and nothing here guesses at it.
+        val outline = ByOutlines.getInstance(file.project).forFile(file) ?: return
+        margins = StringMargins.strippedIn(outline)
     }
 
     /**
@@ -175,7 +182,10 @@ private class ByStringMarginPass(project: Project, private val editor: Editor) :
         editors.redraw(editor, margins)
     }
 
-    /** Whether this highlighter is already the one marking [margin]'s literal. */
-    private fun RangeHighlighter.covers(margin: StringMargin): Boolean =
-        isValid && startOffset == margin.literalStart && endOffset == margin.literalEnd
+    /** Whether this highlighter is already the one marking [margin]'s literal, at its indent. */
+    private fun RangeHighlighter.covers(margin: ByOutline.StringPart): Boolean =
+        isValid &&
+            startOffset == margin.range.startOffset &&
+            endOffset == margin.range.endOffset &&
+            ((this as? RangeHighlighterEx)?.customRenderer as? ByStringMarginRenderer)?.indent == margin.strippedIndent
 }

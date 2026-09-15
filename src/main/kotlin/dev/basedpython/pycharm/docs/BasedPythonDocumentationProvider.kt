@@ -1,7 +1,6 @@
 package dev.basedpython.pycharm.docs
 
 import com.intellij.lang.documentation.DocumentationProvider
-import com.intellij.openapi.editor.Document
 import com.intellij.openapi.util.TextRange
 import com.intellij.psi.PsiDocCommentBase
 import com.intellij.psi.PsiElement
@@ -10,16 +9,18 @@ import dev.basedpython.pycharm.docs.render.ByDocstringComment
 import dev.basedpython.pycharm.docs.render.ByDocstringSpans
 import dev.basedpython.pycharm.docs.render.ByRenderedDocs
 import dev.basedpython.pycharm.lang.BasedPythonFile
+import dev.basedpython.pycharm.lsp.outline.ByOutline
+import dev.basedpython.pycharm.lsp.outline.ByOutlines
 import java.util.function.Consumer
 
 /**
  * Provides Quick Documentation (Ctrl+Q / F1) and external docs links for
  * basedpython-specific keywords, modifiers and operators in `.by` files.
  *
- * The PSI for `.by` files is flat (token-only), so this provider works off the
- * raw element text and the surrounding line in the document rather than a real
- * syntax tree. Anything it does not recognise yields `null`, allowing the LSP
- * hover to win where applicable.
+ * The PSI for `.by` files is flat (token-only). A keyword whose meaning depends on the declaration
+ * it is part of — `data`, `frozen`, `enum`, `class`, `def`, `protocol` — is looked up by what `by`
+ * parsed that declaration as (see [ByOutlines]); anything else by its own text. Anything it does not
+ * recognise yields `null`, allowing the LSP hover to win where applicable.
  *
  * It is also where rendered documentation is answered from — the docstrings the editor draws in
  * place of their source when "Render documentation comments" is on. That is a different axis on the
@@ -98,76 +99,60 @@ class BasedPythonDocumentationProvider : DocumentationProvider {
         return ByDocstringComment(file, docstring)
     }
 
-    /** Resolve a [DocEntry] for the element by inspecting its text and the line around it. */
+    /**
+     * The [DocEntry] for [element]: a basedpython declaration keyword by what `by` parsed it as, and
+     * anything else by its own text.
+     */
     private fun resolveEntry(element: PsiElement?): DocEntry? {
         if (element == null) return null
-        if (element.containingFile !is BasedPythonFile) return null
-
+        val file = element.containingFile as? BasedPythonFile ?: return null
         val token = element.text?.trim().orEmpty()
-
-        // Direct operator / keyword hit on the element itself.
-        directLookup(token)?.let { return it }
-
-        // Fall back to inspecting the surrounding line text from the document.
-        val file: PsiFile = element.containingFile ?: return null
-        val doc: Document = file.viewProvider.document ?: return null
-        val offset = element.textRange?.startOffset ?: return null
-        if (offset < 0 || offset > doc.textLength) return null
-
-        val lineNumber = doc.getLineNumber(offset.coerceAtMost(doc.textLength.coerceAtLeast(1) - 1).coerceAtLeast(0))
-        val lineStart = doc.getLineStartOffset(lineNumber)
-        val lineEnd = doc.getLineEndOffset(lineNumber)
-        val line = doc.charsSequence.subSequence(lineStart, lineEnd).toString()
-
-        return matchLine(line, token)
-    }
-
-    /** Exact keyword/operator match against the entry table. */
-    private fun directLookup(token: String): DocEntry? {
         if (token.isEmpty()) return null
-        BasedPythonDocEntries.ENTRIES[token]?.let { return it }
-        // Operators may be glued to neighbouring tokens; check for embedded ops.
-        if (token.contains("?.")) return BasedPythonDocEntries.ENTRIES["?."]
-        if (token.contains("??")) return BasedPythonDocEntries.ENTRIES["??"]
-        return null
+
+        if (token in DECLARATION_WORDS) {
+            // `data`, `enum` and `class` are ordinary names and keywords everywhere else, so what
+            // they document is decided by the declaration the parser read them into — never by the
+            // words around them on the line.
+            val outline = ByOutlines.getInstance(file.project).forFile(file) ?: return null
+            return declarationEntry(outline, element.textRange.startOffset)
+        }
+        return BasedPythonDocEntries.ENTRIES[token]
     }
 
     /**
-     * Inspect the whole line for multi-word constructs (e.g. `frozen data class`)
-     * and operators, preferring the longest/most specific match that contains the
-     * caret [token].
+     * The entry for the declaration keyword at [offset]: the modifier it is part of (`frozen` in
+     * `frozen data class`), or, on the `class` or `def` of a declaration, the modifier that makes it
+     * the kind of declaration it is (the `class` of `data class P:`).
      */
-    private fun matchLine(line: String, token: String): DocEntry? {
-        val normalized = line.trim()
-
-        // Operators anywhere on the line.
-        if ("?." in normalized && (token == "?." || token == "?" || token == ".")) {
-            BasedPythonDocEntries.ENTRIES["?."]?.let { return it }
+    private fun declarationEntry(outline: ByOutline, offset: Int): DocEntry? {
+        var entry: DocEntry? = null
+        outline.walk { statement, _ ->
+            val modifier = statement.modifiers.firstOrNull { it.range.containsOffset(offset) }
+            if (modifier != null) {
+                entry = MODIFIER_ENTRIES[modifier.name]?.let(BasedPythonDocEntries.ENTRIES::get)
+                return@walk
+            }
+            val keyword = statement.clauses.firstOrNull()?.keyword ?: return@walk
+            if (keyword.containsOffset(offset)) {
+                entry = statement.modifiers
+                    .firstNotNullOfOrNull { MODIFIER_ENTRIES[it.name] }
+                    ?.let(BasedPythonDocEntries.ENTRIES::get)
+            }
         }
-        if ("??" in normalized && (token == "??" || token == "?")) {
-            BasedPythonDocEntries.ENTRIES["??"]?.let { return it }
-        }
+        return entry
+    }
 
-        // Multi-word class declarations, most specific first.
-        when {
-            Regex("""\bfrozen\s+data\s+class\b""").containsMatchIn(normalized) &&
-                token in setOf("frozen", "data", "class") ->
-                return BasedPythonDocEntries.ENTRIES["frozen data class"]
+    private companion object {
+        /** The words whose entry depends on the declaration they are part of. */
+        val DECLARATION_WORDS = setOf("data", "frozen", "enum", "class", "def", "protocol")
 
-            Regex("""\bdata\s+class\b""").containsMatchIn(normalized) &&
-                token in setOf("data", "class") ->
-                return BasedPythonDocEntries.ENTRIES["data class"]
-
-            Regex("""\benum\s+class\b""").containsMatchIn(normalized) &&
-                token in setOf("enum", "class") ->
-                return BasedPythonDocEntries.ENTRIES["enum class"]
-
-            Regex("""\bclass\s+def\b""").containsMatchIn(normalized) &&
-                token in setOf("class", "def") ->
-                return BasedPythonDocEntries.ENTRIES["class def"]
-        }
-
-        // Single keyword fallback when the token itself is recognised.
-        return BasedPythonDocEntries.ENTRIES[token]
+        /** A declaration modifier, as `by/syntaxOutline` names it, and the entry that explains it. */
+        val MODIFIER_ENTRIES = mapOf(
+            "data_class" to "data class",
+            "frozen_data_class" to "frozen data class",
+            "enum_def" to "enum class",
+            "classmethod" to "class def",
+            "protocol_class" to "protocol",
+        )
     }
 }

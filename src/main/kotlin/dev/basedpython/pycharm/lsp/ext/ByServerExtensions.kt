@@ -171,6 +171,27 @@ interface ByServerExtensions {
      */
     @JsonRequest("by/runModules")
     fun runModules(args: ByRunModulesParams): CompletableFuture<ByRunModulesResponse?>
+
+    /**
+     * A document's block structure and string literals, as the parser reads them — see
+     * [dev.basedpython.pycharm.lsp.outline.ByOutlines].
+     *
+     * **Why the server.** Which line opens a suite, which `else` belongs to which statement, where
+     * a string's escapes are and how much indentation basedpython strips from it are all decided
+     * by the parser and the transpiler. Every scanner this plugin carried to answer them from the
+     * text answered some of them differently: `match: int = 1` read as a match statement, a `"`
+     * toggled with no regard for escapes, a margin drawn on a docstring nothing is stripped from.
+     *
+     * **Why not the standard requests.** `foldingRange` and `selectionRange` give ranges without
+     * saying which is a header or a suite, and semantic tokens cannot overlap, which an
+     * interpolation's tokens inside its braces do. The keyword pairs a caret lights up *are* a
+     * standard request, `textDocument/documentHighlight`, and are asked for there.
+     *
+     * A `null` answer means the server declined — language services are off, or the document is a
+     * notebook or a template.
+     */
+    @JsonRequest("by/syntaxOutline")
+    fun syntaxOutline(args: BySyntaxOutlineParams): CompletableFuture<BySyntaxOutlineResponse?>
 }
 
 /** Field names are the wire format of `ty_server`'s `EntryPointParams`, which is `deny_unknown_fields`. */
@@ -283,6 +304,69 @@ data class ByBuildOutput(
     val generated: String? = null,
     /** For a file in [buildDirectory] a source is written to, that source. */
     val source: String? = null,
+)
+
+/**
+ * The document to outline.
+ *
+ * Field names are the wire format and must match `ty_server`'s `SyntaxOutlineParams`, which is
+ * `deny_unknown_fields`.
+ */
+data class BySyntaxOutlineParams(val textDocument: TextDocumentIdentifier)
+
+/** The whole outline of one document. */
+data class BySyntaxOutlineResponse(
+    /** The module's statements, in source order. */
+    val statements: List<ByOutlineStatement> = emptyList(),
+    /** Every string literal part, in source order. */
+    val strings: List<ByOutlineString> = emptyList(),
+)
+
+/** One statement. */
+data class ByOutlineStatement(
+    /** From its first token — a decorator, on a decorated definition — to the end of its body. */
+    val range: Range? = null,
+    /** A compound statement's clauses, in source order; empty on a simple statement. */
+    val clauses: List<ByOutlineClause> = emptyList(),
+    /** The basedpython modifier keywords a definition was declared with. */
+    val modifiers: List<ByOutlineModifier> = emptyList(),
+    /** On an expression statement that is a call: the call. */
+    val call: ByOutlineCall? = null,
+)
+
+/** One clause of a compound statement. */
+data class ByOutlineClause(
+    /** `if`, `elif`, `case`, the `def` of a function; absent on a trailing lambda's. */
+    val keyword: Range? = null,
+    /** The `:` that opens the suite; absent when the header has none. */
+    val colon: Range? = null,
+    /** From the start of the header to the end of the body. */
+    val range: Range? = null,
+    val body: List<ByOutlineStatement> = emptyList(),
+)
+
+/** A basedpython modifier keyword, e.g. `frozen data`, and what the parser read it as. */
+data class ByOutlineModifier(val range: Range? = null, val name: String? = null)
+
+/** A call made as a statement of its own. */
+data class ByOutlineCall(
+    val callee: Range? = null,
+    /** From the first argument to the last; absent when there are none. */
+    val arguments: Range? = null,
+    /** Whether every argument is positional and none is unpacked. */
+    val positionalOnly: Boolean = false,
+)
+
+/** One string literal part. */
+data class ByOutlineString(
+    /** The part, prefix and quotes included. */
+    val range: Range? = null,
+    /** How many leading characters basedpython strips from every line; absent when none. */
+    val strippedIndent: Int? = null,
+    /** An f-string's or t-string's `{...}` interpolations, braces included. */
+    val interpolations: List<Range> = emptyList(),
+    /** The escape sequences in the literal text. */
+    val escapes: List<Range> = emptyList(),
 )
 
 /**

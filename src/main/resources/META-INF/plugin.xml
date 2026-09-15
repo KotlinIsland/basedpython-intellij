@@ -151,10 +151,10 @@
         <!-- ===== Stream H: string escapes =====
              Semantic colour comes from the `by` server's semantic tokens. What is left here is
              the part a semantic token cannot express: a token covers a whole string literal, so
-             escapes and f-string interpolations inside the quotes are ours. -->
+             escapes and f-string interpolations inside the quotes come from `by/syntaxOutline`. -->
         <annotator
             language="basedpython"
-            implementationClass="dev.basedpython.pycharm.highlight.StringEscapeAnnotator"/>
+            implementationClass="dev.basedpython.pycharm.highlight.StringPartsAnnotator"/>
 
         <!-- ===== Stream H2: language injection =====
              A fragment of another language inside a `.by` string — html, sql, a regexp — read as
@@ -314,8 +314,9 @@
         <!-- ===== Stream V: smart editing ===== -->
         <enterHandlerDelegate
             implementation="dev.basedpython.pycharm.editor.smart.BasedPythonEnterHandler"/>
-        <backspaceHandlerDelegate
-            implementation="dev.basedpython.pycharm.editor.smart.BasedPythonBackspaceHandler"/>
+        <editor.backspaceModeOverride
+            language="basedpython"
+            implementationClass="dev.basedpython.pycharm.editor.smart.BasedPythonBackspaceModeOverride"/>
 
         <!-- ===== Stream W: environment UX ===== -->
         <editorNotificationProvider
@@ -337,14 +338,8 @@
             implementation="dev.basedpython.pycharm.editor.indent.BasedPythonFileIndentOptionsProvider"/>
 
         <!-- ===== Wave 7: highlight, watch, onboarding, template macros ===== -->
-        <!-- `order="first"` because the platform's own LspHighlightUsagesHandlerFactory claims every
-             caret position in a file whose server advertises documentHighlightProvider — `by` does —
-             and createCustomHandler keeps the first non-null handler. Ours already sorted ahead of it
-             unregistered, but that is incidental to load order; KeywordHighlightRegistrationTest
-             asserts the relation this pins. -->
-        <highlightUsagesHandlerFactory
-            order="first"
-            implementation="dev.basedpython.pycharm.editor.highlight.BasedPythonKeywordHighlightUsagesHandlerFactory"/>
+        <!-- The keywords a caret on `if`, `def` or `for` lights up are `by`'s answer to
+             textDocument/documentHighlight, through the platform's own LSP support. -->
         <codeBlockSupportHandler
             language="basedpython"
             implementationClass="dev.basedpython.pycharm.editor.highlight.BasedPythonCodeBlockSupportHandler"/>
@@ -368,9 +363,6 @@
              `ByRecompositionSession` when a stop changes what is known. -->
         <highlightingPassFactory
             implementation="dev.basedpython.pycharm.debug.recompose.ByRecompositionPassFactory"/>
-        <annotator
-            language="basedpython"
-            implementationClass="dev.basedpython.pycharm.highlight.fstring.FStringInterpolationAnnotator"/>
         <postStartupActivity
             implementation="dev.basedpython.pycharm.onboarding.BasedPythonWelcomeActivity"/>
         <liveTemplateMacro implementation="dev.basedpython.pycharm.editor.templates.macro.ByModuleNameMacro"/>

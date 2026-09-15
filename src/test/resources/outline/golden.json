@@ -1,0 +1,351 @@
+{
+ "statements": [
+  {
+   "range": {
+    "end": {
+     "character": 14,
+     "line": 0
+    },
+    "start": {
+     "character": 0,
+     "line": 0
+    }
+   }
+  },
+  {
+   "clauses": [
+    {
+     "body": [
+      {
+       "range": {
+        "end": {
+         "character": 7,
+         "line": 7
+        },
+        "start": {
+         "character": 4,
+         "line": 4
+        }
+       }
+      },
+      {
+       "clauses": [
+        {
+         "body": [
+          {
+           "call": {
+            "arguments": {
+             "end": {
+              "character": 25,
+              "line": 9
+             },
+             "start": {
+              "character": 14,
+              "line": 9
+             }
+            },
+            "callee": {
+             "end": {
+              "character": 13,
+              "line": 9
+             },
+             "start": {
+              "character": 8,
+              "line": 9
+             }
+            },
+            "positionalOnly": true
+           },
+           "range": {
+            "end": {
+             "character": 26,
+             "line": 9
+            },
+            "start": {
+             "character": 8,
+             "line": 9
+            }
+           }
+          }
+         ],
+         "colon": {
+          "end": {
+           "character": 9,
+           "line": 8
+          },
+          "start": {
+           "character": 8,
+           "line": 8
+          }
+         },
+         "keyword": {
+          "end": {
+           "character": 6,
+           "line": 8
+          },
+          "start": {
+           "character": 4,
+           "line": 8
+          }
+         },
+         "range": {
+          "end": {
+           "character": 26,
+           "line": 9
+          },
+          "start": {
+           "character": 4,
+           "line": 8
+          }
+         }
+        },
+        {
+         "body": [
+          {
+           "range": {
+            "end": {
+             "character": 16,
+             "line": 11
+            },
+            "start": {
+             "character": 8,
+             "line": 11
+            }
+           }
+          }
+         ],
+         "colon": {
+          "end": {
+           "character": 18,
+           "line": 10
+          },
+          "start": {
+           "character": 17,
+           "line": 10
+          }
+         },
+         "keyword": {
+          "end": {
+           "character": 8,
+           "line": 10
+          },
+          "start": {
+           "character": 4,
+           "line": 10
+          }
+         },
+         "range": {
+          "end": {
+           "character": 16,
+           "line": 11
+          },
+          "start": {
+           "character": 4,
+           "line": 10
+          }
+         }
+        },
+        {
+         "body": [
+          {
+           "range": {
+            "end": {
+             "character": 12,
+             "line": 13
+            },
+            "start": {
+             "character": 8,
+             "line": 13
+            }
+           }
+          }
+         ],
+         "colon": {
+          "end": {
+           "character": 9,
+           "line": 12
+          },
+          "start": {
+           "character": 8,
+           "line": 12
+          }
+         },
+         "keyword": {
+          "end": {
+           "character": 8,
+           "line": 12
+          },
+          "start": {
+           "character": 4,
+           "line": 12
+          }
+         },
+         "range": {
+          "end": {
+           "character": 12,
+           "line": 13
+          },
+          "start": {
+           "character": 4,
+           "line": 12
+          }
+         }
+        }
+       ],
+       "range": {
+        "end": {
+         "character": 12,
+         "line": 13
+        },
+        "start": {
+         "character": 4,
+         "line": 8
+        }
+       }
+      },
+      {
+       "range": {
+        "end": {
+         "character": 11,
+         "line": 16
+        },
+        "start": {
+         "character": 4,
+         "line": 14
+        }
+       }
+      },
+      {
+       "range": {
+        "end": {
+         "character": 15,
+         "line": 17
+        },
+        "start": {
+         "character": 4,
+         "line": 17
+        }
+       }
+      }
+     ],
+     "colon": {
+      "end": {
+       "character": 9,
+       "line": 3
+      },
+      "start": {
+       "character": 8,
+       "line": 3
+      }
+     },
+     "keyword": {
+      "end": {
+       "character": 3,
+       "line": 3
+      },
+      "start": {
+       "character": 0,
+       "line": 3
+      }
+     },
+     "range": {
+      "end": {
+       "character": 15,
+       "line": 17
+      },
+      "start": {
+       "character": 0,
+       "line": 3
+      }
+     }
+    }
+   ],
+   "range": {
+    "end": {
+     "character": 15,
+     "line": 17
+    },
+    "start": {
+     "character": 0,
+     "line": 3
+    }
+   }
+  }
+ ],
+ "strings": [
+  {
+   "range": {
+    "end": {
+     "character": 7,
+     "line": 7
+    },
+    "start": {
+     "character": 4,
+     "line": 4
+    }
+   },
+   "strippedIndent": 4
+  },
+  {
+   "escapes": [
+    {
+     "end": {
+      "character": 19,
+      "line": 9
+     },
+     "start": {
+      "character": 17,
+      "line": 9
+     }
+    }
+   ],
+   "interpolations": [
+    {
+     "end": {
+      "character": 24,
+      "line": 9
+     },
+     "start": {
+      "character": 19,
+      "line": 9
+     }
+    }
+   ],
+   "range": {
+    "end": {
+     "character": 25,
+     "line": 9
+    },
+    "start": {
+     "character": 14,
+     "line": 9
+    }
+   }
+  },
+  {
+   "range": {
+    "end": {
+     "character": 17,
+     "line": 10
+    },
+    "start": {
+     "character": 14,
+     "line": 10
+    }
+   }
+  },
+  {
+   "range": {
+    "end": {
+     "character": 11,
+     "line": 16
+    },
+    "start": {
+     "character": 11,
+     "line": 14
+    }
+   },
+   "strippedIndent": 12
+  }
+ ]
+}

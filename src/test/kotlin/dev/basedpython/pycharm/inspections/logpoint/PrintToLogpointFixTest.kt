@@ -14,6 +14,7 @@ import com.intellij.xdebugger.breakpoints.SuspendPolicy
 import com.intellij.xdebugger.breakpoints.XLineBreakpoint
 import dev.basedpython.pycharm.debug.logpoint.ByLogpoints
 import dev.basedpython.pycharm.debug.ByLineBreakpointType
+import dev.basedpython.pycharm.lsp.outline.OutlineSpec
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
 import dev.basedpython.pycharm.testFramework.letContentHashingFinish
 import org.junit.jupiter.api.AfterEach
@@ -42,17 +43,25 @@ class PrintToLogpointFixTest {
 
     private val type get() = XDebuggerUtil.getInstance().findBreakpointType(ByLineBreakpointType::class.java)!!
 
-    /** Reports on [source], applies the single fix, and returns the breakpoint it created. */
-    private fun applyFix(source: String): XLineBreakpoint<*> {
-        fixture.configureByText("main.by", source)
-        val descriptor = problems(source).single()
+    /**
+     * Reports on [source], as `by` outlines it — a `def f(x):` holding [print] and then [follower] —
+     * applies the single fix, and returns the breakpoint it created.
+     */
+    private fun applyFix(source: String, print: String, follower: String): XLineBreakpoint<*> {
+        configure(source) { compound { clause("def f(x):") { call(print); simple(follower) } } }
+        val descriptor = problems().single()
         WriteCommandAction.runWriteCommandAction(fixture.project) {
             (descriptor.fixes!!.single() as LocalQuickFix).applyFix(fixture.project, descriptor)
         }
         return XDebuggerManager.getInstance(fixture.project).breakpointManager.getBreakpoints(type).single()
     }
 
-    private fun problems(@Suppress("UNUSED_PARAMETER") source: String): Array<ProblemDescriptor> =
+    private fun configure(source: String, outline: OutlineSpec.Suite.() -> Unit) {
+        fixture.configureByText("main.by", source)
+        OutlineSpec.remember(fixture.project, fixture.editor.document, outline)
+    }
+
+    private fun problems(): Array<ProblemDescriptor> =
         PrintToLogpointInspection()
             .checkFile(fixture.file, InspectionManager.getInstance(fixture.project), false)
 
@@ -62,7 +71,7 @@ class PrintToLogpointFixTest {
 
     @Test
     fun `the call is gone and what replaces it is a log point`() {
-        val breakpoint = applyFix("def f(x):\n    print(x)\n    return x * 2\n")
+        val breakpoint = applyFix("def f(x):\n    print(x)\n    return x * 2\n", "print(x)", "return x * 2")
 
         assertEquals("def f(x):\n    return x * 2\n", fixture.editor.document.text)
         // The mark that makes it a log point rather than an ordinary breakpoint. Was the
@@ -74,7 +83,7 @@ class PrintToLogpointFixTest {
 
     @Test
     fun `the log point logs the argument and does not suspend`() {
-        val breakpoint = applyFix("def f(x):\n    print(f\"x={x}\")\n    return x\n")
+        val breakpoint = applyFix("def f(x):\n    print(f\"x={x}\")\n    return x\n", "print(f\"x={x}\")", "return x")
 
         assertEquals(SuspendPolicy.NONE, breakpoint.suspendPolicy)
         val logged = breakpoint.logExpressionObject
@@ -84,7 +93,7 @@ class PrintToLogpointFixTest {
 
     @Test
     fun `undo takes the log point back along with the deleted line`() {
-        applyFix("def f(x):\n    print(x)\n    return x * 2\n")
+        applyFix("def f(x):\n    print(x)\n    return x * 2\n", "print(x)", "return x * 2")
         assertTrue(
             XDebuggerManager.getInstance(fixture.project).breakpointManager.getBreakpoints(type).isNotEmpty(),
         )
@@ -105,7 +114,7 @@ class PrintToLogpointFixTest {
      */
     @Test
     fun `redo puts back exactly one log point`() {
-        applyFix("def f(x):\n    print(x)\n    return x * 2\n")
+        applyFix("def f(x):\n    print(x)\n    return x * 2\n", "print(x)", "return x * 2")
         val editor = FileEditorManager.getInstance(fixture.project).getSelectedEditor(fixture.file.virtualFile)
         val undo = UndoManager.getInstance(fixture.project)
         undo.undo(editor)
@@ -129,7 +138,10 @@ class PrintToLogpointFixTest {
     @Test
     fun `no fix is offered where the log point would have nowhere to bind`() {
         // The print is the last statement of the function; the next line runs at import time.
-        fixture.configureByText("main.by", "def f(x):\n    print(x)\n\nf(1)\n")
-        assertTrue(problems("").isEmpty(), "expected no report for a print at the end of its block")
+        configure("def f(x):\n    print(x)\n\nf(1)\n") {
+            compound { clause("def f(x):") { call("print(x)") } }
+            call("f(1)")
+        }
+        assertTrue(problems().isEmpty(), "expected no report for a print at the end of its block")
     }
 }

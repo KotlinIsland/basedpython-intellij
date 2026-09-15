@@ -14,26 +14,26 @@ import java.awt.Graphics2D
  * A [CustomHighlighterRenderer] because there is nothing to attribute. Text attributes colour
  * characters, and the margin is a rule between two of them — on lines that may have no character
  * at that column at all, which is precisely the case worth showing (a blank line inside the
- * literal, or closing quotes sitting further right than the text above them).
+ * literal, or closing quotes sitting further left than the text above them).
  *
- * **The margin is measured here, at paint time, from the highlighter's own range** — not carried
- * in from the pass that added the highlighter. Offsets computed by a daemon pass are a snapshot,
- * and the editor keeps painting between one pass and the next: every keystroke would draw the
- * rule where the text used to be, and it would jump back a few hundred milliseconds later when
- * the daemon caught up. The highlighter's range, by contrast, is moved by the document itself as
- * the edit happens, so measuring from it is measuring from what is on screen. It also costs
- * nothing worth counting — one scan of one literal, only for the ones in view.
+ * One renderer per marked literal, carrying [indent]: how much `by` said is stripped from it, and
+ * the only thing carried in from the pass that added the highlighter. **Where the rule goes is
+ * measured here, at paint time, from the highlighter's own range.** Offsets computed by a daemon
+ * pass are a snapshot, and the editor keeps painting between one pass and the next: every
+ * keystroke would draw the rule where the text used to be, and it would jump back a few hundred
+ * milliseconds later when the daemon caught up. The highlighter's range is moved by the document
+ * itself as the edit happens, so measuring from it is measuring from what is on screen. An edit
+ * that changes how much is stripped is picked up by the next pass, which replaces the renderer.
  *
- * The line runs from the first line of content to the last line of text. Not across the opening
- * line, whose text starts after the quotes with nothing taken off it; not down beside closing
- * quotes on a line of their own, which are the margin rather than something to mark against it.
+ * The line runs from the first line of content to the last. Not across the opening line, and not
+ * down beside the closing quotes, which sit on a line of their own below the content.
  *
  * Placed by asking the editor where [StringMargin.anchorOffset] is rather than by multiplying a
  * column by a character width. Only the editor knows what the columns before it are worth — tabs,
  * a proportional font, an inlay from `by` sitting in the line — and the anchor is chosen on a line
  * whose leading characters are exactly the whitespace being stripped.
  */
-object ByStringMarginRenderer : CustomHighlighterRenderer {
+class ByStringMarginRenderer(val indent: Int) : CustomHighlighterRenderer {
 
     override fun paint(editor: Editor, highlighter: RangeHighlighter, g: Graphics) {
         if (!highlighter.isValid) return
@@ -41,6 +41,7 @@ object ByStringMarginRenderer : CustomHighlighterRenderer {
             editor.document.immutableCharSequence,
             highlighter.startOffset,
             highlighter.endOffset,
+            indent,
         ) ?: return
 
         // Folded away — by `by`'s folding ranges or by a collapsed region around the statement.

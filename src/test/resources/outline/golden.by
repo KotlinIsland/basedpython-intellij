@@ -1,0 +1,18 @@
+match: int = 1
+
+
+def f(x):
+    """
+    Args:
+        x: é thing
+    """
+    if x:  # a: note
+        print(f"x\n{x!r}")
+    elif x == ":":
+        return 2
+    else:
+        pass
+    text = """
+            eight
+        """
+    return text

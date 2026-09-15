@@ -9,6 +9,7 @@ import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Key
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.psi.PsiFile
 import com.intellij.platform.lsp.api.LspClient
 import com.intellij.platform.lsp.api.LspIntegrationProvider
 import com.intellij.platform.lsp.api.LspIntegrationProvider.LspClientStarter
@@ -24,6 +25,7 @@ import com.intellij.platform.lsp.api.customization.LspFormattingDisabled
 import com.intellij.platform.lsp.api.customization.LspHoverDisabled
 import com.intellij.platform.lsp.api.customization.LspOptimizeImportsDisabled
 import com.intellij.platform.lsp.api.customization.LspDocumentHighlightsDisabled
+import com.intellij.platform.lsp.api.customization.LspDocumentHighlightsSupport
 import com.intellij.platform.lsp.api.customization.LspDocumentLinkDisabled
 import com.intellij.platform.lsp.api.customization.LspDocumentSymbolDisabled
 import com.intellij.platform.lsp.api.customization.LspFindReferencesDisabled
@@ -219,8 +221,17 @@ internal class ByLspServerDescriptor(
       }
     override val codeLensCustomizer
       get() = if (s.byCodeLens) super.codeLensCustomizer else LspCodeLensDisabled
+    /**
+     * `by`'s document highlights, asked for in `.by` files too.
+     *
+     * The platform's [LspDocumentHighlightsSupport] only asks for plain-text and TextMate files,
+     * on the assumption that a language with PSI highlights usages itself — and `.by`'s PSI is flat,
+     * so nothing did: the toggle above switched a request that was never sent. `by` answers it for
+     * symbols and for keywords, where it lights up an `if` with its `elif`s and `else`, a `def` with
+     * its `return`s and a loop with its `break`s.
+     */
     override val documentHighlightsCustomizer
-      get() = if (s.byDocumentHighlight) super.documentHighlightsCustomizer else LspDocumentHighlightsDisabled
+      get() = if (s.byDocumentHighlight) ByDocumentHighlights else LspDocumentHighlightsDisabled
     override val signatureHelpCustomizer
       get() = if (s.bySignatureHelp) super.signatureHelpCustomizer else LspSignatureHelpDisabled
     /**
@@ -237,6 +248,10 @@ internal class ByLspServerDescriptor(
      * the provider sends.
      */
     override val inlayHintCustomizer = LspInlayHintDisabled
+  }
+
+  private object ByDocumentHighlights : LspDocumentHighlightsSupport() {
+    override fun shouldAskServerForDocumentHighlights(psiFile: PsiFile): Boolean = true
   }
 }
 

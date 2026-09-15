@@ -20,8 +20,9 @@ internal object BasedPythonDocEntries {
     const val DOCS_BASE: String = "https://basedpython.dev/docs/"
 
     /**
-     * Keyed by the *lookup* form. Multi-word constructs are keyed both by the
-     * leading keyword (e.g. `data`, `frozen`) and by their full phrase.
+     * Keyed by the *lookup* form: a keyword or operator's own text, or a multi-word declaration's
+     * full phrase (`frozen data class`), which is what
+     * [BasedPythonDocumentationProvider] resolves any of its words to.
      */
     val ENTRIES: Map<String, DocEntry> = buildMap {
         put(
@@ -51,30 +52,12 @@ internal object BasedPythonDocEntries {
             )
         )
         put(
-            "data", DocEntry(
-                "data class",
-                "A <b>data class</b> auto-generates <code>__init__</code>, <code>__eq__</code>, " +
-                    "<code>__repr__</code> and <code>__hash__</code> from its fields." +
-                    "<br/><pre>data class Point:\n    x: int\n    y: int</pre>",
-                "classes#data-class",
-            )
-        )
-        put(
             "data class", DocEntry(
                 "data class",
                 "A <b>data class</b> auto-generates <code>__init__</code>, <code>__eq__</code>, " +
                     "<code>__repr__</code> and <code>__hash__</code> from its fields." +
                     "<br/><pre>data class Point:\n    x: int\n    y: int</pre>",
                 "classes#data-class",
-            )
-        )
-        put(
-            "frozen", DocEntry(
-                "frozen data class",
-                "A <b>frozen data class</b> is an immutable data class: its fields cannot be " +
-                    "reassigned after construction, making instances hashable by value." +
-                    "<br/><pre>frozen data class Point:\n    x: int\n    y: int</pre>",
-                "classes#frozen-data-class",
             )
         )
         put(
@@ -87,29 +70,11 @@ internal object BasedPythonDocEntries {
             )
         )
         put(
-            "enum", DocEntry(
-                "enum class",
-                "An <b>enum class</b> defines a fixed set of named constant members." +
-                    "<br/><pre>enum class Color:\n    RED\n    GREEN\n    BLUE</pre>",
-                "classes#enum-class",
-            )
-        )
-        put(
             "enum class", DocEntry(
                 "enum class",
                 "An <b>enum class</b> defines a fixed set of named constant members." +
                     "<br/><pre>enum class Color:\n    RED\n    GREEN\n    BLUE</pre>",
                 "classes#enum-class",
-            )
-        )
-        put(
-            "class", DocEntry(
-                "class def",
-                "Declares a <b>class</b>. In basedpython, member modifiers such as " +
-                    "<code>public</code>, <code>private</code>, <code>final</code>, " +
-                    "<code>abstract</code>, <code>static</code> and <code>override</code> are " +
-                    "supported.<br/><pre>class def Widget:\n    public name: str</pre>",
-                "classes#class-def",
             )
         )
         put(

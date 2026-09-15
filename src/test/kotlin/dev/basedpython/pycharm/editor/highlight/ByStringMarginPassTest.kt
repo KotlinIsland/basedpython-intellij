@@ -9,19 +9,21 @@ import com.intellij.openapi.util.Disposer
 import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import com.intellij.testFramework.replaceService
+import dev.basedpython.pycharm.lsp.outline.OutlineSpec
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 /**
- * That the margins [StringMarginsTest] computes actually reach an editor.
+ * That the margins `by` reports reach an editor, and are placed where the stripped indentation
+ * ends.
  *
- * Everything between the two is registration and reconciliation — the `highlightingPassFactory`
- * entry in plugin.xml, the language check, and the diff [ByStringMarginPassFactory] does against
- * what is already drawn — and none of it is visible to a unit test of the scanner. A margin that
- * is computed perfectly and never added to the markup model looks exactly like a feature that was
- * never written.
+ * Everything between the server's answer and the pixels is registration, reconciliation and layout
+ * — the `highlightingPassFactory` entry in plugin.xml, the diff [ByStringMarginPassFactory] does
+ * against what is already drawn, and [StringMargins.marginOf] placing the rule on the literal's
+ * lines — and none of it needs a server to be wrong.
  */
 @TestFixtures
 @RunInEdt(writeIntent = true)
@@ -31,49 +33,90 @@ class ByStringMarginPassTest {
 
     private val q = "\"\"\""
 
+    /** The margin highlighters, in document order. */
+    private fun marginHighlighters() = fixture.editor.markupModel.allHighlighters
+        .filter { (it as? RangeHighlighterEx)?.customRenderer is ByStringMarginRenderer }
+        .sortedBy { it.startOffset }
+
     /**
      * The margins currently drawn in the fixture's editor, measured the way the renderer measures
-     * them: from each marked literal's *live* range, not from anything the pass stored.
+     * them: from each marked literal's *live* range, and the indent its renderer carries.
      */
     private fun drawn(): List<StringMargin> {
         val text = fixture.editor.document.immutableCharSequence
-        return fixture.editor.markupModel.allHighlighters
-            .filter { (it as? RangeHighlighterEx)?.customRenderer === ByStringMarginRenderer }
-            .mapNotNull { StringMargins.marginOf(text, it.startOffset, it.endOffset) }
+        return marginHighlighters().mapNotNull {
+            val indent = ((it as RangeHighlighterEx).customRenderer as ByStringMarginRenderer).indent
+            StringMargins.marginOf(text, it.startOffset, it.endOffset, indent)
+        }
     }
 
     @Test
-    fun `the pass draws a margin for each multiline literal`() {
-        fixture.configureByText("a.by", "a = $q\n    one\n    $q\nb = $q\n      two\n  $q\n")
+    fun `the pass draws a margin for each literal by strips`() {
+        fixture.configureByText("a.by", "a = $q\n    one\n    $q\nb = $q\n      two\n  $q\nc = \"three\"\n")
+        OutlineSpec.remember(fixture.project, fixture.editor.document) {
+            string("$q\n    one\n    $q", strippedIndent = 4)
+            string("$q\n      two\n  $q", strippedIndent = 6)
+            string("\"three\"")
+        }
         fixture.doHighlighting()
-        assertEquals(listOf(4, 2), drawn().map { it.indent })
+        assertEquals(listOf(4, 6), drawn().map { it.indent })
+    }
+
+    /**
+     * A docstring whose text starts on the opening line is left as written by the transpiler, and
+     * so gets no margin — the scanner this replaced drew one there, at the indentation of the lines
+     * below, marking a strip that never happens.
+     */
+    @Test
+    fun `no highlighter where by strips nothing`() {
+        fixture.configureByText("b.by", "a = ${q}Summary.\n    more\n    $q\n")
+        OutlineSpec.remember(fixture.project, fixture.editor.document) {
+            string("${q}Summary.\n    more\n    $q")
+        }
+        fixture.doHighlighting()
+        assertEquals(emptyList<StringMargin>(), drawn())
     }
 
     @Test
-    fun `no highlighter where nothing is trimmed`() {
-        fixture.configureByText("b.by", "a = $q\none\n$q\nb = \"two\"\n")
+    fun `no answer from by is no margin`() {
+        fixture.configureByText("c.by", "a = $q\n    one\n    $q\n")
         fixture.doHighlighting()
         assertEquals(emptyList<StringMargin>(), drawn())
     }
 
     /**
-     * That the anchor really is a pixel column, through a real editor.
-     *
-     * [StringMargin.anchorOffset] is chosen so the editor can be *asked* where the trim cuts,
-     * instead of the renderer multiplying a column by a character width. Asking is only right if
-     * the offset is on the line that defines the margin — here the closing quotes, four in, with
-     * the text above them indented eight.
+     * The rule is drawn at the column `by` strips to — the content's, here eight — which is not the
+     * column of the closing quotes, four in. The transpiler strips what the content lines share and
+     * leaves the closing line out of it.
      */
     @Test
-    fun `the margin lands on the closing quotes, left of the text above them`() {
-        fixture.configureByText("d.by", "a = $q\n        one\n    $q\n")
+    fun `the margin lands where the content is stripped to, not on the closing quotes`() {
+        fixture.configureByText("d.by", "a = $q\n        one\n\n        two\n    $q\n")
+        OutlineSpec.remember(fixture.project, fixture.editor.document) {
+            string("$q\n        one\n\n        two\n    $q", strippedIndent = 8)
+        }
         fixture.doHighlighting()
         val editor = fixture.editor
         val text = editor.document.text
 
-        val x = editor.offsetToXY(drawn().single().anchorOffset).x
-        assertEquals(editor.offsetToXY(text.lastIndexOf(q)).x, x)
-        assertTrue(x < editor.offsetToXY(text.indexOf("one")).x)
+        val margin = drawn().single()
+        assertEquals(editor.offsetToXY(text.indexOf("one")).x, editor.offsetToXY(margin.anchorOffset).x)
+        assertEquals(text.indexOf("        one"), margin.firstLineStart)
+        assertEquals(text.indexOf("        two"), margin.lastLineStart)
+    }
+
+    @Test
+    fun `a tab-indented literal is anchored after its tabs`() {
+        val text = "a = $q\n\t\tone\n\t$q\n"
+        val margin = StringMargins.marginOf(text, text.indexOf(q), text.lastIndexOf(q) + 3, 2)!!
+        assertEquals(text.indexOf("one"), margin.anchorOffset)
+    }
+
+    /** Between an edit and the next answer the literal can lose its shape; nothing is drawn then. */
+    @Test
+    fun `a literal whose shape no longer fits its indent is not drawn`() {
+        val text = "a = $q\n  one\n    $q\n"
+        assertNull(StringMargins.marginOf(text, text.indexOf(q), text.lastIndexOf(q) + 3, 4))
     }
 
     /**
@@ -95,30 +138,23 @@ class ByStringMarginPassTest {
         )
     }
 
-    /** The margin highlighters themselves, in document order, so two passes can be compared. */
-    private fun marginHighlighters() = fixture.editor.markupModel.allHighlighters
-        .filter { (it as? RangeHighlighterEx)?.customRenderer === ByStringMarginRenderer }
-        .sortedBy { it.startOffset }
-
     /**
      * The pass runs on every keystroke, so a margin that has not moved must not be replaced —
      * a new highlighter repaints the literal, and there is one of these per string in the file.
-     *
-     * The pass's *own* highlighters, not every highlighter in the editor. What else is in the markup
-     * model belongs to other passes, and whether they choose to reuse theirs is neither this test's
-     * business nor stable enough to assert on — comparing the lot made this fail for reasons that
-     * had nothing to do with the margin.
      */
     @Test
     fun `a second pass over unchanged text reuses the highlighters`() {
-        fixture.configureByText("c.by", "a = $q\n    one\n    $q\n")
+        fixture.configureByText("f.by", "a = $q\n    one\n    $q\n")
+        OutlineSpec.remember(fixture.project, fixture.editor.document) {
+            string("$q\n    one\n    $q", strippedIndent = 4)
+        }
         fixture.doHighlighting()
         val first = marginHighlighters()
         assertEquals(1, first.size, "the fixture needs one margin for this to be testing anything")
 
         fixture.doHighlighting()
         // Identity, which is the claim: the same objects, not equal ones.
-        assertEquals(first, marginHighlighters())
+        assertTrue(first.zip(marginHighlighters()).all { (a, b) -> a === b })
     }
 
     /**
@@ -139,7 +175,10 @@ class ByStringMarginPassTest {
             fun listeners() = multicaster.listeners.values.flatten()
                 .count { it.javaClass.name.startsWith(ByStringMarginEditors::class.java.name) }
 
-            fixture.configureByText("f.by", "a = $q\n    one\n    $q\n")
+            fixture.configureByText("g.by", "a = $q\n    one\n    $q\n")
+            OutlineSpec.remember(fixture.project, fixture.editor.document) {
+                string("$q\n    one\n    $q", strippedIndent = 4)
+            }
             fixture.doHighlighting()
             assertEquals(1, marginHighlighters().size, "the fixture needs a margin for this to be testing anything")
             val registered = listeners()

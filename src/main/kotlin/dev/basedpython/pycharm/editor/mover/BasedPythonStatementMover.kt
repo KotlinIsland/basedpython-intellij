@@ -4,309 +4,168 @@ import com.intellij.codeInsight.editorActions.moveUpDown.LineRange
 import com.intellij.codeInsight.editorActions.moveUpDown.StatementUpDownMover
 import com.intellij.openapi.editor.Document
 import com.intellij.openapi.editor.Editor
+import com.intellij.openapi.util.TextRange
 import com.intellij.psi.PsiFile
 import dev.basedpython.pycharm.lang.BasedPythonFile
+import dev.basedpython.pycharm.lsp.outline.ByOutline
+import dev.basedpython.pycharm.lsp.outline.ByOutlines
 
 /**
- * Move Statement Up/Down support for basedpython (`.by`) files.
+ * Move Statement Up/Down for basedpython (`.by`) files: a statement swaps places with the sibling
+ * statement next to it, its whole suite and decorators travelling with it.
  *
- * The PSI for `.by` files is flat (token-only), so block ranges are computed
- * purely from the [Document] text using indentation.
+ * What a statement is, and which are siblings, is `by`'s parse — see [ByOutlines]. A line that
+ * merely ends in `:` is not a header (a docstring's `Args:` is not), and a line that does not end
+ * in one can be (`if x: return 1`, a header with a trailing comment).
  *
- * Behavior:
- *  - With a selection, or when the caret line is a *block header* (a non-blank
- *    line ending in `:`), the whole logical block (header + its more-indented
- *    body) is moved above the previous sibling block or below the next sibling
- *    block.
- *  - Otherwise a single line is moved, but a deeper-indented child block that
- *    would be straddled is skipped over as a unit so the move never breaks into
- *    the middle of a nested block.
+ * The unit moved:
+ *  - with the caret on a statement — anywhere in a simple one, or on the header or decorators of a
+ *    compound one — that statement;
+ *  - with the caret on an `elif`, `except` or `case`, that clause, among the adjacent clauses of
+ *    the same kind: reordering those leaves the statement valid, and no other clause can move;
+ *  - with a selection, the run of sibling statements it spans exactly.
  *
- * Whenever a safe move cannot be computed the mover returns `false`, deferring to
- * the platform's default `LineMover` rather than risk corrupting the document.
+ * At either end of its suite a unit has nowhere to go without being re-indented into a different
+ * block, and the move is refused rather than made into a different program.
  *
- * Registered in plugin.xml as:
- *   <statementUpDownMover implementation="dev.basedpython.pycharm.editor.mover.BasedPythonStatementMover"
- *                         order="before line"/>
+ * Everything else — a blank or comment line, an `else:` line, a selection that cuts a statement,
+ * and any press made before the server has answered for the text on screen — is the platform's
+ * line mover. This runs on the EDT and does not wait for the server, and does not guess instead.
  */
 class BasedPythonStatementMover : StatementUpDownMover() {
 
     override fun checkAvailable(editor: Editor, file: PsiFile, info: MoveInfo, down: Boolean): Boolean {
         if (file !is BasedPythonFile) return false
-
         val document = editor.document
-        val lineCount = document.lineCount
-        if (lineCount == 0) return false
+        val outline = ByOutlines.getInstance(file.project).current(document) ?: return false
 
-        return try {
-            computeMove(editor, document, info, down)
-        } catch (_: Exception) {
-            // Never corrupt the document: defer to the platform line mover.
-            false
+        val lines = Lines(document)
+        val unit = if (editor.selectionModel.hasSelection()) {
+            val selection = getLineRangeFromSelection(editor)
+            lines.spanning(outline.statements, selection.startLine, selection.endLine - 1)
+        } else {
+            lines.unitAt(outline.statements, editor.caretModel.logicalPosition.line)
+        } ?: return false
+
+        val moved = unit.lines(unit.from, unit.to)
+        info.toMove = LineRange(moved.first, moved.last + 1)
+        val neighbour = if (down) unit.to + 1 else unit.from - 1
+        if (neighbour !in unit.siblings.indices) return info.prohibitMove()
+        val target = unit.expand(neighbour, neighbour)
+        val targetLines = unit.lines(target.first, target.last)
+
+        info.toMove2 = if (down) {
+            LineRange(moved.last + 1, targetLines.last + 1)
+        } else {
+            LineRange(targetLines.first, moved.first)
         }
-    }
-
-    // ------------------------------------------------------------------ logic
-
-    private fun computeMove(editor: Editor, document: Document, info: MoveInfo, down: Boolean): Boolean {
-        val lineCount = document.lineCount
-        val selection = getLineRangeFromSelection(editor)
-        val caretLine = editor.caretModel.logicalPosition.line.coerceIn(0, lineCount - 1)
-
-        val hasSelection = editor.selectionModel.hasSelection()
-        val headerLine = caretLine.takeIf { isBlockHeader(document, it) }
-
-        // ---- whole-block move (selection or block header) ----------------
-        if (hasSelection || headerLine != null) {
-            val blockStart: Int
-            val blockEndExclusive: Int
-            if (hasSelection) {
-                blockStart = selection.startLine
-                blockEndExclusive = selection.endLine.coerceAtMost(lineCount)
-            } else {
-                blockStart = headerLine!!
-                blockEndExclusive = blockBodyEndExclusive(document, blockStart)
-            }
-            if (blockStart < 0 || blockEndExclusive <= blockStart || blockEndExclusive > lineCount) {
-                return false
-            }
-            return moveBlock(document, info, blockStart, blockEndExclusive, down)
-                ?: false
-        }
-
-        // ---- single-line move (skip child blocks as a unit) -------------
-        return moveSingleLine(document, info, caretLine, down)
+        // Siblings share an indentation, so nothing is re-indented.
+        info.indentTarget = false
+        return true
     }
 
     /**
-     * Moves the block `[start, endExclusive)` above the previous sibling block
-     * (up) or below the next sibling block (down). Returns null when no safe
-     * target exists.
+     * Some adjacent items of one list of siblings — statements of one suite, or like clauses of one
+     * statement — from [from] to [to] inclusive.
      */
-    private fun moveBlock(
-        document: Document,
-        info: MoveInfo,
-        start: Int,
-        endExclusive: Int,
-        down: Boolean,
-    ): Boolean? {
-        val lineCount = document.lineCount
-        val blockIndent = indentOf(document, start)
+    private class Unit(
+        val siblings: List<TextRange>,
+        val lines: Lines,
+        from: Int,
+        to: Int,
+    ) {
+        val from: Int
+        val to: Int
 
-        if (down) {
-            // Target is the sibling block starting at endExclusive.
-            var targetStart = endExclusive
-            // Skip intervening blank lines (they travel with the block boundary).
-            while (targetStart < lineCount && isBlank(document, targetStart)) targetStart++
-            if (targetStart >= lineCount) return null
-            // A sibling must be at the same (or shallower) indent; if it is
-            // shallower we are leaving the enclosing scope, which is still a
-            // valid move target. If it is deeper, treat the contiguous deeper
-            // run + its header as the sibling unit.
-            val targetEnd = siblingEndExclusive(document, targetStart, blockIndent)
-            if (targetEnd <= targetStart || targetEnd > lineCount) return null
-            info.toMove = LineRange(start, endExclusive)
-            info.toMove2 = LineRange(endExclusive, targetEnd)
-            return true
-        } else {
-            // Target is the sibling block ending at start.
-            var targetEnd = start
-            while (targetEnd > 0 && isBlank(document, targetEnd - 1)) targetEnd--
-            if (targetEnd <= 0) return null
-            val targetStart = siblingStart(document, targetEnd - 1, blockIndent)
-            if (targetStart < 0 || targetStart >= targetEnd) return null
-            info.toMove = LineRange(start, endExclusive)
-            info.toMove2 = LineRange(targetStart, start)
-            return true
+        init {
+            val expanded = expand(from, to)
+            this.from = expanded.first
+            this.to = expanded.last
         }
+
+        /**
+         * [from]..[to] grown to take in any sibling sharing a line with it — `a = 1; b = 2` is two
+         * statements and one line, and a line cannot be moved in halves.
+         */
+        fun expand(from: Int, to: Int): IntRange {
+            var first = from
+            var last = to
+            while (first > 0 && lines.last(siblings[first - 1]) >= lines.first(siblings[first])) first--
+            while (last < siblings.size - 1 && lines.first(siblings[last + 1]) <= lines.last(siblings[last])) last++
+            return first..last
+        }
+
+        /** The lines the siblings [from]..[to] cover. */
+        fun lines(from: Int, to: Int): IntRange = lines.first(siblings[from])..lines.last(siblings[to])
     }
 
-    /**
-     * Moves a single line, but if the immediate neighbor in the move direction
-     * is the header of a deeper-indented block, the whole child block is treated
-     * as the swap unit so the line never lands inside it.
-     */
-    private fun moveSingleLine(document: Document, info: MoveInfo, line: Int, down: Boolean): Boolean {
-        val lineCount = document.lineCount
-        if (down) {
-            val neighbor = line + 1
-            if (neighbor >= lineCount) return false
-            val end = if (startsDeeperBlock(document, neighbor, line)) {
-                blockBodyEndExclusive(document, neighbor)
-            } else {
-                neighbor + 1
+    private class Lines(private val document: Document) {
+
+        fun first(range: TextRange): Int = document.getLineNumber(range.startOffset)
+        fun last(range: TextRange): Int = document.getLineNumber(range.endOffset)
+
+        /** The unit a caret on [line] moves, searching [statements] and what is nested in them. */
+        fun unitAt(statements: List<ByOutline.Statement>, line: Int): Unit? {
+            for ((index, statement) in statements.withIndex()) {
+                if (line !in first(statement.range)..last(statement.range)) continue
+                for ((clauseIndex, clause) in statement.clauses.withIndex()) {
+                    val headerEnd = clause.colon ?: clause.keyword ?: TextRange.from(clause.range.startOffset, 0)
+                    if (line in first(clause.range)..last(headerEnd)) {
+                        return if (clauseIndex == 0) {
+                            Unit(statements.map { it.range }, this, index, index)
+                        } else {
+                            clauseUnit(statement.clauses, clauseIndex)
+                        }
+                    }
+                    if (line in first(clause.range)..last(clause.range)) return unitAt(clause.body, line)
+                }
+                // A simple statement, or the decorators above a compound one's first clause.
+                return Unit(statements.map { it.range }, this, index, index)
             }
-            if (end > lineCount || end <= neighbor) return false
-            info.toMove = LineRange(line, line + 1)
-            info.toMove2 = LineRange(neighbor, end)
-            return true
-        } else {
-            val neighbor = line - 1
-            if (neighbor < 0) return false
-            val start = if (lineIsInsideDeeperBlockEndingAt(document, neighbor, line)) {
-                blockStartForLine(document, neighbor)
-            } else {
-                neighbor
+            return null
+        }
+
+        /** The run of sibling statements covering exactly lines [startLine]..[endLine]. */
+        fun spanning(statements: List<ByOutline.Statement>, startLine: Int, endLine: Int): Unit? {
+            val from = statements.indexOfFirst { first(it.range) == startLine }
+            val to = statements.indexOfLast { last(it.range) == endLine }
+            if (from >= 0 && to >= from) {
+                val unit = Unit(statements.map { it.range }, this, from, to)
+                // Grown past the selection by a statement sharing its first or last line: that is
+                // not the run that was selected.
+                return unit.takeIf { it.from == from && it.to == to }
             }
-            if (start < 0 || start > neighbor) return false
-            info.toMove = LineRange(line, line + 1)
-            info.toMove2 = LineRange(start, neighbor + 1)
-            return true
+            val enclosing = statements.firstOrNull {
+                startLine >= first(it.range) && endLine <= last(it.range)
+            } ?: return null
+            val clause = enclosing.clauses.firstOrNull { clause ->
+                clause.body.isNotEmpty() &&
+                    startLine >= first(clause.body.first().range) &&
+                    endLine <= last(clause.body.last().range)
+            } ?: return null
+            return spanning(clause.body, startLine, endLine)
         }
-    }
 
-    // -------------------------------------------------------------- helpers
-
-    /** A block header is a non-blank, non-comment line whose content ends in `:`. */
-    private fun isBlockHeader(document: Document, line: Int): Boolean {
-        val content = contentOf(document, line)
-        if (content.isEmpty() || content.startsWith("#")) return false
-        // Strip a trailing line comment before checking for the colon.
-        val code = stripTrailingComment(content).trimEnd()
-        if (!code.endsWith(":")) return false
-        val firstWord = code.substringBefore('(').substringBefore(':').trim().split(Regex("\\s+")).firstOrNull().orEmpty()
-        return firstWord in BLOCK_KEYWORDS || code.endsWith(":")
-    }
-
-    /** End (exclusive) of the block whose header is at [headerLine], by indentation. */
-    private fun blockBodyEndExclusive(document: Document, headerLine: Int): Int {
-        val lineCount = document.lineCount
-        val headerIndent = indentOf(document, headerLine)
-        var last = headerLine
-        var i = headerLine + 1
-        while (i < lineCount) {
-            if (isBlank(document, i)) { i++; continue }
-            if (indentOf(document, i) > headerIndent) {
-                last = i
-            } else {
-                break
-            }
-            i++
+        /**
+         * The clause at [index] among the clauses next to it that share its keyword, when that
+         * keyword is one whose clauses can be reordered.
+         */
+        private fun clauseUnit(clauses: List<ByOutline.Clause>, index: Int): Unit? {
+            val keyword = keywordOf(clauses[index]) ?: return null
+            if (keyword !in REORDERABLE) return null
+            var first = index
+            var last = index
+            while (first > 0 && keywordOf(clauses[first - 1]) == keyword) first--
+            while (last < clauses.size - 1 && keywordOf(clauses[last + 1]) == keyword) last++
+            return Unit(clauses.subList(first, last + 1).map { it.range }, this, index - first, index - first)
         }
-        return last + 1
+
+        private fun keywordOf(clause: ByOutline.Clause): String? =
+            clause.keyword?.let { document.immutableCharSequence.subSequence(it.startOffset, it.endOffset).toString() }
     }
 
-    /** Smallest line index of the block that [line] belongs to (its header). */
-    private fun blockStartForLine(document: Document, line: Int): Int {
-        if (isBlank(document, line)) return line
-        val indent = indentOf(document, line)
-        var i = line - 1
-        while (i >= 0) {
-            if (isBlank(document, i)) { i--; continue }
-            val ind = indentOf(document, i)
-            if (ind < indent) return i
-            i--
-        }
-        return line
-    }
-
-    /** True when [candidate] is a header that opens a block deeper than [refLine]. */
-    private fun startsDeeperBlock(document: Document, candidate: Int, refLine: Int): Boolean {
-        if (!isBlockHeader(document, candidate)) return false
-        return indentOf(document, candidate) >= indentOf(document, refLine)
-    }
-
-    /** True when [neighbor] is the last line of a deeper block whose header sits above [refLine]. */
-    private fun lineIsInsideDeeperBlockEndingAt(document: Document, neighbor: Int, refLine: Int): Boolean {
-        if (isBlank(document, neighbor)) return false
-        return indentOf(document, neighbor) > indentOf(document, refLine)
-    }
-
-    /**
-     * End (exclusive) of a sibling unit beginning at [targetStart]. If the target
-     * line is a header, the whole block is consumed; if it is deeper than
-     * [blockIndent] (a nested run) the contiguous deeper run is consumed; otherwise
-     * just the single line.
-     */
-    private fun siblingEndExclusive(document: Document, targetStart: Int, blockIndent: Int): Int {
-        val lineCount = document.lineCount
-        if (isBlockHeader(document, targetStart)) {
-            return blockBodyEndExclusive(document, targetStart)
-        }
-        val targetIndent = indentOf(document, targetStart)
-        if (targetIndent > blockIndent) {
-            var i = targetStart + 1
-            var last = targetStart
-            while (i < lineCount) {
-                if (isBlank(document, i)) { i++; continue }
-                if (indentOf(document, i) >= targetIndent) { last = i; i++ } else break
-            }
-            return last + 1
-        }
-        return targetStart + 1
-    }
-
-    /** Start line of the sibling unit ending at line [targetEnd] (inclusive). */
-    private fun siblingStart(document: Document, targetEnd: Int, blockIndent: Int): Int {
-        val targetIndent = indentOf(document, targetEnd)
-        if (targetIndent > blockIndent) {
-            // Walk up to the header of this nested block.
-            var i = targetEnd
-            while (i > 0) {
-                if (isBlank(document, i)) { i--; continue }
-                if (indentOf(document, i) <= blockIndent) return i
-                i--
-            }
-            return 0
-        }
-        // Same level: a single line, unless it is the tail of a block whose
-        // header lies above at the same indent.
-        if (isBlank(document, targetEnd)) return targetEnd
-        val headerCandidate = blockStartForLine(document, targetEnd)
-        // Only collapse to the header when that header is itself a sibling
-        // (same indent as blockIndent) so we swap whole sibling blocks.
-        return if (headerCandidate < targetEnd && indentOf(document, headerCandidate) == blockIndent) {
-            headerCandidate
-        } else {
-            targetEnd
-        }
-    }
-
-    // ---- low-level text utilities ----------------------------------------
-
-    private fun lineText(document: Document, line: Int): String {
-        val start = document.getLineStartOffset(line)
-        val end = document.getLineEndOffset(line)
-        return document.getText(com.intellij.openapi.util.TextRange(start, end))
-    }
-
-    private fun contentOf(document: Document, line: Int): String = lineText(document, line).trim()
-
-    private fun isBlank(document: Document, line: Int): Boolean = lineText(document, line).isBlank()
-
-    private fun indentOf(document: Document, line: Int): Int {
-        val text = lineText(document, line)
-        var indent = 0
-        for (c in text) {
-            when (c) {
-                ' ' -> indent += 1
-                '\t' -> indent += 4
-                else -> return indent
-            }
-        }
-        return indent
-    }
-
-    private fun stripTrailingComment(content: String): String {
-        var inSingle = false
-        var inDouble = false
-        for (i in content.indices) {
-            val c = content[i]
-            when {
-                c == '\'' && !inDouble -> inSingle = !inSingle
-                c == '"' && !inSingle -> inDouble = !inDouble
-                c == '#' && !inSingle && !inDouble -> return content.substring(0, i)
-            }
-        }
-        return content
-    }
-
-    companion object {
-        private val BLOCK_KEYWORDS = setOf(
-            "def", "async", "class", "if", "elif", "else", "for", "while",
-            "with", "try", "except", "finally", "match", "case", "data",
-            "frozen", "enum", "protocol", "public", "private", "abstract",
-            "final", "static", "override",
-        )
+    private companion object {
+        /** Clause keywords whose adjacent clauses can trade places and leave a valid statement. */
+        val REORDERABLE = setOf("elif", "except", "case")
     }
 }

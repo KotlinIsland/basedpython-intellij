@@ -1,5 +1,9 @@
 package dev.basedpython.pycharm.inspections.logpoint
 
+import com.intellij.openapi.editor.Document
+import com.intellij.openapi.util.TextRange
+import dev.basedpython.pycharm.lsp.outline.ByOutline
+
 /**
  * Finds `print(...)` statements a log point could stand in for, and works out where the log point
  * has to go once the call is gone.
@@ -12,14 +16,14 @@ package dev.basedpython.pycharm.inspections.logpoint
  *
  * A breakpoint fires *before* its line runs, so the log point cannot go where the call was — that
  * line is about to disappear. It goes on the statement that followed, which runs the expression at
- * exactly the moment the `print` used to. That only reads the same way while the follower is in the
- * same block: a `print` at the end of a function is followed by a line at a lower indent that runs
- * at some entirely different time (often once, at import), so those are left alone rather than
+ * exactly the moment the `print` used to. That only reads the same way while the follower is the
+ * next statement of the same suite: a `print` at the end of a function is followed by a line that
+ * runs at some entirely different time (often once, at import), so those are left alone rather than
  * silently moved. There is no third option — `pass` left behind as an anchor emits no bytecode in
  * CPython, so the line has no trace event and the breakpoint would never bind.
  *
- * Everything here is offsets into the file text: `.by` has no composite PSI (see
- * `BasedPythonParserDefinition`), so this scans like the other lexer-driven inspections do.
+ * Which statements are calls, what they call, what their arguments are and which statement follows
+ * in the same suite are all `by`'s parse — see [dev.basedpython.pycharm.lsp.outline.ByOutlines].
  */
 object PrintToLogpoint {
 
@@ -30,7 +34,7 @@ object PrintToLogpoint {
         val lineStart: Int,
         /** End of the statement's line, past its line separator. */
         val lineEndWithSeparator: Int,
-        /** The call's argument text, verbatim — this becomes the log point's expression. */
+        /** The call's arguments, verbatim — this becomes the log point's expression. */
         val expression: String,
         /** 0-based line of the statement that follows, as the document reads *now*. */
         val followerLine: Int,
@@ -42,179 +46,55 @@ object PrintToLogpoint {
         val logpointLine: Int get() = followerLine - 1
     }
 
-    /** Every convertible `print` in [text], in document order. */
-    fun candidates(text: CharSequence): List<Candidate> {
-        val lines = lineRanges(text)
-        return lines.indices.mapNotNull { candidateAt(text, lines, it) }
+    /** Every convertible `print` in [document], which [outline] describes, in document order. */
+    fun candidates(outline: ByOutline, document: Document): List<Candidate> {
+        val found = mutableListOf<Candidate>()
+        suites(outline) { suite -> suite.indices.mapNotNullTo(found) { candidateAt(document, suite, it) } }
+        return found.sortedBy { it.callOffset }
     }
 
     /** The candidate whose `print` name starts at [callOffset], if that is still what is there. */
-    fun at(text: CharSequence, callOffset: Int): Candidate? {
-        val lines = lineRanges(text)
-        val index = lines.indexOfFirst { callOffset >= it.start && callOffset < it.endWithSeparator }
-        if (index < 0) return null
-        return candidateAt(text, lines, index)?.takeIf { it.callOffset == callOffset }
-    }
-
-    // ---------------------------------------------------------------- detection
+    fun at(outline: ByOutline, document: Document, callOffset: Int): Candidate? =
+        candidates(outline, document).firstOrNull { it.callOffset == callOffset }
 
     private const val NAME = "print"
 
-    private fun candidateAt(text: CharSequence, lines: List<Line>, index: Int): Candidate? {
-        val line = lines[index]
-        if (!text.startsWith(NAME, line.contentStart)) return null
+    private fun candidateAt(document: Document, suite: List<ByOutline.Statement>, index: Int): Candidate? {
+        val statement = suite[index]
+        val call = statement.call ?: return null
+        if (text(document, call.callee) != NAME) return null
+        // `print()` has nothing to log, and `print(x, file=…)` / `sep=` / `end=` / `flush=` or an
+        // unpacked argument ask for something a log point does not do.
+        val arguments = call.arguments ?: return null
+        if (!call.positionalOnly) return null
 
-        // `printer(x)` also starts with the name; only a space or the paren itself may follow.
-        var open = line.contentStart + NAME.length
-        while (open < line.contentEnd && (text[open] == ' ' || text[open] == '\t')) open++
-        if (open >= line.contentEnd || text[open] != '(') return null
-
-        // A call continued onto the next line is deliberately not offered: the fix deletes one line.
-        val close = matchingParen(text, open, line.contentEnd) ?: return null
-
-        // Nothing but a trailing comment may follow, or this is not a statement of its own
-        // (`print(x); y = 1` would lose the second half).
-        var after = close + 1
-        while (after < line.contentEnd && (text[after] == ' ' || text[after] == '\t')) after++
-        if (after < line.contentEnd && text[after] != '#') return null
-
-        val expression = text.subSequence(open + 1, close).toString().trim()
-        // `print()` has nothing to log, and `print(x, file=…)` / `sep=` / `end=` / `flush=` are
-        // asking for something a log point does not do.
-        if (expression.isEmpty() || hasKeywordArgument(expression)) return null
-
-        val follower = nextStatementLine(lines, index) ?: return null
-        if (lines[follower].indent != line.indent) return null
+        // The fix deletes one line, so the statement has to be the whole of one: not a call
+        // continued onto the next line, not one sharing its line with another statement, and not
+        // the inline suite of a header (`if x: print(x)`).
+        val line = document.getLineNumber(statement.range.startOffset)
+        if (document.getLineNumber(statement.range.endOffset) != line) return null
+        val lineStart = document.getLineStartOffset(line)
+        val before = document.immutableCharSequence.subSequence(lineStart, statement.range.startOffset)
+        if (before.isNotBlank()) return null
+        val follower = suite.getOrNull(index + 1) ?: return null
+        val followerLine = document.getLineNumber(follower.range.startOffset)
+        if (followerLine == line) return null
 
         return Candidate(
-            callOffset = line.contentStart,
-            lineStart = line.start,
-            lineEndWithSeparator = line.endWithSeparator,
-            expression = expression,
-            followerLine = follower,
+            callOffset = call.callee.startOffset,
+            lineStart = lineStart,
+            lineEndWithSeparator = minOf(document.getLineEndOffset(line) + 1, document.textLength),
+            expression = text(document, arguments),
+            followerLine = followerLine,
         )
     }
 
-    /**
-     * Offset just past the `)` closing the call that opens at [open], or null when it does not close
-     * before [limit]. Strings are skipped whole, so a bracket or a `#` inside one counts for nothing.
-     */
-    private fun matchingParen(text: CharSequence, open: Int, limit: Int): Int? {
-        var depth = 0
-        var i = open
-        while (i < limit) {
-            when (val c = text[i]) {
-                '\'', '"' -> {
-                    i = skipString(text, i, limit) ?: return null
-                    continue
-                }
-                '#' -> return null
-                '(', '[', '{' -> depth++
-                ')', ']', '}' -> {
-                    depth--
-                    if (depth == 0) return if (c == ')') i else null
-                    if (depth < 0) return null
-                }
-            }
-            i++
-        }
-        return null
+    /** Every suite in [outline] — the module's statements and each clause's body. */
+    private fun suites(outline: ByOutline, visit: (List<ByOutline.Statement>) -> Unit) {
+        visit(outline.statements)
+        outline.walk { statement, _ -> statement.clauses.forEach { visit(it.body) } }
     }
 
-    /** Offset just past the literal starting at [start], or null when it does not close before [limit]. */
-    private fun skipString(text: CharSequence, start: Int, limit: Int): Int? {
-        val quote = text[start]
-        val triple = start + 2 < limit && text[start + 1] == quote && text[start + 2] == quote
-        var i = start + if (triple) 3 else 1
-        while (i < limit) {
-            when {
-                text[i] == '\\' -> i += 2
-                text[i] != quote -> i++
-                !triple -> return i + 1
-                i + 2 < limit && text[i + 1] == quote && text[i + 2] == quote -> return i + 3
-                else -> i++
-            }
-        }
-        return null
-    }
-
-    /**
-     * Whether the argument list carries a keyword argument. `==` / `!=` / `<=` / `>=` / `:=` are
-     * comparisons, and an `=` nested inside brackets belongs to a call of its own.
-     */
-    private fun hasKeywordArgument(expression: String): Boolean {
-        var depth = 0
-        var i = 0
-        while (i < expression.length) {
-            val c = expression[i]
-            when {
-                c == '\'' || c == '"' -> {
-                    // An unterminated literal here means the scan cannot be trusted; decline.
-                    i = skipString(expression, i, expression.length) ?: return true
-                    continue
-                }
-                c == '(' || c == '[' || c == '{' -> depth++
-                c == ')' || c == ']' || c == '}' -> depth--
-                c == '=' && depth == 0 -> {
-                    if (expression.getOrNull(i + 1) == '=') {
-                        i += 2
-                        continue
-                    }
-                    val previous = expression.getOrNull(i - 1)
-                    if (previous == null || previous !in COMPARISON_HEADS) return true
-                }
-            }
-            i++
-        }
-        return false
-    }
-
-    private val COMPARISON_HEADS = setOf('=', '!', '<', '>', ':')
-
-    /** The next line that runs — blank lines and whole-line comments are neither. */
-    private fun nextStatementLine(lines: List<Line>, from: Int): Int? =
-        (from + 1 until lines.size).firstOrNull { !lines[it].isBlank && !lines[it].isComment }
-
-    // ---------------------------------------------------------------- lines
-
-    private class Line(
-        val start: Int,
-        val contentStart: Int,
-        val contentEnd: Int,
-        val endWithSeparator: Int,
-        val indent: Int,
-        val isBlank: Boolean,
-        val isComment: Boolean,
-    )
-
-    private fun lineRanges(text: CharSequence): List<Line> {
-        val lines = mutableListOf<Line>()
-        var i = 0
-        while (i < text.length) {
-            val start = i
-            var indent = 0
-            while (i < text.length && (text[i] == ' ' || text[i] == '\t')) {
-                indent += if (text[i] == '\t') TAB_WIDTH else 1
-                i++
-            }
-            val contentStart = i
-            while (i < text.length && text[i] != '\n' && text[i] != '\r') i++
-            val contentEnd = i
-            if (i < text.length && text[i] == '\r') i++
-            if (i < text.length && text[i] == '\n') i++
-            lines += Line(
-                start = start,
-                contentStart = contentStart,
-                contentEnd = contentEnd,
-                endWithSeparator = i,
-                indent = indent,
-                isBlank = contentStart == contentEnd,
-                isComment = contentStart < contentEnd && text[contentStart] == '#',
-            )
-        }
-        return lines
-    }
-
-    /** How many columns a tab counts for when measuring indentation. */
-    private const val TAB_WIDTH = 4
+    private fun text(document: Document, range: TextRange): String =
+        document.immutableCharSequence.subSequence(range.startOffset, range.endOffset).toString()
 }
