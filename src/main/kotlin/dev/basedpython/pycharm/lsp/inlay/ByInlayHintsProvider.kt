@@ -18,6 +18,7 @@ import com.intellij.platform.lsp.util.getOffsetInDocument
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
 import dev.basedpython.pycharm.lang.BasedPythonFile
+import dev.basedpython.pycharm.lsp.ByServerDocuments
 import dev.basedpython.pycharm.lsp.askBy
 import dev.basedpython.pycharm.lsp.byServerFor
 import dev.basedpython.pycharm.lsp.ext.ByAlignmentGroupsParams
@@ -137,6 +138,9 @@ private class ByInlayHintsCollector(
         val virtualFile = file.originalFile.virtualFile ?: return true
         val document = editor.document
         val server = byServerFor(file.project, virtualFile) ?: return true
+        // A file outside the content roots — a stub, a scratch — is one the platform never tells
+        // the server about, and every request below would come back empty. See [ByServerDocuments].
+        ByServerDocuments.ensureOpen(server, file.project, virtualFile)
 
         val params = InlayHintParams(
             server.getDocumentIdentifier(virtualFile),

@@ -304,7 +304,7 @@ lexical colour only. Don't reintroduce guessed semantic colour; fix the LSP path
 ## 17. Documentation / help
 - [x] Rendered docstrings in the editor (docs.render.* — ranges from `by`'s semantic tokens (`string` + `documentation`), owners from its document symbols, text from its hover; handed to the platform as fake `PsiDocCommentBase`, HTML via `DocMarkdownToHtmlConverter`)
 - [x] `by`'s extracted typeshed registered as a library root (project.ByTypeshedLibrary), so Reader Mode renders stub docstrings automatically
-- [x] Stub files opened with the server directly (lsp.ByServerDocuments) — the platform's LSP client syncs only files under a content root, so `by` answers nothing about a library file until we send `didOpen` ourselves
+- [x] Files outside the content roots synced with the server directly (lsp.ByServerDocuments) — the platform's LSP client syncs only files under a content root, so `by` answers nothing about a library stub, a scratch file or an excluded file until we send `didOpen` ourselves; and since a scratch file can be edited, the whole lifecycle goes with it: `didChange` with a counting version on every edit, `didClose` when no editor has the file open, when it is moved, renamed or deleted, and before the roots change (a file that becomes content is the platform's to open). Hover, rendered docs, injections and inlay hints all go through it
 - [x] External docs links (Ctrl+Shift+I → basedpython docs)
 - [x] Plugin settings help buttons → docs (docs.help.BasedPythonWebHelpProvider + getHelpTopic)
 - [x] Bundled quick-reference of basedpython syntax
