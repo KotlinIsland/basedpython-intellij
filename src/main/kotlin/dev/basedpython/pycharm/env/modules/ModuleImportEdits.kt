@@ -58,18 +58,19 @@ internal object ModuleImportEdits {
         server.initializeResult?.capabilities?.workspace?.fileOperations?.willRename != null
 
     /**
-     * Asks the server what [moves] cost, and applies the answer.
+     * Asks the server what [moves] cost, without applying anything yet.
      *
-     * Returns the number of files edited, or null when the server could not be asked at all — which
-     * the caller treats as a reason to stop, not as "no edits were needed".
+     * Returns the edits, ready to [ModuleRename.ImportEdits.apply] and to take back, or null when the
+     * server could not be asked at all — which the caller treats as a reason not to start, not as "no
+     * edits were needed". Asking changes nothing, which is what lets a rename ask before it has done
+     * anything it would have to undo.
      *
-     * Must be called from a background thread; the edits themselves are applied on the EDT in a
-     * write action, as a single undoable command, so that one Ctrl+Z takes the whole rename back.
+     * Must be called from a background thread.
      */
-    fun applyFor(project: Project, moves: List<ModuleRenamePlan.Move>): Int? {
+    fun prepare(project: Project, moves: List<ModuleRenamePlan.Move>): ModuleRename.ImportEdits? {
         val server = server(project) ?: return null
         if (!advertises(server)) return null
-        if (moves.isEmpty()) return 0
+        if (moves.isEmpty()) return Prepared(project, emptyMap())
 
         val params = RenameFilesParams(
             moves.map { FileRename(uriOf(it.from), uriOf(it.to)) },
@@ -78,52 +79,86 @@ internal object ModuleImportEdits {
         val answer = server.askBy("workspace/willRenameFiles", REQUEST_TIMEOUT_MS) {
             it.workspaceService.willRenameFiles(params)
         }
-        val edit = when (answer) {
-            is ByAnswer.Answer -> answer.value
+        return when (answer) {
+            is ByAnswer.Answer -> Prepared(project, editsByFile(answer.value))
             // The server answered "nothing to change", which is an ordinary answer.
-            ByAnswer.None -> return 0
-            ByAnswer.Failed -> return null
+            ByAnswer.None -> Prepared(project, emptyMap())
+            ByAnswer.Failed -> null
         }
-
-        return apply(project, edit)
     }
 
+    /** The edits per file, dropping files the IDE cannot find and files with nothing to change. */
+    private fun editsByFile(edit: WorkspaceEdit): Map<VirtualFile, List<org.eclipse.lsp4j.TextEdit>> =
+        uris(edit).mapNotNull { uri ->
+            val file = fileOf(uri) ?: return@mapNotNull null
+            val edits = ByCleanup.editsFor(edit, uri).takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+            file to edits
+        }.toMap()
+
     /**
-     * Applies [edit] to the files it names, and returns how many were touched.
+     * The server's answer, held until the rename is ready for it.
      *
      * The documents are edited rather than the files on disk, so an importer the user has open
      * changes on screen and takes part in undo. Everything is then saved, because the very next
-     * thing that happens is uv reading these files from disk.
+     * thing that happens is uv reading these files from disk. What each document said before is
+     * kept, so a rename that fails after this step can put every importer back.
      */
-    private fun apply(project: Project, edit: WorkspaceEdit): Int {
-        val documents = FileDocumentManager.getInstance()
-        val byFile: Map<VirtualFile, List<org.eclipse.lsp4j.TextEdit>> =
-            uris(edit).mapNotNull { uri ->
-                val file = fileOf(uri) ?: return@mapNotNull null
-                val edits = ByCleanup.editsFor(edit, uri).takeIf { it.isNotEmpty() } ?: return@mapNotNull null
-                file to edits
-            }.toMap()
+    private class Prepared(
+        private val project: Project,
+        private val byFile: Map<VirtualFile, List<org.eclipse.lsp4j.TextEdit>>,
+    ) : ModuleRename.ImportEdits {
 
-        if (byFile.isEmpty()) return 0
+        private val before = LinkedHashMap<VirtualFile, String>()
 
-        ApplicationManager.getApplication().invokeAndWait {
-            if (project.isDisposed) return@invokeAndWait
-            CommandProcessor.getInstance().executeCommand(
-                project,
-                {
-                    WriteAction.run<RuntimeException> {
-                        for ((file, edits) in byFile) {
-                            val document = documents.getDocument(file) ?: continue
-                            ByCleanup.applyEditsTo(document, edits)
-                            documents.saveDocument(document)
+        override fun apply(): Boolean {
+            if (byFile.isEmpty()) return true
+            val documents = FileDocumentManager.getInstance()
+            var applied = false
+            ApplicationManager.getApplication().invokeAndWait {
+                if (project.isDisposed) return@invokeAndWait
+                CommandProcessor.getInstance().executeCommand(
+                    project,
+                    {
+                        WriteAction.run<RuntimeException> {
+                            for ((file, edits) in byFile) {
+                                val document = documents.getDocument(file) ?: continue
+                                before[file] = document.text
+                                ByCleanup.applyEditsTo(document, edits)
+                                documents.saveDocument(document)
+                            }
                         }
-                    }
-                },
-                BasedPythonBundle.message("modules.rename.command"),
-                null,
-            )
+                    },
+                    BasedPythonBundle.message("modules.rename.command"),
+                    null,
+                )
+                applied = true
+            }
+            return applied
         }
-        return byFile.size
+
+        override fun revert() {
+            if (before.isEmpty()) return
+            val documents = FileDocumentManager.getInstance()
+            ApplicationManager.getApplication().invokeAndWait {
+                if (project.isDisposed) return@invokeAndWait
+                CommandProcessor.getInstance().executeCommand(
+                    project,
+                    {
+                        WriteAction.run<RuntimeException> {
+                            for ((file, text) in before) {
+                                if (!file.isValid) continue
+                                val document = documents.getDocument(file) ?: continue
+                                document.setText(text)
+                                documents.saveDocument(document)
+                            }
+                        }
+                    },
+                    BasedPythonBundle.message("modules.rename.command"),
+                    null,
+                )
+            }
+            before.clear()
+        }
     }
 
     /** Every document URI the edit names, in either of the two shapes a workspace edit can take. */

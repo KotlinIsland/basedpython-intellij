@@ -133,13 +133,23 @@ internal object EnvOperations {
      *
      * The root's own manifest is left out because [EnvFiles.saveBeforeOperation] already covers it.
      */
-    private fun manifestsOf(project: Project, lists: Collection<EnvDependencyList>): List<java.nio.file.Path> {
+    private fun manifestsOf(project: Project, lists: Collection<EnvDependencyList>): List<java.nio.file.Path> =
+        manifestsOfModules(project, lists.mapNotNull { it.module })
+
+    /**
+     * The manifests of the modules called [names], for a gesture that runs `uv add --package` or
+     * `uv remove --package` against them — see [manifestsOf] for why they have to be named.
+     *
+     * Names the layout does not know are skipped: a module that does not exist has no manifest for
+     * anything to rewrite.
+     */
+    fun manifestsOfModules(project: Project, names: Collection<String>): List<java.nio.file.Path> {
         val layout = EnvService.getInstance(project).status.modules ?: return emptyList()
-        return lists.mapNotNull { it.module }
-            .distinct()
+        return names.distinct()
             .mapNotNull { layout.byName(it) }
             .filterNot { it.isRoot }
             .map { it.root.resolve(UvWorkspace.MANIFEST) }
+            .distinct()
     }
 
     /**
@@ -197,7 +207,11 @@ internal object EnvOperations {
     fun runInBackground(
         project: Project,
         title: String,
-        /** Manifests outside the project root this gesture touches — see [EnvFiles.saveBeforeOperation]. */
+        /**
+         * Manifests outside the project root this gesture touches — see [EnvFiles.saveBeforeOperation]
+         * — and directories whose whole contents the gesture creates, which are re-read recursively
+         * afterwards.
+         */
         extraFiles: List<java.nio.file.Path> = emptyList(),
         body: (ProgressIndicator) -> Unit,
     ) {
