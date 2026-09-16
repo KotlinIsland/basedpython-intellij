@@ -261,6 +261,30 @@ class ByRecompositionSessionTest {
         assertNull(live().watchProblem)
     }
 
+    /**
+     * The watch sent when the adapter is ready, before `launch`: bpd holds it and answers `pending`.
+     * Neither a problem nor bpd confirming the stream is off — and the first stop confirms it.
+     */
+    @Test
+    fun `a watch bpd holds until the launch is no problem and is confirmed at the first stop`() {
+        service.setWatching(true)
+        val link = start(Scripted(pullAnswer = ByRecompositionAnswer.Answered(emptyAnswer())))
+        runBlocking {
+            service.adapterReady(
+                link,
+                answeringContext(this) { _, _ -> Result.success(json("""{"watching": false, "pending": true}""")) },
+            )
+        }
+        PlatformTestUtil.dispatchAllInvocationEventsInIdeEventQueue()
+        assertNull(live().watchProblem, "a held watch was reported as a problem")
+        assertNull(live().watching, "a held watch was shown as bpd confirming the stream is off")
+
+        service.paused(link)
+        settled(link) { live().watching == true }
+        assertEquals(listOf(true), link.watched)
+        assertNull(live().watchProblem)
+    }
+
     @Test
     fun `a toggle mid-session is sent, and its answer is what bpd last confirmed`() {
         val link = start()
@@ -363,6 +387,8 @@ class ByRecompositionSessionTest {
     private companion object {
         fun watching(on: Boolean): ByRecompositionAnswer =
             ByRecompositionAnswer.Answered(Json.parseToJsonElement("""{"watching": $on}""").jsonObject)
+
+        fun json(text: String): JsonObject = Json.parseToJsonElement(text).jsonObject
 
         fun emptyAnswer(): JsonObject =
             Json.parseToJsonElement("""{ "format": 1, "runtimes": 1, "tracing": true, "records": { "kept": [], "dropped": 0 }, "mode": {} }""").jsonObject

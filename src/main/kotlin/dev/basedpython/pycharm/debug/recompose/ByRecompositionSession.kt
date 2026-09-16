@@ -271,12 +271,11 @@ internal class ByRecompositionSession(
      * The adapter has reported itself initialized, and the platform has not yet told it to run.
      *
      * Started with `bpd/understands` ([dev.basedpython.pycharm.debug.BySourceMapPublisher]), so the
-     * request is written ahead of `configurationDone` and nothing has run yet. bpd accepts a watch
-     * before the program has imported the runtime — watching is an interest in records to come —
-     * but not before it has been told what to launch, and bpd reports itself initialized as soon as
-     * `initialize` is answered, ahead of `launch`: measured against bpd, this watch is refused with
-     * "nothing has been launched yet" and the first stop ([paused]) is what sends it again and has
-     * it confirmed. Records made before that stop are the pull's to read, not the stream's.
+     * request is written ahead of `configurationDone` and `launch`, and nothing has run yet. bpd
+     * holds a watch asked for before it has a program, answers it `pending`, and turns it on before
+     * the program runs a line — so the stream carries the first frame. `pending` is not a
+     * confirmation, so the toggle goes on showing the preference until the first stop ([paused])
+     * sends the watch again and bpd confirms it.
      */
     suspend fun adapterReady(link: ByRecompositionLink, context: DapSessionContext) {
         if (!enabled || !watching || this.link !== link) return
@@ -446,8 +445,13 @@ internal class ByRecompositionSession(
         }
     }
 
+    /**
+     * bpd answered the watch. A `pending` answer — the watch held until there is a program — says
+     * `watching: false` because nothing is being sent yet, which is not bpd confirming the stream is
+     * off: it leaves the watch unconfirmed, and without a problem.
+     */
     private fun confirmWatching(link: ByRecompositionLink, ticket: Long, body: JsonObject) {
-        val watching = body.bool("watching")
+        val watching = if (body.bool("pending") == true) null else body.bool("watching")
         synchronized(lock) {
             if (this.link !== link || ticket < watchApplied) return
             watchApplied = ticket
