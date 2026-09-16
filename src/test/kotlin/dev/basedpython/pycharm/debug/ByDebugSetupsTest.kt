@@ -4,9 +4,11 @@ import com.intellij.execution.configurations.RunProfile
 import com.intellij.execution.process.NopProcessHandler
 import com.intellij.openapi.util.Disposer
 import com.intellij.testFramework.junit5.fixture.TestFixtures
+import dev.basedpython.pycharm.debug.bpd.ByBpdExecutable
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -91,6 +93,39 @@ class ByDebugSetupsTest {
         }
         setups.releaseWith(setup, process)
         assertFalse(Files.exists(setup.bootstrapDir))
+    }
+
+    /**
+     * Two sessions at once, made the way a debug start makes them. Each has a directory of its own,
+     * the first ending takes only its own, and the name it had is never handed to a session after
+     * it — something the ended session left running reaches its directory by path, and must reach
+     * nothing.
+     */
+    @Test
+    fun `two sessions at once never share a directory, and one ending leaves the other's wrapper`() {
+        val first = ByDebugSetup.forBpd(ByBpdExecutable.Found(besideBy = null, onPath = null))
+        val second = ByDebugSetup.forBpd(ByBpdExecutable.Found(besideBy = null, onPath = null))
+        assertNotEquals(first.bootstrapDir, second.bootstrapDir)
+        val firstProcess = NopProcessHandler().apply { startNotify() }
+        val secondProcess = NopProcessHandler().apply { startNotify() }
+        setups.releaseWith(first, firstProcess)
+        setups.releaseWith(second, secondProcess)
+
+        firstProcess.destroyProcess()
+        assertTrue(firstProcess.waitFor(10_000))
+        val deadline = System.currentTimeMillis() + 10_000
+        while (Files.exists(first.bootstrapDir) && System.currentTimeMillis() < deadline) Thread.sleep(10)
+        assertFalse(Files.exists(first.bootstrapDir), "the first program ended and its directory stayed")
+        assertTrue(Files.isExecutable(second.wrapper), "the first session's end took the second session's wrapper")
+
+        val third = ByDebugSetup.create()
+        try {
+            assertNotEquals(first.bootstrapDir, third.bootstrapDir, "an ended session's directory name was handed on")
+            assertTrue(third.bootstrapDir.fileName.toString().startsWith(ByDebugSetup.SESSION_DIR_PREFIX))
+        } finally {
+            third.delete()
+            second.delete()
+        }
     }
 
     /** Unloading the plugin, or closing the project, leaves nothing of a session behind. */

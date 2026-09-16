@@ -73,6 +73,9 @@ class ByDebugSetup(
 
         private const val BOOTSTRAP_RESOURCE = "/debug/sitecustomize.py"
 
+        /** What every session's directory name starts with, before its random part. */
+        internal const val SESSION_DIR_PREFIX = "basedpython-debug-"
+
         /**
          * Allocates a port and unpacks the bootstrap into a fresh temp directory.
          *
@@ -123,9 +126,23 @@ class ByDebugSetup(
         /** The wrapper `by run` is pointed at, which only a bpd session has. */
         private fun wrapperOf(dir: Path): Path = dir.resolve("bpd-python")
 
+        /**
+         * A directory no other session has ever had, and no other session will be given.
+         *
+         * `FileUtil.createTempDirectory` names a directory after the first free one of
+         * `basedpython-debug`, `basedpython-debug1`, … — so the name of a session whose program has
+         * ended, and whose directory was deleted, is the next session's. Anything the ended session
+         * left running that still reaches its directory *by path* then reaches the newer session's:
+         * the wrapper writes its record with `>` by path, and the JVM-exit deletion `deleteOnExit`
+         * registered removes whatever holds the name when the IDE exits. A random name, created
+         * atomically, belongs to one session; what outlives the session writes into nothing.
+         *
+         * Nothing is registered for JVM exit: [ByDebugSetups] deletes the directory when the
+         * program ends, and whatever is left when the project closes.
+         */
         @Throws(ExecutionException::class)
         private fun tempDir(): Path = try {
-            FileUtil.createTempDirectory("basedpython-debug", null, true).toPath()
+            Files.createTempDirectory(Path.of(FileUtil.getTempDirectory()), SESSION_DIR_PREFIX)
         } catch (e: IOException) {
             throw ExecutionException(BasedPythonBundle.message("debug.error.bootstrapFailed", e.message ?: ""), e)
         }
