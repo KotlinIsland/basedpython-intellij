@@ -42,7 +42,7 @@ internal data class ByCollection(
 }
 
 /**
- * Reads the test tree out of `by run pytest --collect-only -q`.
+ * Reads the test tree out of `by run --in-build pytest --collect-only -q`.
  *
  * Quiet mode is what makes this parseable: plain `--collect-only` prints an indented
  * `<Module …>` / `<Class …>` / `<Function …>` listing whose shape varies with pytest's version and
@@ -79,8 +79,14 @@ internal object ByPytestCollect {
     /** One node id per line instead of the indented object listing; see the class doc. */
     const val QUIET: String = "-q"
 
-    /** The arguments that follow `by run`. */
-    fun arguments(): List<String> = listOf(ByPytest.MODULE, COLLECT_ONLY, QUIET)
+    /**
+     * The arguments that follow `by run`.
+     *
+     * [ByPytest.IN_BUILD] for the same reason a run needs it: collection walks the working directory,
+     * and without it that is the project, where every test is still a `.by` — measured, a bare
+     * `by run pytest --collect-only` collected 0 items in a src layout and a flat layout alike.
+     */
+    fun arguments(): List<String> = listOf(ByPytest.IN_BUILD, ByPytest.MODULE, COLLECT_ONLY, QUIET)
 
     /**
      * The arguments for the plain-pytest half, run as `python -m pytest` in the project itself.

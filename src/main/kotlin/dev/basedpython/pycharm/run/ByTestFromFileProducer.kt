@@ -15,7 +15,7 @@ import com.intellij.psi.PsiFile
 
 /**
  * Right-click a `.by` test file (or click the "Run test" gutter icon) → produce a configuration
- * that runs `by run pytest -v <path>[::Class][::test_name]`.
+ * that runs `by run --in-build pytest -v <path>[::Class][::test_name]`.
  *
  * The target is the node id pytest gives the test in the tree `by run` stages: the file as `by`
  * stages it ([ByProgramModel.stagedPath]), then the names `by/testItems` gives the test.

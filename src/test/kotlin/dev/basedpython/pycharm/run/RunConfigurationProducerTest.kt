@@ -210,7 +210,7 @@ class RunConfigurationProducerTest {
         assertNotNull(config)
         assertEquals("tests/test_staged.py::test_addition", config!!.options.paths)
         assertEquals(
-            listOf("pytest", "-v", "tests/test_staged.py::test_addition"),
+            listOf("--in-build", "pytest", "-v", "tests/test_staged.py::test_addition"),
             ByPytest.arguments(config.options.paths),
         )
     }

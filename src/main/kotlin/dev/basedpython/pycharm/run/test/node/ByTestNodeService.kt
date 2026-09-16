@@ -259,7 +259,7 @@ internal class ByTestNodeService(
         return true
     }
 
-    /** One `by run pytest --collect-only -q`, and the plain-pytest half, as a [ByCollection]. */
+    /** One `by run --in-build pytest --collect-only -q`, and the plain-pytest half, as a [ByCollection]. */
     private suspend fun collect(): ByCollection {
         val cwd = project.basePath?.let { Paths.get(it) }
         val arguments = ByPytestCollect.arguments()

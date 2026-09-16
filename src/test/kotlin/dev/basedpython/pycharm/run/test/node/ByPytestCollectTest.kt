@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 /**
- * How `by run pytest --collect-only -q` output becomes a list of tests.
+ * How `by run --in-build pytest --collect-only -q` output becomes a list of tests.
  *
  * Every blob below is real output, captured from by ruff/0.0.1 (7e30af642) with pytest 8.4.1 on a
  * project with `tests/test_math.by` and `tests/test_more.by` — including the two ways collection
@@ -17,10 +17,10 @@ import org.junit.jupiter.api.Test
 class ByPytestCollectTest {
 
     @Test
-    fun `the command is by run pytest --collect-only -q`() {
-        assertEquals(listOf("pytest", "--collect-only", "-q"), ByPytestCollect.arguments())
+    fun `the command is by run --in-build pytest --collect-only -q`() {
+        assertEquals(listOf("--in-build", "pytest", "--collect-only", "-q"), ByPytestCollect.arguments())
         assertEquals(
-            listOf("run", "pytest", "--collect-only", "-q"),
+            listOf("run", "--in-build", "pytest", "--collect-only", "-q"),
             byArguments("run", "--min-version", "", ByPytestCollect.arguments(), ""),
         )
     }
