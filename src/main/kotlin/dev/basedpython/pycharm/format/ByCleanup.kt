@@ -193,8 +193,18 @@ object ByCleanup {
     val changes = edit.documentChanges.orEmpty()
       .mapNotNull { change -> change.takeIf { it.isLeft }?.left }
       .filter { it.textDocument.uri == uri }
+    // Each edit of a text document edit is a plain text edit or a snippet edit (LSP 3.18). A
+    // snippet's text is snippet grammar — `$0`, placeholders — for an editor to expand at a caret,
+    // not text to write into a file, so a document edit carrying one is not applied at all rather
+    // than applied with its snippets written in literally or left out. `buff` sends none: the
+    // platform does not claim snippet edit support.
+    val edits = changes.flatMap { it.edits }
+    if (edits.any { it.isRight }) {
+      LOG.warn("a workspace edit for $uri carries snippet edits, which are not applied to a file; none of it was")
+      return ByDocumentEdits(emptyList(), version = changes.firstNotNullOfOrNull { it.textDocument.version })
+    }
     return ByDocumentEdits(
-      edits = changes.flatMap { it.edits },
+      edits = edits.map { it.left },
       version = changes.firstNotNullOfOrNull { it.textDocument.version },
     )
   }

@@ -12,12 +12,14 @@
     <depends>com.intellij.modules.lsp</depends>
     <depends>org.toml.lang</depends>
     <depends>com.intellij.modules.vcs</depends>
-    <!-- The SM test runner left the core platform in 2026.2; see basedpython-testrunner.xml. -->
+    <!-- The SM test runner is a bundled plugin rather than core platform; see basedpython-testrunner.xml. -->
     <depends optional="true" config-file="basedpython-testrunner.xml">intellij.testRunner.plugin</depends>
 
     <!-- The platform's Debug Adapter Protocol client, which `.by` debugging is built on. A platform
          module rather than a plugin, so it is declared the v2 way; the legacy <depends> entries
-         above still apply. -->
+         above still apply. Its protocol classes (`intellij.platform.dap.protocol`) are reached
+         through it: that module's visibility is internal, and a plugin that names it is not
+         loaded. -->
     <dependencies>
         <module name="intellij.platform.dap"/>
     </dependencies>

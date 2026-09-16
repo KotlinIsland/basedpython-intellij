@@ -8,6 +8,7 @@ import org.eclipse.lsp4j.CreateFile
 import org.eclipse.lsp4j.Position
 import org.eclipse.lsp4j.Range
 import org.eclipse.lsp4j.ResourceOperation
+import org.eclipse.lsp4j.SnippetTextEdit
 import org.eclipse.lsp4j.TextDocumentEdit
 import org.eclipse.lsp4j.TextEdit
 import org.eclipse.lsp4j.VersionedTextDocumentIdentifier
@@ -215,8 +216,10 @@ class ByCleanupWorkspaceEditTest {
 
   private fun documentEdit(forUri: String, vararg edits: TextEdit) =
     Either.forLeft<TextDocumentEdit, ResourceOperation>(
-      TextDocumentEdit(VersionedTextDocumentIdentifier(forUri, null), edits.toList()),
+      TextDocumentEdit(VersionedTextDocumentIdentifier(forUri, null), edits.map { plain(it) }),
     )
+
+  private fun plain(edit: TextEdit) = Either.forLeft<TextEdit, SnippetTextEdit>(edit)
 
   @Test
   fun `reads edits sent as documentChanges`() {
@@ -260,11 +263,32 @@ class ByCleanupWorkspaceEditTest {
     val workspaceEdit = WorkspaceEdit(
       listOf(
         Either.forLeft<TextDocumentEdit, ResourceOperation>(
-          TextDocumentEdit(VersionedTextDocumentIdentifier(uri, 7), listOf(edit("fixed\n"))),
+          TextDocumentEdit(VersionedTextDocumentIdentifier(uri, 7), listOf(plain(edit("fixed\n")))),
         ),
       ),
     )
     assertEquals(7, ByCleanup.editsFor(workspaceEdit, uri).version)
+  }
+
+  /**
+   * A snippet edit's text is snippet grammar for an editor to expand, not text for a file, so a
+   * document edit that carries one is not applied — neither with the snippet written in literally
+   * nor with it left out of the edits beside it.
+   */
+  @Test
+  fun `a document edit carrying a snippet edit yields no edits`() {
+    val snippet = SnippetTextEdit(Range(Position(1, 0), Position(1, 0)), org.eclipse.lsp4j.StringValue("snippet", "x = \$0\n"))
+    val workspaceEdit = WorkspaceEdit(
+      listOf(
+        Either.forLeft<TextDocumentEdit, ResourceOperation>(
+          TextDocumentEdit(
+            VersionedTextDocumentIdentifier(uri, 7),
+            listOf(plain(edit("fixed\n")), Either.forRight(snippet)),
+          ),
+        ),
+      ),
+    )
+    assertEquals(emptyList<TextEdit>(), ByCleanup.editsFor(workspaceEdit, uri).edits)
   }
 
   /** The `changes` shape has nowhere to put a version, so none is claimed. */

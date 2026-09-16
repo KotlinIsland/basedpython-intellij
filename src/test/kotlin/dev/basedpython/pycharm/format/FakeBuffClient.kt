@@ -28,9 +28,10 @@ import java.util.concurrent.atomic.AtomicInteger
 /**
  * A `buff` that answers `textDocument/codeAction` from [answer] and counts what it is asked.
  *
- * Versions are the document's own modification sequence, which is what the platform's client
- * reports — so a test moves a document to a new version simply by editing it. A blocking request
- * fails the test: nothing in a cleanup pass has any business waiting on a thread for `buff`.
+ * Versions are the document's own modification sequence — a number that, like the platform's own
+ * per-file counter, moves on with every edit — so a test moves a document to a new version simply
+ * by editing it. A blocking request fails the test: nothing in a cleanup pass has any business
+ * waiting on a thread for `buff`.
  */
 internal class FakeBuffClient(
   override val project: Project,
@@ -60,6 +61,9 @@ internal class FakeBuffClient(
 
   override fun getDocumentVersion(document: Document): Int =
     (document as DocumentEx).modificationSequence
+
+  override fun nextDocumentVersion(document: Document): Int =
+    error("a cleanup pass sends no document changes of its own")
 
   private val documents = object : TextDocumentService {
     override fun codeAction(params: CodeActionParams): CompletableFuture<List<Either<Command, CodeAction>>> {

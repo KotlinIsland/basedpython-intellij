@@ -17,10 +17,9 @@ import dev.basedpython.pycharm.debug.bpd.ByDebugBackend
  * the adapter does not know the request.
  *
  * Asked of [dev.basedpython.pycharm.debug.bpd.ByDebugBackend] rather than of an advertised
- * capability, which is how [dev.basedpython.pycharm.debug.ByRestartFrame] decides the same shape of
- * question: `restartFrame` is a DAP capability an adapter announces in `initialize`, and there is
- * no capability flag for a custom request. Nothing is on the wire to believe, so the thing that
- * chose the backend is what says which one it is.
+ * capability, because there is none to ask: `restartFrame` is a DAP capability an adapter announces
+ * in `initialize`, and there is no capability flag for a custom request. Nothing is on the wire to
+ * believe, so the thing that chose the backend is what says which one it is.
  */
 internal class ByHotSwapEnabler : HotSwapInDebugSessionEnabler {
 
@@ -30,7 +29,7 @@ internal class ByHotSwapEnabler : HotSwapInDebugSessionEnabler {
         return ByHotSwapProvider(
             process = dap,
             project = dap.session.project,
-            commandProcessor = dap.dapDebugSession.commandProcessor,
+            executor = dap.dapDebugSession,
             recordFile = dap.recordFile,
         )
     }

@@ -18,7 +18,7 @@ import dev.basedpython.pycharm.util.BasedPythonBundle
  * would not see that type's breakpoints anyway — the platform dispatches a breakpoint to a handler
  * by exact type class, never by assignability. Everything the debugger needs is the file and the
  * line — the mapping onto the transpiled output happens in the debuggee (see
- * [ByDebugProtocolServer]) — so its [ByBreakpointProperties] carry one thing the debugger does not
+ * [ByDapRequests.setPydevdSourceMap]) — so its [ByBreakpointProperties] carry one thing the debugger does not
  * use at all: whether this breakpoint is a log point.
  *
  * Claiming a `.py` we own — and only one we own — is also what keeps this from being a second

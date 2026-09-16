@@ -1,6 +1,7 @@
 package dev.basedpython.pycharm.debug
 
-import com.google.gson.JsonParser
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
@@ -17,7 +18,7 @@ import org.junit.jupiter.api.Test
  */
 class ByMovedTest {
 
-    private fun parse(json: String) = ByMoved.parse(JsonParser.parseString(json).asJsonObject)
+    private fun parse(json: String) = ByMoved.parse(Json.parseToJsonElement(json).jsonObject)
 
     /** Captured from a restart of `work(n)` where `later` was not yet bound. */
     private val moved = """

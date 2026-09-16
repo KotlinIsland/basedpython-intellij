@@ -1,6 +1,7 @@
 package dev.basedpython.pycharm.debug.recompose
 
-import com.google.gson.JsonParser
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertInstanceOf
 import org.junit.jupiter.api.Assertions.assertNotNull
@@ -21,7 +22,7 @@ class ByRecompositionsCaptureTest {
 
     private fun capture(name: String): ByRecompositions.Answer {
         val stream = checkNotNull(javaClass.getResourceAsStream("/debug/recompose/$name")) { "no test resource $name" }
-        val body = stream.use { JsonParser.parseString(it.reader().readText()).asJsonObject }
+        val body = stream.use { Json.parseToJsonElement(it.reader().readText()).jsonObject }
         val reply = ByRecompositions.parseAnswer(body)
         assertInstanceOf(ByRecompositions.Reply.Read::class.java, reply, "$name: $reply")
         return (reply as ByRecompositions.Reply.Read).answer

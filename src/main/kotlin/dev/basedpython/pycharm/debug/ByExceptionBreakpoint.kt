@@ -136,8 +136,10 @@ private class ByExceptionBreakpointPanel :
 /**
  * Sends this session's exception breakpoints to the adapter.
  *
- * `DapXDebugProcess` registers a handler for *line* breakpoints only, so without this the type
- * above would be a checkbox that changed nothing — which is exactly what it was until now.
+ * `DapXDebugProcess` registers handlers for *line* and function breakpoints only, so without this
+ * the type above would be a checkbox that changed nothing — which is exactly what it once was. It
+ * reaches the process through [ByDebugAdapterDescriptor]'s breakpoints support, which is where the
+ * platform takes additional handlers from.
  *
  * What was registered is remembered per breakpoint, and exactly that is what an unregistration
  * removes. Rebuilding it from the breakpoint instead removes nothing: the platform unregisters an
@@ -154,8 +156,8 @@ internal class ByExceptionBreakpointHandler(
     override fun registerBreakpoint(breakpoint: XBreakpoint<ByExceptionBreakpointProperties>) {
         val added = breakpoint.toDapBreakpoints()
         val replaced = synchronized(registered) { registered.put(breakpoint, added) }.orEmpty()
-        session.commandProcessor.submitCommand {
-            session.breakpointManager.run {
+        session.post {
+            with(session.breakpointManager) {
                 replaced.forEach { removeExceptionBreakpoint(it) }
                 added.forEach { addExceptionBreakpoint(it) }
             }
@@ -167,8 +169,8 @@ internal class ByExceptionBreakpointHandler(
         temporary: Boolean,
     ) {
         val removed = synchronized(registered) { registered.remove(breakpoint) } ?: return
-        session.commandProcessor.submitCommand {
-            session.breakpointManager.run {
+        session.post {
+            with(session.breakpointManager) {
                 removed.forEach { removeExceptionBreakpoint(it) }
             }
         }

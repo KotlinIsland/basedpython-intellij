@@ -1,6 +1,11 @@
 package dev.basedpython.pycharm.debug.dfa
 
-import com.google.gson.JsonObject
+import dev.basedpython.pycharm.debug.array
+import dev.basedpython.pycharm.debug.bool
+import dev.basedpython.pycharm.debug.obj
+import dev.basedpython.pycharm.debug.objOrNull
+import dev.basedpython.pycharm.debug.string
+import kotlinx.serialization.json.JsonObject
 
 /**
  * Turning what `bpd` proved about a frame into what `by` can narrow with.
@@ -52,11 +57,11 @@ object ByDataFlowFacts {
      * both would make the server pick, and it has less to pick with.
      */
     fun observationsOf(reply: JsonObject?): List<ByObservation> {
-        val proved = reply?.getAsJsonArray("proved") ?: return emptyList()
+        val proved = reply?.array("proved") ?: return emptyList()
 
         val best = LinkedHashMap<String, ByObservation>()
         for (element in proved) {
-            val fact = element as? JsonObject ?: continue
+            val fact = element.objOrNull() ?: continue
             if (!isDurable(fact)) continue
             val observation = observationOf(fact) ?: continue
             val existing = best[observation.name]
@@ -69,10 +74,10 @@ object ByDataFlowFacts {
 
     /** Whether a fact stays true long enough to say anything about code that has not run. */
     private fun isDurable(fact: JsonObject): Boolean {
-        val stability = fact.getAsJsonObject("stability") ?: return false
-        return when (stability.get("stability")?.asString) {
+        val stability = fact.obj("stability") ?: return false
+        return when (stability.string("stability")) {
             "permanent" -> true
-            "until" -> stability.get("mutation")?.asString in TOLERATED_MUTATIONS
+            "until" -> stability.string("mutation") in TOLERATED_MUTATIONS
             // A stability `bpd` grew that this build does not know is not one to assume is
             // harmless. An unknown shelf life is not a long one
             else -> false
@@ -87,22 +92,22 @@ object ByDataFlowFacts {
      * reporting — the fact was proved, it simply does not translate.
      */
     private fun observationOf(fact: JsonObject): ByObservation? {
-        val name = fact.get("name")?.asString ?: return null
-        val observed = fact.getAsJsonObject("observed") ?: return null
+        val name = fact.string("name") ?: return null
+        val observed = fact.obj("observed") ?: return null
 
-        return when (observed.get("observed")?.asString) {
+        return when (observed.string("observed")) {
             "is_none" -> ByObservation(name, IS_NONE)
 
             "is_bool" -> ByObservation(
                 name,
                 IS_BOOL,
-                value = observed.get("value")?.asBoolean ?: return null,
+                value = observed.bool("value") ?: return null,
             )
 
             "is_int" -> ByObservation(
                 name,
                 IS_INT,
-                text = observed.get("text")?.asString ?: return null,
+                text = observed.string("text") ?: return null,
             )
 
             // `float.__repr__`'s own text, forwarded rather than parsed. A json number would lose
@@ -113,33 +118,33 @@ object ByDataFlowFacts {
             "is_float" -> ByObservation(
                 name,
                 IS_FLOAT,
-                text = observed.get("text")?.asString ?: return null,
+                text = observed.string("text") ?: return null,
             )
 
             "is_str" -> ByObservation(
                 name,
                 IS_STR,
-                text = observed.get("text")?.asString ?: return null,
+                text = observed.string("text") ?: return null,
             )
 
             "is_exactly" -> {
-                val cls = observed.getAsJsonObject("class") ?: return null
+                val cls = observed.obj("class") ?: return null
                 ByObservation(
                     name,
                     IS_EXACTLY,
-                    module = cls.get("module")?.asString ?: return null,
-                    qualname = cls.get("qualname")?.asString ?: return null,
+                    module = cls.string("module") ?: return null,
+                    qualname = cls.string("qualname") ?: return null,
                 )
             }
 
             "is_enum_member" -> {
-                val cls = observed.getAsJsonObject("class") ?: return null
+                val cls = observed.obj("class") ?: return null
                 ByObservation(
                     name,
                     IS_ENUM_MEMBER,
-                    module = cls.get("module")?.asString ?: return null,
-                    qualname = cls.get("qualname")?.asString ?: return null,
-                    member = observed.get("member")?.asString ?: return null,
+                    module = cls.string("module") ?: return null,
+                    qualname = cls.string("qualname") ?: return null,
+                    member = observed.string("member") ?: return null,
                 )
             }
 

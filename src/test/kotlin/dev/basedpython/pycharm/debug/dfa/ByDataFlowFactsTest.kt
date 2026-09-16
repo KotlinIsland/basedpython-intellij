@@ -1,6 +1,7 @@
 package dev.basedpython.pycharm.debug.dfa
 
-import com.google.gson.JsonParser
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -22,9 +23,9 @@ class ByDataFlowFactsTest {
     // the capture in `ByFactsWireTest`). Nothing here reads it, which is exactly why it was worth
     // correcting: an envelope nobody checks is one a reader would otherwise take as documentation
     private fun facts(vararg proved: String) =
-        JsonParser.parseString(
+        Json.parseToJsonElement(
             """{"proved":[${proved.joinToString(",")}],"silent":[],"mode":{"mode":"non_stop"}}""",
-        ).asJsonObject
+        ).jsonObject
 
     private fun permanent(name: String, observed: String) = """
         {"name":"$name","scope":"local","observed":$observed,"stability":{"stability":"permanent"}}

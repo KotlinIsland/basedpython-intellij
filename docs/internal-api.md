@@ -140,7 +140,7 @@ Nothing internal ships any more. What each one became, for when the platform cha
 | `SourceFileChangesCollectorImpl`, `SourceFileChangeFilter` (6) | Our own `SourceFileChangesCollector` — `debug/hotswap/ByChangesCollector.kt`. The public interface is three methods, so this deleted more reflection than it added code: the impl's constructor changed between 262 and 263 and had to be looked up at runtime, out of a call that runs while the debug session starts |
 | `HotSwapStatusNotificationManager.trackNotification` (5) | The last "not reloaded" balloon is held and expired at the top of `performHotSwap` |
 | `LspClientManagerListener.fileOpened`, `DocRenderManager` (17) | `ByLspLifecycleListener.serverInitialized` plus a bounded re-check on file open, and `FileContentUtilCore.reparseFiles` in place of `resetEditorToDefaultState`. **The one swap that is not like-for-like** — see below |
-| `DapInitializationException.userVisible` (2) | `ByDebugAdapterDescriptor.hasReportedFailure`, which answers the same question more directly: has the user already been told |
+| `DapInitializationException.userVisible` (2) | Nothing: since 263.5153 the platform classifies a failed start itself, reports it with the adapter's own sentence, and stops quietly on `CustomProcessedCantRunException` — so the plugin's start sequence, and the question it needed this for, are gone |
 | `ShadowJava2DBorder` (2) | `ByLogpointBoxBorder`, a rounded rect and a few translucent passes |
 | `PluginManagerCore.getPlugin` (1) | The plugin's own code source — `<plugin>/lib/<jar>` grandparent. Every descriptor lookup in the platform is internal |
 | `AdditionalFenceLanguageSuggester` (2) | **Dropped.** See below |

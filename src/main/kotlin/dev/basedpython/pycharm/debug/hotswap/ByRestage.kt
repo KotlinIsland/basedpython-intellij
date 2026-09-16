@@ -80,7 +80,7 @@ internal object ByRestage {
      * transpile without having been told the text the IDE holds for it. Background threads only.
      */
     internal fun ask(project: Project, server: LspClient, files: List<VirtualFile>, buildDirectory: String): Asked {
-        ReadAction.run<RuntimeException> {
+        ReadAction.runBlocking<RuntimeException> {
             for (file in files) ByServerDocuments.ensureOpen(server, project, file)
         }
 

@@ -563,6 +563,13 @@
 
 ### Fixed
 
+- A workspace edit from `buff` carrying snippet edits is no longer a `ClassCastException` waiting to
+  happen: on 2026.3 lsp4j's `TextDocumentEdit.edits` is a list of `Either<TextEdit,
+  SnippetTextEdit>`, which a plugin compiled against 262 read as plain `TextEdit`s — invisible to the
+  Plugin Verifier, which cannot see generic types. A document edit that carries a snippet edit is
+  now not applied at all, rather than applied with snippet grammar written into the file.
+- A hot reload bpd failed while answering says bpd's sentence in the "not reloaded" notification,
+  rather than that the adapter did not answer.
 - *Optimize Imports* no longer freezes the IDE while `buff` works: the edit is asked for before the
   platform's write action on the EDT rather than inside it, and Cancel cancels the request. Cleanup
   edits (optimize imports, fix all on save and on commit) are dropped rather than applied when the
@@ -877,6 +884,33 @@
 
 ### Changed
 
+- **The minimum IDE is 2026.3, build 263.5153** (`sinceBuild` 263.5153), where it said 262. Between
+  IU-263.4732.28 and IU-263.5153.20 the platform's Debug Adapter Protocol client was rewritten rather
+  than evolved: its protocol moved from lsp4j's `org.eclipse.lsp4j.debug` to
+  `com.jetbrains.dap.protocol` (kotlinx.serialization, suspend functions), `DapCommandProcessor` and
+  `CommandScope` became `DapSessionExecutor` and `DapSessionContext`, `DapClient` and
+  `DapEventConsumer` became registered observers, thread and frame ids became value classes, and the
+  descriptor's `debugAdapterServerClass` and `createClient` hooks are gone. None of the old classes
+  exist on 263.5153 and none of the new ones on 262, so no one build of the debugger links against
+  both: against 263.5153 the 262-compiled plugin had 70 unresolved references, every one of them in
+  `debug`. The plugin now compiles against the 263 snapshot and the debugger is ported to the new
+  client — custom requests (`setPydevdSourceMap`, `bpd/facts`, `bpd/replaceCode`,
+  `bpd/recompositions`, …) are `RequestType`s sent through the session's endpoint, bpd's events are
+  observers, bodies are read as kotlinx `JsonObject`s by one set of total accessors, and
+  breakpoints, console and output are configured through the descriptor's `DapCustomization`.
+  Verified live in a 2026.3 sandbox against `by` and `bpd` on python 3.14: `.by` breakpoints,
+  stepping over, into and out, a raised-exception breakpoint, *Reset Frame*, data flow, and
+  recompositions pulled at a stop and streamed after it.
+- Three things the plugin did around the old DAP client are the platform's now, and are deleted:
+  *Reset Frame* (`DapDropFrameHandler` sends `restartFrame`; bpd's refusals reach the user as its
+  own notification), reporting a start the adapter refused (the platform shows the adapter's
+  sentence), and applying a `stopped` for the thread already on screen instead of queueing it until
+  the next Resume. The last was measured before the plugin's workaround went: *Reset Frame* on
+  `main` moves the highlight to its first line at once, and Resume runs the program on.
+- 262-only compatibility is gone: the log point's expression goes onto the platform's info as the
+  `XExpression` it is rather than through a setter looked up by reflection, and is no longer
+  restated on the breakpoint afterwards; `PATH` lookups use the platform's `findFirst` rather than a
+  copy of the `findInPath` 2026.3 deprecates for removal.
 - The `by` and `buff` servers are registered through the platform's `LspIntegrationProvider` /
   `ProjectWideLspClientDescriptor` / `LspClientManager` API rather than the `LspServer*` classes
   2026.3 deprecates — which were 87 of the 139 deprecated usages the Plugin Verifier reported

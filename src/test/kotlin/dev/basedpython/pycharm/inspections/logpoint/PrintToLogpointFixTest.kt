@@ -20,6 +20,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import dev.basedpython.pycharm.lang.BasedPythonLanguage
 
 /**
  * What the quick fix leaves behind, in a real editor: the call gone, and a breakpoint that logs and
@@ -83,6 +84,10 @@ class PrintToLogpointFixTest {
         val logged = breakpoint.logExpressionObject
         assertNotNull(logged, "expected a log expression")
         assertEquals("f\"x={x}\"", logged!!.expression)
+        assertEquals(
+            BasedPythonLanguage, logged.language,
+            "the log expression edits as plain text in the box and the breakpoint dialog",
+        )
     }
 
     @Test
@@ -115,9 +120,11 @@ class PrintToLogpointFixTest {
         undo.redo(editor)
 
         assertEquals("def f(x):\n    return x * 2\n", fixture.editor.document.text)
+        val redone = XDebuggerManager.getInstance(fixture.project).breakpointManager.getBreakpoints(type)
+        assertEquals(listOf(1), redone.map { it.line })
         assertEquals(
-            listOf(1),
-            XDebuggerManager.getInstance(fixture.project).breakpointManager.getBreakpoints(type).map { it.line },
+            BasedPythonLanguage, redone.single().logExpressionObject?.language,
+            "redo handed back a log point whose expression no longer edits as basedpython",
         )
 
         undo.undo(editor)

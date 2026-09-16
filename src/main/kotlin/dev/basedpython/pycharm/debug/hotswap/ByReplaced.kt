@@ -1,6 +1,17 @@
 package dev.basedpython.pycharm.debug.hotswap
 
-import com.google.gson.JsonObject
+import dev.basedpython.pycharm.debug.array
+import dev.basedpython.pycharm.debug.int
+import dev.basedpython.pycharm.debug.obj
+import dev.basedpython.pycharm.debug.objOrNull
+import dev.basedpython.pycharm.debug.string
+import dev.basedpython.pycharm.debug.strings
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
 
 /**
  * The `bpd/replaceCode` request body.
@@ -39,14 +50,20 @@ data class ByReplaceCodeArguments(
      * rather than omitted so that the choice is visible at the one place it is made.
      */
     val evenUnderALiveFrame: Boolean = false,
-)
+) {
+    fun toJson(): JsonObject = buildJsonObject {
+        putJsonArray("files") { files.forEach { add(it) } }
+        put("remap", remap)
+        put("evenUnderALiveFrame", evenUnderALiveFrame)
+    }
+}
 
 /**
  * What a code replacement did to the process, as bpd answers `bpd/replaceCode`.
  *
  * ## parsing
  *
- * Read field by field rather than through a Gson-mapped class, for the reason
+ * Read field by field rather than through a mapped class, for the reason
  * [dev.basedpython.pycharm.debug.ByMoved] is: the shape is bpd's `Replaced` serialised whole, and a
  * class here would be a second copy of a vocabulary that has to agree. Anything missing or of the
  * wrong shape yields null — an answer from a newer bpd should cost this feature, never the session.
@@ -58,7 +75,7 @@ data class ByReplaceCodeArguments(
  * category `important` — which this plugin puts where a person cannot miss it (see
  * [dev.basedpython.pycharm.debug.ByAdapterOutput]). Reading them again here would be a second copy
  * of that vocabulary rendering the same sentences twice, which is exactly what
- * [dev.basedpython.pycharm.debug.ByUnderstandsArguments] exists to stop for events.
+ * [dev.basedpython.pycharm.debug.ByDapRequests.understands] exists to stop for events.
  *
  * So all this needs from a refusal is *that* it was one — [applied] — and how many reasons there
  * were, which is what tells a caller whether the console is about to explain itself.
@@ -101,8 +118,7 @@ internal data class ByReplaced(
          *
          * Total over any JSON, exactly as [dev.basedpython.pycharm.debug.ByMoved.parse] is: every
          * accessor checks the *kind* of what it found rather than merely that something was there,
-         * because Gson's `asInt` on a string throws and a debug session must not end because a
-         * newer bpd changed a shape.
+         * because a debug session must not end because a newer bpd changed a shape.
          */
         fun parse(body: JsonObject?): ByReplaced? {
             val answered = body?.array("files") ?: return null
@@ -110,7 +126,7 @@ internal data class ByReplaced(
                 files = answered.mapNotNull { ByReplacedFile.parse(it) },
                 remapped = body.obj("remapped")?.let { ByRemapped.parse(it) },
                 rebound = body.array("rebound")
-                    ?.mapNotNull { it.obj()?.obj("binding")?.int("line") }
+                    ?.mapNotNull { it.objOrNull()?.obj("binding")?.int("line") }
                     .orEmpty(),
             )
         }
@@ -141,15 +157,15 @@ internal data class ByReplacedFile(
     val refusals: Int,
 ) {
     companion object {
-        fun parse(element: com.google.gson.JsonElement): ByReplacedFile? {
-            val entry = element.obj() ?: return null
+        fun parse(element: JsonElement): ByReplacedFile? {
+            val entry = element.objOrNull() ?: return null
             val outcome = entry.obj("outcome")
             return ByReplacedFile(
                 file = entry.string("file"),
                 applied = ByReplaced.wasApplied(outcome),
                 changed = outcome?.array("changed")?.mapNotNull { ByRebound.parse(it) }.orEmpty(),
                 unchanged = outcome?.strings("unchanged").orEmpty(),
-                refusals = outcome?.array("because")?.size() ?: 0,
+                refusals = outcome?.array("because")?.size ?: 0,
             )
         }
     }
@@ -189,8 +205,8 @@ internal data class ByRebound(
     val objects: Int?,
 ) {
     companion object {
-        fun parse(element: com.google.gson.JsonElement): ByRebound? {
-            val entry = element.obj() ?: return null
+        fun parse(element: JsonElement): ByRebound? {
+            val entry = element.objOrNull() ?: return null
             val function = entry.string("function") ?: return null
             return ByRebound(
                 function = function,
@@ -261,23 +277,3 @@ private fun ByRebound.describe(): String = buildString {
     if (wasAt != null && nowAt != null && wasAt != nowAt) append(" (line $wasAt is now $nowAt)")
     if (objects != null && objects > 1) append(" — $objects function objects held it")
 }
-
-// The same total accessors [dev.basedpython.pycharm.debug.ByMoved] reads with, over the same
-// question: what kind of thing is under this name, if anything is.
-
-private fun com.google.gson.JsonElement.obj() = takeIf { it.isJsonObject }?.asJsonObject
-
-private fun JsonObject.primitive(name: String) =
-    get(name)?.takeIf { it.isJsonPrimitive }?.asJsonPrimitive
-
-private fun JsonObject.obj(name: String) = get(name)?.takeIf { it.isJsonObject }?.asJsonObject
-
-private fun JsonObject.string(name: String) = primitive(name)?.takeIf { it.isString }?.asString
-
-private fun JsonObject.int(name: String) = primitive(name)?.takeIf { it.isNumber }?.asInt
-
-private fun JsonObject.array(name: String) = get(name)?.takeIf { it.isJsonArray }?.asJsonArray
-
-private fun JsonObject.strings(name: String): List<String> =
-    array(name)?.mapNotNull { it.takeIf { e -> e.isJsonPrimitive && e.asJsonPrimitive.isString }?.asString }
-        .orEmpty()

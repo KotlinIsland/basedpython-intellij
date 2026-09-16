@@ -1,32 +1,29 @@
 package dev.basedpython.pycharm.debug.dfa
 
-import com.google.gson.JsonObject
-import com.google.gson.JsonParser
-import dev.basedpython.pycharm.debug.ByDebugProtocolServer
-import org.eclipse.lsp4j.jsonrpc.debug.DebugLauncher
-import org.eclipse.lsp4j.jsonrpc.services.JsonRequest
+import dev.basedpython.pycharm.debug.Answer
+import dev.basedpython.pycharm.debug.ByDapRequests
+import dev.basedpython.pycharm.debug.send
+import dev.basedpython.pycharm.debug.sessionContext
+import dev.basedpython.pycharm.debug.withFakeAdapter
+import kotlinx.coroutines.coroutineScope
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertInstanceOf
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Test
-import java.io.PipedInputStream
-import java.io.PipedOutputStream
-import java.util.concurrent.CompletableFuture
-import java.util.concurrent.TimeUnit
 
 /**
- * `bpd/facts` across a real lsp4j pair, because the declared type is what decides whether the
- * answer survives the trip.
+ * `bpd/facts` across the platform's real DAP client, because what the request type declares is what
+ * decides whether the answer survives the trip.
  *
- * This is the test that would have caught the feature drawing nothing. Every other test of the
- * data-flow chain hands [ByDataFlowFacts] a `JsonObject` it built in-process, which is exactly the
- * one thing that never happens in a session: there, the object is whatever lsp4j asked Gson to
- * build from the reply body — and Gson builds what the **declared return type** tells it to. A
- * `CompletableFuture<Any?>` declares `Object`, and Gson's `Object` is a `LinkedTreeMap`. Asking
- * that for a `JsonObject` yields null, on every stop, with nothing logged: a debugger that answers
- * no facts is the ordinary case, so the feature is built to shrug at it.
- *
- * So the round trip is the point. A test that called `facts()` on a mock would agree with itself.
+ * Every other test of the data-flow chain hands [ByDataFlowFacts] an object it built in-process,
+ * which is exactly the one thing that never happens in a session: there, the object is whatever the
+ * platform's endpoint decoded from the reply body with the serializer the request type names. This
+ * is the test that catches a declaration that cannot hold what bpd sends — the failure mode that
+ * once made the feature draw nothing on every stop, with nothing logged.
  *
  * ## the payload
  *
@@ -66,61 +63,26 @@ class ByFactsWireTest {
          "silent":[{"name":"print","why":{"silence":"unbound"}}]}
     """.trimIndent()
 
-    /** The client end of a DAP pair: lsp4j needs an interface to proxy, and nothing calls back. */
-    private interface NoClient
-
-    /** Stands in for bpd, and records the request so the outgoing half is pinned too. */
-    private class FakeBpd(private val body: JsonObject) {
-        var received: JsonObject? = null
-
-        @JsonRequest("bpd/facts")
-        fun facts(args: JsonObject): CompletableFuture<JsonObject> {
-            received = args
-            return CompletableFuture.completedFuture(body)
+    private fun askFacts(arguments: ByFactsArguments) = withFakeAdapter(
+        respond = { Answer.Body(Json.parseToJsonElement(CAPTURED)) },
+    ) { session, adapter ->
+        val reply = coroutineScope {
+            sessionContext(this, session.server, session.endpoint)
+                .send(ByDapRequests.facts, arguments.toJson())
         }
-    }
-
-    private fun <T> withPair(block: (ByDebugProtocolServer, FakeBpd) -> T): T {
-        val toClient = PipedInputStream()
-        val fromAdapter = PipedOutputStream(toClient)
-        val toAdapter = PipedInputStream()
-        val fromClient = PipedOutputStream(toAdapter)
-
-        val adapter = FakeBpd(JsonParser.parseString(CAPTURED).asJsonObject)
-        val client = DebugLauncher.createLauncher(
-            Any(), ByDebugProtocolServer::class.java, toClient, fromClient,
-        )
-        val server = DebugLauncher.createLauncher(
-            adapter, NoClient::class.java, toAdapter, fromAdapter,
-        )
-        val listeners = listOf(client.startListening(), server.startListening())
-        try {
-            return block(client.remoteProxy, adapter)
-        } finally {
-            listeners.forEach { it.cancel(true) }
-        }
+        reply to adapter.received.single()
     }
 
     @Test
     fun `the answer arrives as something the fact reader can read`() {
-        // the regression. `as? JsonObject` on a `LinkedTreeMap` is null, and null here is
-        // indistinguishable from "this adapter is debugpy and has no facts" — which is why the
-        // feature drew nothing rather than reporting anything
-        // deliberately `Any?` and not the declared type: this test's whole subject is what the
-        // declaration makes Gson build, so widening it here is what lets the assertion below say
-        // so rather than the compiler saying it for a reader who then never sees the reason
-        val reply: Any? = withPair { server, _ ->
-            server.facts(
-                ByFactsArguments(frameId = 1, names = listOf("a", "print"), limit = ByFactsLimit(depth = 3)),
-            ).get(10, TimeUnit.SECONDS)
-        }
-
-        assertInstanceOf(
-            JsonObject::class.java, reply,
-            "the reply crossed the wire and arrived as a ${reply?.javaClass?.name}, which nothing " +
-                "downstream reads — Gson builds what the declared return type asks for",
+        val (reply, _) = askFacts(
+            ByFactsArguments(frameId = 1, names = listOf("a", "print"), limit = ByFactsLimit(depth = 3)),
         )
-        val observations = ByDataFlowFacts.observationsOf(reply as JsonObject)
+
+        // null here is indistinguishable from "this adapter is debugpy and has no facts" — which is
+        // why a declaration the body does not survive draws nothing rather than reporting anything
+        assertNotNull(reply, "the reply crossed the wire and arrived as nothing a reader can use")
+        val observations = ByDataFlowFacts.observationsOf(reply)
         assertEquals(1, observations.size, "one name was proved, so one observation is sendable: $observations")
         assertEquals("a", observations[0].name)
         assertEquals(
@@ -135,16 +97,14 @@ class ByFactsWireTest {
         // the other half of the contract, and it has the same failure mode: bpd looks these up by
         // name (`arguments["frameId"]`, `arguments["names"]`), so a rename on this side is a
         // refused request rather than a field quietly ignored
-        val received = withPair { server, adapter ->
-            server.facts(
-                ByFactsArguments(frameId = 7, names = listOf("a"), limit = ByFactsLimit(depth = 3)),
-            ).get(10, TimeUnit.SECONDS)
-            adapter.received
-        }
+        val (_, received) = askFacts(
+            ByFactsArguments(frameId = 7, names = listOf("a"), limit = ByFactsLimit(depth = 3)),
+        )
 
-        assertNotNull(received)
-        assertEquals(7, received!!.get("frameId").asInt)
-        assertEquals("a", received.getAsJsonArray("names")[0].asString)
-        assertEquals(3, received.getAsJsonObject("limit").get("depth").asInt)
+        assertEquals("bpd/facts", received.command)
+        val arguments = received.arguments!!
+        assertEquals(7, arguments.getValue("frameId").jsonPrimitive.int)
+        assertEquals("a", arguments.getValue("names").jsonArray[0].jsonPrimitive.content)
+        assertEquals(3, arguments.getValue("limit").jsonObject.getValue("depth").jsonPrimitive.int)
     }
 }

@@ -13,7 +13,7 @@ import com.intellij.psi.tree.IElementType
 class BasedPythonSyntaxHighlighter : SyntaxHighlighterBase() {
     override fun getHighlightingLexer(): Lexer = BasedPythonLexer()
 
-    override fun getTokenHighlights(tokenType: IElementType?): Array<TextAttributesKey> = when (tokenType) {
+    override fun getTokenHighlights(tokenType: IElementType): Array<TextAttributesKey> = when (tokenType) {
         BasedPythonTokenTypes.KEYWORD     -> pack(BasedPythonColors.KEYWORD)
         BasedPythonTokenTypes.STRING      -> pack(BasedPythonColors.STRING)
         BasedPythonTokenTypes.NUMBER      -> pack(BasedPythonColors.NUMBER)

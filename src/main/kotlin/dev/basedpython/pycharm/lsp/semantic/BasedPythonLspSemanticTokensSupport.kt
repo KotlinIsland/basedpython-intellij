@@ -32,6 +32,6 @@ class BasedPythonLspSemanticTokensSupport : LspSemanticTokensSupport() {
      */
     override fun shouldAskServerForSemanticTokens(psiFile: PsiFile): Boolean = true
 
-    override fun getTextAttributesKey(tokenType: String, tokenModifiers: List<String>): TextAttributesKey? =
-        BasedPythonSemanticTokensMapping.keyFor(tokenType, tokenModifiers)
+    override fun getTextAttributesKey(tokenType: String, modifiers: List<String>): TextAttributesKey? =
+        BasedPythonSemanticTokensMapping.keyFor(tokenType, modifiers)
 }

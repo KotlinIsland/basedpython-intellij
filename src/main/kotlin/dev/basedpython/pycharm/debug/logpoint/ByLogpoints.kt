@@ -112,9 +112,7 @@ object ByLogpoints {
      * [text] as the expression a `.by` log point logs.
      *
      * With the language attached, which is not decoration: it is what makes the expression edit as
-     * basedpython in the box and in the breakpoint dialog rather than as plain text, and what the
-     * platform loses on 262, where the builder that creates a log point takes the expression as a
-     * `String` and makes a plain-text expression of it (see [PlatformLogpointInfo]).
+     * basedpython in the box and in the breakpoint dialog rather than as plain text.
      */
     fun expressionOf(text: String): XExpression = XDebuggerUtil.getInstance()
         .createExpression(text, BasedPythonLanguage, null, EvaluationMode.EXPRESSION)

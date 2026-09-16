@@ -11,6 +11,7 @@ import org.eclipse.lsp4j.Command
 import org.eclipse.lsp4j.Position
 import org.eclipse.lsp4j.Range
 import org.eclipse.lsp4j.ResourceOperation
+import org.eclipse.lsp4j.SnippetTextEdit
 import org.eclipse.lsp4j.TextDocumentEdit
 import org.eclipse.lsp4j.TextEdit
 import org.eclipse.lsp4j.VersionedTextDocumentIdentifier
@@ -41,7 +42,7 @@ class BuffImportOptimizerTest {
           Either.forLeft<TextDocumentEdit, ResourceOperation>(
             TextDocumentEdit(
               VersionedTextDocumentIdentifier(uri, version),
-              listOf(TextEdit(Range(Position(0, 0), Position(1, 0)), "")),
+              listOf(Either.forLeft<TextEdit, SnippetTextEdit>(TextEdit(Range(Position(0, 0), Position(1, 0)), ""))),
             ),
           ),
         ),

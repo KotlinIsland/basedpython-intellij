@@ -79,5 +79,7 @@ class RecordingByClient(project: Project) : LspClient {
 
     override fun getDocumentVersion(document: Document): Int = -1
 
+    override fun nextDocumentVersion(document: Document): Int = -1
+
     private fun name(uri: String) = uri.substringAfterLast('/')
 }

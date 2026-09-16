@@ -1,6 +1,7 @@
 package dev.basedpython.pycharm.debug.hotswap
 
-import com.google.gson.JsonParser
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
@@ -30,7 +31,7 @@ import org.junit.jupiter.api.Test
  */
 class ByReplacedTest {
 
-    private fun parse(json: String) = ByReplaced.parse(JsonParser.parseString(json).asJsonObject)
+    private fun parse(json: String) = ByReplaced.parse(Json.parseToJsonElement(json).jsonObject)
 
     /** One captured per-file body, in the envelope bpd now wraps them in. */
     private fun envelope(vararg files: String, rebound: String = "[]", remapped: String = "null") =

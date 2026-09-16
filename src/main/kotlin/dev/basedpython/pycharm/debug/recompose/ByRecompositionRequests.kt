@@ -1,18 +1,20 @@
 package dev.basedpython.pycharm.debug.recompose
 
-import com.google.gson.JsonObject
 import com.intellij.openapi.diagnostic.Logger
-import com.intellij.platform.dap.DapCommandProcessor
+import com.intellij.platform.dap.DapSessionContext
+import com.intellij.platform.dap.DapSessionExecutor
 import com.intellij.util.concurrency.ThreadingAssertions
-import dev.basedpython.pycharm.debug.ByDebugProtocolServer
+import com.jetbrains.dap.protocol.RequestType
+import dev.basedpython.pycharm.debug.ByDapRequests
+import dev.basedpython.pycharm.debug.send
 import dev.basedpython.pycharm.util.BasedPythonBundle
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.future.await
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
-import org.eclipse.lsp4j.jsonrpc.ResponseErrorException
-import java.util.concurrent.CompletionException
-import java.util.concurrent.ExecutionException
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 
 private val LOG = Logger.getInstance(ByRecompositionRequests::class.java)
 
@@ -36,7 +38,7 @@ internal interface ByRecompositionLink {
 
 /** What a request came back with. */
 internal sealed interface ByRecompositionAnswer {
-    /** A body, as lsp4j built it — a `JsonObject` because the declared type asked for one. */
+    /** A body that is a JSON object, which is every answer bpd gives these requests. */
     data class Answered(val body: JsonObject) : ByRecompositionAnswer
 
     /**
@@ -46,8 +48,8 @@ internal sealed interface ByRecompositionAnswer {
     data class Refused(val sentence: String) : ByRecompositionAnswer
 
     /**
-     * No answer at all — no adapter server, no answer in time, or a failure that is not a refusal —
-     * and [why], in a sentence, because "no answer" shown as "nothing has run" would be a wrong
+     * No answer at all — no body, no answer in time, or a failure that is not a refusal — and
+     * [why], in a sentence, because "no answer" shown as "nothing has run" would be a wrong
      * statement about the program.
      */
     data class Unavailable(val why: String) : ByRecompositionAnswer
@@ -57,7 +59,7 @@ internal sealed interface ByRecompositionAnswer {
         fun timedOut(): Unavailable =
             Unavailable(BasedPythonBundle.message("recompose.unanswered.timeout", TIMEOUT_MS / 1_000L))
 
-        /** The adapter answered with no body, or there was no adapter server to ask. */
+        /** The adapter answered with no body, or with one that is not an object. */
         fun noBody(): Unavailable = Unavailable(BasedPythonBundle.message("recompose.unanswered.noBody"))
 
         /** The request failed for a reason that is not the adapter refusing. */
@@ -69,44 +71,31 @@ internal sealed interface ByRecompositionAnswer {
 /**
  * The one sender of `bpd/recompositions` and `bpd/watchRecompositions`.
  *
- * Custom DAP requests, so they travel the way `bpd/facts` does: declared on
- * [ByDebugProtocolServer] and sent inside a command on the session's [DapCommandProcessor], which
- * is the only context that holds the adapter's server. Session-scoped rather than frame-scoped
- * because the trace is the program's, not a frame's — any held thread answers.
+ * Custom DAP requests, so they travel the way `bpd/facts` does: one of [ByDapRequests], sent inside
+ * a command on the session's [DapSessionExecutor], which is the only context that holds the
+ * adapter's endpoint. Session-scoped rather than frame-scoped because the trace is the program's,
+ * not a frame's — any held thread answers.
  */
-internal class ByRecompositionRequests(private val commandProcessor: DapCommandProcessor) : ByRecompositionLink {
+internal class ByRecompositionRequests(private val executor: DapSessionExecutor) : ByRecompositionLink {
 
     override fun pull(): ByRecompositionAnswer =
-        send("bpd/recompositions") { it.recompositions(ByRecompositionsArguments()).await() }
+        send { ask(ByDapRequests.recompositions, ByRecompositionsArguments.toJson()) }
 
     override fun watch(on: Boolean): ByRecompositionAnswer =
-        send("bpd/watchRecompositions") { it.watchRecompositions(ByWatchRecompositionsArguments(on)).await() }
+        send { ask(ByDapRequests.watchRecompositions, ByWatchRecompositionsArguments(on).toJson()) }
 
-    private fun send(
-        name: String,
-        request: suspend (ByDebugProtocolServer) -> JsonObject?,
-    ): ByRecompositionAnswer {
+    private fun send(request: suspend DapSessionContext.() -> ByRecompositionAnswer): ByRecompositionAnswer {
         ThreadingAssertions.assertBackgroundThread()
         return runBlocking {
             withTimeoutOrNull(TIMEOUT_MS) {
                 try {
-                    val body = commandProcessor.submitCommandAsync {
-                        val server = server as? ByDebugProtocolServer ?: return@submitCommandAsync null
-                        request(server)
-                    }.await()
-                    if (body == null) ByRecompositionAnswer.noBody() else ByRecompositionAnswer.Answered(body)
+                    executor.withSession { request() }
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
-                    val refusal = refusalOf(e)
-                    if (refusal != null) {
-                        // bpd's own sentence, which the caller shows and logs once. Not an error: a
-                        // program that has no compose runtime is an ordinary program
-                        ByRecompositionAnswer.Refused(refusal)
-                    } else {
-                        LOG.warn("$name failed", e)
-                        ByRecompositionAnswer.failed(e)
-                    }
+                    // The work was not taken at all: an executor whose session has stopped refuses it
+                    LOG.warn("a recomposition request could not be sent", e)
+                    ByRecompositionAnswer.failed(e)
                 }
             } ?: ByRecompositionAnswer.timedOut()
         }
@@ -114,31 +103,44 @@ internal class ByRecompositionRequests(private val commandProcessor: DapCommandP
 
     companion object {
         /**
-         * The adapter's own sentence behind a failed request, or null when the failure is not the
-         * adapter refusing.
+         * Send [request] from inside a command and read what came back.
          *
-         * lsp4j completes the request's future with a [ResponseErrorException] carrying the error
-         * response, and depending on who awaited it that arrives bare, inside a
-         * [CompletionException], or inside an [ExecutionException]. The sentence is the same one
-         * whichever way it came.
+         * Every failure is answered here rather than left to leave the command: one that does is
+         * shown to the user by the platform when the adapter marked it `showUser`, and bpd marks
+         * every refusal so — while a refusal is an ordinary answer to these requests (a program with
+         * no compose runtime), which the window already says in its own place.
          */
-        fun refusalOf(e: Throwable): String? {
-            var cause: Throwable? = e
-            while (cause != null) {
-                if (cause is ResponseErrorException) return cause.responseError?.message ?: cause.message
-                cause = if (cause is CompletionException || cause is ExecutionException) cause.cause else null
+        suspend fun DapSessionContext.ask(
+            request: RequestType<JsonObject, JsonElement?>,
+            arguments: JsonObject,
+        ): ByRecompositionAnswer = try {
+            send(request, arguments)
+                ?.let { ByRecompositionAnswer.Answered(it) }
+                ?: ByRecompositionAnswer.noBody()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            val refusal = ByDapRequests.refusalOf(e)
+            if (refusal != null) {
+                // bpd's own sentence, which the caller shows and logs once. Not an error: a
+                // program that has no compose runtime is an ordinary program
+                ByRecompositionAnswer.Refused(refusal)
+            } else {
+                LOG.warn("${request.command} failed", e)
+                ByRecompositionAnswer.failed(e)
             }
-            return null
         }
     }
 }
 
 /**
  * The `bpd/recompositions` request body, which is empty: the trace is the program's, and there is
- * nothing to choose. A class rather than nothing because lsp4j serialises the argument it is given,
- * and an object with no fields is `{}`.
+ * nothing to choose. `{}` rather than no arguments at all, which is what this request has always
+ * carried.
  */
-class ByRecompositionsArguments
+object ByRecompositionsArguments {
+    fun toJson(): JsonObject = buildJsonObject {}
+}
 
 /**
  * The `bpd/watchRecompositions` request body.
@@ -146,4 +148,6 @@ class ByRecompositionsArguments
  * The field name is the wire format — bpd reads `arguments["on"]` by name — so a rename here is a
  * request it will not understand.
  */
-data class ByWatchRecompositionsArguments(val on: Boolean)
+data class ByWatchRecompositionsArguments(val on: Boolean) {
+    fun toJson(): JsonObject = buildJsonObject { put("on", on) }
+}

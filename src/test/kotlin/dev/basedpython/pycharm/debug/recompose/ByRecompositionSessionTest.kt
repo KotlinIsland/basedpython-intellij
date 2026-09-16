@@ -1,24 +1,23 @@
 package dev.basedpython.pycharm.debug.recompose
 
-import com.google.gson.JsonObject
-import com.google.gson.JsonParser
 import com.intellij.testFramework.PlatformTestUtil
 import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
-import dev.basedpython.pycharm.debug.ByDebugProtocolServer
+import dev.basedpython.pycharm.debug.answeringContext
+import dev.basedpython.pycharm.debug.refusal
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import com.intellij.platform.dap.DapSessionContext
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.runBlocking
-import org.eclipse.lsp4j.jsonrpc.ResponseErrorException
-import org.eclipse.lsp4j.jsonrpc.messages.ResponseError
-import org.eclipse.lsp4j.jsonrpc.messages.ResponseErrorCode
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import java.lang.reflect.Proxy
-import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -144,7 +143,7 @@ class ByRecompositionSessionTest {
         val older = Scripted()
         service.sessionStarted(older)
         start()
-        runBlocking { service.adapterReady(older, refusing("not this session's adapter")) }
+        runBlocking { service.adapterReady(older, refusing(this, "not this session's adapter")) }
         PlatformTestUtil.dispatchAllInvocationEventsInIdeEventQueue()
         assertNull(live().watchProblem)
     }
@@ -250,7 +249,7 @@ class ByRecompositionSessionTest {
     fun `an init-time refusal of the watch is not the window's state, and the stop asks again`() {
         service.setWatching(true)
         val link = start(Scripted(pullAnswer = ByRecompositionAnswer.Answered(emptyAnswer())))
-        runBlocking { service.adapterReady(link, refusing("the program has not imported basedpython_ui.runtime, so there is no trace to read")) }
+        runBlocking { service.adapterReady(link, refusing(this, "the program has not imported basedpython_ui.runtime, so there is no trace to read")) }
         PlatformTestUtil.dispatchAllInvocationEventsInIdeEventQueue()
         assertNull(live().refusal, "the init-time refusal became the window's state")
         assertEquals("the program has not imported basedpython_ui.runtime, so there is no trace to read", live().watchProblem)
@@ -363,26 +362,13 @@ class ByRecompositionSessionTest {
 
     private companion object {
         fun watching(on: Boolean): ByRecompositionAnswer =
-            ByRecompositionAnswer.Answered(JsonParser.parseString("""{"watching": $on}""").asJsonObject)
+            ByRecompositionAnswer.Answered(Json.parseToJsonElement("""{"watching": $on}""").jsonObject)
 
         fun emptyAnswer(): JsonObject =
-            JsonParser.parseString("""{ "format": 1, "runtimes": 1, "tracing": true, "records": { "kept": [], "dropped": 0 }, "mode": {} }""").asJsonObject
+            Json.parseToJsonElement("""{ "format": 1, "runtimes": 1, "tracing": true, "records": { "kept": [], "dropped": 0 }, "mode": {} }""").jsonObject
 
-        /** A debug adapter that refuses the watch with [sentence], the way lsp4j delivers a refusal. */
-        fun refusing(sentence: String): ByDebugProtocolServer = Proxy.newProxyInstance(
-            ByDebugProtocolServer::class.java.classLoader,
-            arrayOf(ByDebugProtocolServer::class.java),
-        ) { _, method, _ ->
-            when (method.name) {
-                "watchRecompositions" -> CompletableFuture.failedFuture<JsonObject?>(
-                    ResponseErrorException(ResponseError(ResponseErrorCode.InvalidRequest, sentence, null)),
-                )
-
-                "toString" -> "a refusing adapter"
-                "hashCode" -> 0
-                "equals" -> false
-                else -> null
-            }
-        } as ByDebugProtocolServer
+        /** A session whose adapter refuses every request with [sentence], the way the platform's endpoint delivers a refusal. */
+        fun refusing(scope: CoroutineScope, sentence: String): DapSessionContext =
+            answeringContext(scope) { _, _ -> refusal(sentence) }
     }
 }

@@ -51,7 +51,7 @@ class ByLogpointFieldRenderTest {
         val info = XLineBreakpointAdditionalInfo.Builder()
             .setVerticalPlacement(XLineBreakpointVerticalPlacement.INTER_LINE)
             .setSuspendPolicy(SuspendPolicy.NONE)
-            .setLogExpressionIfEnabled("a")
+            .setLogExpressionIfEnabled(ByLogpoints.expressionOf("a"))
             .build()
         val logpoint = XDebuggerManager.getInstance(fixture.project).breakpointManager
             .addLineBreakpoint(type, fixture.file.virtualFile.url, 1, null, info)

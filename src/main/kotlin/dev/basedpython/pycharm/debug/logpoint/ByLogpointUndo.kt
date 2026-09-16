@@ -112,14 +112,8 @@ object ByLogpointUndo {
             val type = type() ?: return
             val logged = expression?.let { ByLogpoints.expressionOf(it) }
             val info = PlatformLogpointInfo.of(suspendPolicy, logged)
-            val breakpoint = XDebuggerManager.getInstance(project).breakpointManager
+            XDebuggerManager.getInstance(project).breakpointManager
                 .addLineBreakpoint(type, file.url, line, ByLogpoints.logpointProperties(), info)
-            // Restated on the breakpoint, because what the info carries is not always what comes
-            // back out of it: on 262 the platform takes the expression as text and rebuilds it as a
-            // plain-text one, and redo would quietly hand back a log point that no longer edits as
-            // basedpython. It is also what puts the expression there at all on a build whose builder
-            // this plugin cannot fill in — see PlatformLogpointInfo.
-            logged?.let { breakpoint.logExpressionObject = it }
         }
 
         private fun type() = XDebuggerUtil.getInstance().findBreakpointType(ByLineBreakpointType::class.java)

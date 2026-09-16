@@ -53,7 +53,7 @@ class BasedPythonLanguageInjector : MultiHostInjector {
         // During completion the platform works on a copy of the file with a dummy identifier typed
         // into it, so this host's offsets are not the ones the server answered about. Its original
         // is, and that is what the fragments are matched against.
-        val anchor = CompletionUtil.getOriginalOrSelf(host) as? BasedPythonStringLiteral ?: return
+        val anchor = CompletionUtil.getOriginalOrSelf(host)
         val anchorContent = absoluteContentRange(anchor) ?: return
 
         for (injection in injections) {

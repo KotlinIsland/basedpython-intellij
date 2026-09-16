@@ -24,13 +24,17 @@ dependencies {
 
   // IntelliJ Platform Gradle Plugin Dependencies Extension - read more: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin-dependencies-extension.html
   intellijPlatform {
-    intellijIdea("2026.2")
+    // 263.5153 is the floor (see `sinceBuild`), and no 2026.3 release exists yet, so the platform
+    // comes from the snapshot repository the way the verifier's 263 IDE does, and is dynamic for
+    // the same reason: pinning an EAP build would freeze compilation at whatever DAP API existed
+    // the day it was pinned.
+    intellijIdea("263.+") { useInstaller = false }
     testFramework(TestFrameworkType.Platform)
     // The platform's JUnit 5 support: @TestApplication, @TestFixtures, @RunInEdt, projectFixture.
     // Note it does *not* publish the junit5 `codeInsightFixture`; see testFramework/CodeInsightFixtures.kt.
     testFramework(TestFrameworkType.JUnit5)
 
-    // Bundled plugins used by features (present in IDEA/PyCharm 2026.1+)
+    // Bundled plugins used by features
     bundledPlugin("org.toml.lang")
     // The SM test runner (SMTRunnerConsoleProperties, TestConsoleProperties, …) left the core
     // platform in 2026.2 and now ships as this bundled plugin.
@@ -40,6 +44,15 @@ dependencies {
     // The platform's Debug Adapter Protocol client (DebugAdapterSupportProvider, DapProcessStarter,
     // …), also a platform module rather than a bundled plugin. Powers `.by` debugging.
     bundledModule("intellij.platform.dap")
+    // What the DAP client is spoken in since 263.5153: its own protocol classes
+    // (`com.jetbrains.dap.protocol`), serialised with kotlinx.serialization.
+    bundledModule("intellij.platform.dap.protocol")
+    bundledModule("intellij.libraries.kotlinx.serialization.json")
+    // XDebugProcess, the breakpoint types, the executors. Every one of them a product module, and a
+    // snapshot artifact (`useInstaller = false`) puts on the compile classpath only what is named.
+    bundledModule("intellij.platform.debugger")
+    // XDebuggerExpressionEditor, which the log point field is built on.
+    bundledModule("intellij.platform.debugger.impl.ui")
 
     // `./gradlew runIde -PideAgent` — puts MCP Steroid in the sandbox, which exposes the running
     // IDE over a local MCP server: execute Kotlin inside its JVM, screenshot windows, send real
@@ -226,19 +239,21 @@ intellijPlatform {
       VerifyPluginTask.FailureLevel.INVALID_PLUGIN,
       VerifyPluginTask.FailureLevel.INTERNAL_API_USAGES,
     )
-    // Both ends of the declared range, not just the bottom. `recommended()` asks Marketplace's
-    // release feed what to verify against, and on 2026-09-03 that feed listed no 263 build at all —
-    // so a plugin claiming 262 through 263.* was verified against IU-262.10315.69 and nothing else.
-    // That is how 2026.3's lsp4j swap — `Diagnostic.getMessage()` returning
-    // `Either<String, MarkupContent>` where 262 returned `String` — reached a running IDE as a
-    // NoSuchMethodError on every diagnostic rather than a red build here.
+    // The release feed and the snapshot repository both. `recommended()` asks Marketplace's release
+    // feed what to verify against, and that feed has lagged the range this plugin claims: on
+    // 2026-09-03 it listed no 263 build at all, so a plugin claiming 262 through 263.* was verified
+    // against IU-262.10315.69 and nothing else, and 2026.3's lsp4j swap — `Diagnostic.getMessage()`
+    // returning `Either<String, MarkupContent>` — reached a running IDE as a NoSuchMethodError on
+    // every diagnostic rather than a red build here. With the floor at 263.5153 it lists nothing
+    // until 2026.3 is released, which is when it starts to matter again.
     //
-    // So the 263 half comes from the snapshot repository, which `defaultRepositories()` already
-    // declares, instead of the release feed. `useInstaller = false` because those are Maven
-    // artifacts rather than installers, and the verifier wants an unpacked distribution, which is
-    // what the artifact is. The version is dynamic on purpose: pinning an EAP build freezes this at
-    // whatever platform existed the day it was pinned, which is the hole being closed. It does mean
-    // a JetBrains change can turn this red without a change here — that is the signal, not noise.
+    // So the snapshot repository supplies a 263 build whatever the feed says, as it did before the
+    // floor moved — `defaultRepositories()` already declares it. `useInstaller = false` because
+    // those are Maven artifacts rather than installers, and the verifier wants an unpacked
+    // distribution, which is what the artifact is. The version is dynamic on purpose: pinning an EAP
+    // build freezes this at whatever platform existed the day it was pinned. It does mean a
+    // JetBrains change can turn this red without a change here — that is the signal, not noise:
+    // the move from 263.4732 to 263.5153 rewrote the DAP client and turned it red in 70 places.
     ides {
       recommended()
       create(IntelliJPlatformType.IntellijIdea, "263.+") { useInstaller = false }
@@ -261,15 +276,15 @@ intellijPlatform {
     }
 
     ideaVersion {
-      // 262, not 261. The log point feature is built on the platform's inter-line breakpoint API —
-      // XLineBreakpointVerticalPlacement, XLineBreakpointAdditionalInfo, InterLineShiftAnimator,
-      // InterLineBreakpointConfiguration and the rest — which arrived in 2026.2, along with
-      // XBreakpointManager.addLineBreakpoint/findBreakpointsAtLine and DAP's applySuspendContext.
-      // Those are compile-time references across eight files, so on 2026.1 they are a
-      // NoClassDefFoundError the moment the debugger or a gutter log point is touched. The floor
-      // said 261 until Marketplace's verifier reported all 28 of them against IU-261.27258.48; a
-      // claimed 2026.1 that breaks on use is worse than an honest 2026.2.
-      sinceBuild = "262"
+      // 263.5153, not 262. Between IU-263.4732.28 and IU-263.5153.20 `intellij.platform.dap` was
+      // rewritten rather than evolved: lsp4j's `org.eclipse.lsp4j.debug` protocol became
+      // `com.jetbrains.dap.protocol` (kotlinx.serialization, suspend functions), `DapCommandProcessor`
+      // and `CommandScope` became `DapSessionExecutor` and `DapSessionContext`, `DapClient` and
+      // `DapEventConsumer` became registered observers, and thread and frame ids became value
+      // classes. None of the old classes survive and none of the new ones exist on 262, so no
+      // build of the debugger links against both: against 263.5153 the 262-compiled plugin had 70
+      // unresolved references. The floor went where the platform is going, 2026.3.
+      sinceBuild = "263.5153"
       untilBuild = "263.*"
     }
 
@@ -403,8 +418,11 @@ tasks {
     archiveClassifier = bundledPlatform.orElse("")
   }
 }
-/** The PyCharm `runPyCharm` downloads when none is named. Kept beside the IDEA version it mirrors. */
-val PYCHARM_VERSION = "2026.2.1"
+/**
+ * The PyCharm `runPyCharm` downloads when none is named: the newest 2026.3 snapshot, which is what
+ * the IDEA platform above is too, and for the same reason — no release is new enough for the floor.
+ */
+val PYCHARM_VERSION = "263.+"
 
 // --- Running the plugin in PyCharm -------------------------------------------------------------
 //
@@ -420,7 +438,7 @@ val PYCHARM_VERSION = "2026.2.1"
 // in IDEA exercises neither the code this plugin ships for PyCharm nor the arbitration between them.
 //
 // `-PpycharmPath=/Applications/PyCharm.app` launches a PyCharm already installed — a nightly, say —
-// instead of downloading one. `-PpycharmVersion=2026.3` picks a different published build.
+// instead of downloading one. `-PpycharmVersion=263.5153.2-EAP-CANDIDATE` picks a particular snapshot.
 intellijPlatformTesting.runIde.register("runPyCharm") {
   val installed = providers.gradleProperty("pycharmPath")
   if (installed.isPresent) {
@@ -428,5 +446,7 @@ intellijPlatformTesting.runIde.register("runPyCharm") {
   } else {
     type = IntelliJPlatformType.PyCharmProfessional
     version = providers.gradleProperty("pycharmVersion").orElse(PYCHARM_VERSION)
+    // a snapshot is a Maven artifact rather than an installer, as the IDEA platform's is
+    useInstaller = false
   }
 }

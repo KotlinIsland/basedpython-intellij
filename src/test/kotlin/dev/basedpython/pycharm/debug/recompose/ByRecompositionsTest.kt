@@ -1,6 +1,7 @@
 package dev.basedpython.pycharm.debug.recompose
 
-import com.google.gson.JsonParser
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertInstanceOf
@@ -19,7 +20,7 @@ import org.junit.jupiter.api.Test
  */
 class ByRecompositionsTest {
 
-    private fun obj(json: String) = JsonParser.parseString(json).asJsonObject
+    private fun obj(json: String) = Json.parseToJsonElement(json).jsonObject
 
     /** The wire document's run record, with its `causes` filled from the document's cause table. */
     private val run = """

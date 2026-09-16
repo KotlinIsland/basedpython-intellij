@@ -313,8 +313,9 @@ support, run configurations, CLI actions, and editor tooling.
   guard, async def, match/case, enum, and pytest fixture.
 
 ## Requirements
-- IntelliJ Platform 2026.2+ (IntelliJ IDEA Ultimate or PyCharm Professional). Not the
-  Community editions: `com.intellij.modules.lsp` is a paid-IDE module, which is why
+- IntelliJ Platform 2026.3, build 263.5153 or newer (IntelliJ IDEA Ultimate or PyCharm
+  Professional) — the build whose rewritten Debug Adapter Protocol client `.by` debugging is built
+  on. Not the Community editions: `com.intellij.modules.lsp` is a paid-IDE module, which is why
   Marketplace lists IntelliJ IDEA Community and PyCharm Community as unsupported products.
 - A project with basedpython installed (`uv add --dev basedpython`), exposing `by` and
   `buff` in `.venv/` or on `PATH`.
@@ -345,13 +346,14 @@ them.
 ```bash
 ./gradlew runPyCharm
 ./gradlew runPyCharm -PpycharmPath=/Applications/PyCharm.app   # a PyCharm you already have
-./gradlew runPyCharm -PpycharmVersion=2026.3                   # a different published build
+./gradlew runPyCharm -PpycharmVersion=263.5153.2-EAP-CANDIDATE # a particular snapshot
 ```
 
 Both are also **Run IDE** and **Run PyCharm** in the IDE's own run-configuration dropdown.
 
-`./gradlew verifyPlugin` checks the built zip against both ends of the range the manifest claims:
-the recommended 2026.2 release, and the newest 2026.3 build in JetBrains' snapshot repository. The
+`./gradlew verifyPlugin` checks the built zip against the recommended releases in the range the
+manifest claims — none, until 2026.3 is released — and the newest 2026.3 build in JetBrains' snapshot
+repository. The
 public 2026.3 snapshots run some weeks behind the internal nightlies, so a platform change can be
 live in the IDE you use before any repository can hand it to CI — point the verifier at that build
 directly to see what it says.

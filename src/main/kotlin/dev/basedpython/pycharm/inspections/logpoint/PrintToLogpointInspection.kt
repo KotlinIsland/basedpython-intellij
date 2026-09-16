@@ -111,13 +111,6 @@ private class ReplaceWithLogpointFix : LocalQuickFix {
             info,
         )
 
-        // Re-stated with a language attached, so the expression edits as basedpython in the
-        // breakpoint dialog rather than as plain text — which is what the info loses on 262, where
-        // it carries the expression as a `String`. Unconditional, because the log point and the
-        // deleted `print` are the same edit: one that ended up without its expression would be a
-        // silent deletion, which is the one outcome this fix must not produce.
-        breakpoint.logExpressionObject = expression
-
         // Undo has to take both halves or neither. Without this the deleted line came back and the
         // log point stayed, so the value was logged twice — the one outcome nobody asked for.
         ByLogpointUndo.record(project, document, breakpoint)

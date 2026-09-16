@@ -1,6 +1,6 @@
 package dev.basedpython.pycharm.debug
 
-import com.google.gson.JsonObject
+import kotlinx.serialization.json.JsonObject
 
 /**
  * What a jump or a frame restart really did, as bpd reports it on `bpd/moved`.
@@ -13,15 +13,14 @@ import com.google.gson.JsonObject
  * is a place a person can read and a client cannot — no gutter icon can be dimmed from a paragraph.
  *
  * DAP itself was never the obstacle. Its event bodies are open JSON objects and an adapter may name
- * its own events; what drops them is a client that deserialises into fixed types. lsp4j binds
- * notifications by reflecting over the **runtime class** of the local service
- * (`GenericEndpoint.recursiveFindRpcMethods` → `service.getClass()`), and the platform hands it the
- * object `DebugAdapterDescriptor.createClient` returns — ours. So an `@JsonNotification` on
- * [ByDapClient] receives whatever bpd sends, untyped, and nothing is lost.
+ * its own events; what drops them is a client that deserialises into fixed types. The platform's DAP
+ * client takes an observer for any event name with the serializer to read its body with, and
+ * [ByDebugAdapterDescriptor] registers one for this name that reads a [JsonObject], so nothing bpd
+ * sends is lost.
  *
  * ## parsing
  *
- * Read field by field rather than through a Gson-mapped class, for the reason
+ * Read field by field rather than through a mapped class, for the reason
  * [dev.basedpython.pycharm.debug.dfa.ByDataFlowFacts] is: the shape is bpd's `Jumped` serialised
  * whole, and a class here would be a second copy of a vocabulary that has to agree. Anything missing
  * or of the wrong shape yields null — an event from a newer bpd should cost this feature, never the
@@ -72,7 +71,7 @@ internal data class ByMoved(
 ) {
     companion object {
 
-        /** The event name, which is also what [ByDebugProtocolServer.understands] names back. */
+        /** The event name, which is also what [ByDapRequests.understands] names back. */
         const val EVENT: String = "bpd/moved"
 
         /** The value of `Jump`'s serde tag when cpython refused the move. */
@@ -83,8 +82,7 @@ internal data class ByMoved(
          *
          * Total over any JSON: every accessor below checks the *kind* of what it found, not merely
          * that something was there, so a field of an unexpected type is absent rather than an
-         * exception. Gson's `asLong` on a string throws, and a debug session must not end because a
-         * newer bpd changed a shape.
+         * exception — see [obj]. A debug session must not end because a newer bpd changed a shape.
          */
         fun parse(body: JsonObject?): ByMoved? {
             val stop = body?.long("stop") ?: return null
@@ -122,27 +120,6 @@ internal data class ByMoved(
                 else -> "$kind: $message"
             }
         }
-
-        private fun JsonObject.primitive(name: String) =
-            get(name)?.takeIf { it.isJsonPrimitive }?.asJsonPrimitive
-
-        private fun JsonObject.obj(name: String) = get(name)?.takeIf { it.isJsonObject }?.asJsonObject
-
-        private fun JsonObject.string(name: String) = primitive(name)?.takeIf { it.isString }?.asString
-
-        private fun JsonObject.int(name: String) = primitive(name)?.takeIf { it.isNumber }?.asInt
-
-        private fun JsonObject.long(name: String) = primitive(name)?.takeIf { it.isNumber }?.asLong
-
-        private fun JsonObject.array(name: String) = get(name)?.takeIf { it.isJsonArray }?.asJsonArray
-
-        private fun JsonObject.strings(name: String): List<String> =
-            array(name)?.mapNotNull { it.takeIf { e -> e.isJsonPrimitive && e.asJsonPrimitive.isString }?.asString }
-                .orEmpty()
-
-        private fun JsonObject.ints(name: String): List<Int> =
-            array(name)?.mapNotNull { it.takeIf { e -> e.isJsonPrimitive && e.asJsonPrimitive.isNumber }?.asInt }
-                .orEmpty()
     }
 }
 

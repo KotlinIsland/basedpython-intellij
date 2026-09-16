@@ -1,13 +1,11 @@
 package dev.basedpython.pycharm.debug
 
-import com.intellij.platform.dap.CommandScope
 import com.intellij.platform.dap.DapBreakpointManager
 import com.intellij.platform.dap.DapDebugSession
 import com.intellij.platform.dap.DapExceptionBreakpoint
-import com.intellij.platform.dap.ParentDapCommandProcessor
+import com.intellij.platform.dap.DapSessionContext
 import com.intellij.xdebugger.breakpoints.XBreakpoint
 import kotlinx.coroutines.runBlocking
-import org.eclipse.lsp4j.debug.services.IDebugProtocolServer
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import java.lang.reflect.Proxy
@@ -40,21 +38,14 @@ class ByExceptionBreakpointHandlerTest {
         Unit
     }
 
-    private val server = proxy<IDebugProtocolServer> { _, _, _ -> null }
-
-    /** Runs each command to completion as it is submitted, which is the order the platform keeps. */
-    private val commands = proxy<ParentDapCommandProcessor> { _, name, args ->
-        if (name == "submitCommand") {
-            @Suppress("UNCHECKED_CAST")
-            val block = args[0] as suspend CommandScope.() -> Unit
-            runBlocking { CommandScope(this, server).block() }
-        }
-        null
-    }
-
-    private val session = proxy<DapDebugSession> { _, name, _ ->
+    /** Runs each command to completion as it is posted, which is the order the platform keeps. */
+    private val session = proxy<DapDebugSession> { _, name, args ->
         when (name) {
-            "getCommandProcessor" -> commands
+            "post" -> {
+                @Suppress("UNCHECKED_CAST")
+                val block = args[0] as suspend DapSessionContext.() -> Unit
+                runBlocking { answeringContext(this) { _, _ -> Result.success(null) }.block() }
+            }
             "getBreakpointManager" -> manager
             else -> null
         }

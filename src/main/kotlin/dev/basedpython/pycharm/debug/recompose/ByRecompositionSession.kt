@@ -1,6 +1,5 @@
 package dev.basedpython.pycharm.debug.recompose
 
-import com.google.gson.JsonObject
 import com.intellij.codeInsight.daemon.DaemonCodeAnalyzer
 import com.intellij.ide.util.PropertiesComponent
 import com.intellij.notification.NotificationGroupManager
@@ -18,20 +17,22 @@ import com.intellij.openapi.util.SystemInfo
 import com.intellij.openapi.util.io.FileUtil
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiManager
-import dev.basedpython.pycharm.debug.ByDebugProtocolServer
+import com.intellij.platform.dap.DapSessionContext
+import dev.basedpython.pycharm.debug.ByDapRequests
+import dev.basedpython.pycharm.debug.bool
+import dev.basedpython.pycharm.debug.recompose.ByRecompositionRequests.Companion.ask
 import dev.basedpython.pycharm.debug.ByEditorMarks
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import dev.basedpython.pycharm.util.BasedPythonBundle
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.future.await
 import kotlinx.coroutines.launch
 import java.util.concurrent.CopyOnWriteArrayList
 import org.jetbrains.annotations.TestOnly
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
+import kotlinx.serialization.json.JsonObject
 
 /**
  * The trace records of the current bpd session, and what is known about the session itself.
@@ -61,10 +62,11 @@ import java.util.concurrent.atomic.AtomicLong
  * ## the watch
  *
  * The preference is the user's; whether bpd is streaming is bpd's to say. The watch is sent when
- * the adapter is ready ([adapterReady], before the program has run a line — bpd accepts a watch
- * before the runtime is imported), and sent again at a stop and after a pull for as long as the
- * preference is on and bpd has not confirmed. A refusal of a watch is never the window's state: it
- * is said once, as a notification and in the toolbar, and the toggle shows what bpd last confirmed.
+ * the adapter is ready ([adapterReady], before the program has run a line — though bpd, which is
+ * ready before it has been told what to launch, refuses it then), and sent again at a stop and after
+ * a pull for as long as the preference is on and bpd has not confirmed. A refusal of a watch is
+ * never the window's state: it is said once, as a notification and in the toolbar, and the toggle
+ * shows what bpd last confirmed.
  *
  * ## refusals
  *
@@ -266,32 +268,20 @@ internal class ByRecompositionSession(
     }
 
     /**
-     * The adapter has answered `initialize` and is about to be told to run.
+     * The adapter has reported itself initialized, and the platform has not yet told it to run.
      *
-     * Called inside the command that also sends `bpd/understands`, which is what makes a watch that
-     * was on before the session began see the very first frame: the request goes out ahead of
-     * `configurationDone`, so nothing has run yet. bpd accepts a watch before the program has
-     * imported the runtime — watching is an interest in records to come. A bpd that refuses it
-     * anyway is told again at the first stop ([paused]).
+     * Started with `bpd/understands` ([dev.basedpython.pycharm.debug.BySourceMapPublisher]), so the
+     * request is written ahead of `configurationDone` and nothing has run yet. bpd accepts a watch
+     * before the program has imported the runtime — watching is an interest in records to come —
+     * but not before it has been told what to launch, and bpd reports itself initialized as soon as
+     * `initialize` is answered, ahead of `launch`: measured against bpd, this watch is refused with
+     * "nothing has been launched yet" and the first stop ([paused]) is what sends it again and has
+     * it confirmed. Records made before that stop are the pull's to read, not the stream's.
      */
-    suspend fun adapterReady(link: ByRecompositionLink, server: ByDebugProtocolServer) {
+    suspend fun adapterReady(link: ByRecompositionLink, context: DapSessionContext) {
         if (!enabled || !watching || this.link !== link) return
         val ticket = watchTickets.incrementAndGet()
-        val answer = try {
-            server.watchRecompositions(ByWatchRecompositionsArguments(on = true)).await()
-                ?.let { ByRecompositionAnswer.Answered(it) }
-                ?: ByRecompositionAnswer.noBody()
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            val refusal = ByRecompositionRequests.refusalOf(e)
-            if (refusal != null) {
-                ByRecompositionAnswer.Refused(refusal)
-            } else {
-                LOG.warn("bpd/watchRecompositions failed at start", e)
-                ByRecompositionAnswer.failed(e)
-            }
-        }
+        val answer = context.ask(ByDapRequests.watchRecompositions, ByWatchRecompositionsArguments(on = true).toJson())
         takeWatch(link, ticket, answer)
     }
 
@@ -457,7 +447,7 @@ internal class ByRecompositionSession(
     }
 
     private fun confirmWatching(link: ByRecompositionLink, ticket: Long, body: JsonObject) {
-        val watching = body.get("watching")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isBoolean }?.asBoolean
+        val watching = body.bool("watching")
         synchronized(lock) {
             if (this.link !== link || ticket < watchApplied) return
             watchApplied = ticket

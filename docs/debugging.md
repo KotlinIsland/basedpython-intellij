@@ -82,22 +82,36 @@ The pieces, all under `src/main/kotlin/dev/basedpython/pycharm/debug/` unless no
 4. **`ByDebugAdapterDescriptor.launchDebugAdapter`** waits for that JSON file, inverts the map, and
    opens the socket.
 5. **`BySourceMapPublisher`** sends one `setPydevdSourceMap` per `.by` file when `initialized`
-   arrives, before the platform releases the breakpoints behind it.
+   arrives, ahead of the breakpoints and `configurationDone` the platform releases behind it.
 
 `ByLineBreakpointType` supplies the `.by` line breakpoints (the Python plugin's is unavailable —
-see FEATURES.md §5), and `ByDapXDebugProcess` puts the run configuration's own console and process
-handler back, since `DapXDebugProcess` otherwise builds a console over the adapter's process and
-`by run`'s output — the transpile step included — never travels over DAP.
+see FEATURES.md §5), and the run configuration's own console and process handler are put back —
+the console by the descriptor's `DapExecutionUiSupport`, the handler by `ByDapXDebugProcess` —
+since `DapXDebugProcess` otherwise builds a console over the adapter's process and `by run`'s
+output — the transpile step included — never travels over DAP.
 
 ## The four things that are easy to get wrong
 
-**Ordering against the breakpoints.** The platform answers `initialized` by submitting a command
-that releases the configuration sender, which sends `setBreakpoints` for every file — addressed to
-`.by` paths and `.by` lines, and therefore meaningless until the maps are registered. Commands run
-sequentially only *up to their first suspension point*, so merely enqueuing the map requests first
-would leave them in flight while the breakpoints went out behind them. `BySourceMapPublisher` wraps
-the `DapEventConsumer` and calls the delegate from *inside* the command that pushes the maps, which
-is what actually orders the two.
+**Ordering against the configuration.** The platform answers `initialized` by releasing its
+configuration sender, which sends `setBreakpoints` for every file and then `configurationDone` —
+and `configurationDone` is what lets the program run, so a map registered after it misses the code
+that runs first. (Ahead of `setBreakpoints` too, though that half heals itself: pydevd's
+`set_source_mapping` ends in `reapply_breakpoints`.) pydevd handles a connection's messages one at a
+time on its reader thread, so a request *written* ahead of `configurationDone` takes effect ahead of
+it.
+
+No hook in the platform's API sits between `initialized` and that release, so the order comes from
+how its session commands run: one at a time on one thread, in the order posted, each exclusively
+only up to its first suspension. `BySourceMapPublisher` is a `DapTrafficObserver`, which sees the
+incoming `initialized` before the platform's handler does, so its command is queued ahead of the
+release; and it starts every request as a child coroutine in that command's one turn, so each is
+written before anything the release causes to be posted. Two alternatives were measured and fail:
+sending the requests one after another is overtaken by `setBreakpoints` at the first answer
+awaited, and holding the command thread until they are all answered deadlocks the session, because
+the platform answers `initialize` on that same thread and every other request waits for that.
+`BySourceMapPublisherTest` reproduces the platform's executor and pins the order; on the wire, bpd
+receives `bpd/understands` and the watch ahead of `launch`, `setBreakpoints` and
+`configurationDone`.
 
 **Inverting the map.** The forward table is a total function from generated lines to `.by` lines;
 the inverse is a relation, because one `.by` line routinely becomes several generated ones. Each
@@ -149,12 +163,16 @@ there lands in an environment the next sync rebuilds from the lock file and the 
 disappears again; everything else gets `<interpreter> -m pip install debugpy`, aimed at the exact
 executable that reported the failure.
 
-Reporting it this way rather than by throwing is deliberate. `DapDebugSession.initialize` wraps
-anything `launchDebugAdapter` throws in a `DapInitializationException` whose `userVisible` flag is
-`e !is CantRunException.CustomProcessedCantRunException`, and `DapXDebugProcess` rethrows the
-user-visible ones out of a coroutine — where a missing package surfaces as an "Unhandled exception"
-box naming `CoroutineScheduler` and `Rete`. So the notification is raised here and the throw is the
-silenced kind. The debuggee is killed on the way out, too: the bootstrap fails at interpreter
+Reporting it this way rather than by throwing is deliberate. The platform reports a failed adapter
+launch itself, but only as "failed to launch" with the adapter's name — the sentence the exception
+carried stays in the log — and it stops quietly on a
+`CantRunException.CustomProcessedCantRunException`, its word for "already reported". So the
+notification is raised here and the throw is the silenced kind. A bpd connection that fails while
+the session is waiting for it (the record never completes, the socket will not open) is reported the
+same way. An adapter that
+*refuses* the start request is different, and needs nothing from the plugin: the platform shows the
+adapter's own sentence from the error response, beside "Failed to launch program" — measured with a
+bpd carrying no agent build. The debuggee is killed on the way out, too: the bootstrap fails at interpreter
 startup, before the program body runs, so otherwise pressing Debug would hit no breakpoints and
 still run the program to completion with all its side effects.
 
@@ -318,12 +336,12 @@ not fire for this pass. bpd used to have nowhere to put them but the console, wh
 and a client cannot.
 
 DAP was never the obstacle. Its event bodies are open JSON objects and an adapter may name its own
-events; what drops the extras is a client that deserialises into fixed types, and lsp4j's
-`StoppedEventArguments` is exactly that. But lsp4j binds notifications by reflecting over the
-**runtime class** of the local service — `GenericEndpoint.recursiveFindRpcMethods` calls
-`service.getClass()` — and the platform hands it whatever `DebugAdapterDescriptor.createClient`
-returned, which is `ByDapClient`. So an `@JsonNotification` there receives a custom event with a
-`JsonObject` body and nothing is lost. No platform change and no protocol change were needed.
+events; what drops the extras is a client that deserialises into fixed types. The platform's client
+dispatches any event name an observer registers (`DebugAdapterDescriptor.registerObservers`, with an
+`EventType` naming the event and the serializer for its body), and `bpdEvents` registers bpd's with
+`JsonElement` as that serializer — so nothing an adapter sends is lost, and a body from a newer bpd
+that does not read costs the report rather than an IDE error. `ByRecompositionsWireTest` drives an
+event through the platform's own client to the reader.
 
 bpd sends `bpd/moved` carrying its `Jumped` whole; [ByMoved] reads it. And because narrating the same
 facts *and* sending them would show everything twice, a client says what it reads —
@@ -492,31 +510,18 @@ everything, and a `KeyError` from a dict lookup compiles happily and dies at run
 breakpoint stops on the right `.by` line. So the PyCharm default carries over: **On termination**
 on, **On raise** off.
 
-## What this plugin does instead of the platform's DAP client
+## What this plugin used to do instead of the platform's DAP client
 
-`ByDapXDebugProcess` overrides `sessionInitialized` and does **not** call `super`. That method does
-exactly four things — watch for the session to stop, run the start sequence, listen to the thread
-list, listen to output — and two of them are gaps this plugin cannot otherwise reach. They are
-written up in full in `scratch.ij-dap-issues.md`; in short:
-
-- **a refused start is unreported.** The base catches only `DapInitializationException`, so an
-  adapter that *answers* `launch` with an error has its message dropped, the session is never
-  stopped, and the user gets an "Unhandled exception" naming `CoroutineScheduler`. That is how a bpd
-  which would not debug a build produced a live-looking tab with the one sentence saying what to do
-  nowhere. Ours catches it and shows the adapter's own message
-- **a `stopped` for the thread you are on is queued rather than applied.** The base asks only
-  whether the session is suspended. That is right for a *second* thread stopping under a non-stop
-  adapter, and wrong for the `stopped` DAP prescribes after `restartFrame` and `goto`, which means
-  "this thread moved". Queued, the highlight stays where the code no longer is — and since the
-  platform drains that queue only in `resume`, the next Resume shows the stale position **instead of
-  running the program on**. Ours applies a suspension for the thread already on screen and defers
-  only a different thread's, with `resume` draining its own queue the same way
-
-What is *not* replaced is the part that matters most: `applySuspendContext` is the platform's, and it
-is `protected`, so log points, breakpoint conditions and suspend policies keep working exactly as
-they did. Stepping, run to cursor, the breakpoint handlers, the variables tree, expression evaluation
-and the editors provider are all inherited untouched. This is one lifecycle method, not a fork of the
-client — which is what makes it something to delete when the platform fixes its own.
+Until 2026.3 `ByDapXDebugProcess` overrode `sessionInitialized` without calling `super`, for two
+gaps in the platform's client: a start the adapter *refused* was never reported or stopped, and a
+`stopped` for the thread already on screen — the one DAP prescribes after `restartFrame` and `goto`
+— was queued rather than applied, so the highlight stayed where the code no longer was and the next
+Resume showed the stale position instead of running the program on. Both are fixed in the
+platform's rewritten client (263.5153): it classifies and reports a failed start with the adapter's
+sentence, and it applies a suspension for the visible thread at once, queueing only another
+thread's. Measured live against bpd: *Reset Frame* on `main` moves the highlight to its first line
+immediately, and the Resume after it runs the program on to the next breakpoint. The override is
+gone, and everything is the platform's.
 
 ## Reset Frame
 
@@ -551,29 +556,20 @@ This used to read "only the frame its thread is executing", which was true of bp
 crashes rather than refuses when a frame that is not executing is moved. When bpd gained the unwind,
 the plugin's own copy of that limit is what went on greying the action out on a caller.
 
-Refusals are the request's own error response, which is why `ByRestartFrameHandler` catches and
-shows them: the platform drops a failed request's message on the floor, and a refusal a person asked
-for would otherwise look like a button that did nothing. What a restart really *did* — which locals
-were emptied, which frames were discarded, whether any held a block open — comes back from bpd on
-the console, in one place rather than two.
+Refusals are the request's own error response, and bpd marks them `showUser`, which the platform
+shows as a notification — so a refusal a person asked for is not a button that did nothing. What a
+restart really *did* — which locals were emptied, which frames were discarded, whether any held a
+block open — comes back from bpd on the console, in one place rather than two.
 
 ### the bridge
 
 `restartFrame` is a DAP request and `supportsRestartFrame` a DAP capability; bpd implements both.
-The platform's DAP client implements neither half of the connection to the IDE action —
-`intellij.platform.dap` contains no reference to `restartFrame` or to `XDropFrameHandler` — so the
-action stays grey however much an adapter advertises. `ByRestartFrameHandler` is the missing bridge,
-through `XDebugProcess.getDropFrameHandler`, which is an ordinary supported override rather than a
-way around anything.
-
-Whether to offer it is asked of the **adapter's advertised capability**, not of
-`ByDebugBackend`: debugpy is the reason it matters (pydevd reports `supportsRestartFrame` as false)
-but the wire carries the answer here, and believing what the adapter says beats remembering what we
-think it is. The capabilities arrive after `initialize`, so the handler is always returned and the
-question is asked live — deciding at process construction would answer "not yet" forever. A
-capability that has not arrived declines: an action that is briefly grey beats one that is briefly
-wrong, because a refused request's message is discarded by the platform and a wrong "yes" would look
-like a button that does nothing.
+Until 2026.3 the platform's DAP client connected neither to the IDE action, and the plugin supplied
+the bridge through `XDebugProcess.getDropFrameHandler`. The rewritten client has its own —
+`DapDropFrameHandler`, which offers a frame when the adapter advertises `supportsRestartFrame` and
+the frame's `canRestart` is not false (bpd sends none, which DAP reads as true), and sends
+`restartFrame` for it — so the plugin's is gone. Whether debugpy offers it is still pydevd's to say,
+and it says no.
 
 ## Hot reload
 

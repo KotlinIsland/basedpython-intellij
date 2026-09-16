@@ -1,7 +1,18 @@
 package dev.basedpython.pycharm.debug.recompose
 
-import com.google.gson.JsonElement
-import com.google.gson.JsonObject
+import dev.basedpython.pycharm.debug.array
+import dev.basedpython.pycharm.debug.bool
+import dev.basedpython.pycharm.debug.int
+import dev.basedpython.pycharm.debug.long
+import dev.basedpython.pycharm.debug.longOrNull
+import dev.basedpython.pycharm.debug.number
+import dev.basedpython.pycharm.debug.obj
+import dev.basedpython.pycharm.debug.objOrNull
+import dev.basedpython.pycharm.debug.string
+import dev.basedpython.pycharm.debug.stringOrNull
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.longOrNull
 
 /**
  * Why a basedpython-ui scope ran, as bpd reads it out of the runtime's trace ring.
@@ -25,12 +36,12 @@ import com.google.gson.JsonObject
  * changed. The count of what was declined is kept ([Answer.unreadable]) so the window can say so
  * rather than looking complete.
  *
- * No Gson-mapped classes, for the reason [dev.basedpython.pycharm.debug.dfa.ByDataFlowFacts] has
+ * No mapped classes, for the reason [dev.basedpython.pycharm.debug.dfa.ByDataFlowFacts] has
  * none: the vocabulary is bpd's, and a POJO here would be a second copy that has to agree.
  */
 internal object ByRecompositions {
 
-    /** The event bpd pushes while watching, which [dev.basedpython.pycharm.debug.ByDebugProtocolServer.understands] names back. */
+    /** The event bpd pushes while watching, which [dev.basedpython.pycharm.debug.ByDapRequests.understands] names back. */
     const val EVENT: String = "bpd/recomposition"
 
     /** The one trace format this reads; the runtime's `TRACE_FORMAT`. */
@@ -75,7 +86,7 @@ internal object ByRecompositions {
         var unreadable = 0
         val kept = ArrayList<ByRecord>()
         for (element in records?.array("kept") ?: emptyList<JsonElement>()) {
-            val record = element.takeIf { it.isJsonObject }?.asJsonObject?.let(::parseRecord)
+            val record = element.objOrNull()?.let(::parseRecord)
             if (record == null) unreadable++ else kept += record
         }
         return Reply.Read(
@@ -128,7 +139,7 @@ internal object ByRecompositions {
                 causes = obj.causes("causes") ?: return null,
                 skipped = obj.array("skipped")?.mapNotNull { it.longOrNull() }.orEmpty(),
                 disposed = obj.array("disposed")?.mapNotNull { element ->
-                    val child = element.takeIf { it.isJsonObject }?.asJsonObject ?: return@mapNotNull null
+                    val child = element.objOrNull() ?: return@mapNotNull null
                     ByDisposed(
                         scope = child.long("scope") ?: return@mapNotNull null,
                         name = child.string("name") ?: return@mapNotNull null,
@@ -285,9 +296,9 @@ internal object ByRecompositions {
     /** Every cause in the array under [name], or null when the field is missing or any one is unreadable. */
     private fun JsonObject.causes(name: String): List<ByCause>? {
         val array = array(name) ?: return null
-        val causes = ArrayList<ByCause>(array.size())
+        val causes = ArrayList<ByCause>(array.size)
         for (element in array) {
-            val cause = element.takeIf { it.isJsonObject }?.asJsonObject?.let(::parseCause) ?: return null
+            val cause = element.objOrNull()?.let(::parseCause) ?: return null
             causes += cause
         }
         return causes
@@ -295,31 +306,10 @@ internal object ByRecompositions {
 
     /** `null | int | string`, which is what a scope key and an op's index/key both are. */
     private fun JsonObject.scalar(name: String): ByTraceScalar? {
-        val primitive = primitive(name) ?: return null
-        return when {
-            primitive.isNumber -> ByTraceScalar.Number(primitive.asLong)
-            primitive.isString -> ByTraceScalar.Text(primitive.asString)
-            else -> null
-        }
+        val element = get(name) ?: return null
+        element.number()?.longOrNull?.let { return ByTraceScalar.Number(it) }
+        return element.stringOrNull()?.let { ByTraceScalar.Text(it) }
     }
-
-    private fun JsonElement.longOrNull(): Long? =
-        takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asLong
-
-    private fun JsonObject.primitive(name: String) =
-        get(name)?.takeIf { it.isJsonPrimitive }?.asJsonPrimitive
-
-    private fun JsonObject.obj(name: String) = get(name)?.takeIf { it.isJsonObject }?.asJsonObject
-
-    private fun JsonObject.array(name: String) = get(name)?.takeIf { it.isJsonArray }?.asJsonArray
-
-    private fun JsonObject.string(name: String) = primitive(name)?.takeIf { it.isString }?.asString
-
-    private fun JsonObject.int(name: String) = primitive(name)?.takeIf { it.isNumber }?.asInt
-
-    private fun JsonObject.long(name: String) = primitive(name)?.takeIf { it.isNumber }?.asLong
-
-    private fun JsonObject.bool(name: String) = primitive(name)?.takeIf { it.isBoolean }?.asBoolean
 }
 
 /**

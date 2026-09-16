@@ -11,28 +11,26 @@ import com.intellij.execution.ui.ConsoleViewContentType
 import com.intellij.execution.ui.ExecutionConsole
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
-import com.intellij.util.PathUtil
 import com.intellij.platform.dap.DapBreakpointsDescription
-import com.intellij.platform.dap.DapClient
-import com.intellij.platform.dap.DapCommandProcessor
+import com.intellij.platform.dap.DapBreakpointsSupport
+import com.intellij.platform.dap.DapCustomization
 import com.intellij.platform.dap.DapDebugSession
-import com.intellij.platform.dap.DapEventConsumer
 import com.intellij.platform.dap.DapExceptionBreakpoint
 import com.intellij.platform.dap.DapExceptionInfo
+import com.intellij.platform.dap.DapExecutionUiContext
+import com.intellij.platform.dap.DapExecutionUiSupport
+import com.intellij.platform.dap.DapObserversBuilder
 import com.intellij.platform.dap.DapStartRequest
-import com.intellij.platform.dap.DapThreadState
 import com.intellij.platform.dap.DebugAdapterDescriptor
 import com.intellij.platform.dap.DebugAdapterId
 import com.intellij.platform.dap.DebugAdapterSupportProvider
 import com.intellij.platform.dap.connection.DebugAdapterHandle
 import com.intellij.platform.dap.connection.DebugAdapterSocketConnection
 import com.intellij.platform.dap.xdebugger.DapXDebugProcess
-import com.intellij.platform.dap.xdebugger.DapXDebugSessionState
-import com.intellij.platform.dap.xdebugger.DapXSuspendContext
+import com.intellij.util.PathUtil
 import com.intellij.xdebugger.XDebugSession
 import com.intellij.xdebugger.breakpoints.XBreakpointHandler
-import com.intellij.xdebugger.frame.XDropFrameHandler
-import com.intellij.xdebugger.frame.XSuspendContext
+import com.jetbrains.dap.protocol.OutputEventArguments
 import dev.basedpython.pycharm.actions.ByCli
 import dev.basedpython.pycharm.debug.bpd.ByBpdConnection
 import dev.basedpython.pycharm.debug.bpd.ByBpdRecord
@@ -43,15 +41,7 @@ import dev.basedpython.pycharm.debug.recompose.ByRecompositionRequests
 import dev.basedpython.pycharm.debug.recompose.ByRecompositionSession
 import dev.basedpython.pycharm.run.ByCommandLineState
 import dev.basedpython.pycharm.util.BasedPythonBundle
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.launch
-import java.util.concurrent.ConcurrentLinkedQueue
-import org.eclipse.lsp4j.debug.Capabilities
-import org.eclipse.lsp4j.debug.OutputEventArguments
-import org.eclipse.lsp4j.debug.StoppedEventArguments
-import org.eclipse.lsp4j.debug.services.IDebugProtocolServer
 import kotlin.time.Duration.Companion.milliseconds
 
 /** Identifies this adapter to the platform's DAP infrastructure and to `initialize`'s `adapterID`. */
@@ -89,32 +79,53 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
     private var bpdRecord: ByBpdRecord.Ready? = null
 
     /**
+     * The platform's session, once [createXDebugProcess] has been handed it — which is before the
+     * adapter is launched, and so before anything in [registerObservers] can need it.
+     */
+    @Volatile
+    private var dapSession: DapDebugSession? = null
+
+    /**
      * This session's link to bpd's compose runtime: the identity every recomposition call of this
      * session carries, so that with two sessions running one's records never reach the other's
-     * window. Made from the session's command processor by whichever of [createClient] and
-     * [createXDebugProcess] the platform calls first — both are handed it.
+     * window. Made in [createXDebugProcess], from the session that is its executor, and read by the
+     * events that session's adapter sends.
      */
+    @Volatile
     private var recompositionLink: ByRecompositionRequests? = null
 
-    private fun recompositionLinkFor(commandProcessor: DapCommandProcessor): ByRecompositionRequests =
-        synchronized(this) { recompositionLink ?: ByRecompositionRequests(commandProcessor).also { recompositionLink = it } }
+    override val customization: DapCustomization = object : DapCustomization() {
+        override val breakpointsSupport: DapBreakpointsSupport = ByBreakpointsSupport
+        override val executionUiSupport: DapExecutionUiSupport = ByOutputSupport { setup?.backend }
+    }
 
-    /** Adds `setPydevdSourceMap`; see [ByDebugProtocolServer]. */
-    override val debugAdapterServerClass: Class<out IDebugProtocolServer> = ByDebugProtocolServer::class.java
+    /**
+     * The line and exception breakpoint types, and the handler that sends exception breakpoints.
+     *
+     * `DapXDebugProcess` makes a handler for the source breakpoint type and, when there is one, the
+     * function breakpoint type; everything else it takes from here. Without
+     * [ByExceptionBreakpointHandler] the exception type would be a checkbox that changed nothing.
+     */
+    private object ByBreakpointsSupport : DapBreakpointsSupport() {
+        override val breakpointsDescription: DapBreakpointsDescription = object : DapBreakpointsDescription(
+            sourceBreakpointType = ByLineBreakpointType::class.java,
+            exceptionBreakpointType = ByExceptionBreakpointType::class.java,
+        ) {
+            /**
+             * DAP does not say *which* exception breakpoint a stop belongs to, and the platform needs
+             * one to attach the stop to. There is exactly one exception breakpoint here — the type's
+             * single default — so any exception stop is that one.
+             */
+            override fun doesExceptionMatchBreakpoint(
+                exceptionInfo: DapExceptionInfo,
+                breakpoint: DapExceptionBreakpoint,
+            ): Boolean = breakpoint.ideBreakpoint.type is ByExceptionBreakpointType
+        }
 
-    override val breakpointsDescription: DapBreakpointsDescription = object : DapBreakpointsDescription(
-        sourceBreakpointType = ByLineBreakpointType::class.java,
-        exceptionBreakpointType = ByExceptionBreakpointType::class.java,
-    ) {
-        /**
-         * DAP does not say *which* exception breakpoint a stop belongs to, and the platform needs
-         * one to attach the stop to. There is exactly one exception breakpoint here — the type's
-         * single default — so any exception stop is that one.
-         */
-        override fun doesExceptionMatchBreakpoint(
-            exceptionInfo: DapExceptionInfo,
-            breakpoint: DapExceptionBreakpoint,
-        ): Boolean = breakpoint.ideBreakpoint.type is ByExceptionBreakpointType
+        override fun createAdditionalBreakpointHandlers(
+            dapSession: DapDebugSession,
+            session: XDebugSession,
+        ): List<XBreakpointHandler<*>> = listOf(ByExceptionBreakpointHandler(dapSession))
     }
 
     /**
@@ -161,8 +172,8 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
     /**
      * Waits for the bootstrap to report that it is listening, then connects.
      *
-     * By the time this returns, [mappings] is populated — [createClient], which needs them, is
-     * called immediately after this in `DapDebugSession.initialize`.
+     * By the time this returns, [mappings] is populated — [BySourceMapPublisher], which needs them,
+     * reads them when the adapter reports itself initialized, which it can only do once connected.
      */
     override suspend fun launchDebugAdapter(
         environment: ExecutionEnvironment,
@@ -170,6 +181,7 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
         sessionId: String,
     ): DebugAdapterHandle {
         val setup = setup ?: throw ExecutionException(BasedPythonBundle.message("debug.error.noSetup"))
+        this.executionResult = executionResult
         val processHandler = executionResult?.processHandler
         ByDebugSetups.getInstance(project).releaseWith(setup, processHandler)
 
@@ -178,16 +190,25 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
             // from the filesystem the program is on, and reports `.by` locations from the agent.
             // `mappings` stays empty and `BySourceMapPublisher` sends nothing, which is right —
             // sending pydevd's request to bpd would be sending it a request it does not have
-            return ByBpdConnection.open(setup.infoFile, processHandler).also { bpdRecord = it.record }
+            val connection = try {
+                ByBpdConnection.open(setup.infoFile, processHandler)
+            } catch (e: ExecutionException) {
+                // Every one of these is a sentence written for the user — no bpd found, the wrapper
+                // exited, the record never completed — and the platform shows none of them: it
+                // reports a failed adapter launch as "failed to launch" with the adapter's name
+                fail(e.message ?: BasedPythonBundle.message("debug.error.noSetup"), install = null, processHandler)
+            }
+            bpdRecord = connection.record
+            return connection
         }
 
         val info = awaitDebuggeeInfo(setup.infoFile) { processHandler?.isProcessTerminated != true }
-            ?: fail(BasedPythonBundle.message("debug.error.noReport"), null, processHandler)
+            ?: fail(BasedPythonBundle.message("debug.error.noReport"), ByDebugpyInstall.plan(project, null), processHandler)
 
         if (!info.isListening) {
             fail(
                 info.message ?: BasedPythonBundle.message("debug.error.bootstrapFailedGeneric"),
-                info.python,
+                ByDebugpyInstall.plan(project, info.python),
                 processHandler,
             )
         }
@@ -207,30 +228,38 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
         }
     }
 
-    override fun createClient(
-        eventConsumer: DapEventConsumer,
-        environment: ExecutionEnvironment,
-        executionResult: ExecutionResult?,
-        commandProcessor: DapCommandProcessor,
-        sessionScope: CoroutineScope,
-    ): DapClient {
-        val link = recompositionLinkFor(commandProcessor)
-        return ByDapClient(
+    /**
+     * The run configuration's own process and console, once [launchDebugAdapter] has been handed
+     * them. What a jump's report is printed on.
+     */
+    @Volatile
+    private var executionResult: ExecutionResult? = null
+
+    /**
+     * What this session listens to on the adapter's connection: `initialized`, to publish ahead of
+     * the platform's configuration ([BySourceMapPublisher]), and bpd's own events.
+     */
+    override fun registerObservers(observers: DapObserversBuilder) {
+        observers.traffic(
             BySourceMapPublisher(
-                eventConsumer,
-                commandProcessor,
-                mappings,
+                executor = { dapSession },
+                mappings = { mappings },
                 // The compose runtime's trace is bpd's to read, so only a bpd session is told when
                 // the adapter is ready for a watch; debugpy would answer `unknown command`
-                onReady = { server ->
-                    if (setup?.backend == ByDebugBackend.BPD) {
-                        ByRecompositionSession.getInstance(project).adapterReady(link, server)
+                onReady = {
+                    val link = recompositionLink
+                    if (setup?.backend == ByDebugBackend.BPD && link != null) {
+                        ByRecompositionSession.getInstance(project).adapterReady(link, this)
                     }
                 },
-            ).consumer,
-            onMoved = { moved -> report(moved, executionResult) },
-            onRecomposed = { event -> ByRecompositionSession.getInstance(project).append(link, event) },
+            ),
         )
+        bpdEvents(
+            onMoved = ::report,
+            onRecomposed = { event ->
+                recompositionLink?.let { ByRecompositionSession.getInstance(project).append(it, event) }
+            },
+        ).forEach { observers.event(it.type, it::observe) }
     }
 
     /**
@@ -244,7 +273,7 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
      * bpd sent these as prose until told this plugin reads them ([BySourceMapPublisher]), so this is
      * a rewrite of a line rather than a second copy of one.
      */
-    private fun report(moved: ByMoved, executionResult: ExecutionResult?) {
+    private fun report(moved: ByMoved) {
         val text = moved.report() ?: return
         val console = executionResult?.executionConsole as? ConsoleView ?: return
         val type =
@@ -263,74 +292,71 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
         executionResult: ExecutionResult?,
         startRequestType: DapStartRequest,
         startRequestArguments: Map<String, Any?>,
-    ): DapXDebugProcess = ByDapXDebugProcess(
-        session,
-        dapDebugSession,
-        xDebugProcessScope,
-        globalScope,
-        debugAdapterDescriptor,
-        executionEnvironment,
-        executionResult,
-        startRequestType,
-        startRequestArguments,
-        // The run profile's copy is gone by now — `configureProfileState` consumes it — but this is
-        // the descriptor's own field and lives as long as the session. A session with no setup at
-        // all never reached `launchDebugAdapter`, so the value is moot, and null is the safe way to
-        // be wrong: it costs at most a duplicate of output the console already has, and a hot
-        // reload button for a session nothing could have been reloaded in.
-        backend = setup?.backend,
-        // The *path*, not what is in it. The wrapper writes the temp directory `by run` chose into
-        // this file, and `by run` has not chosen one yet when the process is built — so reading it
-        // here is reading a file that does not exist. It is read when hot reload asks, by which
-        // time the program is running and the record is complete.
-        recordFile = setup?.infoFile,
-        recompositionLink = recompositionLinkFor(dapDebugSession.commandProcessor),
-    )
-
-    /**
-     * The arguments the session is started with: [provided], as the launch-arguments provider
-     * built them, completed from what `by run` recorded when the session is a bpd one.
-     *
-     * The provider runs before `by run` has chosen the program, so it cannot name it; by the time
-     * `start` is sent, [launchDebugAdapter] has read the record that does. Called only after
-     * `initialize`, so a bpd session with no record is one whose adapter was never reached.
-     */
-    fun startArguments(provided: Map<String, Any?>): Map<String, Any?> {
-        if (setup?.backend != ByDebugBackend.BPD) return provided
-        val record = bpdRecord ?: throw ExecutionException(BasedPythonBundle.message("debug.error.noSetup"))
-        return record.launchArguments(provided)
+    ): DapXDebugProcess {
+        dapSession = dapDebugSession
+        val link = ByRecompositionRequests(dapDebugSession).also { recompositionLink = it }
+        return ByDapXDebugProcess(
+            session,
+            dapDebugSession,
+            xDebugProcessScope,
+            globalScope,
+            debugAdapterDescriptor,
+            executionEnvironment,
+            executionResult,
+            startRequestType,
+            startArguments(startRequestArguments),
+            // The run profile's copy is gone by now — `configureProfileState` consumes it — but
+            // this is the descriptor's own field and lives as long as the session. A session with
+            // no setup at all never reached `launchDebugAdapter`, so the value is moot, and null is
+            // the safe way to be wrong: it costs at most a duplicate of output the console already
+            // has, and a hot reload button for a session nothing could have been reloaded in.
+            backend = setup?.backend,
+            // The *path*, not what is in it. The wrapper writes the temp directory `by run` chose
+            // into this file, and `by run` has not chosen one yet when the process is built — so
+            // reading it here is reading a file that does not exist. It is read when hot reload
+            // asks, by which time the program is running and the record is complete.
+            recordFile = setup?.infoFile,
+            recompositionLink = link,
+        )
     }
 
     /**
-     * Whether [fail] has already put the reason on screen.
+     * The arguments the session is started with: [provided], as the launch-arguments provider built
+     * them, completed from what `by run` recorded when the session is a bpd one.
      *
-     * Read by [ByDapXDebugProcess.start], which otherwise cannot tell a failure the user has been
-     * told about from one they have not. The platform's answer to that — `DapInitializationException`
-     * and its `userVisible` flag — is `@ApiStatus.Internal`; see docs/internal-api.md. Volatile
-     * because it is written on whichever thread launches the adapter and read from a coroutine.
+     * The provider runs before `by run` has chosen the program, so it cannot name it, and the
+     * platform takes the arguments now, when the process is built — before `by run` has started.
+     * What it does with them happens later: it reads them to build the `launch` request, after
+     * `initialize`, by which time [launchDebugAdapter] has read the record that names the program.
+     * So a bpd session's arguments are a map whose contents are that record's, read the first time
+     * anything reads the map. A bpd session with no record by then is one whose adapter was never
+     * reached, and has nothing to launch.
      */
-    @Volatile
-    var hasReportedFailure: Boolean = false
-        private set
+    private fun startArguments(provided: Map<String, Any?>): Map<String, Any?> {
+        if (setup?.backend != ByDebugBackend.BPD) return provided
+        return ByRecordedArguments {
+            val record = bpdRecord ?: throw ExecutionException(BasedPythonBundle.message("debug.error.noSetup"))
+            record.launchArguments(provided)
+        }
+    }
 
     /**
-     * Report why the session cannot start, then abort without the platform turning it into an
-     * "Unhandled exception" box.
+     * Report why the session cannot start, then abort without the platform reporting it again.
      *
-     * `DapDebugSession.initialize` wraps whatever [launchDebugAdapter] throws in a
-     * `DapInitializationException` whose `userVisible` flag is `e !is CustomProcessedCantRunException`,
-     * and `DapXDebugProcess` rethrows the user-visible ones out of a coroutine — where they surface
-     * as an IDE error naming `CoroutineScheduler` and `Rete`. A missing `debugpy` is an ordinary,
-     * one-command-away situation; it gets a notification with that command on it instead.
+     * The platform reports a failed adapter launch itself, as "failed to launch" and the adapter's
+     * name, and says nothing more: whatever sentence the exception carried stays in the log. A
+     * missing `debugpy` is an ordinary, one-command-away situation, and a bpd that could not be
+     * found is a sentence about where it was looked for; each gets a notification that says so,
+     * with the command on it when there is one. [CantRunException.CustomProcessedCantRunException]
+     * is the platform's word for "already reported", which it stops the session on quietly.
      *
      * The debuggee is killed on the way out. The bootstrap reports a failure at interpreter startup
      * — before the program body runs — so without this the user would press Debug, get no
      * breakpoints, and still have the program run to completion with all its side effects.
      */
-    private fun fail(message: String, python: String?, processHandler: ProcessHandler?): Nothing {
+    private fun fail(message: String, install: ByDebugpyInstall?, processHandler: ProcessHandler?): Nothing {
         processHandler?.destroyProcess()
-        reportDebugStartFailure(project, message, ByDebugpyInstall.plan(project, python))
-        hasReportedFailure = true
+        reportDebugStartFailure(project, message, install)
         throw CantRunException.CustomProcessedCantRunException()
     }
 
@@ -391,33 +417,45 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
 }
 
 /**
- * The stock DAP process with the run configuration's own process and console put back.
+ * A map whose entries are computed the first time anything reads it.
  *
- * `DapXDebugProcess` assumes the adapter owns the debuggee and so builds a console over its own
- * process handler. Here the IDE launched `by run` itself, and that process is what the user needs
- * to see: the transpile step and its diagnostics, which never travel over DAP whichever backend is
- * running. Reusing its handler also makes the debug session end when `by run` ends, and Stop kill
- * the right process.
+ * What [ByDebugAdapterDescriptor.startArguments] hands the platform for a bpd session: the platform
+ * takes a session's start arguments when it builds the process and reads them only to send
+ * `launch`, and the program they name is not known until between the two.
+ */
+private class ByRecordedArguments(resolve: () -> Map<String, Any?>) : AbstractMap<String, Any?>() {
+    private val resolved by lazy(resolve)
+
+    override val entries: Set<Map.Entry<String, Any?>> get() = resolved.entries
+}
+
+/**
+ * The stock DAP process with the run configuration's own process put back.
  *
- * What that console must *also* carry is the program's own output, and where that comes from is not
- * the same for both backends — see [backend] and [ByDebugBackend.ownsDebuggeeOutput].
+ * `DapXDebugProcess` assumes the adapter owns the debuggee and so gives the session a process
+ * handler of its own. Here the IDE launched `by run` itself, and that process is what the user
+ * needs to see: the transpile step and its diagnostics, which never travel over DAP whichever
+ * backend is running. Reusing its handler also makes the debug session end when `by run` ends, and
+ * Stop kill the right process. Its console is put back by the descriptor's customization
+ * ([ByDebugAdapterDescriptor]), which is also where the program's output is filed.
  *
- * Internal rather than private because [dev.basedpython.pycharm.debug.hotswap.ByHotSwapEnabler] has
- * to recognise one: the platform hands its extension point a bare `XDebugProcess`, and which
- * debugger is behind it is a fact only this class holds.
+ * Internal rather than private because [dev.basedpython.pycharm.debug.hotswap.ByHotSwapEnabler] and
+ * [dev.basedpython.pycharm.debug.recompose.ByRecompositionListener] have to recognise one: the
+ * platform hands their extension points a bare `XDebugProcess`, and which debugger is behind it is a
+ * fact only this class holds.
  *
  * @param backend which debugger drives this session, or null for one that never started
  */
 internal class ByDapXDebugProcess(
     session: XDebugSession,
     dapDebugSession: DapDebugSession,
-    private val xDebugProcessScope: CoroutineScope,
-    private val globalScope: CoroutineScope,
+    xDebugProcessScope: CoroutineScope,
+    globalScope: CoroutineScope,
     debugAdapterDescriptor: DebugAdapterDescriptor<*>,
-    private val executionEnvironment: ExecutionEnvironment,
+    executionEnvironment: ExecutionEnvironment,
     private val result: ExecutionResult?,
-    private val startRequestType: DapStartRequest,
-    private val startRequestArguments: Map<String, Any?>,
+    startRequestType: DapStartRequest,
+    startRequestArguments: Map<String, Any?>,
     val backend: ByDebugBackend?,
     /**
      * The file the wrapper writes what `by run` chose into.
@@ -442,253 +480,40 @@ internal class ByDapXDebugProcess(
     startRequestType,
     startRequestArguments,
 ) {
-    /**
-     * The last capabilities the adapter announced.
-     *
-     * Kept rather than asked for, because the questions that need it are synchronous — the platform
-     * asks whether an action is enabled while it is building a toolbar — and `capabilities` is a
-     * `Flow`. Volatile because the collector and the questions are on different threads; null until
-     * `initialize` has been answered, which every reader has to treat as "not yet", never as "no".
-     */
-    @Volatile
-    private var capabilities: Capabilities? = null
-
-    init {
-        xDebugProcessScope.launch {
-            dapDebugSession.capabilities.collect { capabilities = it }
-        }
-    }
-
-    /**
-     * Suspensions that arrived for a thread other than the one on screen — see [shouldApplyNow].
-     *
-     * Ours because the platform's is private and, once this class stops calling
-     * `super.sessionInitialized`, never filled. [resume] drains this one exactly as the platform
-     * drains that one.
-     */
-    private val deferredSuspensions = ConcurrentLinkedQueue<DapXSuspendContext>()
-
-    /**
-     * The `stopped` event behind the suspension last shown, so the same one is not shown twice.
-     *
-     * Only ever read and written by the single thread-list collector, hence no synchronisation.
-     */
-    private var lastApplied: StoppedEventArguments? = null
-
-    /**
-     * The descriptor this session was launched from, when it is one of ours — which is every
-     * session this class serves, the nullable cast being for the base type of the parameter only.
-     */
-    private val ownDescriptor = debugAdapterDescriptor as? ByDebugAdapterDescriptor
-
-    /** Whether the reason this session cannot start is already on screen. See [start]. */
-    private val reportedItself: Boolean get() = ownDescriptor?.hasReportedFailure == true
-
-    /**
-     * Starts the session, and installs the four listeners `DapXDebugProcess` would have.
-     *
-     * **`super` is deliberately not called.** The base does exactly four things here — watch for the
-     * session to stop, run the start sequence, listen to the thread list, listen to output — and two
-     * of them are the bugs this plugin cannot otherwise reach:
-     *
-     *  - the start sequence catches only `DapInitializationException`, so an adapter that *answers*
-     *    `launch` with an error has its message dropped and the session never stopped. That is how a
-     *    bpd that will not debug this build produced a live-looking tab and an "Unhandled exception"
-     *    naming `CoroutineScheduler`, with the one sentence saying what to do nowhere
-     *  - the thread-state listener queues any suspension that arrives while the session is already
-     *    suspended, including the `stopped` DAP prescribes after `restartFrame` and `goto`
-     *
-     * Everything the base does *elsewhere* is inherited untouched: stepping, run to cursor, the
-     * breakpoint handlers, the variables tree, expression evaluation, the editors provider. In
-     * particular [applySuspendContext] is the platform's, so log points, breakpoint conditions and
-     * suspend policies keep working exactly as they did — this is the one call that matters and it is
-     * `protected`, which is what makes overriding a lifecycle method the whole of the change rather
-     * than the start of a rewrite.
-     *
-     * See `scratch.ij-dap-issues.md`; when the platform fixes these, this override goes away.
-     */
-    override fun sessionInitialized() {
-        xDebugProcessScope.launch(CoroutineName("basedpython stop-watch")) {
-            dapDebugSession.sessionStopped.await()
-            session.stop()
-        }
-        xDebugProcessScope.launch(CoroutineName("basedpython start")) { start() }
-        launchThreadStateListener()
-        launchOutputListener()
-    }
-
-    /**
-     * The base class's start sequence, with the failure it does not report reported.
-     *
-     * `DapDebugSession.start` throws whatever the adapter answered — lsp4j raises a
-     * `ResponseErrorException` carrying the adapter's own message, which is the only account of why
-     * anything went wrong. The base lets it escape a coroutine, so it lands in the log as an
-     * unhandled exception and the session stays up. Here it stops the session and says the sentence.
-     */
-    private suspend fun start() {
-        try {
-            if (!initBreakpointsCustomWay()) session.initBreakpoints()
-            sessionState.value = DapXDebugSessionState.Connecting
-            dapDebugSession.initialize(executionEnvironment, result)
-            dapDebugSession.start(
-                startRequestType,
-                ownDescriptor?.startArguments(startRequestArguments) ?: startRequestArguments,
-            )
-            sessionState.value = DapXDebugSessionState.Running
-            session.rebuildViews()
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            // One branch for every failure, because the platform's own distinction is not askable
-            // any more. It used to be two: a `DapInitializationException` — which the platform
-            // wraps `launchDebugAdapter` failures in — was reported only when its `userVisible`
-            // flag was set, and everything else always. Both that class and the flag are
-            // `@ApiStatus.Internal` (see docs/internal-api.md).
-            //
-            // Nothing is lost, because `userVisible` only ever answered a question this plugin
-            // already knows the answer to: it is `e !is CustomProcessedCantRunException`, and the
-            // one thing that throws that here is `fail()`, which has *just* put the reason on
-            // screen as a notification. So the latch it sets is asked instead — and it is the more
-            // direct question, "has the user already been told", rather than a flag that happens
-            // to correlate with it.
-            //
-            // `message` is otherwise shown as-is: it is what the adapter wrote for a person, which
-            // DAP puts in the error response for exactly this, and wrapping it in a sentence of
-            // ours would say less.
-            PROCESS_LOG.info("the debug adapter refused to start the session", e)
-            if (!reportedItself) {
-                session.reportError(e.message ?: BasedPythonBundle.message("debug.error.startRefused"))
-            }
-            session.stop()
-        }
-    }
-
-    /**
-     * Mirrors the platform's listener, and changes the one decision in it — see [shouldApplyNow].
-     *
-     * How the thread is found, how the child scope is named and how the context is built are the
-     * platform's, reproduced rather than improved: the disagreement is about what to do with a
-     * suspension, not about how to recognise one, and a second way of reading the same state would
-     * be a second thing to keep in step with it.
-     */
-    private fun launchThreadStateListener() {
-        xDebugProcessScope.launch(CoroutineName("basedpython threads")) {
-            var suspension = 0
-            dapDebugSession.threads.collect { state ->
-                suspension++
-                val thread = state.stoppedThread() ?: return@collect
-                // One application per `stopped` event, not per emission of the thread list.
-                //
-                // `threads` is a StateFlow republished whenever the list changes at all, and under a
-                // non-stop adapter threads come and go while you sit at a breakpoint. The platform's
-                // rule hid that: it queued everything while suspended. Applying by thread identity
-                // alone would re-run `applySuspendContext` for a stop already on screen, which
-                // re-prints its log points, tears the variables tree down and rebuilds it, and — if
-                // the breakpoint's suspend policy says not to stop — resumes the program from under
-                // a session the user still sees as paused.
-                //
-                // Keyed on the raw event by identity, because that object is what one `stopped`
-                // produced: a thread-list refresh carries it across, and nothing but a new event
-                // makes another.
-                val raw = (thread.state as? DapThreadState.Paused)?.rawEvent
-                if (raw != null && raw === lastApplied) return@collect
-                val context = presentationFactory.createSuspendContext(
-                    dapDebugSession.commandProcessor.withChildScope("suspension-$suspension"),
-                    state.threads,
-                    thread,
-                )
-                if (shouldApplyNow(session.isSuspended, session.displayedThreadId(), thread.id)) {
-                    lastApplied = raw
-                    applySuspendContext(context)
-                } else {
-                    // Marked as applied even though it is only deferred: it has been accounted for,
-                    // and leaving it unmarked would let the next republication of the same stop add
-                    // a second copy of it to the queue — one Resume each to get through them.
-                    lastApplied = raw
-                    deferredSuspensions.add(context)
-                }
-            }
-        }
-    }
-
-    /**
-     * The platform's output listener, routed through [formatAndPrintOutput] as its own is.
-     *
-     * On **`globalScope`**, which is where the base puts it and is not a detail: `stopAsync` cancels
-     * `xDebugProcessScope` *before* it tells the adapter to stop, so a pump on that scope drops
-     * whatever is still in the channel at the moment Stop is pressed or the program ends. Under bpd
-     * these events are the program's only voice, so that would be the last thing it printed.
-     */
-    private fun launchOutputListener() {
-        globalScope.launch(CoroutineName("basedpython output")) {
-            for (event in dapDebugSession.output) {
-                event?.let(::formatAndPrintOutput)
-            }
-        }
-    }
-
-    /**
-     * Resume, or show a suspension that was held back while this one was on screen.
-     *
-     * The platform's own shape: a queued suspension is what Resume produces, and the program runs on
-     * only when there is none. Overridden because the queue is [deferredSuspensions] now — the
-     * platform's is private, and after [sessionInitialized] stops calling `super` nothing ever adds
-     * to it, so its `resume` would run the program on while ours still held a thread nobody had been
-     * shown.
-     */
-    override fun resume(context: XSuspendContext?) {
-        val deferred = deferredSuspensions.poll()
-        if (deferred == null) {
-            dapDebugSession.resume()
-            return
-        }
-        xDebugProcessScope.launch(CoroutineName("basedpython deferred")) {
-            applySuspendContext(deferred)
-        }
-    }
-
     override fun doGetProcessHandler(): ProcessHandler? = result?.processHandler ?: super.doGetProcessHandler()
+}
 
-    override fun createConsole(): ExecutionConsole = result?.executionConsole ?: super.createConsole()
+/**
+ * The run configuration's console, and the adapter's `output` events filed on it when they are the
+ * program's only voice — by what DAP says each category means rather than by what the platform
+ * assumes.
+ *
+ * Under debugpy nothing is printed: the console is attached to the real `by run` process, which the
+ * interpreter is a child of, so every event is a *second* copy of text the user already has — and
+ * debugpy's adapter opens each session with two bare events reading `ptvsd` and `debugpy` that
+ * landed in front of the program's first line.
+ *
+ * Under bpd the opposite holds and dropping them was a bug: bpd starts the interpreter itself and
+ * captures its streams, and the wrapper points `bpd dap`'s stdout at the record file, so a program's
+ * output reaches the IDE **only** as these events. (`by run`'s own diagnostics are unaffected either
+ * way — they are on the process the IDE started, and were never on this path.)
+ *
+ * The categories are [ByAdapterOutput]'s to interpret; the platform maps everything that is not
+ * `console` or `stderr` onto stdout, which would print `telemetry` at a person and bury `important`
+ * — the category bpd reserves for the messages that must not scroll past.
+ *
+ * The platform prints these from a pump on its global scope, not the process's, so output still in
+ * the channel when Stop is pressed or the program ends is not dropped — under bpd, that would be the
+ * last thing the program printed.
+ */
+private class ByOutputSupport(private val backend: () -> ByDebugBackend?) : DapExecutionUiSupport() {
 
-    /**
-     * *Reset Frame*, which the platform's DAP client does not wire up to `restartFrame` — see
-     * [ByRestartFrameHandler], including which of the two things bpd can do the action turns out to
-     * be, and what neither of them undoes.
-     *
-     * One handler for the life of the process: [com.intellij.xdebugger.frame.XDropFrameHandler] is
-     * asked about a frame at a time and holds nothing itself, and a fresh instance per call would
-     * make identical questions look like different ones.
-     */
-    private val restartFrameHandler: XDropFrameHandler by lazy {
-        ByRestartFrameHandler(session.project) { capabilities?.supportsRestartFrame }
-    }
+    override fun createConsole(context: DapExecutionUiContext): ExecutionConsole =
+        context.executionResult?.executionConsole ?: super.createConsole(context)
 
-    override fun getDropFrameHandler(): XDropFrameHandler = restartFrameHandler
-
-    /**
-     * Prints an adapter `output` event, when it is the program's only voice — and files it by what
-     * DAP says the category means rather than by what the base class assumes.
-     *
-     * Under debugpy nothing here is printed: the console is attached to the real `by run` process,
-     * which the interpreter is a child of, so every one of these is a *second* copy of text the
-     * user already has — and debugpy's adapter opens each session with two bare events reading
-     * `ptvsd` and `debugpy` that landed in front of the program's first line.
-     *
-     * Under bpd the opposite holds and dropping them was a bug: bpd starts the interpreter itself
-     * and captures its streams, and the wrapper points `bpd dap`'s stdout at the record file, so a
-     * program's output reaches the IDE **only** as these events. A `print` went nowhere at all.
-     * (`by run`'s own diagnostics are unaffected either way — they are on the process the IDE
-     * started, and were never on this path.)
-     *
-     * The categories are [ByAdapterOutput]'s to interpret; the base class maps everything that is
-     * not `console` or `stderr` onto stdout, which would print `telemetry` at a person and bury
-     * `important` — the category bpd reserves for the messages that must not scroll past.
-     */
-    override fun formatAndPrintOutput(outEvent: OutputEventArguments) {
-        if (backend?.ownsDebuggeeOutput != true) return
-        val text = outEvent.output ?: return
-        val contentType = when (ByAdapterOutput.registerFor(outEvent.category)) {
+    override fun formatAndPrintOutput(context: DapExecutionUiContext, event: OutputEventArguments) {
+        if (backend()?.ownsDebuggeeOutput != true) return
+        val contentType = when (ByAdapterOutput.registerFor(event.category?.value)) {
             ByOutputRegister.NORMAL -> ConsoleViewContentType.NORMAL_OUTPUT
             ByOutputRegister.SYSTEM -> ConsoleViewContentType.SYSTEM_OUTPUT
             // The console has no register for "not an error, but do not let this scroll past", and
@@ -697,20 +522,6 @@ internal class ByDapXDebugProcess(
             ByOutputRegister.PROMINENT -> ConsoleViewContentType.ERROR_OUTPUT
             ByOutputRegister.HIDDEN -> return
         }
-        session.consoleView?.print(text, contentType)
-    }
-
-    /**
-     * `DapXDebugProcess` supplies a line-breakpoint handler only, so exception breakpoints need
-     * theirs adding here or nothing would ever send them to the adapter.
-     */
-    private val handlers: Array<XBreakpointHandler<*>> by lazy {
-        super.getBreakpointHandlers() + ByExceptionBreakpointHandler(dapDebugSession)
-    }
-
-    override fun getBreakpointHandlers(): Array<XBreakpointHandler<*>> = handlers
-
-    private companion object {
-        private val PROCESS_LOG = Logger.getInstance(ByDapXDebugProcess::class.java)
+        context.session.consoleView?.print(event.output, contentType)
     }
 }

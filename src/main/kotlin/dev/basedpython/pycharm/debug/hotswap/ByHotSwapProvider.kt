@@ -12,20 +12,20 @@ import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.roots.ProjectFileIndex
 import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.platform.dap.DapCommandProcessor
+import com.intellij.platform.dap.DapSessionExecutor
 import com.intellij.xdebugger.XDebugProcess
 import com.intellij.xdebugger.hotswap.HotSwapProvider
 import com.intellij.xdebugger.hotswap.HotSwapResultListener
 import com.intellij.xdebugger.hotswap.HotSwapSession
 import com.intellij.xdebugger.hotswap.SourceFileChangesCollector
 import com.intellij.xdebugger.hotswap.SourceFileChangesListener
-import dev.basedpython.pycharm.debug.ByDebugProtocolServer
+import dev.basedpython.pycharm.debug.ByDapRequests
+import dev.basedpython.pycharm.debug.send
 import dev.basedpython.pycharm.debug.bpd.ByBpdRecord
 import dev.basedpython.pycharm.lang.dialect.BasedPythonSources
 import dev.basedpython.pycharm.util.BasedPythonBundle
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.future.await
 import java.io.IOException
 import java.nio.file.Path
 
@@ -73,7 +73,7 @@ import java.nio.file.Path
 internal class ByHotSwapProvider(
     private val process: XDebugProcess,
     private val project: Project,
-    private val commandProcessor: DapCommandProcessor,
+    private val executor: DapSessionExecutor,
     /**
      * The file the wrapper writes the directory `by run` chose into.
      *
@@ -251,21 +251,13 @@ internal class ByHotSwapProvider(
             return
         }
 
-        commandProcessor.submitCommand {
-            val server = server as? ByDebugProtocolServer
-            if (server == null) {
-                // Only reachable with a backend that is not bpd, which the enabler does not offer
-                // this for — but the server is read per command and nothing here may assume it.
-                LOG.warn("the debug adapter is not a ${ByDebugProtocolServer::class.simpleName}; nothing was reloaded")
-                written.rollback()
-                tell(listOf("nothing was reloaded: this session's debug adapter is not bpd"))
-                listener.onFailure()
-                return@submitCommand
-            }
-
+        executor.post {
+            // What the adapter said when it answered with an error rather than an account
+            var failure: String? = null
             val replaced = try {
                 ByReplaced.parse(
-                    server.replaceCode(
+                    send(
+                        ByDapRequests.replaceCode,
                         ByReplaceCodeArguments(
                             files = write.replace,
                             // Whether `_by_sourcemap.py` was just rewritten, which is a fact about
@@ -274,8 +266,8 @@ internal class ByHotSwapProvider(
                             // replaced, and bpd installs the new one and translates them again, in
                             // the same message, before it assigns any `__code__`.
                             remap = write.sourcemap != null,
-                        ),
-                    ).await(),
+                        ).toJson(),
+                    ),
                 )
             } catch (e: CancellationException) {
                 // The session is going away and took its commands with it. Rethrown rather than
@@ -286,16 +278,18 @@ internal class ByHotSwapProvider(
                 throw e
             } catch (e: Exception) {
                 // A refusal is not this: bpd answers a replacement it would not make with `success`
-                // and the reasons in the body. Landing here means the request itself was not
-                // accepted — an adapter that does not have it, or a session going away.
+                // and the reasons in the body. Landing here means the request itself failed — an
+                // adapter that does not have it, a session going away, or bpd failing while it
+                // answered, which it says in a sentence of its own that is the only account there is.
                 LOG.info("bpd/replaceCode failed", e)
+                failure = ByDapRequests.refusalOf(e)
                 null
             }
 
             if (replaced?.applied == true) {
                 replaced.report()?.let { process.session.consoleView.say(it) }
                 listener.onSuccessfulReload()
-                return@submitCommand
+                return@post
             }
 
             // Everything written goes back. bpd's own reasons are already on the `output` stream
@@ -303,8 +297,9 @@ internal class ByHotSwapProvider(
             // tree is once again what the process is running.
             val stranded = written.rollback()
             val why = when {
-                replaced == null -> "the debug adapter did not answer the request"
-                else -> "the debugger refused it — see the console for what stood in the way"
+                replaced != null -> "the debugger refused it — see the console for what stood in the way"
+                failure != null -> "the debugger could not do it: $failure"
+                else -> "the debug adapter did not answer the request"
             }
             val notReloaded = mutableListOf("nothing was reloaded: $why")
             if (stranded.isNotEmpty()) {
@@ -365,7 +360,7 @@ internal class ByHotSwapProvider(
      *
      * The *reasons* bpd gave stay on the console and are not repeated here — bpd writes each one to
      * the `output` stream under category `important`, and a balloon re-rendering that vocabulary is
-     * the duplication [dev.basedpython.pycharm.debug.ByUnderstandsArguments] exists to stop.
+     * the duplication [dev.basedpython.pycharm.debug.ByDapRequests.understands] exists to stop.
      */
     private fun tell(notReloaded: List<String>) {
         if (notReloaded.isEmpty()) return
