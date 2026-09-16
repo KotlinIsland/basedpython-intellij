@@ -86,9 +86,10 @@ class ByBpdConnection private constructor(
         suspend fun open(
             record: Path,
             debuggee: ProcessHandler?,
+            said: ByProcessTail? = null,
             timeout: Duration = READY_TIMEOUT,
         ): ByBpdConnection {
-            val ready = await(record, debuggee, timeout)
+            val ready = await(record, debuggee, said, timeout)
 
             val socket = try {
                 withContext(Dispatchers.IO) {
@@ -124,18 +125,24 @@ class ByBpdConnection private constructor(
         /**
          * Poll until the record is complete, the program dies, or the wait runs out.
          *
-         * A dead program gets one last read: a wrapper that failed does not block, so the record
-         * may already hold the reason by the time the process is gone.
+         * A dead program gets one last read, taken the way every other read is: a wrapper that
+         * failed does not block, so the record may hold the reason by the time the process is gone —
+         * and a wrapper that found no `bpd` writes that and exits in the same instant, which is the
+         * read most likely to be this one. When the record explains nothing, what `by run` itself
+         * said ([said]) is the reason, because `by run` ending before the wrapper ran is `by run`
+         * refusing to start the program.
          */
         @Throws(ExecutionException::class)
         private suspend fun await(
             record: Path,
             debuggee: ProcessHandler?,
+            said: ByProcessTail?,
             timeout: Duration,
         ): ByBpdRecord.Ready {
             var waited = Duration.ZERO
-            var last = "the wrapper has not written anything yet"
+            var last = NOTHING_WRITTEN
             while (true) {
+                val ended = debuggee?.isProcessTerminated == true
                 when (val parsed = read(record)) {
                     is ByBpdRecord.Ready -> return parsed
                     is ByBpdRecord.Incomplete -> last = parsed.why
@@ -145,12 +152,10 @@ class ByBpdConnection private constructor(
                     )
                     null -> Unit
                 }
-                if (debuggee?.isProcessTerminated == true) {
-                    // one last look, then give up naming what was missing
-                    (read(record) as? ByBpdRecord.Ready)?.let { return it }
-                    throw ExecutionException(
-                        BasedPythonBundle.message("debug.bpd.error.exited", last),
-                    )
+                // read after the process was seen to have ended, so this read saw everything the
+                // wrapper will ever write
+                if (ended) {
+                    throw ExecutionException(exited(debuggee?.exitCode, said?.text().orEmpty(), last))
                 }
                 if (waited >= timeout) {
                     throw ExecutionException(
@@ -161,6 +166,39 @@ class ByBpdConnection private constructor(
                 waited += POLL_INTERVAL
             }
         }
+
+        /**
+         * Why the session cannot start, when `by run` ended on its own before the record was
+         * complete; null when it has not ended, was stopped, or completed the record first.
+         *
+         * For the start that [open] never gets to finish: the platform stops a debug session the
+         * moment the process it started ends, which cancels [open]'s wait — usually before its next
+         * poll could have seen the end and said why, and sometimes before [open] was called at all.
+         * The record is read here the way [await] reads it, so both routes to the same end say the
+         * same thing.
+         */
+        fun endedBeforeAttaching(record: Path, said: ByProcessTail): String? {
+            val code = said.endedOnItsOwnWith ?: return null
+            return when (val parsed = read(record)) {
+                is ByBpdRecord.Ready -> null
+                is ByBpdRecord.NoBpd -> BasedPythonBundle.message("debug.bpd.error.notFound", parsed.python)
+                is ByBpdRecord.Incomplete -> exited(code, said.text(), parsed.why)
+                null -> exited(code, said.text(), NOTHING_WRITTEN)
+            }
+        }
+
+        /**
+         * Why a session whose process ended cannot start: what the process said and how it
+         * exited, or — when it said nothing — what the record was missing.
+         */
+        private fun exited(code: Int?, said: String, missing: String): String =
+            if (said.isEmpty()) {
+                BasedPythonBundle.message("debug.bpd.error.exited", missing)
+            } else {
+                BasedPythonBundle.message("debug.bpd.error.exitedSaying", code?.toString() ?: "unknown", said)
+            }
+
+        private const val NOTHING_WRITTEN = "the wrapper has not written anything yet"
 
         /** The record as it stands, or `null` when there is not a file there yet. */
         private fun read(record: Path): ByBpdRecord? = try {

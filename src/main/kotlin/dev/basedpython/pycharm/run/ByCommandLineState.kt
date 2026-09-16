@@ -9,6 +9,7 @@ import com.intellij.execution.configurations.CommandLineState
 import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.execution.process.KillableColoredProcessHandler
 import com.intellij.execution.process.ProcessHandler
+import com.intellij.execution.process.ProcessListener
 import com.intellij.execution.process.ProcessTerminatedListener
 import com.intellij.execution.runners.ExecutionEnvironment
 import com.intellij.openapi.project.Project
@@ -69,16 +70,22 @@ abstract class ByCommandLineState(
      * Flags the infrastructure adds to the subcommand, written by the same hook and for the same
      * reason as [infrastructureEnv].
      *
-     * A command line rather than more environment because the environment is no longer enough:
-     * `by run` resolves the project's interpreter from the project itself and reads `$PYTHON` only
-     * below that, so the bpd backend names its wrapper here as `--python` — the one place that
-     * outranks discovery. See [dev.basedpython.pycharm.debug.bpd.ByBpdWrapper].
+     * A command line rather than more environment because the environment is not enough: the bpd
+     * backend puts its wrapper in front of the interpreter `by run` chooses, and `--launcher` is
+     * the only way to name one. See [dev.basedpython.pycharm.debug.bpd.ByBpdWrapper].
      *
      * These land *before* the positionals, which is load-bearing: `by run` forwards everything
      * after the module to the program, so a flag placed after it would be the program's argument
      * rather than `by`'s.
      */
     val infrastructureArgs: MutableList<String> = mutableListOf()
+
+    /**
+     * Listeners the infrastructure needs on the process from its very first byte, written by the
+     * same hook as [infrastructureEnv] and added before the process is started — a listener added
+     * afterwards can miss what a short-lived process wrote.
+     */
+    val infrastructureListeners: MutableList<ProcessListener> = mutableListOf()
 
     /** Directories to put in front of `PYTHONPATH`; see [composePythonPath]. */
     val pythonPathPrefix: MutableList<String> = mutableListOf()
@@ -110,6 +117,7 @@ abstract class ByCommandLineState(
         // destroy the whole tree rather than the one process the IDE happens to hold.
         handler.setShouldKillProcessSoftly(false)
         handler.setShouldDestroyProcessRecursively(true)
+        infrastructureListeners.forEach(handler::addProcessListener)
         ProcessTerminatedListener.attach(handler)
         return handler
     }
@@ -264,7 +272,7 @@ internal fun composePythonPath(prefixes: List<String>, existing: String?): Strin
  *
  * [infrastructureArgs] are the debugger's own flags. They go with the version flag, ahead of the
  * positionals, because `by run` forwards everything after the module to the program — a
- * `--python` behind it would reach the debuggee as an argument instead of `by` as an option.
+ * `--launcher` behind it would reach the debuggee as an argument instead of `by` as an option.
  *
  * [extraArgs] go there too, for the same reason: they are `by`'s flags, and `by run main --soundness
  * none` hands `--soundness none` to `main`. Only when [extraArgsForProgram] says they belong to the

@@ -1,6 +1,10 @@
 package dev.basedpython.pycharm.debug.bpd
 
 import com.intellij.execution.ExecutionException
+import com.intellij.execution.configurations.GeneralCommandLine
+import com.intellij.execution.process.OSProcessHandler
+import com.intellij.testFramework.junit5.fixture.TestFixtures
+import dev.basedpython.pycharm.testFramework.codeInsightFixture
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -26,7 +30,12 @@ import kotlin.time.Duration.Companion.seconds
  * another process — `Name: value\r\n`, ahead of the `Content-Length` the lsp4j launcher writes —
  * and a mistake in it is a session that hangs rather than one that errors.
  */
+@TestFixtures
 class ByBpdConnectionTest {
+
+    /** For the application, which a process handler needs; the suite's light project rather than one of its own. */
+    @Suppress("unused")
+    private val fixture by codeInsightFixture()
 
     /** A stand-in `bpd dap --listen`: accepts one client and reports what it said first. */
     private class Listener : AutoCloseable {
@@ -115,6 +124,54 @@ class ByBpdConnectionTest {
             failed.message.orEmpty().contains("/project/.venv/bin/python3"),
             "the refusal should name where bpd was looked for: ${failed.message}",
         )
+    }
+
+    /**
+     * `by run` refusing to start the program — here, the interpreter it found is too old — ends the
+     * process before the wrapper runs, so there is no record and nothing in it. What `by run` wrote
+     * is the reason, and the only one: a debug start that fails here never shows the console.
+     */
+    @Test
+    fun `a by run that ended before the wrapper ran is reported in its own words`(@TempDir dir: Path) {
+        val refusal = "Cause: this project targets python 3.14, but the interpreter this would run on is 3.9"
+        val said = ByProcessTail()
+        val byRun = OSProcessHandler(GeneralCommandLine("sh", "-c", "echo 'by failed' >&2; echo '$refusal' >&2; exit 2"))
+        byRun.addProcessListener(said)
+        byRun.startNotify()
+        assertTrue(byRun.waitFor(10_000))
+
+        val failed = assertThrows<ExecutionException> {
+            runBlocking { ByBpdConnection.open(dir.resolve("record"), byRun, said, timeout = 10.minutes) }
+        }
+        assertTrue(failed.message.orEmpty().contains(refusal), "by run's reason was lost: ${failed.message}")
+        assertTrue(failed.message.orEmpty().contains("exit code 2"), "how by run ended was lost: ${failed.message}")
+    }
+
+    /**
+     * The same end, reached the way the IDE really reaches it: the platform stops the session as
+     * soon as `by run` ends, which cancels the wait before it sees anything. What is left to say it
+     * is what `by run` said — and nothing at all for a `by run` that Stop ended, which refused
+     * nothing.
+     */
+    @Test
+    fun `a by run that ended on its own is a reason to report, and one that was stopped is not`(@TempDir dir: Path) {
+        val refusal = "Cause: --min-version 3.99 is newer than the interpreter this would run on"
+        val said = ByProcessTail()
+        val refused = OSProcessHandler(GeneralCommandLine("sh", "-c", "echo 'by failed' >&2; echo '$refusal' >&2; exit 2"))
+        refused.addProcessListener(said)
+        refused.startNotify()
+        assertTrue(refused.waitFor(10_000))
+        val reported = ByBpdConnection.endedBeforeAttaching(dir.resolve("record"), said)
+        assertTrue(reported.orEmpty().contains(refusal), "by run's reason was lost: $reported")
+        assertTrue(reported.orEmpty().contains("exit code 2"), "how by run ended was lost: $reported")
+
+        val stoppedSaid = ByProcessTail()
+        val stopped = OSProcessHandler(GeneralCommandLine("sh", "-c", "echo 'transpiling'; sleep 30"))
+        stopped.addProcessListener(stoppedSaid)
+        stopped.startNotify()
+        stopped.destroyProcess()
+        assertTrue(stopped.waitFor(10_000))
+        assertEquals(null, ByBpdConnection.endedBeforeAttaching(dir.resolve("record"), stoppedSaid))
     }
 
     @Test

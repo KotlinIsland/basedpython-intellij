@@ -4,7 +4,9 @@ import com.intellij.execution.CantRunException
 import com.intellij.execution.ExecutionException
 import com.intellij.execution.ExecutionResult
 import com.intellij.execution.configurations.RunProfileState
+import com.intellij.execution.process.ProcessEvent
 import com.intellij.execution.process.ProcessHandler
+import com.intellij.execution.process.ProcessListener
 import com.intellij.execution.runners.ExecutionEnvironment
 import com.intellij.execution.ui.ConsoleView
 import com.intellij.execution.ui.ConsoleViewContentType
@@ -165,6 +167,11 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
                 commandLine.infrastructureEnv[ByBpdWrapper.ENV_BPD] = setup.bpd?.besideBy?.toString().orEmpty()
                 commandLine.infrastructureEnv[ByBpdWrapper.ENV_BPD_FALLBACK] =
                     setup.bpd?.onPath?.toString().orEmpty()
+                // what `by run` says when it ends before the wrapper has recorded anything — a
+                // refused interpreter, a transpile error — is in no record, and a start that fails
+                // there never shows the console it went to
+                commandLine.infrastructureListeners += setup.said
+                commandLine.infrastructureListeners += EndedBeforeAttaching(project, setup)
             }
         }
     }
@@ -191,13 +198,18 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
             // `mappings` stays empty and `BySourceMapPublisher` sends nothing, which is right —
             // sending pydevd's request to bpd would be sending it a request it does not have
             val connection = try {
-                ByBpdConnection.open(setup.infoFile, processHandler)
+                ByBpdConnection.open(setup.infoFile, processHandler, setup.said)
             } catch (e: ExecutionException) {
                 // Every one of these is a sentence written for the user — no bpd found, the wrapper
                 // exited, the record never completed — and the platform shows none of them: it
-                // reports a failed adapter launch as "failed to launch" with the adapter's name
-                fail(e.message ?: BasedPythonBundle.message("debug.error.noSetup"), install = null, processHandler)
+                // reports a failed adapter launch as "failed to launch" with the adapter's name.
+                // Said once: `by run` ending on its own is also noticed by [EndedBeforeAttaching]
+                val message = e.message ?: BasedPythonBundle.message("debug.error.noSetup")
+                if (setup.settle()) fail(message, install = null, processHandler)
+                processHandler?.destroyProcess()
+                throw CantRunException.CustomProcessedCantRunException()
             }
+            setup.settle()
             bpdRecord = connection.record
             return connection
         }
@@ -413,6 +425,23 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
         /** The bootstrap only writes its report once the port is open, so this is a formality. */
         private const val CONNECTION_ATTEMPTS = 5
         private const val CONNECTION_INTERVAL_MS = 200L
+    }
+}
+
+/**
+ * Says why a bpd session could not start when `by run` ends on its own before the wrapper's record
+ * was complete — a refused interpreter, a transpile error — in `by run`'s own words.
+ *
+ * On the process rather than in [ByDebugAdapterDescriptor.launchDebugAdapter], because the platform
+ * stops the debug session the moment the process ends: that cancels the adapter launch's wait
+ * before it sees the end, or — when `by run` refuses faster than the session gets that far — before
+ * the launch has begun at all. A cancelled start is one the platform reports nothing about. The
+ * launch's own failure and this share [ByDebugSetup.settle], so a start is reported once.
+ */
+private class EndedBeforeAttaching(private val project: Project, private val setup: ByDebugSetup) : ProcessListener {
+    override fun processTerminated(event: ProcessEvent) {
+        val why = ByBpdConnection.endedBeforeAttaching(setup.infoFile, setup.said) ?: return
+        if (setup.settle()) reportDebugStartFailure(project, why, install = null)
     }
 }
 

@@ -15,6 +15,7 @@ import com.intellij.openapi.util.io.FileUtil
 import com.intellij.util.net.NetUtils
 import dev.basedpython.pycharm.debug.bpd.ByBpdExecutable
 import dev.basedpython.pycharm.debug.bpd.ByBpdWrapper
+import dev.basedpython.pycharm.debug.bpd.ByProcessTail
 import dev.basedpython.pycharm.debug.bpd.ByDebugBackend
 import dev.basedpython.pycharm.env.Executables
 import dev.basedpython.pycharm.util.BasedPythonBundle
@@ -23,6 +24,7 @@ import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.WeakHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
@@ -57,6 +59,20 @@ class ByDebugSetup(
      */
     val bpd: ByBpdExecutable.Found? = null,
 ) {
+    /**
+     * The end of what `by run` wrote, kept from its first byte for a [ByDebugBackend.BPD] session:
+     * when `by run` ends before the wrapper's record is complete, it is the only account of why.
+     */
+    val said: ByProcessTail = ByProcessTail()
+
+    private val settled = AtomicBoolean(false)
+
+    /**
+     * Mark the start as decided — connected, or its failure reported — and answer whether this call
+     * was the one that decided it. Two routes can see a start fail, and the user is told once.
+     */
+    fun settle(): Boolean = settled.compareAndSet(false, true)
+
     /** The script `by run --launcher` is pointed at, for a [ByDebugBackend.BPD] session. */
     val wrapper: Path get() = wrapperOf(bootstrapDir)
 
