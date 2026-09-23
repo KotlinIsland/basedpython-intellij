@@ -3,6 +3,7 @@ package dev.basedpython.pycharm.debug.logpoint
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.WriteAction
 import com.intellij.openapi.command.CommandProcessor
+import com.intellij.openapi.command.impl.UndoManagerImpl
 import com.intellij.openapi.command.undo.UndoManager
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.fileEditor.TextEditor
@@ -17,6 +18,7 @@ import com.intellij.xdebugger.breakpoints.XLineBreakpoint
 import dev.basedpython.pycharm.debug.ByBreakpointProperties
 import dev.basedpython.pycharm.debug.ByLineBreakpointType
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
@@ -175,6 +177,48 @@ class ByLogpointsTest {
             breakpoints.getBreakpoints(type).none { ByLogpoints.asLogpoint(it) != null },
             "undo takes the log point back",
         )
+    }
+
+    @Test
+    fun `undo and redo put back the same log point, once`() {
+        val breakpoint = gutterLoggingBreakpoint()
+        val document = FileDocumentManager.getInstance().getDocument(fixture.file.virtualFile)!!
+        val editor: TextEditor = TextEditorProvider.getInstance().getTextEditor(fixture.editor)
+        val undo = UndoManager.getInstance(fixture.project)
+
+        ByLogpointUndo.record(fixture.project, document, breakpoint)
+        undo.undo(editor)
+        undo.redo(editor)
+
+        val restored = breakpoints.getBreakpoints(type).mapNotNull { ByLogpoints.asLogpoint(it) }
+        assertEquals(1, restored.size, "redo puts back one log point: $restored")
+        assertEquals(1, restored.single().line)
+        assertEquals("x", restored.single().logExpressionObject?.expression)
+        assertEquals(SuspendPolicy.NONE, restored.single().suspendPolicy)
+    }
+
+    /**
+     * What `UndoManager` keeps for a log point is the platform's own object, holding the platform's
+     * and the JDK's: it outlives the plugin — the history lasts as long as the document's does — so
+     * one class of this plugin's in it is what kept the plugin from unloading.
+     */
+    @Test
+    fun `the undo step a log point records holds nothing of this plugin's`() {
+        val breakpoint = gutterLoggingBreakpoint()
+        val document = FileDocumentManager.getInstance().getDocument(fixture.file.virtualFile)!!
+        val editor: TextEditor = TextEditorProvider.getInstance().getTextEditor(fixture.editor)
+
+        ByLogpointUndo.record(fixture.project, document, breakpoint)
+
+        // The dump names each recorded action by its class; it named ByLogpointUndo's own before.
+        val dump = (UndoManager.getInstance(fixture.project) as UndoManagerImpl).dumpState(editor, "")
+        assertTrue("ModCommandExecutorImpl" in dump, "the step is the platform's option change:\n$dump")
+        assertFalse("ByLogpoint" in dump, "no action of this plugin's is on the stack:\n$dump")
+
+        // And what that action keeps of ours is the option's value: JDK types only.
+        val kept = ByLogpointOptions.describe(breakpoint)
+        val types = (listOf(kept) + kept).map { it.javaClass.name }
+        assertTrue(types.all { it.startsWith("java.") }, "the undo step holds $types")
     }
 
     /**

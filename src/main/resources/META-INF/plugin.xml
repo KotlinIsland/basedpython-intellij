@@ -81,6 +81,11 @@
             implementation="dev.basedpython.pycharm.debug.ByLineBreakpointType"/>
         <xdebugger.breakpointType
             implementation="dev.basedpython.pycharm.debug.ByExceptionBreakpointType"/>
+        <!-- Where undoing and redoing a log point lands. The undo step itself is the platform's
+             (ModUpdateSystemOptions), so nothing of this plugin's sits in UndoManager and pins its
+             classloader after an unload; see ByLogpointUndo. -->
+        <optionController
+            implementation="dev.basedpython.pycharm.debug.logpoint.ByLogpointOptions"/>
         <!-- Hot reload. The platform owns everything visible — the floating toolbar over the
              editor, its button, the shortcut and the notifications; this supplies only what to
              watch and what to do when it is pressed, which is `bpd/replaceCode`. PyCharm registers
@@ -441,6 +446,10 @@
     <applicationListeners>
         <listener class="dev.basedpython.pycharm.run.watch.WatchModeSaveListener"
                   topic="com.intellij.openapi.fileEditor.FileDocumentManagerListener"/>
+        <!-- A log point's undo step outlives the plugin but cannot be undone without it; see
+             ByLogpointUndo.endHistoriesBeforeUnload. -->
+        <listener class="dev.basedpython.pycharm.debug.logpoint.ByLogpointUndoUnloadGuard"
+                  topic="com.intellij.ide.plugins.DynamicPluginListener"/>
     </applicationListeners>
 
     <projectListeners>
