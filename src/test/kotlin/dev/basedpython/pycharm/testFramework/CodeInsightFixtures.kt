@@ -1,5 +1,8 @@
 package dev.basedpython.pycharm.testFramework
 
+import com.intellij.openapi.Disposable
+import com.intellij.platform.lsp.api.LspIntegrationProvider
+import com.intellij.testFramework.ExtensionTestUtil
 import com.intellij.testFramework.LightProjectDescriptor
 import com.intellij.testFramework.PlatformTestUtil
 import com.intellij.testFramework.fixtures.CodeInsightTestFixture
@@ -9,6 +12,8 @@ import com.intellij.testFramework.junit5.fixture.TestFixture
 import com.intellij.testFramework.junit5.fixture.testFixture
 import com.intellij.testFramework.junit5.impl.testApplication
 import com.intellij.testFramework.runInEdtAndWait
+import dev.basedpython.pycharm.lsp.BuffLspServerSupportProvider
+import dev.basedpython.pycharm.lsp.ByLspServerSupportProvider
 import org.junit.jupiter.api.extension.ExtensionContext
 
 /**
@@ -41,7 +46,32 @@ fun codeInsightFixture(
   val projectFixture = factory.createLightFixtureBuilder(projectDescriptor, context.testName).fixture
   val fixture = factory.createCodeInsightFixture(projectFixture, LightTempDirTestFixtureImpl(true))
   fixture.setUp()
+  withoutOwnLanguageServers(fixture.testRootDisposable)
   initialized(fixture) { fixture.tearDown() }
+}
+
+/**
+ * Takes this plugin's two LSP integrations out of the platform's list for one test, so opening a
+ * file in the light project never starts a real `by` or `buff`.
+ *
+ * Tests that are about the servers use fakes ([RecordingByClient]) or call a provider's `fileOpened`
+ * themselves with a recording starter. A server the platform starts behind a test is never wanted,
+ * and cannot be ended cleanly: the platform adds the client later, in a write action on the EDT, and
+ * when that lands after the light fixture's close — which only marks the shared project disposed
+ * temporarily, so the LSP manager's coroutines keep running — `LspServiceViewSupport` builds its
+ * console against a project whose message bus throws. The half-built `ConsoleViewImpl` has already
+ * registered its alarms under itself, so it stays at the Disposer root holding the project, and the
+ * leak check at the end of the run fails on it: an `executionError` naming no test, about one time in
+ * four. Any `.by` file opened while `by` resolves does it, through a settings override or a `by` on
+ * `PATH`.
+ */
+private fun withoutOwnLanguageServers(disposable: Disposable) {
+  val ep = LspIntegrationProvider.EP_NAME
+  ExtensionTestUtil.maskExtensions(
+    ep,
+    ep.extensionList.filter { it !is ByLspServerSupportProvider && it !is BuffLspServerSupportProvider },
+    disposable,
+  )
 }
 
 /**

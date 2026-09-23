@@ -177,7 +177,9 @@ class BasedPythonBinariesTest {
     // contextFile param must not break the override short-circuit.
     val exe = makeExecutable("by-fake2")
     BasedPythonSettings.getInstance(project).byPath = exe.toString()
-    val vf = fixture.configureByText("ctx.by", "x = 1").virtualFile
+    // Added, not opened: resolution only needs the file, and opening a `.by` file while `by`
+    // resolves is what asks the platform for a `by` server (see `withoutOwnLanguageServers`).
+    val vf = fixture.addFileToProject("ctx.by", "x = 1").virtualFile
     assertEquals(exe, BasedPythonBinaries.resolveByExe(project, vf))
   }
 
