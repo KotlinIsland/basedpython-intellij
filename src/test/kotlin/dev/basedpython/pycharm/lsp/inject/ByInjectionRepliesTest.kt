@@ -37,8 +37,11 @@ class ByInjectionRepliesTest {
 
     @Test
     fun `the params a client sends are the shape the server accepts`() {
-        val params = ByInjectionsParams(TextDocumentIdentifier("file:///main.by"))
-        assertEquals("""{"textDocument":{"uri":"file:///main.by"}}""", gson.toJson(params))
+        val params = ByInjectionsParams(TextDocumentIdentifier("file:///main.by"), "cbf29ce484222325")
+        assertEquals(
+            """{"textDocument":{"uri":"file:///main.by"},"textHash":"cbf29ce484222325"}""",
+            gson.toJson(params),
+        )
     }
 
     @Test

@@ -11,6 +11,7 @@ import com.intellij.openapi.editor.EditorFactory
 import com.intellij.openapi.editor.event.DocumentEvent
 import com.intellij.openapi.editor.event.DocumentListener
 import com.intellij.openapi.fileEditor.FileDocumentManager
+import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
@@ -22,13 +23,12 @@ import com.intellij.util.containers.ContainerUtil
 import dev.basedpython.pycharm.lang.BasedPythonFile
 import dev.basedpython.pycharm.lsp.ByAnswer
 import dev.basedpython.pycharm.lsp.ByLspLifecycleListener
-import dev.basedpython.pycharm.lsp.ByOpenedDocuments
 import dev.basedpython.pycharm.lsp.ByServerDocuments
+import dev.basedpython.pycharm.lsp.ByTextHash
 import dev.basedpython.pycharm.lsp.askBy
 import dev.basedpython.pycharm.lsp.byServerFor
 import dev.basedpython.pycharm.lsp.ext.ByServerExtensions
 import dev.basedpython.pycharm.lsp.ext.BySyntaxOutlineParams
-import dev.basedpython.pycharm.lsp.hasDocument
 import dev.basedpython.pycharm.lsp.runningByServer
 import org.eclipse.lsp4j.TextDocumentIdentifier
 import org.jetbrains.annotations.TestOnly
@@ -60,15 +60,17 @@ import java.util.Collections
  * of a `.by` document asks again in the background at once, rather than when the daemon next gets
  * round to it. The parse behind the answer is the server's cheapest request.
  *
- * ## Not before the server holds the document
+ * ## Which text is asked about
  *
- * `by` refuses to outline a document it has not been sent `didOpen` for, and the platform sends that
- * after the events that make this want an outline: the first pass over a newly opened editor, an
- * edit to a file no editor shows, a server starting with files already on screen. So nothing is
- * asked until [ByOpenedDocuments] says the server has the document, and that same news is what asks
- * for it. This used to ask on those events straight away, and again 700ms after a file opened or
- * the server started in the hope that the `didOpen` had gone out by then: the first asks were
- * refused, and the second was a guess about the platform's timing.
+ * Each request names the text it is asked at by its [ByTextHash], and `by` answers about that text
+ * and no other — from its buffer, from the file on disk for a document the platform has not opened
+ * on it yet, or once the platform's `didOpen` or `didChange` brings it. That is what makes keeping
+ * the answer against the stamp it was asked at correct, and it is why nothing here needs to know
+ * when the platform opens a document on the server: the events that make this want an outline — a
+ * pass over a newly opened editor, an edit to a file no editor shows, a server starting with files
+ * on screen — all come before the platform's `didOpen`, and asking then is fine. This used to wait
+ * for the `didOpen`, heard through the descriptor's `getLanguageId`, because `by` refused a document
+ * it did not hold; before that it asked straight away and again 700ms later.
  */
 @Service(Service.Level.PROJECT)
 internal class ByOutlines(private val project: Project) : Disposable {
@@ -98,25 +100,26 @@ internal class ByOutlines(private val project: Project) : Disposable {
         connection.subscribe(
             ByLspLifecycleListener.TOPIC,
             object : ByLspLifecycleListener {
-                /** A restarted server may be a different `by`, whose parse is the one that counts. */
+                /**
+                 * A restarted server may be a different `by`, whose parse is the one that counts, so
+                 * every file the old one answered for is asked again — an edited file no editor
+                 * shows included. And every `.by` file on screen was highlighted while there was
+                 * nobody to ask, so each is asked too, and its highlighting run again once it is
+                 * answered.
+                 */
                 override fun serverInitialized(serverName: String) {
                     if (serverName != BY_SERVER) return
+                    val files = (answers.keys + FileEditorManager.getInstance(project).openFiles).toSet()
                     answers.clear()
-                }
-            },
-        )
-        connection.subscribe(
-            ByOpenedDocuments.Listener.TOPIC,
-            ByOpenedDocuments.Listener { file ->
-                // The server now holds [file]. Whatever asked before it did was not asked — a pass
-                // opening the editor, an edit to a file no editor showed, every file on screen when
-                // the server started — so this is where it is asked, and a pass that was served
-                // nothing is run again once it is answered.
-                val document = FileDocumentManager.getInstance().getCachedDocument(file) ?: return@Listener
-                // opened again with the text this server already answered about: nothing new to ask
-                if (answers[file]?.stamp == document.modificationStamp) return@Listener
-                if (PsiDocumentManager.getInstance(project).getCachedPsiFile(document) is BasedPythonFile) {
-                    askInBackground(file, document)
+                    for (file in files) {
+                        if (!file.isValid) continue
+                        val document = FileDocumentManager.getInstance().getCachedDocument(file) ?: continue
+                        // not the cached PSI: a tab not on screen may have none, and is still a file to ask about
+                        val isBy = ReadAction.computeBlocking<Boolean, RuntimeException> {
+                            file.isValid && PsiManager.getInstance(project).findFile(file) is BasedPythonFile
+                        }
+                        if (isBy) askInBackground(file, document)
+                    }
                 }
             },
         )
@@ -179,13 +182,11 @@ internal class ByOutlines(private val project: Project) : Disposable {
     private fun ask(virtualFile: VirtualFile, document: Document): ByOutline? {
         val server = runningByServer(project, virtualFile) ?: return null
         ByServerDocuments.ensureOpen(server, project, virtualFile)
-        // Not held yet, and asking would only be refused: the platform's `didOpen` is still queued.
-        // Nothing is lost by not asking — [ByOpenedDocuments] says when it has been sent, and the
-        // file is asked about then.
-        if (!server.hasDocument(virtualFile)) return null
 
         val params = BySyntaxOutlineParams(
             TextDocumentIdentifier(server.getDocumentIdentifier(virtualFile).uri),
+            // the text the answer's stamp will say it is about
+            ByTextHash.of(document.immutableCharSequence),
         )
         val answer = server.askBy("by/syntaxOutline", TIMEOUT_MS) {
             (it as ByServerExtensions).syntaxOutline(params)
@@ -210,10 +211,9 @@ internal class ByOutlines(private val project: Project) : Disposable {
      * be let in is caught by comparing stamps once this one is done.
      *
      * A call while a request is already out is not dropped but noted in [askAgain], and the one out
-     * asks once more when it is done. That matters most for the call [ByOpenedDocuments] makes: the
-     * platform's `didOpen` is sent from a write action that waits for the read action asking here —
-     * which has just found the document not open and is about to give up — so the news that it is
-     * open arrives while that request is still counted as out.
+     * asks once more when it is done. An edit is caught by the stamps either way; what this catches
+     * is the ask a new server makes of every file on screen arriving while a request to the old one
+     * is still out, which comes back with nothing and would otherwise be the last word.
      */
     private fun askInBackground(virtualFile: VirtualFile, document: Document) {
         // Nothing to ask: no thread is worth starting, and in a test there is never a server.

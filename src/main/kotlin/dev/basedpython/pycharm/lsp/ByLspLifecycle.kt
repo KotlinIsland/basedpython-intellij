@@ -23,7 +23,9 @@ import org.eclipse.lsp4j.InitializeResult
  *
  * Deliberately narrower than what it replaces. The manager listener also reported `fileOpened`,
  * `fileEdited`, `diagnosticsReceived` and `documentLinksReceived`, and the public listener has no
- * equivalent for any of them. `fileOpened` is heard another way — see [ByOpenedDocuments].
+ * equivalent for any of them. Nothing here needs `fileOpened` any more: a request to `by` names the
+ * text it is about and is answered whether or not the platform has opened the document — see
+ * [ByTextHash].
  */
 internal interface ByLspLifecycleListener {
 

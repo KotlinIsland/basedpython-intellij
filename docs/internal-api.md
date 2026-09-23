@@ -139,7 +139,7 @@ Nothing internal ships any more. What each one became, for when the platform cha
 | The inter-line breakpoint API (19) | Gone with the gutter gap; a log point is marked by `ByBreakpointProperties.isLogpoint` — see above |
 | `SourceFileChangesCollectorImpl`, `SourceFileChangeFilter` (6) | Our own `SourceFileChangesCollector` — `debug/hotswap/ByChangesCollector.kt`. The public interface is three methods, so this deleted more reflection than it added code: the impl's constructor changed between 262 and 263 and had to be looked up at runtime, out of a call that runs while the debug session starts |
 | `HotSwapStatusNotificationManager.trackNotification` (5) | The last "not reloaded" balloon is held and expired at the top of `performHotSwap` |
-| `LspClientManagerListener.fileOpened`, `DocRenderManager` (17) | `lsp/ByOpenedDocuments.kt`, which hears the platform build each `didOpen` through the descriptor's public `getLanguageId`, and `FileContentUtilCore.reparseFiles` in place of `resetEditorToDefaultState` — see below |
+| `LspClientManagerListener.fileOpened`, `DocRenderManager` (17) | Nothing: each request to `by` names the text it is about (`lsp/ByTextHash.kt`), and `by` answers about that text whether or not the platform has opened the document on it; `FileContentUtilCore.reparseFiles` in place of `resetEditorToDefaultState` — see below |
 | `DapInitializationException.userVisible` (2) | Nothing: since 263.5153 the platform classifies a failed start itself, reports it with the adapter's own sentence, and stops quietly on `CustomProcessedCantRunException` — so the plugin's start sequence, and the question it needed this for, are gone |
 | `ShadowJava2DBorder` (2) | `ByLogpointBoxBorder`, a rounded rect and a few translucent passes |
 | `PluginManagerCore.getPlugin` (1) | The plugin's own code source — `<plugin>/lib/<jar>` grandparent. Every descriptor lookup in the platform is internal |
@@ -147,29 +147,43 @@ Nothing internal ships any more. What each one became, for when the platform cha
 
 ### When a document is open on `by`
 
-`LspClientManagerListener.fileOpened` fired the moment the client told a server about a file, and
-the public `LspServerListener` has no per-file callback. For a while `ByRenderedDocsRefresher` and
-`ByOutlines` stood in for it with a re-check 700ms after a file opened or the server started — a
-guess at the platform's timing — and everything else that asked about a new document asked at once
-and was refused (*"Document … is not open in the session"*).
+`LspClientManagerListener.fileOpened` fired the moment the client told a server about a file. Its
+registration, `LspClientManager.addListener`, is `@ApiStatus.Internal`, and the public
+`LspServerListener` has only `serverInitialized` and `serverStopped` — in every build from
+263.5153.20 to 263.5701.9, checked with `javap`. Nor does the public `LspClient` say whether a file
+is open, or promise any order between the platform's `didOpen` and a plugin's request.
 
-The platform does build every `didOpen` through `LspClientDescriptor.getLanguageId`, which is public
-and documented as the `languageId` of that notification's `TextDocumentItem`. `ByLspServerDescriptor`
-reports each call to `ByOpenedDocuments`, which is the one place that says whether `by` holds a
-document (`LspClient.hasDocument`) and tells its listeners when it starts to. `ByOutlines`,
-`ByInjections`, `ByDocstringSpans` and `ByRenderedDocsRefresher` ask nothing about a document before
-then, and ask on the news. There is no public signal for `didClose`, so `ByOpenedDocuments` follows
-the platform's own rules for sending one.
+It was needed because `by` refused a document request for a document it had not been sent
+`didOpen` for (*"Document … is not open in the session"*), and the platform sends that `didOpen`
+after the events that make the plugin ask: an editor opening, a first edit to a file no editor
+shows, a server starting with files on screen. So the plugin waited for it — first 700ms after the
+event, then (0069bf1) by hearing the platform build the notification through the descriptor's
+public `getLanguageId`, whose *timing* no contract states, and by copying the platform's rules for
+`didClose`.
 
-Measured in PyCharm 263.5153.49 against `by` 591b2a49c467, over a run that opens six `.by` files,
-edits one in an editor and one no editor shows, restarts the server, opens two more and closes and
-reopens one: the plugin's refused requests went from 12 (`by/syntaxOutline` 3, `by/injections` 4,
-`textDocument/semanticTokens/full` 5) to 0, every file ended with an outline for its current text —
-the file edited without an editor included, which had none before — and every open file had its
-docstrings recorded once its tab was shown.
+The contract is now `by`'s, where it belongs. A document request may carry `textHash`, a hash of
+the text it is about (FNV-1a over UTF-16 code units, line endings counted as `\n`), and `by`
+answers about that text and no other: from its buffer, from the file on disk for a document the
+client has not opened — `by/syntaxOutline`, `by/injections`, `textDocument/semanticTokens/full` and
+`textDocument/documentSymbol` — or, when it holds neither, once the `didOpen`, `didChange` or file
+write that brings the text arrives. A request that waits ten seconds is answered `ServerCancelled`;
+one the client gives up on is cancelled like any other. `ByOutlines`, `ByInjections` and
+`ByDocstringSpans` name the text of every request, so an answer is always about the text its stamp
+is kept against, including an edit to a file no editor shows — which is the case an answer from
+disk alone would get wrong. Go to Super (`BySupers`) names the text its caret was read in on each of
+its requests, so its outline, type hierarchy and `by/superMembers` answers are about one text, and
+Ctrl+U in a file the platform has not opened on `by` yet waits for it rather than being turned away.
+Nothing in the plugin tracks which documents the server holds.
 
-An IJPL issue asking for per-file open and close callbacks on `LspServerListener` would replace the
-`getLanguageId` hook and the mirrored close rules, and is the right thing to file.
+Measured in PyCharm 263.5153.49, over the run 0069bf1 was measured on — open six `.by` files, edit
+one in an editor and one no editor shows, restart the server, open two more, close and reopen one,
+rendered docstrings on — with one more step, an edit to a file no editor shows that puts a line above
+everything, and every answer checked against the text it claims to describe. With `by` answering
+named text, the plugin's requests `by` refused stayed at 0 (they were 12 before 0069bf1), and every
+file's outline was for its current text in every run, and every open file's docstrings and injections once its tab was shown;
+`by` held a request 4 times in a run — the unopened edit, the two unsaved files on restart, the
+shifted file — each until the platform's `didOpen` a few milliseconds later, and answered the other
+62 named requests from its buffer or the disk in a median of 0.2ms.
 
 ### Markdown code fences — dropped
 

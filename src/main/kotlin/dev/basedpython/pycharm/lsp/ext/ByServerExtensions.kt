@@ -1,8 +1,11 @@
 package dev.basedpython.pycharm.lsp.ext
 
+import org.eclipse.lsp4j.DocumentSymbolParams
 import org.eclipse.lsp4j.Position
 import org.eclipse.lsp4j.Range
+import org.eclipse.lsp4j.SemanticTokensParams
 import org.eclipse.lsp4j.TextDocumentIdentifier
+import org.eclipse.lsp4j.TypeHierarchyPrepareParams
 import org.eclipse.lsp4j.WorkspaceDiagnosticParams
 import org.eclipse.lsp4j.WorkspaceDiagnosticReport
 import org.eclipse.lsp4j.jsonrpc.services.JsonRequest
@@ -235,9 +238,10 @@ interface ByServerExtensions {
  * body assigns or annotates.
  *
  * Field names are the wire format and must match `ty_server`'s `SuperMembersParams`, which is
- * `deny_unknown_fields`.
+ * `deny_unknown_fields`; `textHash`, the text [position] is in (see
+ * [dev.basedpython.pycharm.lsp.ByTextHash]), is taken out by the server's dispatcher before that.
  */
-data class BySuperMembersParams(val textDocument: TextDocumentIdentifier, val position: Position)
+data class BySuperMembersParams(val textDocument: TextDocumentIdentifier, val position: Position, val textHash: String)
 
 /** One superclass member the member overrides. In MRO order, the nearest along each branch. */
 data class BySuperMember(
@@ -366,12 +370,12 @@ data class ByBuildOutput(
 )
 
 /**
- * The document to outline.
+ * The document to outline, and the text of it to outline — see [dev.basedpython.pycharm.lsp.ByTextHash].
  *
  * Field names are the wire format and must match `ty_server`'s `SyntaxOutlineParams`, which is
- * `deny_unknown_fields`.
+ * `deny_unknown_fields`; `textHash` is taken out by the server's dispatcher before that.
  */
-data class BySyntaxOutlineParams(val textDocument: TextDocumentIdentifier)
+data class BySyntaxOutlineParams(val textDocument: TextDocumentIdentifier, val textHash: String)
 
 /** The whole outline of one document. */
 data class BySyntaxOutlineResponse(
@@ -429,14 +433,32 @@ data class ByOutlineString(
 )
 
 /**
- * The document to look through.
+ * The document to look through, and the text of it to look through — see
+ * [dev.basedpython.pycharm.lsp.ByTextHash].
  *
  * Field names are the wire format and must match `ty_server`'s `InjectionsParams`, which is
- * `deny_unknown_fields`. No range: which fragments a file holds is not a per-screen question — a
- * marker at the top of the file decides a string at the bottom of it — and the answer is cached
- * per document revision on this side anyway.
+ * `deny_unknown_fields`; `textHash` is taken out by the server's dispatcher before that. No range:
+ * which fragments a file holds is not a per-screen question — a marker at the top of the file
+ * decides a string at the bottom of it — and the answer is cached per document revision on this
+ * side anyway.
  */
-data class ByInjectionsParams(val textDocument: TextDocumentIdentifier)
+data class ByInjectionsParams(val textDocument: TextDocumentIdentifier, val textHash: String)
+
+/**
+ * `textDocument/semanticTokens/full` about one text of the document — see
+ * [dev.basedpython.pycharm.lsp.ByTextHash]. `by` reads `textHash` off any document request; lsp4j
+ * writes a subclass's own fields along with its parent's.
+ */
+class ByNamedSemanticTokensParams(textDocument: TextDocumentIdentifier, val textHash: String) :
+    SemanticTokensParams(textDocument)
+
+/** `textDocument/documentSymbol` about one text of the document, as [ByNamedSemanticTokensParams]. */
+class ByNamedDocumentSymbolParams(textDocument: TextDocumentIdentifier, val textHash: String) :
+    DocumentSymbolParams(textDocument)
+
+/** `textDocument/prepareTypeHierarchy` at a position in one text of the document, as [ByNamedSemanticTokensParams]. */
+class ByNamedTypeHierarchyPrepareParams(textDocument: TextDocumentIdentifier, position: Position, val textHash: String) :
+    TypeHierarchyPrepareParams(textDocument, position)
 
 /** Every fragment in the document, in source order. */
 data class ByInjectionsResponse(val injections: List<ByInjectionFragment> = emptyList())

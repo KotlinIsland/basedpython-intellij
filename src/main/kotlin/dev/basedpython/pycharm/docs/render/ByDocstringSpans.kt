@@ -6,12 +6,12 @@ import com.intellij.openapi.util.TextRange
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiFile
 import dev.basedpython.pycharm.lsp.ByServerDocuments
+import dev.basedpython.pycharm.lsp.ByTextHash
 import dev.basedpython.pycharm.lsp.askBy
-import dev.basedpython.pycharm.lsp.hasDocument
+import dev.basedpython.pycharm.lsp.ext.ByNamedDocumentSymbolParams
+import dev.basedpython.pycharm.lsp.ext.ByNamedSemanticTokensParams
 import dev.basedpython.pycharm.lsp.runningByServer
 import org.eclipse.lsp4j.DocumentSymbol
-import org.eclipse.lsp4j.DocumentSymbolParams
-import org.eclipse.lsp4j.SemanticTokensParams
 import org.eclipse.lsp4j.SymbolInformation
 import org.eclipse.lsp4j.jsonrpc.messages.Either
 import java.util.Collections
@@ -30,22 +30,19 @@ import java.util.WeakHashMap
  * consequence of the server owning the question, and it is also what makes the rendering trustworthy
  * — a rendered block always says what `by` says.
  *
- * ## Losing the race with the server, and asking again
+ * ## Asking before the server has the file
  *
- * `by` answers no document request for a file it has not been sent `textDocument/didOpen` for —
- * *"Document … is not open in the session"* — and the client sends that asynchronously, off the
- * event that opened the file. The rendering pass, meanwhile, runs as soon as the editor appears. So
- * the first pass over a freshly opened file usually asks too early, and gets nothing.
+ * The rendering pass runs as soon as the editor appears, before the platform has sent `by` its
+ * `textDocument/didOpen` for the file. So both requests name the text they are about ([ByTextHash]),
+ * and `by` answers about that text — from the file on disk, which for a file just opened is the
+ * text, or once the platform's notification brings it. The two answers are about the same text,
+ * the one [ByDocstringTokens] reads their positions against.
  *
- * Nothing would ever fix that on its own. The pass is skipped entirely while the PSI modification
- * count is unchanged, so "no docstrings" computed one millisecond too early is what the file keeps
- * until something edits it — which for a read-only stub is never. That is the whole of why the
- * first version of this rendered nothing at all: not a wrong answer, an answer asked for too soon
- * and then cached.
- *
- * So a failed answer is never stored, and [ByRenderedDocsRefresher] asks the platform to run the
- * pass again the moment the client tells the server about the file — which is exactly when the
- * earlier answer became wrong.
+ * `by` used to refuse the request instead, and the pass is skipped while the PSI modification count
+ * is unchanged, so "no docstrings" computed a moment too early was what the file kept until
+ * something edited it — which for a read-only stub is never. A failed answer is still never stored,
+ * and [ByRenderedDocsRefresher] runs the pass again over the files on screen when a server starts,
+ * since every look before that was a look with nobody to ask.
  *
  * ## Caching and threading
  *
@@ -84,8 +81,8 @@ internal object ByDocstringSpans {
         val cache = file.project.service<ByDocstringSpanCache>()
         cache.spans(virtualFile, stamp)?.let { return it }
 
-        // A failure is never stored: it means the server could not answer yet, and
-        // `ByRenderedDocsRefresher` will have the pass ask again once it can.
+        // A failure is never stored: it means the server could not answer, and the next pass asks
+        // again — `ByRenderedDocsRefresher` runs one when a server starts.
         val spans = query(file) ?: return emptyList()
         cache.remember(virtualFile, stamp, spans)
         return spans
@@ -114,9 +111,6 @@ internal object ByDocstringSpans {
         // A stub reached by goto-definition is not in project content, so the platform's client
         // never syncs it and every request below would come back empty. See [ByServerDocuments].
         ByServerDocuments.ensureOpen(server, file.project, virtualFile)
-        // Not held yet, and asking would only be refused. `ByRenderedDocsRefresher` has the pass
-        // look again once `ByOpenedDocuments` says the server has the file.
-        if (!server.hasDocument(virtualFile)) return null
 
         val legend = server.initializeResult?.capabilities?.semanticTokensProvider?.legend ?: return null
         val stringType = legend.tokenTypes.indexOf("string")
@@ -127,13 +121,15 @@ internal object ByDocstringSpans {
         }
 
         val identifier = server.getDocumentIdentifier(virtualFile)
+        // the text both answers' positions are read against, and so the text they are asked about
+        val text = file.text
+        val textHash = ByTextHash.of(text)
         val tokens = server.askBy("textDocument/semanticTokens/full", TIMEOUT_MS) {
-            it.textDocumentService.semanticTokensFull(SemanticTokensParams(identifier))
+            it.textDocumentService.semanticTokensFull(ByNamedSemanticTokensParams(identifier, textHash))
         }.value ?: return null
 
-        val text = file.text
         val symbols = server.askBy("textDocument/documentSymbol", TIMEOUT_MS) {
-            it.textDocumentService.documentSymbol(DocumentSymbolParams(identifier))
+            it.textDocumentService.documentSymbol(ByNamedDocumentSymbolParams(identifier, textHash))
         }.value
 
         return ByDocstringTokens.spans(

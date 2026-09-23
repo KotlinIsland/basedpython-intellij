@@ -136,7 +136,7 @@ class BySupersTest {
         val client = AnsweringClient(fixture.project) { method -> asked += method; answer(method) }
         val shape = (outline[0].right)
         val subject = BySuperSubject.Member(shape.children[1], shape)
-        val result = runBlocking { BySupers.overridden(client, TextDocumentIdentifier("file:///shapes.by"), subject) }
+        val result = runBlocking { BySupers.overridden(client, TextDocumentIdentifier("file:///shapes.by"), "cbf29ce484222325", subject) }
         return result to asked
     }
 

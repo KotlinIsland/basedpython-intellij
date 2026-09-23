@@ -17,13 +17,12 @@ import com.intellij.util.concurrency.AppExecutorUtil
 import com.intellij.util.containers.ContainerUtil
 import dev.basedpython.pycharm.lsp.ByAnswer
 import dev.basedpython.pycharm.lsp.ByLspLifecycleListener
-import dev.basedpython.pycharm.lsp.ByOpenedDocuments
 import dev.basedpython.pycharm.lsp.ByServerDocuments
+import dev.basedpython.pycharm.lsp.ByTextHash
 import dev.basedpython.pycharm.lsp.askBy
 import dev.basedpython.pycharm.lsp.byServerFor
 import dev.basedpython.pycharm.lsp.ext.ByInjectionsParams
 import dev.basedpython.pycharm.lsp.ext.ByServerExtensions
-import dev.basedpython.pycharm.lsp.hasDocument
 import dev.basedpython.pycharm.lsp.runningByServer
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import org.eclipse.lsp4j.TextDocumentIdentifier
@@ -50,10 +49,11 @@ import org.jetbrains.annotations.TestOnly
  * with the answer already in hand. [reinject] is what unpins it, and it runs only when a request
  * comes back with something after the empty answer went out.
  *
- * The same nothing is served, on any thread, while `by` does not hold the document yet — the injector
- * runs as the editor opens, before the platform's `didOpen` has gone out, and `by` would refuse the
- * request. So nothing is asked until [ByOpenedDocuments] says the document is open, and that news
- * is what asks and re-injects. Every file opened while `by` ran used to draw a refused request here.
+ * The injector runs as an editor opens, before the platform's `didOpen` for the document has gone
+ * out, so the request names the text it is about ([ByTextHash]) and `by` answers about that text
+ * from the file on disk, or once the platform's notification brings it. Every file opened while `by`
+ * ran used to draw a refused request here, and for a while nothing was asked until the platform was
+ * heard building its `didOpen`.
  */
 @Service(Service.Level.PROJECT)
 internal class ByInjections(private val project: Project) : Disposable {
@@ -91,13 +91,6 @@ internal class ByInjections(private val project: Project) : Disposable {
                     servedNothing.clear()
                 }
             },
-        )
-        project.messageBus.connect(this).subscribe(
-            ByOpenedDocuments.Listener.TOPIC,
-            // The server now holds [file]. A pass that asked before it did was not asked, and was
-            // served nothing — which the platform keeps until the file changes — so this is where
-            // it is asked, and re-injected if there turns out to be something.
-            ByOpenedDocuments.Listener { file -> if (file in servedNothing) askInBackground(file) },
         )
     }
 
@@ -149,15 +142,11 @@ internal class ByInjections(private val project: Project) : Disposable {
     private fun ask(virtualFile: VirtualFile, document: Document, stamp: Long): List<ByInjection> {
         val server = runningByServer(project, virtualFile) ?: return emptyList()
         ByServerDocuments.ensureOpen(server, project, virtualFile)
-        // Not held yet, and asking would only be refused: the platform's `didOpen` is still queued.
-        // The nothing served meanwhile is noted, and [ByOpenedDocuments] says when to ask.
-        if (!server.hasDocument(virtualFile)) {
-            servedNothing.add(virtualFile)
-            return emptyList()
-        }
 
         val params = ByInjectionsParams(
             TextDocumentIdentifier(server.getDocumentIdentifier(virtualFile).uri),
+            // the text [stamp] names, read in the same read action
+            ByTextHash.of(document.immutableCharSequence),
         )
         val answer = server.askBy("by/injections", INJECTIONS_TIMEOUT_MS) {
             (it as ByServerExtensions).injections(params)
@@ -185,9 +174,8 @@ internal class ByInjections(private val project: Project) : Disposable {
      * retried instead.
      *
      * A call while a request is already out is noted in [askAgain] and asked once that one is done,
-     * rather than dropped: the platform's `didOpen` goes out from a write action that waits for the
-     * read action here, so the news that the document is open can arrive just as a request that
-     * found it closed is finishing.
+     * rather than dropped, so that a pass served nothing while an earlier request was out — one for
+     * a revision since edited, or to a server since restarted — is still asked for and re-injected.
      */
     private fun askInBackground(virtualFile: VirtualFile) {
         // Nothing to ask: no thread is worth starting, and in a test there is never a server.

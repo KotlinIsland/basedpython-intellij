@@ -191,21 +191,8 @@ internal class ByLspServerDescriptor(
       addAll(extraArgs)
     }).withEnvironment(launch.env)
 
-  override fun startServerProcess(): BaseProcessHandler<*> {
-    // a new process has been told about no document, whatever this descriptor's last one had
-    ByOpenedDocuments.getInstance(project).starting(this)
-    return super.startServerProcess().mirrorStderrTo(project, "by")
-  }
-
-  /**
-   * The platform's language id, and the one public moment at which it is sending `didOpen` for
-   * [file] — reported to [ByOpenedDocuments], which is what lets a request wait for the server to
-   * hold the document instead of being refused.
-   */
-  override fun getLanguageId(file: VirtualFile): String {
-    ByOpenedDocuments.getInstance(project).opening(this, file)
-    return super.getLanguageId(file)
-  }
+  override fun startServerProcess(): BaseProcessHandler<*> =
+    super.startServerProcess().mirrorStderrTo(project, "by")
 
   /**
    * Which kinds of inlay hint `by` should bother computing.

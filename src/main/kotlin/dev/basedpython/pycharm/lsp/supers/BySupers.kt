@@ -7,16 +7,17 @@ import com.intellij.platform.lsp.api.LspClient
 import com.intellij.platform.lsp.util.getLsp4jPosition
 import dev.basedpython.pycharm.lsp.ByAnswer
 import dev.basedpython.pycharm.lsp.ByServerDocuments
+import dev.basedpython.pycharm.lsp.ByTextHash
 import dev.basedpython.pycharm.lsp.awaitBy
 import dev.basedpython.pycharm.lsp.awaitingAgain
+import dev.basedpython.pycharm.lsp.ext.ByNamedDocumentSymbolParams
+import dev.basedpython.pycharm.lsp.ext.ByNamedTypeHierarchyPrepareParams
 import dev.basedpython.pycharm.lsp.ext.ByServerExtensions
 import dev.basedpython.pycharm.lsp.ext.BySuperMember
 import dev.basedpython.pycharm.lsp.ext.BySuperMembersParams
-import dev.basedpython.pycharm.lsp.hasDocument
 import dev.basedpython.pycharm.lsp.isMethodNotFound
 import dev.basedpython.pycharm.util.BasedPythonBundle
 import org.eclipse.lsp4j.DocumentSymbol
-import org.eclipse.lsp4j.DocumentSymbolParams
 import org.eclipse.lsp4j.Location
 import org.eclipse.lsp4j.Position
 import org.eclipse.lsp4j.Range
@@ -24,7 +25,6 @@ import org.eclipse.lsp4j.SymbolInformation
 import org.eclipse.lsp4j.SymbolKind
 import org.eclipse.lsp4j.TextDocumentIdentifier
 import org.eclipse.lsp4j.TypeHierarchyItem
-import org.eclipse.lsp4j.TypeHierarchyPrepareParams
 import org.eclipse.lsp4j.TypeHierarchySupertypesParams
 import org.eclipse.lsp4j.jsonrpc.messages.Either
 
@@ -65,6 +65,12 @@ internal sealed interface BySuperSubject {
  * `typeHierarchy/supertypes` of the class, which are its explicit bases in the order the class
  * lists them — the order they take in its MRO, which C3 linearisation keeps. What a member
  * overrides is `by/superMembers`, the override checks' own answer.
+ *
+ * Every request names the text the caret's position was read in ([ByTextHash]), so each is answered
+ * about that text: the outline's ranges, the class's position and the member's all mean the same
+ * thing. That also covers pressing Ctrl+U in a file the platform has not yet sent `by` a `didOpen`
+ * or the latest `didChange` for — `by` answers once the notification brings the text, where it
+ * used to refuse the document, or answer about the text before the edit.
  */
 internal object BySupers {
 
@@ -75,17 +81,15 @@ internal object BySupers {
      * under a read action of its own.
      */
     suspend fun find(server: LspClient, file: VirtualFile, document: Document, offset: Int): BySuperAnswer {
-        val asked = readAction {
+        val (identifier, textHash, caret) = readAction {
             ByServerDocuments.ensureOpen(server, server.project, file)
-            // Not held yet: the platform's `didOpen` is still queued, and asking would be refused.
-            if (!server.hasDocument(file)) return@readAction null
-            server.getDocumentIdentifier(file) to getLsp4jPosition(document, offset)
-        } ?: return nowhere("goto.super.notOpen")
-        val (identifier, caret) = asked
+            // the caret and the text it is in, read together
+            Triple(server.getDocumentIdentifier(file), ByTextHash.of(document.immutableCharSequence), getLsp4jPosition(document, offset))
+        }
 
         val symbols = when (
             val answer = server.awaitBy("textDocument/documentSymbol") {
-                it.textDocumentService.documentSymbol(DocumentSymbolParams(identifier))
+                it.textDocumentService.documentSymbol(ByNamedDocumentSymbolParams(identifier, textHash))
             }
         ) {
             is ByAnswer.Answer -> answer.value
@@ -95,14 +99,19 @@ internal object BySupers {
 
         return when (val subject = subjectAt(symbols, caret)) {
             null -> nowhere("goto.super.nothingHere")
-            is BySuperSubject.Class -> bases(server, identifier, subject.symbol)
-            is BySuperSubject.Member -> overridden(server, identifier, subject)
+            is BySuperSubject.Class -> bases(server, identifier, textHash, subject.symbol)
+            is BySuperSubject.Member -> overridden(server, identifier, textHash, subject)
         }
     }
 
     /** The bases of [symbol], a class, from `by`'s type hierarchy. */
-    private suspend fun bases(server: LspClient, document: TextDocumentIdentifier, symbol: DocumentSymbol): BySuperAnswer {
-        val prepareParams = TypeHierarchyPrepareParams(document, symbol.selectionRange.start)
+    private suspend fun bases(
+        server: LspClient,
+        document: TextDocumentIdentifier,
+        textHash: String,
+        symbol: DocumentSymbol,
+    ): BySuperAnswer {
+        val prepareParams = ByNamedTypeHierarchyPrepareParams(document, symbol.selectionRange.start, textHash)
         val item = when (
             val answer = server.awaitBy("textDocument/prepareTypeHierarchy") {
                 it.textDocumentService.prepareTypeHierarchy(prepareParams)
@@ -129,7 +138,7 @@ internal object BySupers {
     }
 
     /**
-     * What [subject], a class member, overrides, from `by/superMembers`.
+     * What [subject], a class member of the text [textHash] names, overrides, from `by/superMembers`.
      *
      * A `by` that does not know the request is said to be one, rather than read as a member that
      * overrides nothing or answered some other way: nothing else can say what a member overrides.
@@ -137,10 +146,11 @@ internal object BySupers {
     suspend fun overridden(
         server: LspClient,
         document: TextDocumentIdentifier,
+        textHash: String,
         subject: BySuperSubject.Member,
     ): BySuperAnswer {
         val member = "${subject.owner.name}.${subject.symbol.name}"
-        val params = BySuperMembersParams(document, subject.symbol.selectionRange.start)
+        val params = BySuperMembersParams(document, subject.symbol.selectionRange.start, textHash)
         var unknownRequest = false
         val answer = awaitingAgain<List<BySuperMember>>("by/superMembers", LspClient.DEFAULT_REQUEST_TIMEOUT_MS.toLong()) { sent ->
             try {

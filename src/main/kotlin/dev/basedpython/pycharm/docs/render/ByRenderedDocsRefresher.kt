@@ -13,42 +13,31 @@ import com.intellij.util.Alarm
 import com.intellij.util.FileContentUtilCore
 import dev.basedpython.pycharm.lang.BasedPythonFile
 import dev.basedpython.pycharm.lsp.ByLspLifecycleListener
-import dev.basedpython.pycharm.lsp.ByOpenedDocuments
 import org.jetbrains.annotations.VisibleForTesting
 
 /**
- * Renders a file's docstrings once `by` is actually able to say where they are.
+ * Renders the docstrings of the files on screen once a `by` server is there to say where they are.
  *
- * The rendering pass and the language server disagree about when a file is ready, and the pass
- * loses. `by` answers no document request for a file it has not been sent `textDocument/didOpen`
- * for — *"Document … is not open in the session"* — and the client sends that asynchronously, off
- * the event that opened the file. The pass, meanwhile, runs the moment the editor appears. So the
- * first look at a freshly opened file finds no docstrings, and it is not because there are none.
- *
- * On its own that would be permanent. `DocRenderPassFactory` skips the pass entirely while the file's
- * modification count is unchanged, so the empty answer computed a moment too early is what the file
- * keeps until an edit — and a stub in a library is never edited. A feature that only worked after
- * you typed a character is what this fixes.
+ * `DocRenderPassFactory` skips the rendering pass entirely while the file's modification count is
+ * unchanged, so a pass that ran while there was no server — the project opening, a restart — found
+ * no docstrings, and that is what the file would keep until an edit. A stub in a library is never
+ * edited. A feature that only worked after you typed a character is what this fixes.
  *
  * ## the signal
  *
- * This used to listen to `LspClientManagerListener.fileOpened`, which fires exactly when the client
- * has told a server about a file — the precise moment the earlier answer became wrong. That
- * interface is `@ApiStatus.Internal`. For a while it was replaced by a re-check 700ms after a file
- * opened, which was a guess at how long the platform takes to send its `didOpen`; now it is
- * [ByOpenedDocuments], which hears the platform build that `didOpen` through the descriptor's public
- * `getLanguageId` — the same moment the internal listener marked. See docs/internal-api.md.
+ * A server becoming ready ([ByLspLifecycleListener.serverInitialized]) — the one occasion on which
+ * every earlier look was a look with nobody to ask. A file opened while a server runs needs nothing
+ * from here: the pass over it asks at once, naming the text it is about ([ByDocstringSpans]), and
+ * `by` answers about that text whether or not the platform's `didOpen` for the file has gone out
+ * yet. That used to be the hard case. `by` refused a document it had not been opened on, so this
+ * had to run the pass again once the platform had opened it — heard through the internal
+ * `LspClientManagerListener.fileOpened`, then guessed at 700ms after a file opened, then heard
+ * through the descriptor's `getLanguageId`. See docs/internal-api.md.
  *
- * That covers both occasions that matter: a file opened while a server runs, and every file already
- * on screen when a server starts, which the platform opens on the new server one by one. The
- * rendering pass asks nothing before then ([ByDocstringSpans] waits for the same news), so the first
- * look at a freshly opened file records no answer rather than a refused one, and the look this makes
- * once the server has the file is the one that counts.
- *
- * It also keeps the reparse off every file no server was told about. [FileContentUtilCore.reparseFiles]
+ * The reparse is kept to the files on screen that have no answer. [FileContentUtilCore.reparseFiles]
  * is a write action that fires PSI change events, and the daemon answers those by discarding
  * whatever it is computing: *"PSI/document/model changes are not allowed during highlighting,
- * because it leads to the daemon unnecessary restarts."* When the re-check was armed for every file
+ * because it leads to the daemon unnecessary restarts."* When a re-check was armed for every file
  * that opened, server or no server, that surfaced as tests elsewhere in the module failing perhaps
  * one run in three.
  *
@@ -70,8 +59,7 @@ import org.jetbrains.annotations.VisibleForTesting
  * Every answer held so far — the spans in [ByDocstringSpanCache], the markdown in [ByRenderedDocs] —
  * came from no server or from the previous one, and a restart is how a rebuilt `by` or a changed
  * configuration arrives. So both are dropped here, whichever route restarted the server (the action,
- * a settings change, crash recovery). Every open `.by` file is looked at again as the platform opens
- * it on the new server.
+ * a settings change, crash recovery), and every open `.by` file is looked at again.
  *
  * ## lifetime
  *
@@ -96,20 +84,14 @@ internal class ByRenderedDocsRefresher(private val project: Project) : Disposabl
             ByLspLifecycleListener.TOPIC,
             object : ByLspLifecycleListener {
                 override fun serverInitialized(serverName: String) {
-                    if (serverName == BY_SERVER) forgetAnswers()
-                }
-            },
-        )
-
-        connection.subscribe(
-            ByOpenedDocuments.Listener.TOPIC,
-            // Through the alarm rather than straight through: this arrives inside the platform's
-            // write action, before its `didOpen` has gone out, and a reparse is a write action of its
-            // own. Only a file an editor shows has docstrings to render; and if the server answered
-            // for it in the meantime, even with nothing, there is nothing to fix.
-            ByOpenedDocuments.Listener { file ->
-                if (FileEditorManager.getInstance(project).isFileOpen(file)) {
-                    alarm.addRequest({ refreshIfStale(file) }, 0)
+                    if (serverName != BY_SERVER) return
+                    forgetAnswers()
+                    // Everything already open was asked while there was nothing to ask, or asked of
+                    // a server that is gone. Through the alarm rather than straight through, because
+                    // this arrives on whatever thread the server's initialisation ran on and a
+                    // reparse takes a write action.
+                    val open = FileEditorManager.getInstance(project).openFiles.toList()
+                    alarm.addRequest({ open.forEach { refreshIfStale(it) } }, 0)
                 }
             },
         )
