@@ -4,6 +4,8 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.platform.lsp.api.LspClient
 import dev.basedpython.pycharm.format.ByCleanup
+import dev.basedpython.pycharm.lsp.ByAnswer
+import dev.basedpython.pycharm.lsp.askBy
 import dev.basedpython.pycharm.lsp.ext.BuffExplainRuleParams
 import dev.basedpython.pycharm.lsp.ext.BuffServerExtensions
 import dev.basedpython.pycharm.lsp.ext.ByExplainRuleParams
@@ -41,41 +43,48 @@ internal object ByRuleExplainer {
 
     fun explain(project: Project, code: String, contextFile: VirtualFile? = null): ByRuleExplanationResult {
         val file = contextFile ?: anyOpenSource(project)
-
-        val explanation = file?.let { fromBuff(project, it, code) ?: fromBy(project, it, code) }
-        val body = explanation?.documentation?.takeIf { it.isNotBlank() }
-        if (body != null) return ByRuleExplanationResult.Found(body)
-
-        return ByRuleExplanationResult.NotFound(
-            BasedPythonBundle.message(
-                if (file == null) "explainRule.noServer" else "explainRule.noExplanation",
-            ),
-        )
-    }
-
-    private fun fromBuff(project: Project, file: VirtualFile, code: String): ByRuleExplanation? {
-        val server = ByCleanup.findServer(project, file) ?: return null
-        val params = BuffExplainRuleParams(code)
-        return server.explain { (it as BuffServerExtensions).explainRule(params) }
-    }
-
-    private fun fromBy(project: Project, file: VirtualFile, code: String): ByRuleExplanation? {
-        val server = ByTranspile.findServer(project, file) ?: return null
-        val params = ByExplainRuleParams(code)
-        return server.explain { (it as ByServerExtensions).explainRule(params) }
+            ?: return ByRuleExplanationResult.NotFound(BasedPythonBundle.message("explainRule.noServer"))
+        return explain(code, buff = ByCleanup.findServer(project, file), by = ByTranspile.findServer(project, file))
     }
 
     /**
-     * A server serves a project, not a file, but a request still needs one to be routed by — and
-     * *Explain Rule* can be invoked from a prompt with nothing open. Any source this plugin owns
+     * Asks [buff], then [by], for [code].
+     *
+     * Through `askBy`, because each server's "not mine" is an empty answer, and `sendRequestSync`
+     * returns the same `null` for an error answer, a timeout and a request never sent. Read as they
+     * came, a `buff` that failed looked like one that had never heard of the rule, and a lookup that
+     * failed on both sides told the user the rule had no explanation. Now a failure on either side,
+     * with no explanation from the other, says that a server did not answer.
+     */
+    fun explain(code: String, buff: LspClient?, by: LspClient?): ByRuleExplanationResult {
+        if (buff == null && by == null) {
+            return ByRuleExplanationResult.NotFound(BasedPythonBundle.message("explainRule.noServer"))
+        }
+        val fromBuff = buff?.askBy("buff/explainRule") {
+            (it as BuffServerExtensions).explainRule(BuffExplainRuleParams(code))
+        }
+        found(fromBuff)?.let { return it }
+        val fromBy = by?.askBy("by/explainRule") {
+            (it as ByServerExtensions).explainRule(ByExplainRuleParams(code))
+        }
+        found(fromBy)?.let { return it }
+
+        val failed = fromBuff == ByAnswer.Failed || fromBy == ByAnswer.Failed
+        return ByRuleExplanationResult.NotFound(
+            BasedPythonBundle.message(if (failed) "explainRule.serverDidNotAnswer" else "explainRule.noExplanation"),
+        )
+    }
+
+    private fun found(answer: ByAnswer<ByRuleExplanation>?): ByRuleExplanationResult.Found? =
+        answer?.value?.documentation?.takeIf { it.isNotBlank() }?.let { ByRuleExplanationResult.Found(it) }
+
+    /**
+     * A server serves a project, not a file, but a request still needs one to be routed by, and
+     * Explain Rule can be invoked from a prompt with nothing open. Any source this plugin owns
      * will do, because the answer does not depend on which.
      */
     private fun anyOpenSource(project: Project): VirtualFile? =
         com.intellij.openapi.fileEditor.FileEditorManager.getInstance(project)
             .openFiles
             .firstOrNull { it.extension in setOf("by", "byi", "py", "pyi") }
-
-    private fun LspClient.explain(
-        request: (org.eclipse.lsp4j.services.LanguageServer) -> java.util.concurrent.CompletableFuture<ByRuleExplanation?>,
-    ): ByRuleExplanation? = sendRequestSync { request(it) }
 }

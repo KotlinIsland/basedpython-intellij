@@ -98,19 +98,19 @@ internal fun <R : Any> askingAgain(
         // Which of the four nulls this was. The future is complete whenever `sendRequestSync` returned
         // because the server replied — its own result is completed off this one.
         val future = sent.get() ?: return ByAnswer.Failed.also {
-            LOG.debug("$what request to `by` was not sent: no server was running")
+            LOG.debug("$what request was not sent: no server was running")
         }
         // the platform has logged a timeout already
         if (!future.isDone) return ByAnswer.Failed
         val error = errorOf(future) ?: return ByAnswer.None
         if (!isContentModified(error)) {
             // the platform has logged the error as a warning already; this says which request it was
-            LOG.debug("$what request to `by` was answered with an error: $error")
+            LOG.debug("$what request was answered with an error: $error")
             return ByAnswer.Failed
         }
-        LOG.debug("$what request to `by` was overtaken by an edit; asking again")
+        LOG.debug("$what request was overtaken by an edit; asking again")
     }
-    LOG.info("$what request to `by` was overtaken by an edit $CONTENT_MODIFIED_ATTEMPTS times running")
+    LOG.info("$what request was overtaken by an edit $CONTENT_MODIFIED_ATTEMPTS times running")
     return ByAnswer.Failed
 }
 
@@ -143,31 +143,51 @@ internal fun isContentModified(error: Throwable): Boolean =
  * [askBy] for a coroutine: suspends rather than blocks, and stops waiting the moment the caller is
  * cancelled — which a blocked thread outside any progress indicator cannot be told.
  *
- * No answer within [timeoutMs] is [ByAnswer.Failed], as it is for [askBy]; only a cancellation of
- * the caller itself propagates. A `ContentModified` answer is asked again, as [askBy] does, within
- * the same [timeoutMs].
+ * The suspending `LspClient.sendRequest` throws an error answer rather than dropping it, but it
+ * still returns `null` both for a server that answered `null` and for a request it never sent
+ * because no server was running; the future the request went out as tells those two apart here, as
+ * it does for [askBy]. No answer within [timeoutMs] is [ByAnswer.Failed]; only a cancellation of the
+ * caller itself propagates. A `ContentModified` answer is asked again, as [askBy] does, within the
+ * same [timeoutMs].
  */
 internal suspend fun <R : Any> LspClient.awaitBy(
     what: String,
     timeoutMs: Long = LspClient.DEFAULT_REQUEST_TIMEOUT_MS.toLong(),
     request: (LanguageServer) -> CompletableFuture<R?>,
+): ByAnswer<R> = awaitingAgain(what, timeoutMs) { sent -> sendRequest { server -> request(server).also(sent) } }
+
+/**
+ * [awaitBy] without the server: [send] sends the request once, hands the future it went out as to
+ * the callback it is given, and returns what the suspending `sendRequest` returned or throws what it
+ * threw.
+ */
+internal suspend fun <R : Any> awaitingAgain(
+    what: String,
+    timeoutMs: Long,
+    send: suspend (sent: (CompletableFuture<R?>) -> Unit) -> R?,
 ): ByAnswer<R> = withTimeoutOrNull<ByAnswer<R>>(timeoutMs) {
     repeat(CONTENT_MODIFIED_ATTEMPTS) {
         try {
-            return@withTimeoutOrNull sendRequest(request)?.let { ByAnswer.Answer(it) } ?: ByAnswer.None
+            val sent = AtomicReference<CompletableFuture<R?>>()
+            val answer = send(sent::set)
+            return@withTimeoutOrNull when {
+                answer != null -> ByAnswer.Answer(answer)
+                sent.get() == null -> ByAnswer.Failed.also { LOG.debug("$what request was not sent: no server was running") }
+                else -> ByAnswer.None
+            }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             if (!isContentModified(e)) {
-                LOG.warn("$what request to `by` failed", e)
+                LOG.warn("$what request failed", e)
                 return@withTimeoutOrNull ByAnswer.Failed
             }
-            LOG.debug("$what request to `by` was overtaken by an edit; asking again")
+            LOG.debug("$what request was overtaken by an edit; asking again")
         }
     }
-    LOG.info("$what request to `by` was overtaken by an edit $CONTENT_MODIFIED_ATTEMPTS times running")
+    LOG.info("$what request was overtaken by an edit $CONTENT_MODIFIED_ATTEMPTS times running")
     ByAnswer.Failed
-} ?: ByAnswer.Failed.also { LOG.info("$what request to `by` got no answer within $timeoutMs ms") }
+} ?: ByAnswer.Failed.also { LOG.info("$what request got no answer within $timeoutMs ms") }
 
 /**
  * [askBy] without the server, so that the rule above can be stated in a test rather than only in a
@@ -180,6 +200,6 @@ internal fun <R : Any> answering(what: String, request: () -> R?): ByAnswer<R> =
     } catch (e: Exception) {
         // Cancellation is not a failure: it is the pass being told to stop, and it must go on up.
         if (e is ControlFlowException || e is CancellationException) throw e
-        LOG.warn("$what request to `by` failed", e)
+        LOG.warn("$what request failed", e)
         ByAnswer.Failed
     }

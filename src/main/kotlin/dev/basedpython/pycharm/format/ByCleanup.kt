@@ -9,6 +9,8 @@ import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.platform.lsp.api.LspClient
 import com.intellij.platform.lsp.api.LspClientManager
 import dev.basedpython.pycharm.lsp.BuffLspServerSupportProvider
+import dev.basedpython.pycharm.lsp.ByAnswer
+import dev.basedpython.pycharm.lsp.awaitBy
 import dev.basedpython.pycharm.util.BasedPythonBundle
 import org.eclipse.lsp4j.CodeActionContext
 import org.eclipse.lsp4j.CodeActionParams
@@ -127,7 +129,10 @@ object ByCleanup {
    * request was sent about: those edits describe text this editor does not hold.
    *
    * Suspends rather than blocks, so the caller's thread is free while `buff` works and the request
-   * goes when the caller's coroutine is cancelled.
+   * goes when the caller's coroutine is cancelled. Through [awaitBy], because the platform's
+   * suspending `sendRequest` *throws* an error answer — out of an on-save action or a format
+   * request, where it was reported as a crash rather than as a server that did not answer — and
+   * returns the same `null` for a request it never sent as for a server that had nothing to say.
    */
   suspend fun requestEdits(
     server: LspClient,
@@ -144,7 +149,12 @@ object ByCleanup {
       CodeActionContext(emptyList(), listOf(op.kind)),
     )
 
-    val actions = server.sendRequest { it.textDocumentService.codeAction(params) } ?: return null
+    val actions = when (val answer = server.awaitBy("textDocument/codeAction") { it.textDocumentService.codeAction(params) }) {
+      is ByAnswer.Answer -> answer.value
+      // `buff` answered with no actions at all: nothing to do
+      ByAnswer.None -> emptyList()
+      ByAnswer.Failed -> return null
+    }
 
     // `buff` answers a named source action with exactly that action, so anything else means the
     // server does not know this kind — an older binary, most likely.
@@ -154,7 +164,8 @@ object ByCleanup {
     }
 
     val resolved = if (action.edit == null) {
-      server.sendRequest { it.textDocumentService.resolveCodeAction(action) } ?: return null
+      // a resolve that came back with nothing is as unusable as one that failed
+      server.awaitBy("codeAction/resolve") { it.textDocumentService.resolveCodeAction(action) }.value ?: return null
     } else {
       action
     }

@@ -1,6 +1,8 @@
 package dev.basedpython.pycharm.lsp
 
 import com.intellij.openapi.progress.ProcessCanceledException
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.runBlocking
 import org.eclipse.lsp4j.jsonrpc.ResponseErrorException
 import org.eclipse.lsp4j.jsonrpc.messages.ResponseError
 import org.eclipse.lsp4j.jsonrpc.messages.ResponseErrorCode
@@ -116,5 +118,41 @@ class ByServerRequestTest {
     fun `content modified is recognised through the future's wrapping`() {
         assertTrue(isContentModified(CompletionException(contentModified())))
         assertFalse(isContentModified(CompletionException(IllegalStateException("no"))))
+    }
+
+    // What `awaitBy` makes of the suspending `sendRequest`: it throws an error answer, and returns the
+    // same null for a request never sent as for a server that answered null.
+
+    @Test
+    fun `awaiting, an empty answer is still empty`() = runBlocking {
+        val answer = awaitingAgain<String>("textDocument/codeAction", 1_000) { sent -> sent(CompletableFuture.completedFuture(null)); null }
+        assertEquals(ByAnswer.None, answer)
+    }
+
+    @Test
+    fun `awaiting, a request never sent is a failure, not an empty answer`() = runBlocking {
+        assertEquals(ByAnswer.Failed, awaitingAgain<String>("textDocument/codeAction", 1_000) { null })
+    }
+
+    @Test
+    fun `awaiting, an error answer is a failure`() = runBlocking {
+        val internal = ResponseErrorException(ResponseError(ResponseErrorCode.InternalError, "request handler panicked", null))
+        assertEquals(ByAnswer.Failed, awaitingAgain<String>("textDocument/codeAction", 1_000) { throw internal })
+    }
+
+    @Test
+    fun `awaiting, no answer in time is a failure`() = runBlocking {
+        assertEquals(ByAnswer.Failed, awaitingAgain<String>("textDocument/codeAction", 50) { awaitCancellation() })
+    }
+
+    @Test
+    fun `awaiting, content modified is asked again`() = runBlocking {
+        var asked = 0
+        val answer = awaitingAgain<String>("textDocument/codeAction", 1_000) { sent ->
+            if (++asked == 1) throw contentModified()
+            "fixed".also { sent(CompletableFuture.completedFuture(it)) }
+        }
+        assertEquals("fixed", answer.value)
+        assertEquals(2, asked)
     }
 }

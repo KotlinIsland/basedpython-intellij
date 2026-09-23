@@ -16,6 +16,9 @@ import org.eclipse.lsp4j.TextDocumentEdit
 import org.eclipse.lsp4j.TextEdit
 import org.eclipse.lsp4j.VersionedTextDocumentIdentifier
 import org.eclipse.lsp4j.WorkspaceEdit
+import org.eclipse.lsp4j.jsonrpc.ResponseErrorException
+import org.eclipse.lsp4j.jsonrpc.messages.ResponseError
+import org.eclipse.lsp4j.jsonrpc.messages.ResponseErrorCode
 import org.eclipse.lsp4j.jsonrpc.messages.Either
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -115,5 +118,20 @@ class BuffImportOptimizerTest {
 
     assertFalse(applied)
     assertEquals("x\n", document.text)
+  }
+
+  @Test
+  fun `an error answer is no edits to apply, not an exception out of the pass`() {
+    val psi = fixture.configureByText("a.by", "import os\nimport sys\n")
+    val document = psi.viewProvider.document
+    val client = FakeBuffClient(fixture.project) {
+      throw ResponseErrorException(ResponseError(ResponseErrorCode.InternalError, "request handler panicked", null))
+    }
+    val optimizer = BuffImportOptimizer { _, _ -> client }
+
+    val runnable = runBlocking { optimizer.processFileSuspend(psi) }
+    write { runnable.run() }
+
+    assertEquals("import os\nimport sys\n", document.text)
   }
 }
