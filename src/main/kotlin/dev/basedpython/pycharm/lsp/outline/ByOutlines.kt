@@ -11,8 +11,6 @@ import com.intellij.openapi.editor.EditorFactory
 import com.intellij.openapi.editor.event.DocumentEvent
 import com.intellij.openapi.editor.event.DocumentListener
 import com.intellij.openapi.fileEditor.FileDocumentManager
-import com.intellij.openapi.fileEditor.FileEditorManager
-import com.intellij.openapi.fileEditor.FileEditorManagerListener
 import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
@@ -24,16 +22,17 @@ import com.intellij.util.containers.ContainerUtil
 import dev.basedpython.pycharm.lang.BasedPythonFile
 import dev.basedpython.pycharm.lsp.ByAnswer
 import dev.basedpython.pycharm.lsp.ByLspLifecycleListener
+import dev.basedpython.pycharm.lsp.ByOpenedDocuments
 import dev.basedpython.pycharm.lsp.ByServerDocuments
 import dev.basedpython.pycharm.lsp.askBy
 import dev.basedpython.pycharm.lsp.byServerFor
 import dev.basedpython.pycharm.lsp.ext.ByServerExtensions
 import dev.basedpython.pycharm.lsp.ext.BySyntaxOutlineParams
+import dev.basedpython.pycharm.lsp.hasDocument
 import dev.basedpython.pycharm.lsp.runningByServer
 import org.eclipse.lsp4j.TextDocumentIdentifier
 import org.jetbrains.annotations.TestOnly
 import java.util.Collections
-import java.util.concurrent.TimeUnit
 
 /**
  * What `by` last said about each `.by` document's block structure and strings, per revision.
@@ -60,6 +59,16 @@ import java.util.concurrent.TimeUnit
  * That makes how fresh the answer is when a key is pressed the thing that matters, so every edit
  * of a `.by` document asks again in the background at once, rather than when the daemon next gets
  * round to it. The parse behind the answer is the server's cheapest request.
+ *
+ * ## Not before the server holds the document
+ *
+ * `by` refuses to outline a document it has not been sent `didOpen` for, and the platform sends that
+ * after the events that make this want an outline: the first pass over a newly opened editor, an
+ * edit to a file no editor shows, a server starting with files already on screen. So nothing is
+ * asked until [ByOpenedDocuments] says the server has the document, and that same news is what asks
+ * for it. This used to ask on those events straight away, and again 700ms after a file opened or
+ * the server started in the hope that the `didOpen` had gone out by then: the first asks were
+ * refused, and the second was a guess about the platform's timing.
  */
 @Service(Service.Level.PROJECT)
 internal class ByOutlines(private val project: Project) : Disposable {
@@ -72,6 +81,9 @@ internal class ByOutlines(private val project: Project) : Disposable {
 
     /** Files a background request is already out for. */
     private val asking: MutableSet<VirtualFile> = ContainerUtil.newConcurrentSet()
+
+    /** Files asked about while a request for them was out — see [askInBackground]. */
+    private val askAgain: MutableSet<VirtualFile> = ContainerUtil.newConcurrentSet()
 
     /**
      * Files a daemon pass was given no outline for. The pass will not run again on its own until
@@ -86,28 +98,25 @@ internal class ByOutlines(private val project: Project) : Disposable {
         connection.subscribe(
             ByLspLifecycleListener.TOPIC,
             object : ByLspLifecycleListener {
-                /**
-                 * A restarted server may be a different `by`, whose parse is the one that counts.
-                 * And every `.by` file already on screen was highlighted while there was nobody to
-                 * ask, so each is asked again once the client has had time to open it on the server.
-                 */
+                /** A restarted server may be a different `by`, whose parse is the one that counts. */
                 override fun serverInitialized(serverName: String) {
                     if (serverName != BY_SERVER) return
                     answers.clear()
-                    FileEditorManager.getInstance(project).openFiles.forEach(::askSoon)
                 }
             },
         )
         connection.subscribe(
-            FileEditorManagerListener.FILE_EDITOR_MANAGER,
-            object : FileEditorManagerListener {
-                /**
-                 * The first pass over a file opened while the server runs usually asks before the
-                 * client's `didOpen` has reached the server, and is told the document is not open.
-                 * Completion of that is not observable from here, so it is looked at again shortly.
-                 */
-                override fun fileOpened(source: FileEditorManager, file: VirtualFile) {
-                    if (byServerFor(project, file) != null) askSoon(file)
+            ByOpenedDocuments.Listener.TOPIC,
+            ByOpenedDocuments.Listener { file ->
+                // The server now holds [file]. Whatever asked before it did was not asked — a pass
+                // opening the editor, an edit to a file no editor showed, every file on screen when
+                // the server started — so this is where it is asked, and a pass that was served
+                // nothing is run again once it is answered.
+                val document = FileDocumentManager.getInstance().getCachedDocument(file) ?: return@Listener
+                // opened again with the text this server already answered about: nothing new to ask
+                if (answers[file]?.stamp == document.modificationStamp) return@Listener
+                if (PsiDocumentManager.getInstance(project).getCachedPsiFile(document) is BasedPythonFile) {
+                    askInBackground(file, document)
                 }
             },
         )
@@ -170,6 +179,10 @@ internal class ByOutlines(private val project: Project) : Disposable {
     private fun ask(virtualFile: VirtualFile, document: Document): ByOutline? {
         val server = runningByServer(project, virtualFile) ?: return null
         ByServerDocuments.ensureOpen(server, project, virtualFile)
+        // Not held yet, and asking would only be refused: the platform's `didOpen` is still queued.
+        // Nothing is lost by not asking — [ByOpenedDocuments] says when it has been sent, and the
+        // file is asked about then.
+        if (!server.hasDocument(virtualFile)) return null
 
         val params = BySyntaxOutlineParams(
             TextDocumentIdentifier(server.getDocumentIdentifier(virtualFile).uri),
@@ -194,45 +207,41 @@ internal class ByOutlines(private val project: Project) : Disposable {
      * cancels the wait and the read is retried against the new text, instead of the keystroke
      * queueing behind the server. An edit that lands after the answer but before the next ask can
      * be let in is caught by comparing stamps once this one is done.
+     *
+     * A call while a request is already out is not dropped but noted in [askAgain], and the one out
+     * asks once more when it is done. That matters most for the call [ByOpenedDocuments] makes: the
+     * platform's `didOpen` is sent from a write action that waits for the read action asking here —
+     * which has just found the document not open and is about to give up — so the news that it is
+     * open arrives while that request is still counted as out.
      */
     private fun askInBackground(virtualFile: VirtualFile, document: Document) {
         // Nothing to ask: no thread is worth starting, and in a test there is never a server.
         if (byServerFor(project, virtualFile) == null) return
+        askAgain.add(virtualFile)
         if (!asking.add(virtualFile)) return
         AppExecutorUtil.getAppExecutorService().execute {
             var answered: Long? = null
             try {
-                answered = ReadAction.nonBlocking<Long?> {
-                    ask(virtualFile, document)?.stamp
-                }.expireWith(this).executeSynchronously()
+                while (askAgain.remove(virtualFile) && !project.isDisposed) {
+                    answered = ReadAction.nonBlocking<Long?> {
+                        ask(virtualFile, document)?.stamp
+                    }.expireWith(this).executeSynchronously()
+                }
             } catch (_: ProcessCanceledException) {
                 // The project closed. Nothing to ask for any more.
             } finally {
                 asking.remove(virtualFile)
             }
-            if (answered == null || project.isDisposed) return@execute
+            if (project.isDisposed) return@execute
+            // asked for between the last look at [askAgain] and the request no longer counting as out
+            if (virtualFile in askAgain) return@execute askInBackground(virtualFile, document)
+            if (answered == null) return@execute
             if (answered != document.modificationStamp) {
                 askInBackground(virtualFile, document)
             } else if (servedNothing.remove(virtualFile)) {
                 rehighlight(virtualFile)
             }
         }
-    }
-
-    /** [askInBackground] for [file], once the client has had [RECHECK_MS] to open it on the server. */
-    private fun askSoon(file: VirtualFile) {
-        AppExecutorUtil.getAppScheduledExecutorService().schedule(
-            {
-                if (project.isDisposed || !file.isValid) return@schedule
-                val document = FileDocumentManager.getInstance().getCachedDocument(file) ?: return@schedule
-                val psi = ReadAction.computeBlocking<PsiFile?, RuntimeException> {
-                    PsiDocumentManager.getInstance(project).getCachedPsiFile(document)
-                }
-                if (psi is BasedPythonFile) askInBackground(file, document)
-            },
-            RECHECK_MS,
-            TimeUnit.MILLISECONDS,
-        )
     }
 
     /** Runs the daemon over [file] again, now that there is an outline for the passes to read. */
@@ -249,6 +258,7 @@ internal class ByOutlines(private val project: Project) : Disposable {
     override fun dispose() {
         answers.clear()
         asking.clear()
+        askAgain.clear()
         servedNothing.clear()
     }
 
@@ -262,13 +272,6 @@ internal class ByOutlines(private val project: Project) : Disposable {
          * without.
          */
         private const val TIMEOUT_MS = 2_000
-
-        /**
-         * How long after a server starts, or a file opens, to ask about the file again: long enough
-         * for the client's `didOpen` to reach the server, short enough that highlighting does not
-         * visibly arrive late.
-         */
-        private const val RECHECK_MS = 700L
 
         fun getInstance(project: Project): ByOutlines = project.service()
     }

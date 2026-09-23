@@ -7,6 +7,7 @@ import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiFile
 import dev.basedpython.pycharm.lsp.ByServerDocuments
 import dev.basedpython.pycharm.lsp.askBy
+import dev.basedpython.pycharm.lsp.hasDocument
 import dev.basedpython.pycharm.lsp.runningByServer
 import org.eclipse.lsp4j.DocumentSymbol
 import org.eclipse.lsp4j.DocumentSymbolParams
@@ -113,6 +114,9 @@ internal object ByDocstringSpans {
         // A stub reached by goto-definition is not in project content, so the platform's client
         // never syncs it and every request below would come back empty. See [ByServerDocuments].
         ByServerDocuments.ensureOpen(server, file.project, virtualFile)
+        // Not held yet, and asking would only be refused. `ByRenderedDocsRefresher` has the pass
+        // look again once `ByOpenedDocuments` says the server has the file.
+        if (!server.hasDocument(virtualFile)) return null
 
         val legend = server.initializeResult?.capabilities?.semanticTokensProvider?.legend ?: return null
         val stringType = legend.tokenTypes.indexOf("string")

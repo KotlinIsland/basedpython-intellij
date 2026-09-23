@@ -139,29 +139,37 @@ Nothing internal ships any more. What each one became, for when the platform cha
 | The inter-line breakpoint API (19) | Gone with the gutter gap; a log point is marked by `ByBreakpointProperties.isLogpoint` — see above |
 | `SourceFileChangesCollectorImpl`, `SourceFileChangeFilter` (6) | Our own `SourceFileChangesCollector` — `debug/hotswap/ByChangesCollector.kt`. The public interface is three methods, so this deleted more reflection than it added code: the impl's constructor changed between 262 and 263 and had to be looked up at runtime, out of a call that runs while the debug session starts |
 | `HotSwapStatusNotificationManager.trackNotification` (5) | The last "not reloaded" balloon is held and expired at the top of `performHotSwap` |
-| `LspClientManagerListener.fileOpened`, `DocRenderManager` (17) | `ByLspLifecycleListener.serverInitialized` plus a bounded re-check on file open, and `FileContentUtilCore.reparseFiles` in place of `resetEditorToDefaultState`. **The one swap that is not like-for-like** — see below |
+| `LspClientManagerListener.fileOpened`, `DocRenderManager` (17) | `lsp/ByOpenedDocuments.kt`, which hears the platform build each `didOpen` through the descriptor's public `getLanguageId`, and `FileContentUtilCore.reparseFiles` in place of `resetEditorToDefaultState` — see below |
 | `DapInitializationException.userVisible` (2) | Nothing: since 263.5153 the platform classifies a failed start itself, reports it with the adapter's own sentence, and stops quietly on `CustomProcessedCantRunException` — so the plugin's start sequence, and the question it needed this for, are gone |
 | `ShadowJava2DBorder` (2) | `ByLogpointBoxBorder`, a rounded rect and a few translucent passes |
 | `PluginManagerCore.getPlugin` (1) | The plugin's own code source — `<plugin>/lib/<jar>` grandparent. Every descriptor lookup in the platform is internal |
 | `AdditionalFenceLanguageSuggester` (2) | **Dropped.** See below |
 
-### Rendered docstrings — needs live verification
+### When a document is open on `by`
 
-`ByRenderedDocsRefresher` lost its exact signal. `LspClientManagerListener.fileOpened` fired the
-moment the client told the server about a file; the public `LspServerListener` has no per-file
-callback, so the one event is replaced by two occasions — a server becoming ready, and a bounded
-re-check 700ms after a file opens. That second one is a delayed look where there used to be an
-event.
+`LspClientManagerListener.fileOpened` fired the moment the client told a server about a file, and
+the public `LspServerListener` has no per-file callback. For a while `ByRenderedDocsRefresher` and
+`ByOutlines` stood in for it with a re-check 700ms after a file opened or the server started — a
+guess at the platform's timing — and everything else that asked about a new document asked at once
+and was refused (*"Document … is not open in the session"*).
 
-Two things about it have **not been confirmed in a running IDE**, and should be before anyone
-trusts them: that `FileContentUtilCore.reparseFiles` really does re-run `DocRenderPassFactory`
-(it bumps the modification count the pass's skip is keyed on, which is the mechanism, but that is
-reasoning rather than observation), and that 700ms is actually long enough for the client's
-`didOpen` on a cold project. `./gradlew runPyCharm`, open a `.by` file with docstrings, and see
-whether they render without touching the keyboard.
+The platform does build every `didOpen` through `LspClientDescriptor.getLanguageId`, which is public
+and documented as the `languageId` of that notification's `TextDocumentItem`. `ByLspServerDescriptor`
+reports each call to `ByOpenedDocuments`, which is the one place that says whether `by` holds a
+document (`LspClient.hasDocument`) and tells its listeners when it starts to. `ByOutlines`,
+`ByInjections`, `ByDocstringSpans` and `ByRenderedDocsRefresher` ask nothing about a document before
+then, and ask on the news. There is no public signal for `didClose`, so `ByOpenedDocuments` follows
+the platform's own rules for sending one.
 
-An IJPL issue asking for a per-file callback on `LspServerListener` would remove the guesswork
-entirely, and is the right thing to file.
+Measured in PyCharm 263.5153.49 against `by` 591b2a49c467, over a run that opens six `.by` files,
+edits one in an editor and one no editor shows, restarts the server, opens two more and closes and
+reopens one: the plugin's refused requests went from 12 (`by/syntaxOutline` 3, `by/injections` 4,
+`textDocument/semanticTokens/full` 5) to 0, every file ended with an outline for its current text —
+the file edited without an editor included, which had none before — and every open file had its
+docstrings recorded once its tab was shown.
+
+An IJPL issue asking for per-file open and close callbacks on `LspServerListener` would replace the
+`getLanguageId` hook and the mirrored close rules, and is the right thing to file.
 
 ### Markdown code fences — dropped
 

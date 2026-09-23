@@ -6,6 +6,7 @@ import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
 import com.intellij.openapi.editor.Document
+import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
@@ -16,11 +17,13 @@ import com.intellij.util.concurrency.AppExecutorUtil
 import com.intellij.util.containers.ContainerUtil
 import dev.basedpython.pycharm.lsp.ByAnswer
 import dev.basedpython.pycharm.lsp.ByLspLifecycleListener
+import dev.basedpython.pycharm.lsp.ByOpenedDocuments
 import dev.basedpython.pycharm.lsp.ByServerDocuments
 import dev.basedpython.pycharm.lsp.askBy
 import dev.basedpython.pycharm.lsp.byServerFor
 import dev.basedpython.pycharm.lsp.ext.ByInjectionsParams
 import dev.basedpython.pycharm.lsp.ext.ByServerExtensions
+import dev.basedpython.pycharm.lsp.hasDocument
 import dev.basedpython.pycharm.lsp.runningByServer
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import org.eclipse.lsp4j.TextDocumentIdentifier
@@ -45,7 +48,12 @@ import org.jetbrains.annotations.TestOnly
  * `PsiModificationTracker.MODIFICATION_COUNT`, so an EDT caller that asks first and is told
  * *nothing* pins that answer until the file next changes — the file would sit there un-injected
  * with the answer already in hand. [reinject] is what unpins it, and it runs only when a request
- * started from the EDT comes back with something after the empty answer went out.
+ * comes back with something after the empty answer went out.
+ *
+ * The same nothing is served, on any thread, while `by` does not hold the document yet — the injector
+ * runs as the editor opens, before the platform's `didOpen` has gone out, and `by` would refuse the
+ * request. So nothing is asked until [ByOpenedDocuments] says the document is open, and that news
+ * is what asks and re-injects. Every file opened while `by` ran used to draw a refused request here.
  */
 @Service(Service.Level.PROJECT)
 internal class ByInjections(private val project: Project) : Disposable {
@@ -61,6 +69,9 @@ internal class ByInjections(private val project: Project) : Disposable {
 
     /** Files a background request is already out for, so a stalled server is asked once, not once per pass. */
     private val asking: MutableSet<VirtualFile> = ContainerUtil.newConcurrentSet()
+
+    /** Files asked about while a request for them was out — see [askInBackground]. */
+    private val askAgain: MutableSet<VirtualFile> = ContainerUtil.newConcurrentSet()
 
     /** Files that were served nothing while the real answer was still being fetched. */
     private val servedNothing: MutableSet<VirtualFile> = ContainerUtil.newConcurrentSet()
@@ -81,6 +92,13 @@ internal class ByInjections(private val project: Project) : Disposable {
                 }
             },
         )
+        project.messageBus.connect(this).subscribe(
+            ByOpenedDocuments.Listener.TOPIC,
+            // The server now holds [file]. A pass that asked before it did was not asked, and was
+            // served nothing — which the platform keeps until the file changes — so this is where
+            // it is asked, and re-injected if there turns out to be something.
+            ByOpenedDocuments.Listener { file -> if (file in servedNothing) askInBackground(file) },
+        )
     }
 
     /**
@@ -99,7 +117,8 @@ internal class ByInjections(private val project: Project) : Disposable {
         answers[virtualFile]?.let { if (it.stamp == stamp) return it.injections }
 
         if (ApplicationManager.getApplication().isDispatchThread) {
-            askInBackground(original)
+            servedNothing.add(virtualFile)
+            askInBackground(virtualFile)
             return emptyList()
         }
         return ask(virtualFile, document, stamp)
@@ -130,6 +149,12 @@ internal class ByInjections(private val project: Project) : Disposable {
     private fun ask(virtualFile: VirtualFile, document: Document, stamp: Long): List<ByInjection> {
         val server = runningByServer(project, virtualFile) ?: return emptyList()
         ByServerDocuments.ensureOpen(server, project, virtualFile)
+        // Not held yet, and asking would only be refused: the platform's `didOpen` is still queued.
+        // The nothing served meanwhile is noted, and [ByOpenedDocuments] says when to ask.
+        if (!server.hasDocument(virtualFile)) {
+            servedNothing.add(virtualFile)
+            return emptyList()
+        }
 
         val params = ByInjectionsParams(
             TextDocumentIdentifier(server.getDocumentIdentifier(virtualFile).uri),
@@ -149,8 +174,8 @@ internal class ByInjections(private val project: Project) : Disposable {
     }
 
     /**
-     * Asks about [file] off the EDT, and re-injects if the answer turns out not to be the nothing
-     * that was served in the meantime.
+     * Asks about [virtualFile] off the EDT, and re-injects if the answer turns out not to be the
+     * nothing that was served in the meantime.
      *
      * The read action is a *non-blocking* one, and that is not a detail. The request inside it waits
      * on the server for up to [INJECTIONS_TIMEOUT_MS], and a plain `ReadAction.compute` holds the
@@ -158,22 +183,28 @@ internal class ByInjections(private val project: Project) : Disposable {
      * so a write action starting in that window, which is to say a keystroke, would freeze the EDT
      * until the server answered. A non-blocking read action gives way to the pending write and is
      * retried instead.
+     *
+     * A call while a request is already out is noted in [askAgain] and asked once that one is done,
+     * rather than dropped: the platform's `didOpen` goes out from a write action that waits for the
+     * read action here, so the news that the document is open can arrive just as a request that
+     * found it closed is finishing.
      */
-    private fun askInBackground(file: PsiFile) {
-        val virtualFile = file.virtualFile ?: return
+    private fun askInBackground(virtualFile: VirtualFile) {
         // Nothing to ask: no thread is worth starting, and in a test there is never a server.
         if (byServerFor(project, virtualFile) == null) return
+        askAgain.add(virtualFile)
         if (!asking.add(virtualFile)) return
-        servedNothing.add(virtualFile)
         AppExecutorUtil.getAppExecutorService().execute {
             try {
-                val found = ReadAction.nonBlocking<List<ByInjection>> {
-                    if (!file.isValid) return@nonBlocking emptyList()
-                    val document = PsiDocumentManager.getInstance(project).getDocument(file)
-                        ?: return@nonBlocking emptyList()
-                    ask(virtualFile, document, document.modificationStamp)
-                }.expireWith(this).executeSynchronously()
-                if (found.isNotEmpty() && servedNothing.remove(virtualFile)) reinject(virtualFile)
+                while (askAgain.remove(virtualFile) && !project.isDisposed) {
+                    val found = ReadAction.nonBlocking<List<ByInjection>> {
+                        if (!virtualFile.isValid) return@nonBlocking emptyList()
+                        val document = FileDocumentManager.getInstance().getDocument(virtualFile)
+                            ?: return@nonBlocking emptyList()
+                        ask(virtualFile, document, document.modificationStamp)
+                    }.expireWith(this).executeSynchronously()
+                    if (found.isNotEmpty() && servedNothing.remove(virtualFile)) reinject(virtualFile)
+                }
             } catch (_: ProcessCanceledException) {
                 // The project closed, or the file changed under the request. Either way the next
                 // pass asks again against whatever the document says then.
@@ -181,6 +212,8 @@ internal class ByInjections(private val project: Project) : Disposable {
             } finally {
                 asking.remove(virtualFile)
             }
+            // asked for between the last look at [askAgain] and the request no longer counting as out
+            if (virtualFile in askAgain && !project.isDisposed) askInBackground(virtualFile)
         }
     }
 
@@ -209,6 +242,7 @@ internal class ByInjections(private val project: Project) : Disposable {
     override fun dispose() {
         answers.clear()
         asking.clear()
+        askAgain.clear()
         servedNothing.clear()
     }
 
