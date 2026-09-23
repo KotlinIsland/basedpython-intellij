@@ -4,9 +4,13 @@ import com.intellij.openapi.diagnostic.ControlFlowException
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.platform.lsp.api.LspClient
 import kotlinx.coroutines.withTimeoutOrNull
+import org.eclipse.lsp4j.jsonrpc.ResponseErrorException
+import org.eclipse.lsp4j.jsonrpc.messages.ResponseErrorCode
 import org.eclipse.lsp4j.services.LanguageServer
 import java.util.concurrent.CancellationException
 import java.util.concurrent.CompletableFuture
+import java.util.concurrent.CompletionException
+import java.util.concurrent.atomic.AtomicReference
 
 private val LOG = Logger.getInstance("dev.basedpython.pycharm.lsp.request")
 
@@ -56,34 +60,113 @@ internal sealed interface ByAnswer<out R : Any> {
  * the caller carries on doing work under an indicator that has already been cancelled, instead of
  * unwinding. So they are rethrown, by the same test the platform's logger applies.
  *
+ * ## Why a `null` from `sendRequestSync` is not an answer by itself
+ *
+ * `sendRequestSync` returns `null` for four different things: the server answered `null`, the server
+ * was not running so nothing was sent, no answer came within [timeoutMs], and the server answered
+ * with an **error** — which it logs as a warning and then drops. Read as they come, every one of the
+ * last three was [ByAnswer.None], "answered, and empty", and callers remember that: a file whose
+ * `by/testItems` failed was cached as a file with no tests.
+ *
+ * The commonest error is not a fault at all. `by` answers `ContentModified` when an edit lands while
+ * it is working on a request — any edit, to any file, because the database it reads is the whole
+ * project's — and LSP's instruction for that answer is to ask again. So the future the request went
+ * out as is kept and looked at: an error that says the content changed is asked again, up to
+ * [CONTENT_MODIFIED_ATTEMPTS] times; any other error, a timeout, or a request never sent is
+ * [ByAnswer.Failed].
+ *
  * Threading: background only, like the request it wraps.
  */
 internal fun <R : Any> LspClient.askBy(
     what: String,
     timeoutMs: Int = LspClient.DEFAULT_REQUEST_TIMEOUT_MS,
     request: (LanguageServer) -> CompletableFuture<R?>,
-): ByAnswer<R> = answering(what) { sendRequestSync(timeoutMs, request) }
+): ByAnswer<R> = askingAgain(what) { sent -> sendRequestSync(timeoutMs) { server -> request(server).also(sent) } }
+
+/**
+ * [askBy] without the server: [send] sends the request once, hands the future it went out as to the
+ * callback it is given, and returns what `sendRequestSync` returned.
+ */
+internal fun <R : Any> askingAgain(
+    what: String,
+    send: (sent: (CompletableFuture<R?>) -> Unit) -> R?,
+): ByAnswer<R> {
+    repeat(CONTENT_MODIFIED_ATTEMPTS) {
+        val sent = AtomicReference<CompletableFuture<R?>>()
+        val answer = answering(what) { send(sent::set) }
+        if (answer != ByAnswer.None) return answer
+        // Which of the four nulls this was. The future is complete whenever `sendRequestSync` returned
+        // because the server replied — its own result is completed off this one.
+        val future = sent.get() ?: return ByAnswer.Failed.also {
+            LOG.debug("$what request to `by` was not sent: no server was running")
+        }
+        // the platform has logged a timeout already
+        if (!future.isDone) return ByAnswer.Failed
+        val error = errorOf(future) ?: return ByAnswer.None
+        if (!isContentModified(error)) {
+            // the platform has logged the error as a warning already; this says which request it was
+            LOG.debug("$what request to `by` was answered with an error: $error")
+            return ByAnswer.Failed
+        }
+        LOG.debug("$what request to `by` was overtaken by an edit; asking again")
+    }
+    LOG.info("$what request to `by` was overtaken by an edit $CONTENT_MODIFIED_ATTEMPTS times running")
+    return ByAnswer.Failed
+}
+
+/**
+ * How many times one ask is sent before a run of `ContentModified` answers is given up on as
+ * [ByAnswer.Failed]. Each of them means an edit reached `by` while it worked, so a run of them is
+ * someone typing; the bound is there so that a caller not under a cancellable indicator does not ask
+ * for as long as they type.
+ */
+private const val CONTENT_MODIFIED_ATTEMPTS = 5
+
+/** What [future], which is done, failed with; null when it completed normally. */
+private fun errorOf(future: CompletableFuture<*>): Throwable? =
+    try {
+        future.getNow(null)
+        null
+    } catch (e: CompletionException) {
+        e.cause ?: e
+    } catch (e: CancellationException) {
+        e
+    }
+
+/** Whether [error] is the server saying an edit reached it while it worked on the request. */
+internal fun isContentModified(error: Throwable): Boolean =
+    generateSequence(error) { it.cause }.any {
+        it is ResponseErrorException && it.responseError.code == ResponseErrorCode.ContentModified.value
+    }
 
 /**
  * [askBy] for a coroutine: suspends rather than blocks, and stops waiting the moment the caller is
  * cancelled — which a blocked thread outside any progress indicator cannot be told.
  *
  * No answer within [timeoutMs] is [ByAnswer.Failed], as it is for [askBy]; only a cancellation of
- * the caller itself propagates.
+ * the caller itself propagates. A `ContentModified` answer is asked again, as [askBy] does, within
+ * the same [timeoutMs].
  */
 internal suspend fun <R : Any> LspClient.awaitBy(
     what: String,
     timeoutMs: Long = LspClient.DEFAULT_REQUEST_TIMEOUT_MS.toLong(),
     request: (LanguageServer) -> CompletableFuture<R?>,
-): ByAnswer<R> = withTimeoutOrNull(timeoutMs) {
-    try {
-        sendRequest(request)?.let { ByAnswer.Answer(it) } ?: ByAnswer.None
-    } catch (e: CancellationException) {
-        throw e
-    } catch (e: Exception) {
-        LOG.warn("$what request to `by` failed", e)
-        ByAnswer.Failed
+): ByAnswer<R> = withTimeoutOrNull<ByAnswer<R>>(timeoutMs) {
+    repeat(CONTENT_MODIFIED_ATTEMPTS) {
+        try {
+            return@withTimeoutOrNull sendRequest(request)?.let { ByAnswer.Answer(it) } ?: ByAnswer.None
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            if (!isContentModified(e)) {
+                LOG.warn("$what request to `by` failed", e)
+                return@withTimeoutOrNull ByAnswer.Failed
+            }
+            LOG.debug("$what request to `by` was overtaken by an edit; asking again")
+        }
     }
+    LOG.info("$what request to `by` was overtaken by an edit $CONTENT_MODIFIED_ATTEMPTS times running")
+    ByAnswer.Failed
 } ?: ByAnswer.Failed.also { LOG.info("$what request to `by` got no answer within $timeoutMs ms") }
 
 /**

@@ -7,6 +7,7 @@ import com.intellij.platform.lsp.api.LspClient
 import com.intellij.platform.lsp.api.LspClientManager
 import dev.basedpython.pycharm.actions.ByCli
 import dev.basedpython.pycharm.lsp.ByLspServerSupportProvider
+import dev.basedpython.pycharm.lsp.askBy
 import dev.basedpython.pycharm.lsp.ext.ByServerExtensions
 import dev.basedpython.pycharm.lsp.ext.ByTranspileParams
 import dev.basedpython.pycharm.util.BasedPythonBundle
@@ -114,7 +115,10 @@ object ByTranspile {
             )
 
         val params = ByTranspileParams(server.getDocumentIdentifier(file), reverse, snippet)
-        val response = server.sendRequestSync { (it as ByServerExtensions).transpile(params) }
+        // through `askBy`, so an edit landing while `by` transpiles is asked again rather than
+        // reported: `by` answers that with `ContentModified`, which `sendRequestSync` alone drops as
+        // though nothing had answered
+        val response = server.askBy("by/transpile") { (it as ByServerExtensions).transpile(params) }.value
             ?: return ByTranspileResult.Unavailable(
                 BasedPythonBundle.message("transpile.serverDidNotAnswer"),
             ).also { LOG.debug("`by` did not answer by/transpile for ${file.path}") }
