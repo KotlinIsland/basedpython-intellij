@@ -27,8 +27,9 @@ import com.intellij.openapi.vfs.VirtualFile
  *   **dynamic** registration.
  * - `by` registers nothing dynamically for text documents. Probed against 0.0.1: the `initialize`
  *   result carries `capabilities` and `serverInfo` and nothing else — no `experimental` block — and
- *   the one `client/registerCapability` it sends is `workspace/didChangeWatchedFiles` with
- *   `globPattern: "**"`, which watches everything and so says nothing about what it serves.
+ *   the one `client/registerCapability` it sent then was `workspace/didChangeWatchedFiles` with
+ *   `globPattern: "**"`, which watches everything and so says nothing about what it serves. (It
+ *   now watches the file system itself and does not send even that.)
  * - Even a perfect answer would come too late. This predicate is what decides whether to *start* a
  *   server at all, so with only a template open there is nobody to ask.
  *

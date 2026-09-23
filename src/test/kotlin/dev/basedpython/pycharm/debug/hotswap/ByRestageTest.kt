@@ -11,12 +11,12 @@ import org.junit.jupiter.api.Test
  * What `by` is sent when hot reload asks it what the edited files' slots should now hold.
  *
  * The defect these exist for: `by` transpiles the text its database holds, and for a file not open
- * in an editor that is the file as it last read it from disk — which it reads again only when told
- * the file changed. The platform's own notification of a save goes out before the saved bytes reach
- * the disk, so `by` re-read the old text and a reload asked straight after the save was answered
- * about the text before the edit: the tree's own bytes, `changed` false for every file, and "every
- * edited file already was the code the process is running" with bpd never asked. Pinned as the
- * messages in order, because the order is the fix: told, then asked.
+ * in an editor that is the file as it last read it from disk — which it reads again when it hears
+ * the file changed. Its own file system watcher reports a save some milliseconds after the bytes
+ * land, which is after a reload asked straight after the save, so that reload was answered about
+ * the text before the edit: the tree's own bytes, `changed` false for every file, and "every edited
+ * file already was the code the process is running" with bpd never asked. Pinned as the messages in
+ * order, because the order is the fix: told, then asked.
  *
  * The other half — the pending write flushed before `by` is told — is not pinned here, because it
  * cannot fail here: the test application's file system writes a save before `saveDocument`

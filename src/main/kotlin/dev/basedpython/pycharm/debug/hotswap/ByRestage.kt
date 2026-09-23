@@ -87,22 +87,22 @@ internal object ByRestage {
      * The request names files, not text, and `by` transpiles the text its database holds for each.
      * For a file open in an editor that is the editor's text, which the platform sends as it is
      * typed. For every other file it is the file **as `by` last read it from disk**, and `by` reads
-     * a file again only when a `workspace/didChangeWatchedFiles` says it changed — measured against
-     * `by server` directly, a file rewritten on disk with no notification is answered about in its
-     * old text indefinitely.
+     * it again when it hears the file changed: from its own file system watcher, or from a
+     * `workspace/didChangeWatchedFiles`.
      *
-     * Neither half of that could be relied on after a save, and together they were the reload that
-     * never reached bpd. From 263 the platform writes a saved document to disk **after**
-     * `saveDocument` returns: `FileDocumentManagerImpl` is an `AsyncFileContentWriteRequestor`, and
-     * the local file system queues its writes. Measured in a 263.5153 sandbox, one save in ten was
-     * not on disk when it returned, and landed up to 23 ms later. The platform's own
-     * `didChangeWatchedFiles` goes out when the VFS changes — before the write — so `by` re-read a
-     * file that still held the old text, and when the bytes landed nothing told it again. Saving
-     * `ticker.by` and asking straight away, as [ByHotSwapProvider.performHotSwap] does, got an answer
-     * about the text before the save 12 to 25 times in a hundred, still after three seconds of
-     * asking: the tree's own bytes back for every file, `changed` false everywhere, and "every
-     * edited file already was the code the process is running" with bpd never asked — while `by`,
-     * told again, answered `changed`.
+     * From 263 the platform writes a saved document to disk **after** `saveDocument` returns:
+     * `FileDocumentManagerImpl` is an `AsyncFileContentWriteRequestor`, and the local file system
+     * queues its writes. Measured in a 263.5153 sandbox, 10 to 44 saves in a hundred were not on
+     * disk when it returned, and landed up to 23 ms later. The platform's own
+     * `didChangeWatchedFiles` is put together on a pooled thread when the VFS takes the save, and
+     * in 53 saves in a hundred the bytes were not on disk yet at that point. So `by` used to
+     * re-read the old text and was never told again.
+     * `by` now watches the file system itself and asks the platform for nothing, so every save
+     * does reach it, about 25 ms after the bytes land. That is too late for this request, which
+     * [ByHotSwapProvider.performHotSwap] sends straight after the save, and which `by` answers from
+     * whatever it has read by then: the tree's own bytes back for every file, `changed` false
+     * everywhere, and "every edited file already was the code the process is running" with bpd
+     * never asked.
      *
      * So, in this order:
      *
@@ -110,17 +110,22 @@ internal object ByRestage {
      *     the file's [java.nio.file.Path] — the contract for a caller about to reach the file other
      *     than through the VFS, which is exactly what `by` is. A file with no path on disk has no
      *     slot in a tree and is left for `by` to refuse;
-     *  2. **`by` is told every file changed**, so it reads the bytes now on disk rather than trust
-     *     a notification that may have come before them. Everything here was just saved — the
+     *  2. **`by` is told every file changed**, so it reads the bytes now on disk before the request
+     *     rather than whenever its watcher reports them. Everything here was just saved — the
      *     provider saves before it asks — so this is only ever the truth, and a file `by` already
      *     had the latest of is re-read to the same text, which changes nothing downstream;
      *  3. **then it is asked**, after the notification because the platform's client sends
      *     notifications and requests through one single-threaded executor, in the order they are
      *     submitted.
      *
-     * Measured, a hundred saves each, asking straight after the save: with both, no answer about the
-     * old text; with the notification and no flush, two to five; with the flush and no
-     * notification, four, none of which `by` ever caught up on. Without either, 12 to 25.
+     * Measured against a `by` that watches for itself, a hundred saves each, asking straight after
+     * the save: with both, no answer about the old text; with the flush alone, or the notification
+     * alone, 0 or 1; with neither, 5 or 6. Every one of those caught up within 125 ms, when the
+     * watcher's report cancelled the transpile and `by` ran it again. That is a race between the
+     * watcher and the transpile, and only the two steps together keep the first answer out of it.
+     * Before `by` watched, the numbers were 0, 4 with the flush alone, 2 to 5 with the notification
+     * alone, and 12 to 25 with neither, and the ones with the flush alone or with neither never
+     * caught up.
      */
     internal fun ask(project: Project, server: LspClient, files: List<VirtualFile>, buildDirectory: String): Asked {
         ReadAction.runBlocking<RuntimeException> {
