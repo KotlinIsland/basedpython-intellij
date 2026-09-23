@@ -70,9 +70,9 @@
 
         <!-- ===== Stream C2: source-mapped debugging (§64) =====
              `by run` writes `_by_sourcemap.py` next to its transpiled output; the bootstrap in
-             /debug/sitecustomize.py hands that map to pydevd via `setPydevdSourceMap`, so
-             breakpoints set on `.by` lines land on the generated ones and frames come back as
-             `.by`. See docs/debugging.md. -->
+             /debug/sitecustomize.py hands that map to pydevd inside the debuggee, and bpd reads
+             it itself, so breakpoints set on `.by` lines land on the generated ones and frames
+             come back as `.by`. See docs/debugging.md. -->
         <platform.dap.debugAdapterSupportProvider
             implementation="dev.basedpython.pycharm.debug.ByDebugAdapterSupportProvider"/>
         <platform.dap.launchArgumentsProvider

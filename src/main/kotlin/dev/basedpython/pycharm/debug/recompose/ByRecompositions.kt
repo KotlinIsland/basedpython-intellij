@@ -41,7 +41,7 @@ import kotlinx.serialization.json.longOrNull
  */
 internal object ByRecompositions {
 
-    /** The event bpd pushes while watching, which [dev.basedpython.pycharm.debug.ByDapRequests.understands] names back. */
+    /** The event bpd pushes while watching, which the launch's `understands` names back ([dev.basedpython.pycharm.debug.ByBpdEvents.UNDERSTOOD]). */
     const val EVENT: String = "bpd/recomposition"
 
     /** The one trace format this reads; the runtime's `TRACE_FORMAT`. */

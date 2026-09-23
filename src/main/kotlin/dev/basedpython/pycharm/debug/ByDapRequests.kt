@@ -6,16 +6,9 @@ import com.jetbrains.dap.protocol.RequestType
 import kotlinx.serialization.builtins.nullable
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.add
-import kotlinx.serialization.json.buildJsonArray
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
-import kotlinx.serialization.json.putJsonArray
-import kotlinx.serialization.json.putJsonObject
 
 /**
- * The requests this plugin sends that the base protocol does not have: pydevd's
- * `setPydevdSourceMap`, and bpd's own.
+ * The requests this plugin sends that the base protocol does not have: bpd's own.
  *
  * Each is a [RequestType] the platform's DAP endpoint sends inside a session command, through
  * [DapSessionContext.endpoint] — the supported way to send a request `DapServer` does not declare.
@@ -28,42 +21,14 @@ import kotlinx.serialization.json.putJsonObject
  * agree; the readers take them field by field instead ([obj] and its neighbours).
  *
  * The answer is declared `JsonElement?`, and both halves of that matter. The platform's endpoint
- * completes a request whose response has **no body** with null whatever the declared type says —
- * pydevd's `setPydevdSourceMap` and bpd's `bpd/understands` answer that way — so a non-null declared
- * type would be a promise the endpoint does not keep. And [JsonElement] rather than [JsonObject],
- * because a body that does not decode as the declared type is not a quiet null: the endpoint logs
- * it as an error and fails the request, and an answer from a newer bpd should cost the feature
- * that reads it, not put an error in front of the user. What shape the body is, is [send]'s
- * caller's question.
+ * completes a request whose response has **no body** with null whatever the declared type says, so
+ * a non-null declared type would be a promise the endpoint does not keep. And [JsonElement] rather
+ * than [JsonObject], because a body that does not decode as the declared type is not a quiet null:
+ * the endpoint logs it as an error and fails the request, and an answer from a newer bpd should
+ * cost the feature that reads it, not put an error in front of the user. What shape the body is,
+ * is [send]'s caller's question.
  */
 internal object ByDapRequests {
-
-    /**
-     * Registers one `.by` file's mapping with pydevd.
-     *
-     * This is the whole trick behind source-mapped `.by` debugging under debugpy. The IDE cannot
-     * translate a breakpoint on the way out — `DapBreakpointManager` builds requests from
-     * `SourcePosition(VirtualFile, TextPosition)` with no hook to rewrite the path or the line — so
-     * the translation happens in the debuggee instead. pydevd has first-class support for debugging
-     * generated code (it is how notebook cell debugging works) and exposes it as this request: once
-     * a map is registered for a `.by` file, breakpoints set against that file land on the
-     * corresponding generated lines, and frames come back reported against the `.by` file.
-     *
-     * Sent by [BySourceMapPublisher]; pydevd answers with no body.
-     */
-    val setPydevdSourceMap: RequestType<JsonObject, JsonElement?> = custom("setPydevdSourceMap")
-
-    /**
-     * Which of bpd's own events this client reads.
-     *
-     * bpd narrates what it noticed on the console — the locals a jump bound to `None`, the
-     * breakpoints the destination line will not fire for this pass — because for most clients that
-     * is the only channel those facts have. It sends the same facts as data on `bpd/moved`, and a
-     * client that reads both shows everything twice. Naming an event here turns its narration off.
-     *
-     * Sent once per session, beside the source maps; see [BySourceMapPublisher].
-     */
-    val understands: RequestType<JsonObject, JsonElement?> = custom("bpd/understands")
 
     /**
      * What `bpd` can prove about a frame's names, and how long each reading stays true.
@@ -103,8 +68,9 @@ internal object ByDapRequests {
      * Start or stop the stream of `bpd/recomposition` events, which carry every trace record as it
      * is made while the program runs. Answers `{"watching": bool}` with what the flag now is.
      *
-     * The events reach the observer [ByDebugAdapterDescriptor] registers; naming the event in
-     * [understands] is what keeps bpd from narrating each run record on the console as well.
+     * The events reach the handler [ByDebugAdapterDescriptor] registers; naming the event in the
+     * launch's `understands` ([ByBpdEvents.UNDERSTOOD]) is what keeps bpd from narrating each run
+     * record on the console as well.
      */
     val watchRecompositions: RequestType<JsonObject, JsonElement?> = custom("bpd/watchRecompositions")
 
@@ -136,59 +102,3 @@ internal suspend fun DapSessionContext.send(
     request: RequestType<JsonObject, JsonElement?>,
     arguments: JsonObject,
 ): JsonObject? = endpoint.request(request, arguments).getOrThrow()?.objOrNull()
-
-/** @see ByDapRequests.understands */
-data class ByUnderstandsArguments(val events: List<String>) {
-    fun toJson(): JsonObject = buildJsonObject {
-        putJsonArray("events") { events.forEach { add(it) } }
-    }
-}
-
-/**
- * pydevd reads [pydevdSourceMaps] entries as raw dictionaries (`source_map["line"]`,
- * `source_map["runtimeSource"]["path"]`), so these field names are the wire format and must match
- * exactly.
- */
-data class SetPydevdSourceMapArguments(
-    val source: DapSourceRef,
-    val pydevdSourceMaps: List<PydevdSourceMap>,
-) {
-    fun toJson(): JsonObject = buildJsonObject {
-        put("source", source.toJson())
-        put("pydevdSourceMaps", buildJsonArray { pydevdSourceMaps.forEach { add(it.toJson()) } })
-    }
-}
-
-data class DapSourceRef(val path: String) {
-    fun toJson(): JsonObject = buildJsonObject { put("path", path) }
-}
-
-data class PydevdSourceMap(
-    val line: Int,
-    val endLine: Int,
-    val runtimeSource: DapSourceRef,
-    val runtimeLine: Int,
-) {
-    fun toJson(): JsonObject = buildJsonObject {
-        put("line", line)
-        put("endLine", endLine)
-        putJsonObject("runtimeSource") { put("path", runtimeSource.path) }
-        put("runtimeLine", runtimeLine)
-    }
-}
-
-/** The request that registers one `.by` file's mapping. */
-fun ByFileMapping.toRequest(): SetPydevdSourceMapArguments {
-    val runtimeSource = DapSourceRef(generated)
-    return SetPydevdSourceMapArguments(
-        source = DapSourceRef(source),
-        pydevdSourceMaps = runs.map {
-            PydevdSourceMap(
-                line = it.line,
-                endLine = it.endLine,
-                runtimeSource = runtimeSource,
-                runtimeLine = it.runtimeLine,
-            )
-        },
-    )
-}

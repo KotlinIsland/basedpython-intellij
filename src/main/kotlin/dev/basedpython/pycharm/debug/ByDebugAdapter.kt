@@ -21,7 +21,6 @@ import com.intellij.platform.dap.DapExceptionBreakpoint
 import com.intellij.platform.dap.DapExceptionInfo
 import com.intellij.platform.dap.DapExecutionUiContext
 import com.intellij.platform.dap.DapExecutionUiSupport
-import com.intellij.platform.dap.DapObserversBuilder
 import com.intellij.platform.dap.DapStartRequest
 import com.intellij.platform.dap.DebugAdapterDescriptor
 import com.intellij.platform.dap.DebugAdapterId
@@ -32,6 +31,7 @@ import com.intellij.platform.dap.xdebugger.DapXDebugProcess
 import com.intellij.util.PathUtil
 import com.intellij.xdebugger.XDebugSession
 import com.intellij.xdebugger.breakpoints.XBreakpointHandler
+import com.jetbrains.dap.impl.DapClientHandlersBuilder
 import com.jetbrains.dap.protocol.OutputEventArguments
 import dev.basedpython.pycharm.actions.ByCli
 import dev.basedpython.pycharm.debug.bpd.ByBpdConnection
@@ -67,25 +67,35 @@ class ByDebugAdapterSupportProvider : DebugAdapterSupportProvider<ByDebugAdapter
  *
  * A fresh instance per session — the platform creates one from
  * [ByDebugAdapterSupportProvider.createDebugAdapterDescriptor] each time — which is what lets it
- * hold the session's port and, once the debuggee reports in, its source maps.
+ * hold the session's port and what the debuggee reported.
+ *
+ * ## nothing here races the platform
+ *
+ * Everything a session needs in place before the program runs a line is in place by construction,
+ * never by getting a request to the adapter ahead of the platform's own `setBreakpoints` and
+ * `configurationDone` — the platform promises nothing about that order, and 263.5701 took away the
+ * traffic observer the plugin once used to win it:
+ *
+ *  - **source maps** are never sent. bpd reads `_by_sourcemap.py` itself at `launch`, out of the
+ *    directory beside the program, and holds a `.by` breakpoint that arrives before it as
+ *    `pending`; under debugpy the bootstrap hands pydevd the maps inside the debuggee before it
+ *    reports the port, so before anything can connect ([ByDebuggeeInfo.mapped])
+ *  - **what this plugin reads** of bpd's events, and the **recomposition watch**, ride the `launch`
+ *    itself ([startArguments]) — the one request that cannot arrive after the program has started,
+ *    because it is what starts it
+ *  - **bpd's events** are read by name whenever they arrive
+ *    ([DapCustomization.registerProtocolHandlers]), which is never before the `launch` that says
+ *    this plugin reads them
  */
 class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescriptor<ByDebugAdapter>() {
 
     override val id: ByDebugAdapter = ByDebugAdapter
 
     private var setup: ByDebugSetup? = null
-    private var mappings: List<ByFileMapping> = emptyList()
 
     /** What a bpd session's wrapper recorded, once [launchDebugAdapter] has read it. */
     @Volatile
     private var bpdRecord: ByBpdRecord.Ready? = null
-
-    /**
-     * The platform's session, once [createXDebugProcess] has been handed it — which is before the
-     * adapter is launched, and so before anything in [registerObservers] can need it.
-     */
-    @Volatile
-    private var dapSession: DapDebugSession? = null
 
     /**
      * This session's link to bpd's compose runtime: the identity every recomposition call of this
@@ -99,31 +109,55 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
     override val customization: DapCustomization = object : DapCustomization() {
         override val breakpointsSupport: DapBreakpointsSupport = ByBreakpointsSupport
         override val executionUiSupport: DapExecutionUiSupport = ByOutputSupport { setup?.backend }
+
+        /**
+         * bpd's own events, bound to the client's dispatch by name. Nothing else is listened to:
+         * the platform handles every event the base protocol has.
+         */
+        override fun registerProtocolHandlers(builder: DapClientHandlersBuilder) {
+            ByBpdEvents.register(
+                builder,
+                bpdEvents(
+                    onMoved = ::report,
+                    onRecomposed = { event ->
+                        recompositionLink?.let { ByRecompositionSession.getInstance(project).append(it, event) }
+                    },
+                ),
+            )
+        }
     }
 
     /**
-     * The line and exception breakpoint types, and the handler that sends exception breakpoints.
+     * The line and exception breakpoint types.
+     *
+     * On the descriptor rather than on [ByBreakpointsSupport], because the descriptor is where both
+     * ends of the supported range read it: 263.5701 declares it here and nowhere else, and 263.5153,
+     * which also offers it on the support, reads the descriptor's when the support has none.
+     */
+    @Suppress("OVERRIDE_DEPRECATION")
+    override val breakpointsDescription: DapBreakpointsDescription = object : DapBreakpointsDescription(
+        sourceBreakpointType = ByLineBreakpointType::class.java,
+        exceptionBreakpointType = ByExceptionBreakpointType::class.java,
+    ) {
+        /**
+         * DAP does not say *which* exception breakpoint a stop belongs to, and the platform needs
+         * one to attach the stop to. There is exactly one exception breakpoint here — the type's
+         * single default — so any exception stop is that one.
+         */
+        override fun doesExceptionMatchBreakpoint(
+            exceptionInfo: DapExceptionInfo,
+            breakpoint: DapExceptionBreakpoint,
+        ): Boolean = breakpoint.ideBreakpoint.type is ByExceptionBreakpointType
+    }
+
+    /**
+     * The handler that sends exception breakpoints.
      *
      * `DapXDebugProcess` makes a handler for the source breakpoint type and, when there is one, the
      * function breakpoint type; everything else it takes from here. Without
      * [ByExceptionBreakpointHandler] the exception type would be a checkbox that changed nothing.
      */
     private object ByBreakpointsSupport : DapBreakpointsSupport() {
-        override val breakpointsDescription: DapBreakpointsDescription = object : DapBreakpointsDescription(
-            sourceBreakpointType = ByLineBreakpointType::class.java,
-            exceptionBreakpointType = ByExceptionBreakpointType::class.java,
-        ) {
-            /**
-             * DAP does not say *which* exception breakpoint a stop belongs to, and the platform needs
-             * one to attach the stop to. There is exactly one exception breakpoint here — the type's
-             * single default — so any exception stop is that one.
-             */
-            override fun doesExceptionMatchBreakpoint(
-                exceptionInfo: DapExceptionInfo,
-                breakpoint: DapExceptionBreakpoint,
-            ): Boolean = breakpoint.ideBreakpoint.type is ByExceptionBreakpointType
-        }
-
         override fun createAdditionalBreakpointHandlers(
             dapSession: DapDebugSession,
             session: XDebugSession,
@@ -179,8 +213,8 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
     /**
      * Waits for the bootstrap to report that it is listening, then connects.
      *
-     * By the time this returns, [mappings] is populated — [BySourceMapPublisher], which needs them,
-     * reads them when the adapter reports itself initialized, which it can only do once connected.
+     * Under debugpy the report is written only once pydevd holds every `.by` file's map, so what
+     * this connects to already translates a `.by` breakpoint whenever the platform sends one.
      */
     override suspend fun launchDebugAdapter(
         environment: ExecutionEnvironment,
@@ -193,10 +227,9 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
         ByDebugSetups.getInstance(project).releaseWith(setup, processHandler)
 
         if (setup.backend == ByDebugBackend.BPD) {
-            // No source maps to invert and none to publish: bpd reads `_by_sourcemap.py` itself,
-            // from the filesystem the program is on, and reports `.by` locations from the agent.
-            // `mappings` stays empty and `BySourceMapPublisher` sends nothing, which is right —
-            // sending pydevd's request to bpd would be sending it a request it does not have
+            // No source maps to hand anything: bpd reads `_by_sourcemap.py` itself at `launch`, from
+            // the filesystem the program is on, holds a `.by` breakpoint set before then as
+            // `pending`, and reports `.by` locations from the agent
             val connection = try {
                 ByBpdConnection.open(setup.infoFile, processHandler, setup.said)
             } catch (e: ExecutionException) {
@@ -225,7 +258,6 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
             )
         }
 
-        mappings = ByLineMapping.invert(info.mappedFiles)
         reportMappingProblems(info)
 
         return DebugAdapterSocketConnection(
@@ -248,33 +280,6 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
     private var executionResult: ExecutionResult? = null
 
     /**
-     * What this session listens to on the adapter's connection: `initialized`, to publish ahead of
-     * the platform's configuration ([BySourceMapPublisher]), and bpd's own events.
-     */
-    override fun registerObservers(observers: DapObserversBuilder) {
-        observers.traffic(
-            BySourceMapPublisher(
-                executor = { dapSession },
-                mappings = { mappings },
-                // The compose runtime's trace is bpd's to read, so only a bpd session is told when
-                // the adapter is ready for a watch; debugpy would answer `unknown command`
-                onReady = {
-                    val link = recompositionLink
-                    if (setup?.backend == ByDebugBackend.BPD && link != null) {
-                        ByRecompositionSession.getInstance(project).adapterReady(link, this)
-                    }
-                },
-            ),
-        )
-        bpdEvents(
-            onMoved = ::report,
-            onRecomposed = { event ->
-                recompositionLink?.let { ByRecompositionSession.getInstance(project).append(it, event) }
-            },
-        ).forEach { observers.event(it.type, it::observe) }
-    }
-
-    /**
      * Puts what a jump or a restart really did on the run console.
      *
      * The console rather than a notification: it is where the rest of the session's account of
@@ -282,8 +287,9 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
      * the same move twice, once beside the code and once away from it. Nothing is printed for a move
      * that went where it was asked and disturbed nothing; see [report].
      *
-     * bpd sent these as prose until told this plugin reads them ([BySourceMapPublisher]), so this is
-     * a rewrite of a line rather than a second copy of one.
+     * bpd sends these as prose to a client that has not said it reads them, and this one says so in
+     * the `launch` ([ByBpdEvents.UNDERSTOOD]), so this is a rewrite of a line rather than a second
+     * copy of one.
      */
     private fun report(moved: ByMoved) {
         val text = moved.report() ?: return
@@ -305,7 +311,6 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
         startRequestType: DapStartRequest,
         startRequestArguments: Map<String, Any?>,
     ): DapXDebugProcess {
-        dapSession = dapDebugSession
         val link = ByRecompositionRequests(dapDebugSession).also { recompositionLink = it }
         return ByDapXDebugProcess(
             session,
@@ -343,12 +348,19 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
      * So a bpd session's arguments are a map whose contents are that record's, read the first time
      * anything reads the map. A bpd session with no record by then is one whose adapter was never
      * reached, and has nothing to launch.
+     *
+     * The launch also says what this plugin reads of bpd's events and whether to stream the
+     * recompositions ([ByBpdRecord.Ready.launchArguments]). The watch is read from the preference
+     * here, when the platform builds the `launch`.
      */
     private fun startArguments(provided: Map<String, Any?>): Map<String, Any?> {
         if (setup?.backend != ByDebugBackend.BPD) return provided
         return ByRecordedArguments {
             val record = bpdRecord ?: throw ExecutionException(BasedPythonBundle.message("debug.error.noSetup"))
-            record.launchArguments(provided)
+            record.launchArguments(
+                provided,
+                watchRecompositions = ByRecompositionSession.getInstance(project).watchesFromTheStart,
+            )
         }
     }
 
@@ -386,7 +398,7 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
         val detail = when {
             collisions.isNotEmpty() -> describeCollisions(collisions)
             info.message != null -> info.message
-            mappings.isEmpty() -> BasedPythonBundle.message("debug.warning.noMappedLines")
+            (info.mapped ?: 0) == 0 -> BasedPythonBundle.message("debug.warning.noMappedLines")
             else -> return
         }
         LOG.warn("basedpython debug session started with a mapping problem: $detail")

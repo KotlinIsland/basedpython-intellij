@@ -17,10 +17,7 @@ import com.intellij.openapi.util.SystemInfo
 import com.intellij.openapi.util.io.FileUtil
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiManager
-import com.intellij.platform.dap.DapSessionContext
-import dev.basedpython.pycharm.debug.ByDapRequests
 import dev.basedpython.pycharm.debug.bool
-import dev.basedpython.pycharm.debug.recompose.ByRecompositionRequests.Companion.ask
 import dev.basedpython.pycharm.debug.ByEditorMarks
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import dev.basedpython.pycharm.util.BasedPythonBundle
@@ -61,10 +58,9 @@ import kotlinx.serialization.json.JsonObject
  *
  * ## the watch
  *
- * The preference is the user's; whether bpd is streaming is bpd's to say. The watch is sent when
- * the adapter is ready ([adapterReady], before the program has run a line — though bpd, which is
- * ready before it has been told what to launch, refuses it then), and sent again at a stop and after
- * a pull for as long as the preference is on and bpd has not confirmed. A refusal of a watch is
+ * The preference is the user's; whether bpd is streaming is bpd's to say. The watch is asked for in
+ * the `launch` itself ([watchesFromTheStart]), so it is on before the program runs a line, and sent
+ * again at a stop and after a pull for as long as the preference is on and bpd has not confirmed. A refusal of a watch is
  * never the window's state: it is said once, as a notification and in the toolbar, and the toggle
  * shows what bpd last confirmed.
  *
@@ -180,7 +176,7 @@ internal class ByRecompositionSession(
      * Whether bpd is asked to stream records as they happen.
      *
      * A per-project preference, kept across sessions: someone watching one run wants to watch the
-     * next. Sent to bpd when a session's adapter is ready ([adapterReady]), whenever it changes
+     * next. Asked for in a session's `launch` ([watchesFromTheStart]), sent whenever it changes
      * during a session ([setWatching]), and again at a stop or after a pull until bpd confirms.
      */
     val watching: Boolean
@@ -268,21 +264,16 @@ internal class ByRecompositionSession(
     }
 
     /**
-     * The adapter has reported itself initialized, and the platform has not yet told it to run.
+     * Whether a bpd session's `launch` asks for the stream, as its `watchRecompositions`.
      *
-     * Started with `bpd/understands` ([dev.basedpython.pycharm.debug.BySourceMapPublisher]), so the
-     * request is written ahead of `configurationDone` and `launch`, and nothing has run yet. bpd
-     * holds a watch asked for before it has a program, answers it `pending`, and turns it on before
-     * the program runs a line — so the stream carries the first frame. `pending` is not a
-     * confirmation, so the toggle goes on showing the preference until the first stop ([paused])
-     * sends the watch again and bpd confirms it.
+     * In the launch because it is the one request that cannot arrive after the program has started:
+     * bpd turns the watch on before the program runs a line, so the stream carries the first frame,
+     * whenever the platform sends the rest of its requests. No answer comes of it, so the toggle goes
+     * on showing the preference until the first stop ([paused]) sends the watch again and bpd
+     * confirms it.
      */
-    suspend fun adapterReady(link: ByRecompositionLink, context: DapSessionContext) {
-        if (!enabled || !watching || this.link !== link) return
-        val ticket = watchTickets.incrementAndGet()
-        val answer = context.ask(ByDapRequests.watchRecompositions, ByWatchRecompositionsArguments(on = true).toJson())
-        takeWatch(link, ticket, answer)
-    }
+    val watchesFromTheStart: Boolean
+        get() = enabled && watching
 
     // ---- what the window asks for ----------------------------------------
 

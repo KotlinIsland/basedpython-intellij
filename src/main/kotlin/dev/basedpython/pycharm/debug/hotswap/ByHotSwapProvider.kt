@@ -360,7 +360,8 @@ internal class ByHotSwapProvider(
      *
      * The *reasons* bpd gave stay on the console and are not repeated here — bpd writes each one to
      * the `output` stream under category `important`, and a balloon re-rendering that vocabulary is
-     * the duplication [dev.basedpython.pycharm.debug.ByDapRequests.understands] exists to stop.
+     * the duplication the launch's `understands` ([dev.basedpython.pycharm.debug.ByBpdEvents.UNDERSTOOD])
+     * exists to stop.
      */
     private fun tell(notReloaded: List<String>) {
         if (notReloaded.isEmpty()) return

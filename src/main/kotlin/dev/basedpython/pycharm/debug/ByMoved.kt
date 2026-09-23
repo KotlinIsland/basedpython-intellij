@@ -71,7 +71,7 @@ internal data class ByMoved(
 ) {
     companion object {
 
-        /** The event name, which is also what [ByDapRequests.understands] names back. */
+        /** The event name, which is also what the launch's `understands` names back ([ByBpdEvents.UNDERSTOOD]). */
         const val EVENT: String = "bpd/moved"
 
         /** The value of `Jump`'s serde tag when cpython refused the move. */

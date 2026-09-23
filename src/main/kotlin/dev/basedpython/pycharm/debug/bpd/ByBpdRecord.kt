@@ -2,6 +2,7 @@ package dev.basedpython.pycharm.debug.bpd
 
 import com.google.gson.JsonParser
 import com.intellij.openapi.diagnostic.Logger
+import dev.basedpython.pycharm.debug.ByBpdEvents
 
 /**
  * What [ByBpdWrapper] and `bpd` between them wrote to the record file.
@@ -42,9 +43,20 @@ sealed interface ByBpdRecord {
          * (`run.main`), decides what goes after the runner, and names the runner by a path in a
          * directory it has only just made. A launch request built from the configuration was a
          * second guess at all four.
+         *
+         * And what this plugin reads of bpd's events, and whether to stream the recompositions from
+         * the first line ([watchRecompositions]): the launch is the one request that cannot reach
+         * bpd after the program has started, because it is what starts it, so nothing said here has
+         * to overtake the platform's own `setBreakpoints` and `configurationDone`.
          */
-        fun launchArguments(base: Map<String, Any?>): Map<String, Any?> =
-            base + mapOf(PYTHON to python, PROGRAM to argv.first(), ARGS to argv.drop(1))
+        fun launchArguments(base: Map<String, Any?>, watchRecompositions: Boolean): Map<String, Any?> =
+            base + mapOf(
+                PYTHON to python,
+                PROGRAM to argv.first(),
+                ARGS to argv.drop(1),
+                UNDERSTANDS to ByBpdEvents.UNDERSTOOD,
+                WATCH_RECOMPOSITIONS to watchRecompositions,
+            )
     }
 
     /**
@@ -69,6 +81,10 @@ sealed interface ByBpdRecord {
         const val PYTHON: String = "python"
         const val PROGRAM: String = "program"
         const val ARGS: String = "args"
+
+        /** And the two that are this plugin's rather than the program's. */
+        const val UNDERSTANDS: String = "understands"
+        const val WATCH_RECOMPOSITIONS: String = "watchRecompositions"
 
         /**
          * The tree `by run` chose, out of a record file that may still be half written.

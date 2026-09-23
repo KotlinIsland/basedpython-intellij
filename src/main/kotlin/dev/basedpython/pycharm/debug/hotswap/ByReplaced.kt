@@ -75,7 +75,8 @@ data class ByReplaceCodeArguments(
  * category `important` — which this plugin puts where a person cannot miss it (see
  * [dev.basedpython.pycharm.debug.ByAdapterOutput]). Reading them again here would be a second copy
  * of that vocabulary rendering the same sentences twice, which is exactly what
- * [dev.basedpython.pycharm.debug.ByDapRequests.understands] exists to stop for events.
+ * the launch's `understands` ([dev.basedpython.pycharm.debug.ByBpdEvents.UNDERSTOOD]) exists to
+ * stop for events.
  *
  * So all this needs from a refusal is *that* it was one — [applied] — and how many reasons there
  * were, which is what tells a caller whether the console is about to explain itself.

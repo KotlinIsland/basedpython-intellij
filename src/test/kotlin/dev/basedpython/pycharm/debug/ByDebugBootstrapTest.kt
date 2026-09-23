@@ -53,23 +53,27 @@ class ByDebugBootstrapTest {
     }
 
     @Test
-    fun `a listening report parses into mappable files`() {
+    fun `a listening report says how many files pydevd was handed a map for`() {
         val info = ByDebuggeeInfo.parse(
             """
             {"status": "listening", "port": 5679, "python": "/usr/bin/python3",
-             "runDir": "/tmp/x", "message": null,
-             "files": [{"source": "/abs/demo.by", "generated": "/tmp/x/demo.py",
-                        "lines": [null, 0, 1]}]}
+             "runDir": "/tmp/x", "message": null, "mapped": 2}
             """.trimIndent()
         )
         assertNotNull(info)
         assertTrue(info!!.isListening)
         assertEquals(5679, info.port)
-        assertEquals(listOf(null, 0, 1), info.mappedFiles.single().lines)
-        assertEquals(
-            listOf(ByLineRun(line = 1, endLine = 2, runtimeLine = 2)),
-            ByLineMapping.invert(info.mappedFiles).single().runs,
-        )
+        assertEquals(2, info.mapped)
+    }
+
+    /**
+     * The key the bootstrap writes and the one [ByDebuggeeInfo] reads are two spellings in two
+     * languages with nothing linking them: renamed on one side, every debugpy session would warn
+     * that the map was empty.
+     */
+    @Test
+    fun `the bootstrap reports the count under the key the IDE reads`() {
+        assertTrue(bootstrap.contains("\"mapped\": mapped"), "the bootstrap no longer reports `mapped`")
     }
 
     @Test
@@ -79,9 +83,8 @@ class ByDebugBootstrapTest {
         assertFalse(info!!.isListening)
         assertEquals("cannot import debugpy", info.message)
         // Gson builds instances without running the constructor, so an absent key leaves null
-        // behind whatever a Kotlin default declares. The error report carries no "files" at all.
-        assertNull(info.files)
-        assertTrue(info.mappedFiles.isEmpty())
+        // behind whatever a Kotlin default declares. The error report carries no "mapped" at all.
+        assertNull(info.mapped)
     }
 
     /**

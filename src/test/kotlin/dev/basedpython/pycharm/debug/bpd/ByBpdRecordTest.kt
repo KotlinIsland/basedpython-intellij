@@ -69,9 +69,14 @@ class ByBpdRecordTest {
                 "python" to "/project/.venv/bin/python3",
                 "program" to "/tmp/by-build-1/_by_runner.py",
                 "args" to listOf("app.main", "--verbose"),
+                // said in the launch, which cannot reach bpd after the program has started, so
+                // neither has to overtake the platform's own configuration requests
+                "understands" to listOf("bpd/moved", "bpd/recomposition"),
+                "watchRecompositions" to true,
             ),
-            ready.launchArguments(mapOf("stopOnEntry" to false)),
+            ready.launchArguments(mapOf("stopOnEntry" to false), watchRecompositions = true),
         )
+        assertEquals(false, ready.launchArguments(emptyMap(), watchRecompositions = false)["watchRecompositions"])
     }
 
     @Test

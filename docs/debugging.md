@@ -53,13 +53,11 @@ side can map *frames* back to `.by`, but it cannot map *breakpoints* forward to 
 ## How it works
 
 pydevd does the translation. debugpy vendors pydevd, which has first-class support for debugging
-generated code — it is how notebook cell debugging works — exposed as a custom DAP request:
-
-    setPydevdSourceMap { source: {path}, pydevdSourceMaps: [{line, endLine, runtimeSource: {path}, runtimeLine}] }
-
-Once a map is registered for a `.by` file, breakpoints set on that file are placed on the
-corresponding generated lines, and frames come back reported against the `.by` file. Both
-directions, in the debuggee, where the map already lives.
+generated code — it is how notebook cell debugging works — behind its `set_source_mapping` API (the
+same call its `setPydevdSourceMap` DAP request makes). Once a map is registered for a `.by` file,
+breakpoints set on that file are placed on the corresponding generated lines, and frames come back
+reported against the `.by` file. Both directions, in the debuggee, where the map already lives —
+and the bootstrap registers it there, in-process, so the IDE never sends it.
 
 The pieces, all under `src/main/kotlin/dev/basedpython/pycharm/debug/` unless noted:
 
@@ -77,12 +75,9 @@ The pieces, all under `src/main/kotlin/dev/basedpython/pycharm/debug/` unless no
    sets `PYTHONPATH` itself keeps working.
 3. **`resources/debug/sitecustomize.py`** is the bootstrap. `PYTHONPATH` plus a `sitecustomize.py`
    is the one hook that reaches an interpreter you did not launch. It reads `_by_sourcemap.py`,
-   calls `debugpy.listen()`, writes both the map and the outcome as JSON, then blocks in
-   `debugpy.wait_for_client()`.
-4. **`ByDebugAdapterDescriptor.launchDebugAdapter`** waits for that JSON file, inverts the map, and
-   opens the socket.
-5. **`BySourceMapPublisher`** sends one `setPydevdSourceMap` per `.by` file when `initialized`
-   arrives, ahead of the breakpoints and `configurationDone` the platform releases behind it.
+   calls `debugpy.listen()`, inverts the map and registers every file's with pydevd in-process,
+   writes the outcome as JSON, then blocks in `debugpy.wait_for_client()`.
+4. **`ByDebugAdapterDescriptor.launchDebugAdapter`** waits for that JSON file and opens the socket.
 
 `ByLineBreakpointType` supplies the `.by` line breakpoints (the Python plugin's is unavailable —
 see FEATURES.md §5), and the run configuration's own console and process handler are put back —
@@ -92,26 +87,25 @@ output — the transpile step included — never travels over DAP.
 
 ## The four things that are easy to get wrong
 
-**Ordering against the configuration.** The platform answers `initialized` by releasing its
-configuration sender, which sends `setBreakpoints` for every file and then `configurationDone` —
-and `configurationDone` is what lets the program run, so a map registered after it misses the code
-that runs first. (Ahead of `setBreakpoints` too, though that half heals itself: pydevd's
-`set_source_mapping` ends in `reapply_breakpoints`.) pydevd handles a connection's messages one at a
-time on its reader thread, so a request *written* ahead of `configurationDone` takes effect ahead of
-it.
+**Nothing may race the platform's configuration.** The platform answers `initialized` by sending
+`setBreakpoints` for every file and then `configurationDone`, and `configurationDone` is what lets
+the program run. Nothing in its API sits between `initialized` and those requests, and nothing
+promises when a request of the plugin's goes out against them — 263.5701 removed the traffic
+observer the plugin once used to get its source maps written first, and the protocol handlers that
+remain run after the platform's own. So nothing a session needs before the program runs a line is
+sent as a request of its own:
 
-No hook in the platform's API sits between `initialized` and that release, so the order comes from
-how its session commands run: one at a time on one thread, in the order posted, each exclusively
-only up to its first suspension. `BySourceMapPublisher` is a `DapTrafficObserver`, which sees the
-incoming `initialized` before the platform's handler does, so its command is queued ahead of the
-release; and it starts every request as a child coroutine in that command's one turn, so each is
-written before anything the release causes to be posted. Two alternatives were measured and fail:
-sending the requests one after another is overtaken by `setBreakpoints` at the first answer
-awaited, and holding the command thread until they are all answered deadlocks the session, because
-the platform answers `initialize` on that same thread and every other request waits for that.
-`BySourceMapPublisherTest` reproduces the platform's executor and pins the order; on the wire, bpd
-receives `bpd/understands` and the watch ahead of `launch`, `setBreakpoints` and
-`configurationDone`.
+- **the maps** under debugpy are registered by the bootstrap inside the debuggee, before it writes
+  the report the IDE waits for, so before anything can connect. Under bpd nobody sends them: bpd
+  reads `_by_sourcemap.py` itself at `launch`, out of the directory beside the program, and answers
+  a `.by` breakpoint that arrives before it `pending` rather than refusing it — then binds it, with
+  a `breakpoint` event, once the map is read and the module imported. bpd's wire tests
+  `a_by_breakpoint_set_before_the_launch_binds_through_the_map_and_hits` and
+  `a_by_breakpoint_in_a_module_the_runner_imports_is_held_until_the_import_binds_it` pin that, and
+  `ByBpdLiveSessionTest` drives it from this plugin's side with real `by` and `bpd`
+- **what the plugin reads** of bpd's events and **the recomposition watch** ride the `launch`
+  itself, as `understands` and `watchRecompositions`: the one request that cannot reach bpd after
+  the program has started, because it is what starts it
 
 **Inverting the map.** The forward table is a total function from generated lines to `.by` lines;
 the inverse is a relation, because one `.by` line routinely becomes several generated ones. Each
@@ -133,8 +127,8 @@ still the sentinel and the variables view reads `<object object at 0x…>` — t
 Pinning to the last stops on `a.append(1)` with `a == []`. The trade is that a line expanding to
 real work *followed* by emitted code (a runtime soundness check after an assignment) now breaks
 after the assignment rather than before it: a moment later than ideal, which beats showing an
-internal sentinel where a variable should be. `ByLineMapping`, unit-tested against this exact
-transpiler output.
+internal sentinel where a variable should be. The bootstrap's `_invert_lines`, which
+`ByDebugBootstrapLinesTest` runs under a real interpreter against this exact transpiler output.
 
 **Reading the debuggee's state.** `sys.argv[0]` *is* available inside `sitecustomize` —
 `_PySys_UpdateConfig` runs before `init_import_site` — so the bootstrap can tell the transpiled
@@ -205,7 +199,7 @@ A project is rarely all `.by`. Breakpoints work in its `.py` files too, and the 
 how little it takes: **a `.py` breakpoint needs no source map at all.** `by run` transpiles `.by`
 and copies nothing else, so a `.py` module is loaded by the interpreter from where the user wrote
 it — the file the breakpoint names *is* the file that runs, at the line it says. Both backends place
-it without being told anything: pydevd because it is simply not a file a `setPydevdSourceMap` was
+it without being told anything: pydevd because it is simply not a file a source map was
 registered for, bpd because its mapping layer sends everything that is not `.by` through to its
 agent untouched. Verified live against debugpy 1.8.21 with a mixed project: `helper.py:2` reports
 `verified`, stops with `a`/`b` bound, and the frames below it are still `main.by:4` and `main.by:7`.
@@ -298,7 +292,7 @@ data-flow analysis is seeded from.
 | Where the adapter lives | inside the debuggee, via `debugpy.listen()` | its own process, started by the wrapper |
 | The DAP start request | `Attach`, with a `connect` block | `Launch` |
 | How the IDE reaches it | `PYTHONPATH` + `sitecustomize.py` | `PYTHON` + a wrapper script |
-| Who maps `.by` lines | the IDE, via `setPydevdSourceMap` | bpd's own agent |
+| Who maps `.by` lines | pydevd, handed the map in-process by the bootstrap | bpd's own agent |
 
 ### Why bpd needs a wrapper
 
@@ -337,16 +331,16 @@ and a client cannot.
 
 DAP was never the obstacle. Its event bodies are open JSON objects and an adapter may name its own
 events; what drops the extras is a client that deserialises into fixed types. The platform's client
-dispatches any event name an observer registers (`DebugAdapterDescriptor.registerObservers`, with an
+dispatches any event name a handler registers (`DapCustomization.registerProtocolHandlers`, with an
 `EventType` naming the event and the serializer for its body), and `bpdEvents` registers bpd's with
 `JsonElement` as that serializer — so nothing an adapter sends is lost, and a body from a newer bpd
 that does not read costs the report rather than an IDE error. `ByRecompositionsWireTest` drives an
 event through the platform's own client to the reader.
 
 bpd sends `bpd/moved` carrying its `Jumped` whole; [ByMoved] reads it. And because narrating the same
-facts *and* sending them would show everything twice, a client says what it reads —
-`bpd/understands {"events": [...]}` — and bpd stops narrating those. A client that has never heard of
-the request keeps the prose, which is what makes this an addition rather than a migration: measured
+facts *and* sending them would show everything twice, a client says what it reads — this plugin in
+its `launch`, as `understands`; any client with `bpd/understands {"events": [...]}` — and bpd stops
+narrating those. A client that says nothing keeps the prose, which is what makes this an addition rather than a migration: measured
 both ways against one session, the unaware client still gets
 `stop 2: ["later"] held nothing before the move and hold \`None\` now`, and the aware one gets
 `"bound_to_none": ["later"]` and no console line at all.
@@ -433,13 +427,14 @@ imported `basedpython_ui.runtime`, or runs it with `trace=False`, or writes a tr
 does not read. The sentence is what the window shows instead of rows, and it is logged once per
 session at debug level. Every body is read field by field, total over any json: a record or a cause
 a newer bpd has grown costs that record, never the session, and the count of what could not be read
-is a row at the bottom of the tree rather than a silence. `bpd/recomposition` is named in
-`bpd/understands`, so bpd does not narrate each run on the console as well.
+is a row at the bottom of the tree rather than a silence. `bpd/recomposition` is named in the
+launch's `understands`, so bpd does not narrate each run on the console as well.
 
-A watch that was on before the session began sees the first frame: the request goes out in the same
-command as `bpd/understands`, after `initialize` has been answered and before the platform's
-`configurationDone`, so nothing has run yet — bpd accepts a watch before the program has imported
-the runtime, watching being an interest in records to come. Should bpd refuse it anyway, the watch
+A watch that was on before the session began sees the first frame: it is asked for in the `launch`
+itself, as `watchRecompositions`, and bpd turns it on before the program runs a line — the launch
+cannot reach bpd after the program has started, because it is what starts it, so this depends on no
+order of the platform's requests. bpd accepts a watch before the program has imported the runtime,
+watching being an interest in records to come. Should bpd refuse it anyway, the watch
 is sent again at the first stop and after every pull for as long as the preference is on and bpd
 has not confirmed; a refusal of the watch is never the window's state — it is said once, as a
 notification and in the toggle's description, and the toggle shows what bpd last confirmed. The
@@ -634,7 +629,7 @@ this seventeen times.
 
 bpd's DAP adapter writes each reason to the `output` stream under category `important`, which is the
 category this plugin already puts where a person cannot miss it (see `ByAdapterOutput`). So nothing
-in the plugin re-renders them, for the same reason `bpd/understands` exists for events: a client
+in the plugin re-renders them, for the same reason `understands` exists for events: a client
 that reads a fact and shows it, beside an adapter that narrates the same fact, shows everything
 twice. `ByReplaced` therefore reads *that* a replacement was refused and how many reasons there
 were, and leaves the eleven-variant vocabulary of `Unreplaceable` where it is authored.

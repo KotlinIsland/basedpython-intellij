@@ -20,7 +20,7 @@ private val LOG = Logger.getInstance(ByDataFlowRequests::class.java)
  * Asking the debugger what it can prove about a frame's names.
  *
  * The one place the plugin sends `bpd/facts`. It is a custom DAP request, so it travels the way
- * `setPydevdSourceMap` does: one of [ByDapRequests], sent inside a command on the frame's own
+ * bpd's other requests do: one of [ByDapRequests], sent inside a command on the frame's own
  * executor, which is the only context that holds the adapter's endpoint.
  */
 object ByDataFlowRequests {

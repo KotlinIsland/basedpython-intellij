@@ -23,7 +23,7 @@ enum class ByDebugBackend {
     BPD,
 
     /**
-     * debugpy, through pydevd's `setPydevdSourceMap`.
+     * debugpy, with the source map handed to pydevd inside the debuggee by the bootstrap.
      *
      * Kept because it is what shipped, because it needs no extra binary — `pip install debugpy`
      * and nothing else — and because a bug in one backend should not leave `.by` undebuggable.

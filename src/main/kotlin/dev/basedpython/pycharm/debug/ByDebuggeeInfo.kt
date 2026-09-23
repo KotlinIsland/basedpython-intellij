@@ -22,18 +22,20 @@ data class ByDebuggeeInfo(
     val runDir: String? = null,
     /** Present when [status] is [STATUS_ERROR], and as a warning alongside [STATUS_LISTENING]. */
     val message: String? = null,
-    val files: List<ByGeneratedFile>? = null,
-    val collisions: List<ByGeneratedCollision>? = null,
-) {
-    val isListening: Boolean get() = status == STATUS_LISTENING
-
     /**
+     * How many `.by` files the bootstrap handed pydevd a map for, in the debuggee, before it wrote
+     * this — so before the IDE can connect, let alone set a breakpoint. Zero with no [message]
+     * means `by run` wrote a map with nothing in it.
+     *
      * Every field is nullable and defaulted because Gson builds instances without running the
      * constructor: an absent key leaves `null` behind whatever a Kotlin default declares, so
      * anything not marked nullable here would be a type-system lie waiting to throw. The error
-     * report, for one, carries no `files` at all.
+     * report, for one, carries no `mapped` at all.
      */
-    val mappedFiles: List<ByGeneratedFile> get() = files.orEmpty()
+    val mapped: Int? = null,
+    val collisions: List<ByGeneratedCollision>? = null,
+) {
+    val isListening: Boolean get() = status == STATUS_LISTENING
 
     /** Collisions with at least two real sources; anything malformed is ignored. */
     val realCollisions: List<ByGeneratedCollision>
@@ -54,13 +56,6 @@ data class ByDebuggeeInfo(
 }
 
 /**
- * One transpiled file, exactly as `_by_sourcemap.py` records it.
- *
- * [lines] is indexed by *generated* line (0-based) and holds the 0-based `.by` line that line came
- * from, or `null` for emitted prelude with no source. It is deliberately carried across unchanged
- * and inverted on this side — see [ByLineMapping.invert].
- */
-/**
  * One generated file that more than one `.by` source was transpiled to.
  *
  * `by run` writes them in turn, so the last one wins and every earlier source is silently absent
@@ -72,10 +67,4 @@ data class ByGeneratedCollision(
     val generated: String? = null,
     /** In write order, so the last is the one that survived. */
     val sources: List<String>? = null,
-)
-
-data class ByGeneratedFile(
-    val source: String? = null,
-    val generated: String? = null,
-    val lines: List<Int?>? = null,
 )

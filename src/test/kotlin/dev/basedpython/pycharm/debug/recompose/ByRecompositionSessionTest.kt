@@ -3,18 +3,14 @@ package dev.basedpython.pycharm.debug.recompose
 import com.intellij.testFramework.PlatformTestUtil
 import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
-import dev.basedpython.pycharm.debug.answeringContext
-import dev.basedpython.pycharm.debug.refusal
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
-import com.intellij.platform.dap.DapSessionContext
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -136,18 +132,6 @@ class ByRecompositionSessionTest {
         assertEquals(listOf(run(1, 5)), service.records)
     }
 
-    /** The same for the watch sent at the adapter's start: an older session's cannot confirm this one's. */
-    @Test
-    fun `the adapter of a session that is not the current one sends no watch`() {
-        service.setWatching(true)
-        val older = Scripted()
-        service.sessionStarted(older)
-        start()
-        runBlocking { service.adapterReady(older, refusing(this, "not this session's adapter")) }
-        PlatformTestUtil.dispatchAllInvocationEventsInIdeEventQueue()
-        assertNull(live().watchProblem)
-    }
-
     @Test
     fun `a pull's answer landing after the session ended is dropped`() {
         val link = start()
@@ -242,18 +226,31 @@ class ByRecompositionSessionTest {
     }
 
     /**
-     * The watch sent when the adapter is ready, refused: not the window's state, and told again at
-     * the first stop, where bpd's confirmation clears the problem.
+     * The watch a session's `launch` asks for, which nothing answers: the preference, and only while
+     * the setting is on. Asked in the launch so that it is on before the program runs a line,
+     * whatever order the platform sends its other requests in.
      */
     @Test
-    fun `an init-time refusal of the watch is not the window's state, and the stop asks again`() {
+    fun `the launch asks for the stream exactly when the preference and the setting are on`() {
+        val settings = BasedPythonSettings.getInstance(fixture.project)
+        settings.debuggerRecompositions = true
+        assertFalse(service.watchesFromTheStart, "the preference is off")
+        service.setWatching(true)
+        assertTrue(service.watchesFromTheStart)
+        settings.debuggerRecompositions = false
+        assertFalse(service.watchesFromTheStart, "the setting is off, so the launch must not ask")
+    }
+
+    /**
+     * A watch asked for in the launch gets no answer, so the toggle shows the preference and no
+     * confirmation until the first stop sends it again and bpd confirms it.
+     */
+    @Test
+    fun `a watch asked for in the launch is confirmed at the first stop`() {
         service.setWatching(true)
         val link = start(Scripted(pullAnswer = ByRecompositionAnswer.Answered(emptyAnswer())))
-        runBlocking { service.adapterReady(link, refusing(this, "the program has not imported basedpython_ui.runtime, so there is no trace to read")) }
-        PlatformTestUtil.dispatchAllInvocationEventsInIdeEventQueue()
-        assertNull(live().refusal, "the init-time refusal became the window's state")
-        assertEquals("the program has not imported basedpython_ui.runtime, so there is no trace to read", live().watchProblem)
-        assertNull(live().watching)
+        assertNull(live().watching, "nothing has confirmed the launch's watch yet")
+        assertNull(live().watchProblem)
 
         service.paused(link)
         settled(link) { live().watching == true }
@@ -262,26 +259,27 @@ class ByRecompositionSessionTest {
     }
 
     /**
-     * The watch sent when the adapter is ready, before `launch`: bpd holds it and answers `pending`.
+     * A watch toggled on in the moment before the launch: bpd holds it and answers `pending`.
      * Neither a problem nor bpd confirming the stream is off — and the first stop confirms it.
      */
     @Test
     fun `a watch bpd holds until the launch is no problem and is confirmed at the first stop`() {
+        val link = start(
+            Scripted(
+                pullAnswer = ByRecompositionAnswer.Answered(emptyAnswer()),
+                watchAnswer = ByRecompositionAnswer.Answered(json("""{"watching": false, "pending": true}""")),
+            ),
+        )
         service.setWatching(true)
-        val link = start(Scripted(pullAnswer = ByRecompositionAnswer.Answered(emptyAnswer())))
-        runBlocking {
-            service.adapterReady(
-                link,
-                answeringContext(this) { _, _ -> Result.success(json("""{"watching": false, "pending": true}""")) },
-            )
-        }
+        settled(link) { link.watched.size == 1 }
         PlatformTestUtil.dispatchAllInvocationEventsInIdeEventQueue()
         assertNull(live().watchProblem, "a held watch was reported as a problem")
         assertNull(live().watching, "a held watch was shown as bpd confirming the stream is off")
 
+        link.watchAnswer = watching(true)
         service.paused(link)
         settled(link) { live().watching == true }
-        assertEquals(listOf(true), link.watched)
+        assertEquals(listOf(true, true), link.watched)
         assertNull(live().watchProblem)
     }
 
@@ -392,9 +390,5 @@ class ByRecompositionSessionTest {
 
         fun emptyAnswer(): JsonObject =
             Json.parseToJsonElement("""{ "format": 1, "runtimes": 1, "tracing": true, "records": { "kept": [], "dropped": 0 }, "mode": {} }""").jsonObject
-
-        /** A session whose adapter refuses every request with [sentence], the way the platform's endpoint delivers a refusal. */
-        fun refusing(scope: CoroutineScope, sentence: String): DapSessionContext =
-            answeringContext(scope) { _, _ -> refusal(sentence) }
     }
 }

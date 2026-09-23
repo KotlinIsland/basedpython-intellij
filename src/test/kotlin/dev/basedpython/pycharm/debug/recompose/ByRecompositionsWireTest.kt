@@ -4,7 +4,7 @@ import com.intellij.platform.dap.DapSessionContext
 import com.jetbrains.dap.impl.DapClientSession
 import dev.basedpython.pycharm.debug.Answer
 import dev.basedpython.pycharm.debug.ByDapRequests
-import dev.basedpython.pycharm.debug.BySourceMapPublisher
+import dev.basedpython.pycharm.debug.ByBpdEvents
 import dev.basedpython.pycharm.debug.Received
 import dev.basedpython.pycharm.debug.bpdEvents
 import dev.basedpython.pycharm.debug.recompose.ByRecompositionRequests.Companion.ask
@@ -126,7 +126,7 @@ class ByRecompositionsWireTest {
         val events = bpdEvents(onMoved = {}, onRecomposed = { arrived.complete(it) })
         val event = withFakeAdapter(
             respond = bpd(),
-            handlers = { events.forEach { bpdEvent -> event(bpdEvent.type) { body -> bpdEvent.observe(body) } } },
+            handlers = { ByBpdEvents.register(this, events) },
         ) { _, adapter ->
             adapter.event(ByRecompositions.EVENT, Json.parseToJsonElement("""{"record": $RUN, "dropped_before": 2}"""))
             arrived.await()
@@ -134,7 +134,7 @@ class ByRecompositionsWireTest {
         assertEquals("Counter", (event.record as ByRecord.Run).name)
         assertEquals(2L, event.droppedBefore)
         assertTrue(
-            ByRecompositions.EVENT in BySourceMapPublisher.UNDERSTOOD_EVENTS,
+            ByRecompositions.EVENT in ByBpdEvents.UNDERSTOOD,
             "bpd is not told this client reads ${ByRecompositions.EVENT}, so it narrates every run on the console too",
         )
     }
