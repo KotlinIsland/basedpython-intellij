@@ -884,6 +884,17 @@
 
 ### Changed
 
+- The plugin compiles and tests against a pinned build, the floor (IU-263.5153.20), instead of
+  whatever `263.+` resolved to that day. The dynamic version moved under every checkout at once
+  when 263.5701.9 reached the snapshot repository: that build takes `intellij.platform.vcs` — the
+  commit workflow's API, which the before-commit cleanup implements — out of the core classloader,
+  so it is on the compile classpath only when named, and nothing here compiled. The module is now
+  named in the build and in `plugin.xml`; its classes' public API is identical (`javap`) in both
+  builds. `verifyPlugin` checks the floor as well as the newest 263 snapshot, so the oldest
+  build `sinceBuild` admits is verified too, and `-PplatformVersion=<build>` compiles and
+  tests against any other. The Plugin Verifier cannot see a module leave the core — it finds no
+  problem with the commit classes on 263.5701.9 with or without the `plugin.xml` dependency — so
+  they were loaded in a 263.5701.9 sandbox instead: they resolve, from the module's own classloader.
 - **The minimum IDE is 2026.3, build 263.5153** (`sinceBuild` 263.5153), where it said 262. Between
   IU-263.4732.28 and IU-263.5153.20 the platform's Debug Adapter Protocol client was rewritten rather
   than evolved: its protocol moved from lsp4j's `org.eclipse.lsp4j.debug` to

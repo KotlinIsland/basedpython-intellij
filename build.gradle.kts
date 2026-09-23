@@ -10,6 +10,24 @@ plugins {
   id("org.jetbrains.changelog")
 }
 
+// The build everything compiles and tests against: the floor itself, a build `sinceBuild` admits.
+//
+// Pinned, and to the bottom of the range rather than the top. It was `263.+`, so the build would
+// follow the platform, and it did — out from under everyone at once: 263.5701.9 landing in the
+// snapshot repository took `intellij.platform.vcs` out of the core classloader, and every checkout
+// stopped compiling with nothing changed here and nothing to bisect. Compiling against the floor is
+// also what holds the floor honest: an API newer than 263.5153 is a compile error here, where
+// against the newest snapshot it compiled clean and nothing checked the oldest build `sinceBuild`
+// lets install the plugin.
+//
+// Following the platform moves out of the compile: `verifyPlugin` checks the newest 263
+// snapshot as well as this build (see `ides { }`), and `-PplatformVersion=263.+` — or any build —
+// compiles and tests against the top, which catches what the verifier cannot.
+//
+// 263.5153.20 because it is the build the floor was measured on (see `sinceBuild`); the public EAP,
+// 263.5153.40, is what `recommended()` verifies.
+val platformVersion: String = providers.gradleProperty("platformVersion").getOrElse("263.5153.20-EAP-CANDIDATE")
+
 dependencies {
   testImplementation(platform("org.junit:junit-bom:5.14.2"))
   testImplementation("org.junit.jupiter:junit-jupiter")
@@ -24,11 +42,7 @@ dependencies {
 
   // IntelliJ Platform Gradle Plugin Dependencies Extension - read more: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin-dependencies-extension.html
   intellijPlatform {
-    // 263.5153 is the floor (see `sinceBuild`), and no 2026.3 release exists yet, so the platform
-    // comes from the snapshot repository the way the verifier's 263 IDE does, and is dynamic for
-    // the same reason: pinning an EAP build would freeze compilation at whatever DAP API existed
-    // the day it was pinned.
-    intellijIdea("263.+") { useInstaller = false }
+    intellijIdea(platformVersion) { useInstaller = false }
     testFramework(TestFrameworkType.Platform)
     // The platform's JUnit 5 support: @TestApplication, @TestFixtures, @RunInEdt, projectFixture.
     // Note it does *not* publish the junit5 `codeInsightFixture`; see testFramework/CodeInsightFixtures.kt.
@@ -48,6 +62,12 @@ dependencies {
     // (`com.jetbrains.dap.protocol`), serialised with kotlinx.serialization.
     bundledModule("intellij.platform.dap.protocol")
     bundledModule("intellij.libraries.kotlinx.serialization.json")
+    // The commit workflow's API (CheckinHandlerFactory, CommitCheck, CheckinProjectPanel), which
+    // the before-commit cleanup is built on. Through 263.5153 the module is embedded in the core
+    // classloader and so on the compile classpath unasked; 263.5701 made it a module of its own,
+    // on the classpath only when named. Naming it on the floor as well means that move is not
+    // one to rediscover the next time the compile target moves. Declared in plugin.xml too.
+    bundledModule("intellij.platform.vcs")
     // XDebugProcess, the breakpoint types, the executors. Every one of them a product module, and a
     // snapshot artifact (`useInstaller = false`) puts on the compile classpath only what is named.
     bundledModule("intellij.platform.debugger")
@@ -244,18 +264,30 @@ intellijPlatform {
     // 2026-09-03 it listed no 263 build at all, so a plugin claiming 262 through 263.* was verified
     // against IU-262.10315.69 and nothing else, and 2026.3's lsp4j swap — `Diagnostic.getMessage()`
     // returning `Either<String, MarkupContent>` — reached a running IDE as a NoSuchMethodError on
-    // every diagnostic rather than a red build here. With the floor at 263.5153 it lists nothing
-    // until 2026.3 is released, which is when it starts to matter again.
+    // every diagnostic rather than a red build here. On 2026-09-23 it offered IU-263.5153.40, the
+    // public 2026.3 EAP: inside the range, but neither end of it.
     //
     // So the snapshot repository supplies a 263 build whatever the feed says, as it did before the
     // floor moved — `defaultRepositories()` already declares it. `useInstaller = false` because
     // those are Maven artifacts rather than installers, and the verifier wants an unpacked
-    // distribution, which is what the artifact is. The version is dynamic on purpose: pinning an EAP
-    // build freezes this at whatever platform existed the day it was pinned. It does mean a
-    // JetBrains change can turn this red without a change here — that is the signal, not noise:
-    // the move from 263.4732 to 263.5153 rewrote the DAP client and turned it red in 70 places.
+    // distribution, which is what the artifact is.
+    //
+    // Then two 263 builds, the two ends of the range as far as a repository can supply them. The
+    // floor is the pinned build everything compiles against (`platformVersion`), verified so the
+    // artifact is checked against the oldest IDE `sinceBuild` lets install it — nothing else checks
+    // that, `recommended()` included. The top is dynamic on purpose, and is the one place in the
+    // build that is: pinning it would freeze the check at whatever platform existed the day it was
+    // pinned. It means a JetBrains change can turn this red without a change here — that is the
+    // signal, not noise: 263.4732 to 263.5153 rewrote the DAP client and turned it red in 70 places.
+    //
+    // What it cannot see is a module leaving the core classloader. The verifier resolves every
+    // product module as part of the core, so 263.5701 taking `intellij.platform.vcs` out of it —
+    // which broke compilation outright — verifies Compatible with or without the plugin.xml
+    // dependency that makes it right. That one is caught by `-PplatformVersion=263.+`, compiling
+    // against the top, and by running there.
     ides {
       recommended()
+      create(IntelliJPlatformType.IntellijIdea, platformVersion) { useInstaller = false }
       create(IntelliJPlatformType.IntellijIdea, "263.+") { useInstaller = false }
 
       // `-PverifyIde=<path to an IDE>` verifies against one more, a local installation. The public
@@ -419,8 +451,9 @@ tasks {
   }
 }
 /**
- * The PyCharm `runPyCharm` downloads when none is named: the newest 2026.3 snapshot, which is what
- * the IDEA platform above is too, and for the same reason — no release is new enough for the floor.
+ * The PyCharm `runPyCharm` downloads when none is named: the newest 2026.3 snapshot, because no
+ * release is new enough for the floor. Dynamic, unlike the IDEA platform the build compiles against:
+ * this only launches an IDE to look at, and the newest is the one worth looking at.
  */
 val PYCHARM_VERSION = "263.+"
 

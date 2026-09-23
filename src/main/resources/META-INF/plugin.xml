@@ -19,9 +19,19 @@
          module rather than a plugin, so it is declared the v2 way; the legacy <depends> entries
          above still apply. Its protocol classes (`intellij.platform.dap.protocol`) are reached
          through it: that module's visibility is internal, and a plugin that names it is not
-         loaded. -->
+         loaded.
+
+         `intellij.platform.vcs` is the commit workflow's API (CheckinHandlerFactory, CommitCheck),
+         which the before-commit cleanup implements. Through 263.5153 it was embedded in the core
+         classloader; from 263.5701 it loads in a classloader of its own. Without this line its
+         classes still resolved on 263.5701.9, but only transitively, through
+         `intellij.platform.vcs.impl` (the module behind `com.intellij.modules.vcs`) and that
+         module's own generated dependency list, which JetBrains regenerates at will. Named here
+         so the cleanup rests on what it uses. The Plugin Verifier cannot check this either way:
+         it resolves every product module as part of the core. -->
     <dependencies>
         <module name="intellij.platform.dap"/>
+        <module name="intellij.platform.vcs"/>
     </dependencies>
 
     <resource-bundle>messages.BasedPythonBundle</resource-bundle>
