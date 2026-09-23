@@ -54,7 +54,13 @@ class ByDebugDocumentRequestsTest {
         ByRestage.ask(fixture.project, client, listOf(first, second), temp.resolve("build").toString())
 
         assertEquals(
-            listOf("open first.by v1 x = 1", "open second.by v1 y = 2", "request by/transpileForBuild"),
+            listOf(
+                "open first.by v1 x = 1",
+                "open second.by v1 y = 2",
+                "watched first.by changed",
+                "watched second.by changed",
+                "request by/transpileForBuild",
+            ),
             client.sent,
         )
     }
@@ -70,13 +76,17 @@ class ByDebugDocumentRequestsTest {
     }
 
     @Test
-    fun `a file under a content root is left to the platform`() {
+    fun `a file under a content root is not opened, since the platform opens it`() {
         val client = RecordingByClient(fixture.project)
         val file = fixture.configureByText("content.by", "x = 1\n").virtualFile
 
         ByRestage.ask(fixture.project, client, listOf(file), temp.resolve("build").toString())
         runBlocking(Dispatchers.Default) { askDataFlowAt(fixture.project, client, file, 1, emptyList()) }
 
-        assertEquals(listOf("request by/transpileForBuild", "request by/dataFlowAt"), client.sent)
+        // the re-stage still says the file changed on disk, which is not an open — see ByRestageTest
+        assertEquals(
+            listOf("watched content.by changed", "request by/transpileForBuild", "request by/dataFlowAt"),
+            client.sent,
+        )
     }
 }

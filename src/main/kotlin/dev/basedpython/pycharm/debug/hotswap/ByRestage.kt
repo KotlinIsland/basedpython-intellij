@@ -10,6 +10,9 @@ import dev.basedpython.pycharm.lsp.byServerFor
 import dev.basedpython.pycharm.lsp.ext.ByRestage as ByRestageAnswer
 import dev.basedpython.pycharm.lsp.ext.ByServerExtensions
 import dev.basedpython.pycharm.lsp.ext.ByTranspileForBuildParams
+import org.eclipse.lsp4j.DidChangeWatchedFilesParams
+import org.eclipse.lsp4j.FileChangeType
+import org.eclipse.lsp4j.FileEvent
 import org.eclipse.lsp4j.TextDocumentIdentifier
 
 /**
@@ -78,11 +81,56 @@ internal object ByRestage {
      * Each file is made sure of first, as every other request about a document is: a file the
      * platform does not sync — outside the content roots — is one `by` would otherwise be asked to
      * transpile without having been told the text the IDE holds for it. Background threads only.
+     *
+     * ## the saved bytes are on disk, and `by` is told so, before it is asked
+     *
+     * The request names files, not text, and `by` transpiles the text its database holds for each.
+     * For a file open in an editor that is the editor's text, which the platform sends as it is
+     * typed. For every other file it is the file **as `by` last read it from disk**, and `by` reads
+     * a file again only when a `workspace/didChangeWatchedFiles` says it changed — measured against
+     * `by server` directly, a file rewritten on disk with no notification is answered about in its
+     * old text indefinitely.
+     *
+     * Neither half of that could be relied on after a save, and together they were the reload that
+     * never reached bpd. From 263 the platform writes a saved document to disk **after**
+     * `saveDocument` returns: `FileDocumentManagerImpl` is an `AsyncFileContentWriteRequestor`, and
+     * the local file system queues its writes. Measured in a 263.5153 sandbox, one save in ten was
+     * not on disk when it returned, and landed up to 23 ms later. The platform's own
+     * `didChangeWatchedFiles` goes out when the VFS changes — before the write — so `by` re-read a
+     * file that still held the old text, and when the bytes landed nothing told it again. Saving
+     * `ticker.by` and asking straight away, as [ByHotSwapProvider.performHotSwap] does, got an answer
+     * about the text before the save 12 to 25 times in a hundred, still after three seconds of
+     * asking: the tree's own bytes back for every file, `changed` false everywhere, and "every
+     * edited file already was the code the process is running" with bpd never asked — while `by`,
+     * told again, answered `changed`.
+     *
+     * So, in this order:
+     *
+     *  1. **each file's pending write is flushed**, which the platform does for anyone who asks for
+     *     the file's [java.nio.file.Path] — the contract for a caller about to reach the file other
+     *     than through the VFS, which is exactly what `by` is. A file with no path on disk has no
+     *     slot in a tree and is left for `by` to refuse;
+     *  2. **`by` is told every file changed**, so it reads the bytes now on disk rather than trust
+     *     a notification that may have come before them. Everything here was just saved — the
+     *     provider saves before it asks — so this is only ever the truth, and a file `by` already
+     *     had the latest of is re-read to the same text, which changes nothing downstream;
+     *  3. **then it is asked**, after the notification because the platform's client sends
+     *     notifications and requests through one single-threaded executor, in the order they are
+     *     submitted.
+     *
+     * Measured, a hundred saves each, asking straight after the save: with both, no answer about the
+     * old text; with the notification and no flush, two to five; with the flush and no
+     * notification, four, none of which `by` ever caught up on. Without either, 12 to 25.
      */
     internal fun ask(project: Project, server: LspClient, files: List<VirtualFile>, buildDirectory: String): Asked {
         ReadAction.runBlocking<RuntimeException> {
             for (file in files) ByServerDocuments.ensureOpen(server, project, file)
         }
+        for (file in files) file.fileSystem.getNioPath(file)
+        val changed = DidChangeWatchedFilesParams(
+            files.map { FileEvent(server.descriptor.getFileUri(it), FileChangeType.Changed) },
+        )
+        server.sendNotification { it.workspaceService.didChangeWatchedFiles(changed) }
 
         val params = ByTranspileForBuildParams(
             textDocuments = files.map { TextDocumentIdentifier(server.getDocumentIdentifier(it).uri) },

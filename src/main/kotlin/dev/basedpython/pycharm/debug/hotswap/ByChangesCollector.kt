@@ -57,7 +57,7 @@ internal class ByChangesCollector(
   /** File to the text it held at the last reset, for every file touched since. */
   private val snapshots = ConcurrentHashMap<VirtualFile, CharSequence>()
 
-  /** The set the platform is currently being told about, kept to spot the empty/non-empty edges. */
+  /** The files that differ from their snapshots — what [getChanges] answers with. */
   private val changed = ConcurrentHashMap.newKeySet<VirtualFile>()
 
   private val documentListener = object : DocumentListener {
@@ -70,17 +70,34 @@ internal class ByChangesCollector(
       snapshots.computeIfAbsent(file) { event.document.immutableCharSequence }
     }
 
+    /**
+     * Says where the set stands after **every** edit, not only when it crosses between empty and
+     * not, which is what the platform's own collector does too.
+     *
+     * The platform does not only learn the state from here. A reload that fails ends in
+     * `HotSwapResultListener.onFailure`, which sets the session's status back to "no changes" and
+     * leaves the collector's set as it was — the files still differ from what is running, so they
+     * are still changes. Told only about edges, the platform then heard nothing more for the rest of
+     * the session: the set never became empty and never became non-empty again, so the toolbar
+     * stayed away and the reload action stayed disabled however much was edited. Measured in a
+     * 263.5153 sandbox after a reload that was refused: `ticker.by` edited again, the action
+     * disabled, with the edit sitting in [getChanges].
+     */
     override fun documentChanged(event: DocumentEvent) {
       val file = fileOf(event.document) ?: return
       val snapshot = snapshots[file] ?: return
-      val wasEmpty = changed.isEmpty()
       // `contentEquals` rather than identity: the document rebuilds its sequence on every edit.
       if (event.document.immutableCharSequence.contentEquals(snapshot)) {
         // Back to where it started. Drop the snapshot too, so the next edit takes a fresh one.
-        changed.remove(file)
+        val removed = changed.remove(file)
         snapshots.remove(file)
-        if (changed.isEmpty() && !wasEmpty) listener.onChangesCanceled()
-      } else if (changed.add(file) && wasEmpty) {
+        if (changed.isEmpty()) {
+          if (removed) listener.onChangesCanceled()
+        } else {
+          listener.onNewChanges()
+        }
+      } else {
+        changed.add(file)
         listener.onNewChanges()
       }
     }

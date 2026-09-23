@@ -11,6 +11,7 @@ import com.intellij.platform.lsp.api.ProjectWideLspClientDescriptor
 import dev.basedpython.pycharm.debug.dfa.ByDataFlowServer
 import dev.basedpython.pycharm.lsp.ByLspServerSupportProvider
 import org.eclipse.lsp4j.DidChangeTextDocumentParams
+import org.eclipse.lsp4j.DidChangeWatchedFilesParams
 import org.eclipse.lsp4j.DidCloseTextDocumentParams
 import org.eclipse.lsp4j.DidOpenTextDocumentParams
 import org.eclipse.lsp4j.InitializeResult
@@ -18,6 +19,7 @@ import org.eclipse.lsp4j.TextDocumentIdentifier
 import org.eclipse.lsp4j.jsonrpc.services.JsonRequest
 import org.eclipse.lsp4j.services.LanguageServer
 import org.eclipse.lsp4j.services.TextDocumentService
+import org.eclipse.lsp4j.services.WorkspaceService
 import java.lang.reflect.Proxy
 import java.util.concurrent.CompletableFuture
 
@@ -25,8 +27,9 @@ import java.util.concurrent.CompletableFuture
  * A `by` client that records what a server would have been sent, one line per message, in order.
  *
  * Document notifications read `open <name> v<version> <text>`, `change <name> v<version> <text>` and
- * `close <name>`. A `by/` request reads `request <method>` and is answered with nothing, which every
- * caller treats as no answer. Anything else a test did not expect fails the test.
+ * `close <name>`; a watched file reads `watched <name> <kind>`. A `by/` request reads
+ * `request <method>` and is answered with nothing, which every caller treats as no answer. Anything
+ * else a test did not expect fails the test.
  */
 class RecordingByClient(project: Project) : LspClient {
     val sent: MutableList<String> = mutableListOf()
@@ -44,10 +47,20 @@ class RecordingByClient(project: Project) : LspClient {
         null
     } as TextDocumentService
 
+    private val workspace = Proxy.newProxyInstance(javaClass.classLoader, arrayOf(WorkspaceService::class.java)) { _, method, args ->
+        when (val params = args?.firstOrNull()) {
+            is DidChangeWatchedFilesParams ->
+                params.changes.forEach { sent += "watched ${name(it.uri)} ${it.type.name.lowercase()}" }
+            else -> error("unexpected ${method.name}")
+        }
+        null
+    } as WorkspaceService
+
     private val server = Proxy.newProxyInstance(javaClass.classLoader, arrayOf(ByDataFlowServer::class.java)) { _, method, _ ->
         val request = method.getAnnotation(JsonRequest::class.java)
         when {
             method.name == "getTextDocumentService" -> documents
+            method.name == "getWorkspaceService" -> workspace
             request != null && request.value.startsWith("by/") -> {
                 sent += "request ${request.value}"
                 CompletableFuture.completedFuture(null)
