@@ -3,15 +3,24 @@ package dev.basedpython.pycharm.lsp.inlay
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import kotlin.math.roundToInt
 
 /**
  * [ByAlignment] as the arithmetic it is, and as the picture that arithmetic makes.
  *
  * The rendered cases are the point of the file. What the layout has to get right is not a list of
- * integers but where the `=` ends up, and an assertion written as the line the reader would see is
+ * numbers but where the `=` ends up, and an assertion written as the line the reader would see is
  * the only one that fails legibly when it is wrong.
+ *
+ * Measured in characters throughout, with the [separator] set to one of them. [ByAlignment] does not
+ * know what it is counting — in the editor it counts pixels, because a column is a fiction for any
+ * glyph the editor does not draw one advance wide ([ByAlignedColumnTest] is where that is settled) —
+ * and a character grid is the unit this arithmetic can be *read* in.
  */
 class ByAlignmentTest {
+
+    /** One character of breathing room: what [ByAlignment] is given on a grid one glyph wide. */
+    private val separator = 1f
 
     /**
      * One line of a block, written the way the author wrote it plus what `by` says about it.
@@ -28,13 +37,18 @@ class ByAlignmentTest {
      * width the inlay *reports*, which is exactly what the editor does — nothing clips a hint to its
      * reported width. So an overlap here is an overlap on screen, and a row that comes out shorter
      * than its hint is a hint drawing over blanks it gave back.
+     *
+     * A member reports the column less its own code and padding, which is what [ByAlignedColumn]
+     * asks of a seat — not a correction to the hint's natural width, for the reason given on
+     * [ByAlignment.column].
      */
     private fun draw(lines: List<Line>): String {
-        val deltas = ByAlignment.layout(
-            lines.map { ByAlignment.Member(it.lead.length, it.hint.length, it.gap) },
-        )
-        return lines.zip(deltas) { line, delta ->
-            val reported = (line.hint.length + delta).coerceAtLeast(0)
+        val members = lines.map {
+            ByAlignment.Member(it.lead.length.toFloat(), it.hint.length.toFloat(), it.gap.toFloat())
+        }
+        val column = ByAlignment.column(members, separator)
+        return lines.zip(members) { line, member ->
+            val reported = (column - member.lead - member.gap).roundToInt().coerceAtLeast(0)
             val row = StringBuilder(line.lead)
             // Where the document's own text resumes: after the room the inlay claims.
             repeat(reported + line.gap) { row.append(' ') }
@@ -45,8 +59,12 @@ class ByAlignmentTest {
         }.joinToString("\n")
     }
 
-    private fun layout(vararg members: Triple<Int, Int, Int>): List<Int> =
-        ByAlignment.layout(members.map { ByAlignment.Member(it.first, it.second, it.third) })
+    /** The column of a block written as `lead, hint, gap` per line. */
+    private fun column(vararg members: Triple<Int, Int, Int>): Float =
+        ByAlignment.column(
+            members.map { ByAlignment.Member(it.first.toFloat(), it.second.toFloat(), it.third.toFloat()) },
+            separator,
+        )
 
     // region: the block that started it
 
@@ -141,8 +159,8 @@ class ByAlignmentTest {
         // `by` reports `ab=f()` with a gap of nought — no spaces is not no column. Dropped instead,
         // it would take the whole group with it and `a =1` would be left where it started.
         //
-        // The blank before each `=` is [ByAlignment.SEPARATOR], which every block gets and this one
-        // has nowhere to take from: a hint butted straight against an `=` reads as one token.
+        // The blank before each `=` is the separator, which every block gets and this one has
+        // nowhere to take from: a hint butted straight against an `=` reads as one token.
         val block = listOf(
             Line(lead = "ab", gap = 0, hint = ": int", tail = "=f()"),
             Line(lead = "a", gap = 1, hint = ": str", tail = "=1"),
@@ -178,24 +196,27 @@ class ByAlignmentTest {
     }
 
     @Test
-    fun `no member is ever asked to give back more room than its hint is wide`() {
-        // A line with no hint has nothing to narrow, so a delta below `-hintColumns` would be an
-        // instruction it cannot carry out. Swept over a range wide enough to catch an off-by-one in
-        // either the column or the separator.
+    fun `no member is ever asked for less room than it already had`() {
+        // The room a member reports is the column less its own code and padding, so a column short of
+        // any member's `lead + gap` would ask that line for a negative width — an instruction it
+        // cannot carry out, least of all the line with no hint to narrow. Swept over a range wide
+        // enough to catch an off-by-one in either the column or the separator.
         for (lead in 0..12) {
             for (hint in 0..14) {
                 for (gap in 1..9) {
-                    val others = listOf(
-                        ByAlignment.Member(lead, hint, gap),
+                    val members = listOf(
+                        ByAlignment.Member(lead.toFloat(), hint.toFloat(), gap.toFloat()),
                         // A second member sharing the column, which is what a group guarantees.
-                        ByAlignment.Member(lead + gap - 1, 0, 1),
+                        ByAlignment.Member((lead + gap - 1).toFloat(), 0f, 1f),
                     )
-                    val deltas = ByAlignment.layout(others)
-                    assertTrue(
-                        deltas[0] >= -hint,
-                        "lead=$lead hint=$hint gap=$gap gave back ${-deltas[0]} of $hint",
-                    )
-                    assertTrue(deltas[1] >= 0, "a line with no hint was asked to narrow")
+                    val column = ByAlignment.column(members, separator)
+                    for ((index, member) in members.withIndex()) {
+                        assertTrue(
+                            column - member.lead - member.gap >= 0f,
+                            "lead=$lead hint=$hint gap=$gap left member $index asking for " +
+                                "${column - member.lead - member.gap}",
+                        )
+                    }
                 }
             }
         }
@@ -205,8 +226,7 @@ class ByAlignmentTest {
     fun `a block is never squeezed below the column the author typed`() {
         // Every member reaches at least its own `lead + gap`, so a block with small hints keeps the
         // author's own spacing rather than being pulled in to the tightest one that would fit.
-        val deltas = layout(Triple(1, 0, 9), Triple(9, 0, 1))
-        assertEquals(listOf(0, 0), deltas)
+        assertEquals(10f, column(Triple(1, 0, 9), Triple(9, 0, 1)))
     }
 
     // endregion
@@ -215,24 +235,20 @@ class ByAlignmentTest {
 
     @Test
     fun `the widest hint sets the column and the rest are padded out to it`() {
-        // lead 1 + hint 11 + one separator = 13; `basdf` sits at 5 and takes 7 more to reach it.
-        assertEquals(listOf(-4, 7), layout(Triple(1, 11, 5), Triple(5, 0, 1)))
+        // lead 1 + hint 11 + one separator = 13, against the 6 the author's own text reaches. Both
+        // members then report the same 7 for opposite reasons: the hinted line gives back 4 of its 5
+        // spaces and draws 11 of glyphs over 7 of room, and `basdf` takes 6 more than the 1 it had.
+        val members = listOf(ByAlignment.Member(1f, 11f, 5f), ByAlignment.Member(5f, 0f, 1f))
+        val column = ByAlignment.column(members, separator)
+        assertEquals(13f, column)
+        assertEquals(listOf(7f, 7f), members.map { column - it.lead - it.gap })
     }
 
     @Test
     fun `a lone separator column is kept between the widest hint and the code`() {
-        val members = listOf(ByAlignment.Member(1, 11, 5), ByAlignment.Member(5, 0, 1))
-        val deltas = ByAlignment.layout(members)
-        val column = members.zip(deltas) { member, delta ->
-            member.leadColumns + member.hintColumns + member.gapColumns + delta
-        }
-        assertEquals(listOf(13, 13), column)
-        assertEquals(ByAlignment.SEPARATOR, column[0] - (members[0].leadColumns + members[0].hintColumns))
-    }
-
-    @Test
-    fun `an empty block asks for nothing`() {
-        assertEquals(emptyList<Int>(), ByAlignment.layout(emptyList()))
+        val members = listOf(ByAlignment.Member(1f, 11f, 5f), ByAlignment.Member(5f, 0f, 1f))
+        val column = ByAlignment.column(members, separator)
+        assertEquals(separator, column - (members[0].lead + members[0].hint))
     }
 
     // endregion

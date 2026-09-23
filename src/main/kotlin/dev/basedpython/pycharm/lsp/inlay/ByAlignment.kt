@@ -31,75 +31,80 @@ package dev.basedpython.pycharm.lsp.inlay
  */
 object ByAlignment {
 
-    /** The blank columns left between the widest member's hint and the column, so it can breathe. */
-    const val SEPARATOR: Int = 1
-
     /**
-     * One line of a group, measured in columns.
+     * One line of a group, as three widths in one unit.
      *
-     * Columns rather than pixels: the editor font is a code font, so a column is a fixed width and
-     * the whole calculation is integer arithmetic that can be read and tested. The one conversion to
-     * pixels happens where the width is finally reported, against the same font the hint is drawn
-     * in.
+     * **Which unit is the caller's.** [ByAlignedColumn] passes pixels of the editor's own font,
+     * measured by [ByEditorTextWidth], because that is the only unit in which a line of source and a
+     * hint drawn beside it can be compared: a column is a fiction for any character the editor does
+     * not draw one advance wide. `ByAlignmentTest` passes characters, which is the same arithmetic
+     * on a grid where every glyph is one wide, and is how the layout is read as a picture.
+     *
+     * Nothing here divides, rounds or compares against a constant of its own, so the arithmetic is
+     * the same in either.
      */
     data class Member(
-        /** Columns from the start of the line to the end of the target — the code before the gap. */
-        val leadColumns: Int,
+        /** From the start of the line to the end of the target — the code before the gap. */
+        val lead: Float,
         /**
-         * Columns of hint drawn at the end of that target **right now**.
+         * The hint drawn at the end of that target **right now**.
          *
          * Right now, and not as collected: a kind can be set to draw only while a key is held, so
          * this is nought for the same hint a moment later. That is exactly why the sizing is done
          * here and not by the server.
          */
-        val hintColumns: Int,
+        val hint: Float,
         /**
-         * The spaces the author left between the target and the `=`.
+         * The padding the author left between the target and the `=`.
          *
          * Nought is an ordinary value: `a=1` has no spaces and still has its `=` in a column.
          */
-        val gapColumns: Int,
+        val gap: Float,
     )
 
     /**
-     * How many columns each member has to gain, negative where it has room to give back.
+     * The one column every member is brought to, measured from the start of the line.
      *
-     * The column every member is brought to is the furthest right of
+     * [separator] is the blank left between the widest member's hint and the column, so it can
+     * breathe — one space of whatever the caller is measuring in.
      *
-     * - the column the author already typed, so a group is never *squeezed* below what it reads as
-     *   with no hints at all, and
-     * - what each member needs to fit its own hint with [SEPARATOR] to spare.
+     * [members] is never empty: a column is asked for by a line of the block, and a line of the
+     * block is a member. An empty list has no column and is refused rather than given a nought that
+     * would quietly pull a block to the left margin.
      *
-     * Two properties fall out of that first term, and both are worth stating because they are what
+     * The column is the furthest right of
+     *
+     * - where the author's own text puts the `=`, so a group is never *squeezed* in below what it
+     *   reads as with no hints at all, and
+     * - what each member needs to fit its own hint with [separator] to spare.
+     *
+     * **The absolute column is what the caller wants, not a per-member delta**, and the reason is a
+     * pixel. The editor lays a line out by accumulating fractional advances, while an inlay reports
+     * one integer. Composing two separately rounded measurements does not land where rounding once
+     * does, and the gap between them is a whole pixel: laid out that way on a real editor, the two
+     * `=` of a two-line block came out at 109 and 108 (`ByAlignedColumnTest`). So a member's inlay is
+     * sized as *this column, less the code and the padding around it* — one subtraction, one
+     * rounding, and [ByAlignedColumn] is where that rounding is argued.
+     *
+     * Two properties fall out of the first term, and both are worth stating because they are what
      * make this safe to leave switched on:
      *
-     * - **With no hints drawn, every delta is nought.** Each member's `lead + gap` *is* the shared
-     *   column, so the maximum is that column and nothing moves. Releasing the push key puts the
-     *   block back exactly as written rather than leaving it padded for hints that are not there.
-     * - **No member ever gives back more than its hint is wide.** A negative delta is bounded below
-     *   by `-hintColumns`, so this can never ask a line to swallow padding it has no hint to swallow
-     *   it with — least of all a line that has no hint at all.
+     * - **With no hints drawn, a block of text on the editor's advance grid does not move.** Each
+     *   member's `lead + gap` *is* the shared column, so the maximum is that column and every member
+     *   asks for exactly the padding it already has. Releasing the push key puts such a block back
+     *   as written rather than leaving it padded for hints that are not there. A block whose lead
+     *   holds a character the editor draws off the grid — a wide glyph from a fallback font — is the
+     *   exception, and it is the one place this *does* move text nobody hinted: `by` reports those
+     *   lines as one column because they are one column in the source, the editor never drew them in
+     *   one, and bringing them to a shared x is the whole point of measuring rather than counting.
+     * - **No member is ever asked for less room than it already had.** The column is at least every
+     *   member's own `lead + gap`, so the room it reports back is never negative — this can never
+     *   ask a line to swallow padding it has no hint to swallow it with, least of all a line that
+     *   has no hint at all.
      */
-    fun layout(members: List<Member>): List<Int> {
-        if (members.isEmpty()) return emptyList()
-        val column = column(members)
-        return members.map { column - (it.leadColumns + it.hintColumns + it.gapColumns) }
-    }
-
-    /**
-     * The one column every member is brought to, counted from the start of the line.
-     *
-     * **The absolute column is what the caller wants, not the per-member deltas**, and the reason is
-     * a pixel. A column is a fraction of a pixel wide — the editor lays a line out by accumulating
-     * fractional advances and flooring each position — while an inlay reports one integer. Composing
-     * two separately rounded measurements does not land where rounding once does, and the gap between
-     * them is a whole pixel: laid out that way on a real editor, the two `=` of a two-line block came
-     * out at 109 and 108 (`ByAlignedColumnTest`). Measuring each line's inlay as *the column, less the
-     * code and the padding around it* rounds once instead of twice, and every member lands together.
-     */
-    fun column(members: List<Member>): Int {
-        val typed = members.maxOf { it.leadColumns + it.gapColumns }
-        val needed = members.maxOf { it.leadColumns + it.hintColumns + SEPARATOR }
+    fun column(members: List<Member>, separator: Float): Float {
+        val typed = members.maxOf { it.lead + it.gap }
+        val needed = members.maxOf { it.lead + it.hint + separator }
         return maxOf(typed, needed)
     }
 }

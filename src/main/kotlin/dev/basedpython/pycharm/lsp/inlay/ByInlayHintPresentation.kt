@@ -129,21 +129,18 @@ class ByInlayHintPresentation(
             return (seat?.widthFor(this, natural) ?: natural).coerceAtLeast(HIDDEN_WIDTH)
         }
 
-    /** What this hint costs as source, which is what it reports when it is not holding a column. */
+    /**
+     * What this hint costs as source, which is what it reports when it is not holding a column, and
+     * the room it asks its block for when it is.
+     *
+     * Nought while it is not drawn, which is what makes releasing the push key put a block back
+     * exactly as the author wrote it rather than leaving it padded for hints that are not there.
+     */
     internal fun naturalWidth(): Int {
         if (!shown) return 0
         val metrics = metrics(font())
         return leftPadding(metrics) + textWidth(metrics) + rightPadding(metrics)
     }
-
-    /**
-     * The room this hint takes on its line right now, in columns, as [ByAlignment] counts it.
-     *
-     * Nought while it is not drawn, which is what makes releasing the push key put a block back
-     * exactly as the author wrote it rather than leaving it padded for hints that are not there.
-     */
-    internal val shownColumns: Int
-        get() = if (!shown) 0 else text.length + (if (padLeft) 1 else 0) + (if (padRight) 1 else 0)
 
     /** Whether this hint's visibility can change under a keypress, and so needs watching for. */
     internal val watchesPush: Boolean get() = mode == ByHintMode.ON_PUSH
@@ -328,7 +325,7 @@ class ByInlayHintPresentation(
             previous.padRight != padRight ||
             previous.mode != mode ||
             previous.pushKey != pushKey ||
-            previous.seat?.deltaColumns != seat?.deltaColumns
+            previous.seat?.requiredWidth() != seat?.requiredWidth()
     }
 
     override fun toString(): String = text

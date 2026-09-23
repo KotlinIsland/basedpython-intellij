@@ -35,22 +35,34 @@ class ByAlignedColumnTest {
     private val ctrlAlt = InputEvent.CTRL_DOWN_MASK or InputEvent.ALT_DOWN_MASK
 
     /**
-     * A two-line block whose first line carries [hint]: the offsets of each gap and `=`, and the
-     * display columns `by` reports for each gap.
+     * A two-line block whose first line carries [hint]: where each line's gap starts and where its
+     * `=` is, which is the whole of what `by` answers that a seat is built from.
      */
     private data class Block(
         val text: String,
         val gapStart1: Int,
         val equals1: Int,
-        val startColumn1: Int,
-        val endColumn1: Int,
         val gapStart2: Int,
         val equals2: Int,
-        val startColumn2: Int,
-        val endColumn2: Int,
         /** What the first line actually infers, and the reason narrowing alone could never do it. */
         val hint: String = ": list[int]",
-    )
+    ) {
+        /**
+         * The line's own text from its first character up to its gap, which is what a seat holds.
+         *
+         * Both blocks are two lines, so the second one starts after the only line break before it.
+         */
+        fun lead(line: Int): String = when (line) {
+            1 -> text.substring(0, gapStart1)
+            else -> text.substring(text.indexOf('\n') + 1, gapStart2)
+        }
+
+        /** The padding the author left, which is spaces and is the rest of what a seat holds. */
+        fun gap(line: Int): String = when (line) {
+            1 -> text.substring(gapStart1, equals1)
+            else -> text.substring(gapStart2, equals2)
+        }
+    }
 
     /**
      * The block that started this.
@@ -60,42 +72,50 @@ class ByAlignedColumnTest {
      * basdf = 1         basdf at 15, gap 20..21, = at 21
      * ```
      *
-     * ASCII only, so every character is one column and the offsets and columns coincide.
+     * ASCII only, so every glyph is one advance of the editor font wide and the source is already
+     * square on screen.
      */
     private val ascii = Block(
         text = "a     = [1, 2]\nbasdf = 1\n",
-        gapStart1 = 1, equals1 = 6, startColumn1 = 1, endColumn1 = 6,
-        gapStart2 = 20, equals2 = 21, startColumn2 = 5, endColumn2 = 6,
+        gapStart1 = 1, equals1 = 6,
+        gapStart2 = 20, equals2 = 21,
     )
 
     /**
-     * Two wide characters before the gap: two characters, four columns. The columns are what `by`
-     * answers for this text.
+     * Two wide characters before the gap: two characters, four columns, and neither of those is what
+     * the editor draws.
      *
      * ```
-     * 名前 = [1, 2]    gap 2..3 at columns 4..5
-     * abcd = 1         gap 16..17 at columns 4..5
+     * 名前 = [1, 2]    gap 2..3, four columns before it
+     * abcd = 1         gap 16..17, four columns before it
      * ```
+     *
+     * `by` reports these two as one group because they *are* one column in the source. The editor
+     * draws `名前` in whatever fallback font has the glyphs — 13 pixels each against the 7.8 of an
+     * advance of JetBrains Mono — so on screen the two `=` are six pixels apart before anything is
+     * hinted. This is the case a column can never settle and a measurement can.
      */
     private val wide = Block(
         text = "名前 = [1, 2]\nabcd = 1\n",
-        gapStart1 = 2, equals1 = 3, startColumn1 = 4, endColumn1 = 5,
-        gapStart2 = 16, equals2 = 17, startColumn2 = 4, endColumn2 = 5,
+        gapStart1 = 2, equals1 = 3,
+        gapStart2 = 16, equals2 = 17,
     )
 
     /**
-     * A tab before the gap, which at a tab size of four reaches column four from column two. The
-     * columns are what `by` answers for this text with a `tabSize` of 4.
+     * A tab before the gap, which at a tab size of four reaches column four from column two.
      *
      * ```
-     * x:<tab>list[int] = [1]    gap 12..13 at columns 13..14
-     * abcdefghijklm = [2]       gap 32..33 at columns 13..14
+     * x:<tab>list[int] = [1]    gap 12..13
+     * abcdefghijklm = [2]       gap 32..33
      * ```
+     *
+     * The tab is measured to the next tab stop *in pixels*, as the editor draws it, so the tab size
+     * that settles this block is the editor's own rather than one sent to `by` and counted back.
      */
     private val tabbed = Block(
         text = "x:\tlist[int] = [1]\nabcdefghijklm = [2]\n",
-        gapStart1 = 12, equals1 = 13, startColumn1 = 13, endColumn1 = 14,
-        gapStart2 = 32, equals2 = 33, startColumn2 = 13, endColumn2 = 14,
+        gapStart1 = 12, equals1 = 13,
+        gapStart2 = 32, equals2 = 33,
     )
 
     private fun editor(block: Block = ascii): Editor {
@@ -119,15 +139,9 @@ class ByAlignedColumnTest {
     private fun laidOut(mode: ByHintMode, block: Block = ascii): Editor {
         val editor = editor(block)
         val column = ByAlignedColumn(editor)
-        // As the collector seats a member: the columns `by` reported, not offsets.
-        val hinted = column.seat(
-            leadColumns = block.startColumn1,
-            gapColumns = block.endColumn1 - block.startColumn1,
-        )
-        val bare = column.seat(
-            leadColumns = block.startColumn2,
-            gapColumns = block.endColumn2 - block.startColumn2,
-        )
+        // As the collector seats a member: the line's own text up to its gap, and the gap itself.
+        val hinted = column.seat(lead = block.lead(1), gap = block.gap(1))
+        val bare = column.seat(lead = block.lead(2), gap = block.gap(2))
 
         val hint = ByInlayHintPresentation(
             editor = editor,
@@ -226,33 +240,37 @@ class ByAlignedColumnTest {
     }
 
     /**
-     * Wide characters are the case columns cannot settle to the pixel. Unicode counts one as two
-     * columns, and so does `by`, but the editor draws it in whatever fallback font has the glyph —
-     * 13 pixels in this editor's JetBrains Mono at 13pt, against 7.8 for a column — so the source
-     * itself is not aligned on screen. What laying the block out can promise is to move every line
-     * by the same amount: the hint's room is the same for both, so the `=` stay exactly as far apart
-     * as the author's text put them. Counting the target in characters instead gave the wide line
-     * two columns of room it does not take up, and pushed it further out than its neighbour.
+     * Wide characters are the case a column can never settle and a measurement can.
+     *
+     * Unicode counts `名` as two columns and so does `by`; the editor draws it in whatever fallback
+     * font has the glyph, at neither two advances nor one. The source is therefore *not* square on
+     * screen to begin with — the two `=` start six pixels apart — and a layout built on columns could
+     * only promise to move both lines by the same amount, leaving those six pixels wherever they
+     * were. Measuring the lead in the font the editor will draw it in closes them: the column is the
+     * furthest right of the measured lines, and every member is brought to it.
      */
     @Test
-    fun `a hint after wide characters moves both lines by the same amount`() {
+    fun `a block whose lead is wide characters is brought onto one column`() {
         val plain = editor(wide)
         val resting = plain.columnOf(wide.equals1)
-        val apart = plain.columnOf(wide.equals2) - resting
+        assertTrue(
+            resting != plain.columnOf(wide.equals2),
+            "this block is only interesting because its source is not square on screen",
+        )
 
         val editor = laidOut(ByHintMode.ALWAYS, wide)
-        assertTrue(editor.columnOf(wide.equals1) > resting, "the hint took no room")
         assertEquals(
-            apart,
-            editor.columnOf(wide.equals2) - editor.columnOf(wide.equals1),
-            "the block moved one line further than the other",
+            editor.columnOf(wide.equals1),
+            editor.columnOf(wide.equals2),
+            "the wide line's glyphs were counted as columns rather than measured",
         )
+        assertTrue(editor.columnOf(wide.equals1) > resting, "the hint took no room")
     }
 
     @Test
-    fun `a tab before the gap is aligned to begin with at the tab size by was told`() {
+    fun `a tab before the gap is aligned to begin with at the editor's own tab size`() {
         val editor = editor(tabbed)
-        assertEquals(4, EditorUtil.getTabSize(editor), "the columns of the tabbed block are `by`'s at a tab size of four")
+        assertEquals(4, EditorUtil.getTabSize(editor), "the tabbed block is only square at a tab size of four")
         assertEquals(editor.columnOf(tabbed.equals1), editor.columnOf(tabbed.equals2))
     }
 
