@@ -2,11 +2,15 @@ package dev.basedpython.pycharm.lsp.supers
 
 import com.intellij.codeInsight.CodeInsightActionHandler
 import com.intellij.codeInsight.hint.HintManager
+import com.intellij.openapi.application.EDT
+import com.intellij.openapi.components.Service
+import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.logger
+import com.intellij.openapi.editor.Document
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.popup.JBPopupFactory
-import com.intellij.platform.ide.progress.runWithModalProgressBlocking
+import com.intellij.platform.ide.progress.withBackgroundProgress
 import com.intellij.platform.lsp.api.LspClient
 import com.intellij.platform.lsp.util.navigateToLocation
 import com.intellij.psi.PsiFile
@@ -14,6 +18,12 @@ import com.intellij.ui.ColoredListCellRenderer
 import com.intellij.ui.SimpleTextAttributes
 import dev.basedpython.pycharm.lsp.byServerFor
 import dev.basedpython.pycharm.util.BasedPythonBundle
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.jetbrains.annotations.VisibleForTesting
 import javax.swing.JList
 
 /**
@@ -24,10 +34,21 @@ import javax.swing.JList
  * the language and does nothing at all. Where to go is [BySupers]'s, which asks `by`; this runs the
  * asking and shows the answer.
  *
- * The asking is off the EDT under a modal progress, which the user can cancel and which cancels the
- * requests with it. One target is gone to straight away; several are offered in a chooser, in the
- * order `by` gives them. Nowhere to go is said in a hint rather than left silent, because a
- * shortcut that does nothing reads as a shortcut that is broken.
+ * One target is gone to straight away; several are offered in a chooser, in the order `by` gives
+ * them. Nowhere to go is said in a hint rather than left silent, because a shortcut that does
+ * nothing reads as a shortcut that is broken.
+ *
+ * ## Asking in the background, not under a modal progress
+ *
+ * [BySupers] names the text it asks about, and `by` answers a document the platform has not sent
+ * it yet once the platform's `didOpen` brings it. The platform sends that `didOpen` from a step it
+ * runs on the EDT in the non-modal state (`LspOpenedFilesService`, `finishOnUiThread(nonModal)`),
+ * so a modal progress held over the asking keeps it from ever going out: Ctrl+U pressed before the
+ * platform had opened the file sat in the modal for the ten seconds `by` holds a request, then said
+ * `by` had not answered. Measured in PyCharm 263.5153.49: 10080ms, and no navigation. So the asking
+ * runs under a background progress, which the user can cancel from the status bar and which leaves
+ * the EDT free; the answer is shown when it comes, unless the caret has moved or the text changed
+ * meanwhile, since it answers for a place the user has left.
  */
 class ByGotoSuperHandler : CodeInsightActionHandler {
 
@@ -37,14 +58,39 @@ class ByGotoSuperHandler : CodeInsightActionHandler {
     override fun invoke(project: Project, editor: Editor, psiFile: PsiFile) {
         val file = psiFile.originalFile.virtualFile ?: return
         val server = byServerFor(project, file) ?: return hint(editor, BasedPythonBundle.message("goto.super.noServer"))
-        val offset = editor.caretModel.offset
-        val answer = runWithModalProgressBlocking(project, BasedPythonBundle.message("goto.super.progress")) {
-            BySupers.find(server, file, editor.document, offset)
+        ask(project, editor, { document, offset -> BySupers.find(server, file, document, offset) }) { answer ->
+            when (answer) {
+                is BySuperAnswer.Nowhere -> hint(editor, answer.message)
+                is BySuperAnswer.Targets -> go(server, editor, answer)
+            }
         }
-        if (editor.isDisposed) return
-        when (answer) {
-            is BySuperAnswer.Nowhere -> hint(editor, answer.message)
-            is BySuperAnswer.Targets -> go(server, editor, answer)
+    }
+
+    /**
+     * Asks [find] where Go to Super goes from [editor]'s caret, off the EDT under a background
+     * progress, and hands the answer to [show] on the EDT — unless by then the editor is gone, its
+     * caret has moved or its text has changed.
+     */
+    @VisibleForTesting
+    internal fun ask(
+        project: Project,
+        editor: Editor,
+        find: suspend (Document, Int) -> BySuperAnswer,
+        show: (BySuperAnswer) -> Unit,
+    ): Job {
+        val document = editor.document
+        val offset = editor.caretModel.offset
+        val stamp = document.modificationStamp
+        return project.service<ByGotoSuperScope>().scope.launch {
+            val answer = withBackgroundProgress(project, BasedPythonBundle.message("goto.super.progress")) {
+                find(document, offset)
+            }
+            withContext(Dispatchers.EDT) {
+                val stillThere = !editor.isDisposed &&
+                    document.modificationStamp == stamp &&
+                    editor.caretModel.offset == offset
+                if (stillThere) show(answer)
+            }
         }
     }
 
@@ -83,3 +129,7 @@ class ByGotoSuperHandler : CodeInsightActionHandler {
         val LOG = logger<ByGotoSuperHandler>()
     }
 }
+
+/** Where Go to Super's asking runs: cancelled with the project, and with the plugin when it unloads. */
+@Service(Service.Level.PROJECT)
+internal class ByGotoSuperScope(val scope: CoroutineScope)
