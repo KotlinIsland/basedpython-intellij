@@ -1,0 +1,161 @@
+package dev.basedpython.pycharm.lsp.supers
+
+import com.intellij.openapi.application.readAction
+import com.intellij.openapi.editor.Document
+import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.platform.lsp.api.LspClient
+import com.intellij.platform.lsp.util.getLsp4jPosition
+import dev.basedpython.pycharm.lsp.ByAnswer
+import dev.basedpython.pycharm.lsp.ByServerDocuments
+import dev.basedpython.pycharm.lsp.awaitBy
+import dev.basedpython.pycharm.lsp.hasDocument
+import dev.basedpython.pycharm.util.BasedPythonBundle
+import org.eclipse.lsp4j.DocumentSymbol
+import org.eclipse.lsp4j.DocumentSymbolParams
+import org.eclipse.lsp4j.Location
+import org.eclipse.lsp4j.Position
+import org.eclipse.lsp4j.Range
+import org.eclipse.lsp4j.SymbolInformation
+import org.eclipse.lsp4j.SymbolKind
+import org.eclipse.lsp4j.TextDocumentIdentifier
+import org.eclipse.lsp4j.TypeHierarchyItem
+import org.eclipse.lsp4j.TypeHierarchyPrepareParams
+import org.eclipse.lsp4j.TypeHierarchySupertypesParams
+import org.eclipse.lsp4j.jsonrpc.messages.Either
+
+/** Where Go to Super can go from the caret, or why it cannot go anywhere. */
+internal sealed interface BySuperAnswer {
+
+    /** One or more places to go: one is gone to, several are offered. */
+    data class Targets(val chooserTitle: String, val targets: List<BySuperTarget>) : BySuperAnswer
+
+    /** Nowhere, and what to tell the user about why. */
+    data class Nowhere(val message: String) : BySuperAnswer
+}
+
+/** A place Go to Super can go, with what to call it in a chooser. */
+internal data class BySuperTarget(
+    /** The class, or `Class.member`. */
+    val name: String,
+    /** Where it is, for a chooser to say: the module, or the file. */
+    val where: String?,
+    val location: Location,
+)
+
+/** The definition the caret is in that Go to Super answers for, as `by`'s outline has it. */
+internal sealed interface BySuperSubject {
+
+    /** A class: Go to Super goes to its bases. */
+    data class Class(val symbol: DocumentSymbol) : BySuperSubject
+
+    /** A member of [owner]'s body: Go to Super goes to what it overrides. */
+    data class Member(val symbol: DocumentSymbol, val owner: DocumentSymbol) : BySuperSubject
+}
+
+/**
+ * Go to Super (Ctrl+U) in a `.by` file, asked of `by`.
+ *
+ * Everything that decides where to go is `by`'s. Which definition the caret is in comes from its
+ * `textDocument/documentSymbol` outline, and a class's bases from its type hierarchy: the
+ * `typeHierarchy/supertypes` of the class, which are its explicit bases in the order the class
+ * lists them — the order they take in its MRO, which C3 linearisation keeps.
+ */
+internal object BySupers {
+
+    /**
+     * Where Go to Super goes from [offset] in [file], asking [server].
+     *
+     * Suspends on the server and gives up the moment the caller is cancelled. Reads the document
+     * under a read action of its own.
+     */
+    suspend fun find(server: LspClient, file: VirtualFile, document: Document, offset: Int): BySuperAnswer {
+        val asked = readAction {
+            ByServerDocuments.ensureOpen(server, server.project, file)
+            // Not held yet: the platform's `didOpen` is still queued, and asking would be refused.
+            if (!server.hasDocument(file)) return@readAction null
+            server.getDocumentIdentifier(file) to getLsp4jPosition(document, offset)
+        } ?: return nowhere("goto.super.notOpen")
+        val (identifier, caret) = asked
+
+        val symbols = when (
+            val answer = server.awaitBy("textDocument/documentSymbol") {
+                it.textDocumentService.documentSymbol(DocumentSymbolParams(identifier))
+            }
+        ) {
+            is ByAnswer.Answer -> answer.value
+            ByAnswer.None -> emptyList()
+            ByAnswer.Failed -> return nowhere("goto.super.noAnswer", "textDocument/documentSymbol")
+        }
+
+        return when (val subject = subjectAt(symbols, caret)) {
+            null -> nowhere("goto.super.nothingHere")
+            is BySuperSubject.Class -> bases(server, identifier, subject.symbol)
+            is BySuperSubject.Member -> nowhere("goto.super.member.notAsked", subject.symbol.name)
+        }
+    }
+
+    /** The bases of [symbol], a class, from `by`'s type hierarchy. */
+    private suspend fun bases(server: LspClient, document: TextDocumentIdentifier, symbol: DocumentSymbol): BySuperAnswer {
+        val prepareParams = TypeHierarchyPrepareParams(document, symbol.selectionRange.start)
+        val item = when (
+            val answer = server.awaitBy("textDocument/prepareTypeHierarchy") {
+                it.textDocumentService.prepareTypeHierarchy(prepareParams)
+            }
+        ) {
+            is ByAnswer.Answer -> answer.value.firstOrNull() ?: return nowhere("goto.super.class.unknown", symbol.name)
+            ByAnswer.None -> return nowhere("goto.super.class.unknown", symbol.name)
+            ByAnswer.Failed -> return nowhere("goto.super.noAnswer", "textDocument/prepareTypeHierarchy")
+        }
+        val supertypes = when (
+            val answer = server.awaitBy("typeHierarchy/supertypes") {
+                it.textDocumentService.typeHierarchySupertypes(TypeHierarchySupertypesParams(item))
+            }
+        ) {
+            is ByAnswer.Answer -> answer.value
+            ByAnswer.None -> emptyList()
+            ByAnswer.Failed -> return nowhere("goto.super.noAnswer", "typeHierarchy/supertypes")
+        }
+        if (supertypes.isEmpty()) return nowhere("goto.super.class.none", item.name)
+        return BySuperAnswer.Targets(
+            BasedPythonBundle.message("goto.super.class.chooser", item.name),
+            supertypes.map(::classTarget),
+        )
+    }
+
+    /** Where a base class is: its name, where the platform opens it. */
+    fun classTarget(item: TypeHierarchyItem): BySuperTarget =
+        BySuperTarget(item.name, item.detail, Location(item.uri, item.selectionRange))
+
+    /**
+     * The class or class member the caret at [caret] is in: the innermost symbol around it that is
+     * either a class or one of a class's own members. `null` when the caret is in neither — at the
+     * top level of a module, or in a function no class holds.
+     *
+     * A caret inside a method's body is in the method, as in any IDE's Go to Super; one inside a
+     * class nested in a method is in that nested class. `by` answers the outline hierarchically; the
+     * deprecated flat shape carries no nesting to find a member's class in, so it answers nothing.
+     */
+    fun subjectAt(symbols: List<Either<SymbolInformation, DocumentSymbol>>, caret: Position): BySuperSubject? {
+        var subject: BySuperSubject? = null
+        var parent: DocumentSymbol? = null
+        var level: List<DocumentSymbol> = symbols.mapNotNull { if (it.isRight) it.right else null }
+        while (true) {
+            val around = level.firstOrNull { contains(it.range, caret) } ?: return subject
+            when {
+                around.kind == SymbolKind.Class -> subject = BySuperSubject.Class(around)
+                parent?.kind == SymbolKind.Class -> subject = BySuperSubject.Member(around, parent)
+            }
+            parent = around
+            level = around.children.orEmpty()
+        }
+    }
+
+    private fun contains(range: Range, position: Position): Boolean =
+        !before(position, range.start) && !before(range.end, position)
+
+    private fun before(a: Position, b: Position): Boolean =
+        a.line < b.line || (a.line == b.line && a.character < b.character)
+
+    private fun nowhere(key: String, vararg params: Any): BySuperAnswer.Nowhere =
+        BySuperAnswer.Nowhere(BasedPythonBundle.message(key, *params))
+}

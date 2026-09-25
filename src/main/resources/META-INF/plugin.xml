@@ -299,6 +299,10 @@
         <codeInsight.typeInfo
             language="basedpython"
             implementationClass="dev.basedpython.pycharm.lsp.typeinfo.ByTypeInfoProvider"/>
+        <!-- Go to Super (Ctrl+U): a class's bases, from the `by` server's type hierarchy. -->
+        <codeInsight.gotoSuper
+            language="basedpython"
+            implementationClass="dev.basedpython.pycharm.lsp.supers.ByGotoSuperHandler"/>
 
         <!-- ===== Stream V: smart editing ===== -->
         <enterHandlerDelegate
