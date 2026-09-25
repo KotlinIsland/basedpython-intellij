@@ -100,6 +100,15 @@ class BasedPythonSettings : PersistentStateComponent<BasedPythonSettings.State> 
     var byLanguageInjection: Boolean = true,
     var bySignatureHelp: Boolean = true,
     /**
+     * Keep the Problems view's Project Errors tab listing what `by` finds in every file of the
+     * project, open or not.
+     *
+     * Off by default, because it is not free: `by` checks every file rather than the open ones and
+     * holds what it inferred about all of them, which measured 4.2 GB for an 8,664-file project
+     * against 1.4 GB for `by check` over the same files. *Check Project* turns it on.
+     */
+    var byProjectDiagnostics: Boolean = false,
+    /**
      * Draw what a stopped program's own state settles about the code below it.
      *
      * Off by default. It costs a round trip to the debuggee on every stop and every step, and it
@@ -254,6 +263,9 @@ class BasedPythonSettings : PersistentStateComponent<BasedPythonSettings.State> 
   var bySignatureHelp: Boolean
     get() = state.bySignatureHelp
     set(value) { state.bySignatureHelp = value }
+  var byProjectDiagnostics: Boolean
+    get() = state.byProjectDiagnostics
+    set(value) { state.byProjectDiagnostics = value }
   var debuggerDataFlow: Boolean
     get() = state.debuggerDataFlow
     set(value) { state.debuggerDataFlow = value }

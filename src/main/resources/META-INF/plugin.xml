@@ -32,6 +32,10 @@
     <dependencies>
         <module name="intellij.platform.dap"/>
         <module name="intellij.platform.vcs"/>
+        <!-- The Problems view: ProblemsCollector and the problem types, which Project Errors lists
+             `by`'s whole-project diagnostics through, and the tab that Check Project opens. -->
+        <module name="intellij.platform.problemView.shared"/>
+        <module name="intellij.platform.problemView.ui"/>
     </dependencies>
 
     <resource-bundle>messages.BasedPythonBundle</resource-bundle>
@@ -222,6 +226,16 @@
             enabledByDefault="true"
             level="WEAK WARNING"
             implementationClass="dev.basedpython.pycharm.inspections.BinaryNotConfiguredInspection"/>
+        <!-- by's diagnostics for Inspect Code and batch (offline, Qodana) runs; see
+             ByDiagnosticsInspection. Global, so it runs only in a batch and the editor is not
+             given what the LSP client already shows it. No language: by checks .py as well. -->
+        <globalInspection
+            groupName="basedpython"
+            displayName="by diagnostics"
+            shortName="BasedPythonByDiagnostics"
+            enabledByDefault="true"
+            level="ERROR"
+            implementationClass="dev.basedpython.pycharm.lsp.diagnostics.ByDiagnosticsInspection"/>
         <localInspection
             language="basedpython"
             groupName="basedpython"

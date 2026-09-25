@@ -14,6 +14,7 @@ import com.intellij.ui.components.JBTextField
 import com.intellij.ui.dsl.builder.AlignX
 import com.intellij.ui.dsl.builder.panel
 import dev.basedpython.pycharm.lsp.BasedPythonBinaries
+import dev.basedpython.pycharm.lsp.diagnostics.ByProjectDiagnostics
 import dev.basedpython.pycharm.lsp.inlay.ByHintKind
 import dev.basedpython.pycharm.lsp.inlay.ByHintMode
 import dev.basedpython.pycharm.lsp.inlay.ByPushKey
@@ -119,6 +120,7 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
     private val byDocumentHighlight = JCheckBox("Highlight usages")
     private val bySignatureHelp = JCheckBox("Signature help")
     private val byLanguageInjection = JCheckBox("Language injection (html, sql, … inside strings)")
+    private val byProjectDiagnostics = JCheckBox("Problems in every file of the project, open or not")
     private val buffFormatting = JCheckBox("Formatting")
     private val buffCodeActions = JCheckBox("Code actions (lint fixes)")
     private val buffHover = JCheckBox("Hover")
@@ -188,6 +190,11 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
                 row { cell(byDocumentHighlight) }
                 row { cell(bySignatureHelp) }
                 row { cell(byLanguageInjection) }
+                row { cell(byProjectDiagnostics) }
+                    .comment(
+                        "Listed in Problems | Project Errors. by checks every file rather than the " +
+                            "open ones, which takes several times the memory.",
+                    )
             }
             group("buff server capabilities") {
                 row { cell(buffFormatting) }
@@ -271,6 +278,7 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
             pyFileHandlingCombo.selectedItem != s.pyFileHandling ||
             debugBackendCombo.selectedItem != s.debugBackend ||
             debuggerDataFlow.isSelected != s.debuggerDataFlow ||
+            byProjectDiagnostics.isSelected != s.byProjectDiagnostics ||
             debuggerRecompositions.isSelected != s.debuggerRecompositions ||
             byCompletion.isSelected != s.byCompletion ||
             byGoToDefinition.isSelected != s.byGoToDefinition ||
@@ -319,6 +327,9 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
         s.debuggerRecompositions = debuggerRecompositions.isSelected
         // Off must take what a stopped session drew down now: the pass that would have removed it
         // no longer runs once the factory declines, so each service removes its marks itself
+        val projectDiagnosticsChanged = byProjectDiagnostics.isSelected != s.byProjectDiagnostics
+        s.byProjectDiagnostics = byProjectDiagnostics.isSelected
+        if (projectDiagnosticsChanged) ByProjectDiagnostics.getInstance(project).settingChanged()
         if (dataFlowChanged) ByDataFlowSession.getInstance(project).settingChanged()
         if (recompositionsChanged) ByRecompositionSession.getInstance(project).settingChanged()
         BasedPythonSettingsEffects.announce(project, before)
@@ -369,6 +380,7 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
         pyFileHandlingCombo.selectedItem = s.pyFileHandling
         debugBackendCombo.selectedItem = s.debugBackend
         debuggerDataFlow.isSelected = s.debuggerDataFlow
+        byProjectDiagnostics.isSelected = s.byProjectDiagnostics
         debuggerRecompositions.isSelected = s.debuggerRecompositions
         byCompletion.isSelected = s.byCompletion
         byGoToDefinition.isSelected = s.byGoToDefinition

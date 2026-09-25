@@ -11,6 +11,7 @@ import com.intellij.openapi.util.Key
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiFile
 import com.intellij.platform.lsp.api.LspClient
+import com.intellij.platform.lsp.api.LspClientManager
 import com.intellij.platform.lsp.api.LspIntegrationProvider
 import com.intellij.platform.lsp.api.LspIntegrationProvider.LspClientStarter
 import com.intellij.platform.lsp.api.LspServerListener
@@ -115,6 +116,34 @@ private fun splitArgs(raw: String): List<String> =
 
 // region: `by` server (type checker + general LSP)
 
+/**
+ * The descriptor `by` is started from for [project], or `null` — after saying why — when it has no
+ * binary to start.
+ *
+ * What a file being opened starts, and what [startByServer] starts when nothing has been opened.
+ */
+private fun byDescriptor(project: Project): ByLspServerDescriptor? {
+  val launch = BasedPythonBinaries.launchBy(project)
+  if (launch == null) {
+    LOG.warn("`by` binary not found — not starting its language server")
+    BasedPythonNotifications.warnBinaryMissing(project, "by")
+    return null
+  }
+  return ByLspServerDescriptor(project, launch, splitArgs(BasedPythonSettings.getInstance(project).effectiveByExtraArgs))
+}
+
+/**
+ * Starts `by` for [project] if it is not running, for work that asks about the whole project rather
+ * than about a file somebody opened — an inspection run, which in a batch run has no editor at all.
+ * `false` when it cannot be started: turned off in settings, or no binary.
+ */
+internal fun startByServer(project: Project): Boolean {
+  if (!BasedPythonSettings.getInstance(project).byEnabled) return false
+  val descriptor = byDescriptor(project) ?: return false
+  LspClientManager.getInstance(project).ensureClientStarted(ByLspServerSupportProvider::class.java, descriptor)
+  return true
+}
+
 internal class ByLspServerSupportProvider : LspIntegrationProvider {
   override fun fileOpened(project: Project, file: VirtualFile, clientStarter: LspClientStarter) {
     if (!file.isByServerFile()) return
@@ -126,13 +155,8 @@ internal class ByLspServerSupportProvider : LspIntegrationProvider {
     // root would make the whole project's server run from the `.venv` of whichever module happened
     // to have a file opened first. One server serves every module, so it resolves the way the
     // project does.
-    val launch = BasedPythonBinaries.launchBy(project)
-    if (launch == null) {
-      LOG.warn("`by` binary not found — skipping LSP startup for ${file.path}")
-      BasedPythonNotifications.warnBinaryMissing(project, "by")
-      return
-    }
-    clientStarter.ensureClientStarted(ByLspServerDescriptor(project, launch, splitArgs(settings.effectiveByExtraArgs)))
+    val descriptor = byDescriptor(project) ?: return
+    clientStarter.ensureClientStarted(descriptor)
   }
 
   /**
@@ -206,7 +230,15 @@ internal class ByLspServerDescriptor(
     ByDataFlowServer::class.java
 
   override fun createInitializationOptions(): Any =
-    mapOf("inlayHints" to BasedPythonSettings.getInstance(project).inlayModes.serverOptions())
+    mapOf(
+      "inlayHints" to BasedPythonSettings.getInstance(project).inlayModes.serverOptions(),
+      // Every file checked when a whole-project request asks — `workspace/diagnostic`, for
+      // Problems | Project Errors, and `by/checkWorkspace`, for an inspection run. The mode costs
+      // nothing until one is sent: it chooses which files a check reports, and the per-document
+      // requests the editor sends answer the same in either mode. Always on rather than following
+      // the setting, so turning the setting on needs no restart, and Inspect Code works without it.
+      "diagnosticMode" to "workspace",
+    )
 
   // `by` advertises: completion, hover, goto-def/decl/type-def, references, rename,
   // doc highlight, signature help, diagnostics, inlay hints, semantic tokens,

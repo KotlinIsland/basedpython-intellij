@@ -68,6 +68,11 @@ dependencies {
     // on the classpath only when named. Naming it on the floor as well means that move is not
     // one to rediscover the next time the compile target moves. Declared in plugin.xml too.
     bundledModule("intellij.platform.vcs")
+    // The Problems view (ProblemsCollector, FileProblem, the Project Errors tab), which `by`'s
+    // whole-project diagnostics are listed in. Content modules of the bundled Problems View plugin;
+    // declared in plugin.xml too.
+    bundledModule("intellij.platform.problemView.shared")
+    bundledModule("intellij.platform.problemView.ui")
     // XDebugProcess, the breakpoint types, the executors. Every one of them a product module, and a
     // snapshot artifact (`useInstaller = false`) puts on the compile classpath only what is named.
     bundledModule("intellij.platform.debugger")

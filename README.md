@@ -90,7 +90,9 @@ support, run configurations, CLI actions, and editor tooling.
 - **Transpile to .py** / **Reverse Transpile to .by** (also in editor & project popups).
 - **Generate api.lock** — `by generate-api-file`.
 - **Format with buff** (`Ctrl+Alt+Shift+L`) — works without the LSP.
-- **Check Project** — `by check` in a Run console.
+- **Check Project** — lists what `by` finds in every file, open or not, in *Problems | Project
+  Errors*, and keeps the list current (off until asked for: `by` then holds the whole project).
+  *Code | Inspect Code* reports the same diagnostics through the **by diagnostics** inspection.
 - **Clean buff Caches** — `buff clean`.
 - **Explain Rule...** — looks up the rule under the caret via `buff rule` / `by explain`.
 

@@ -3,6 +3,8 @@ package dev.basedpython.pycharm.lsp.ext
 import org.eclipse.lsp4j.Position
 import org.eclipse.lsp4j.Range
 import org.eclipse.lsp4j.TextDocumentIdentifier
+import org.eclipse.lsp4j.WorkspaceDiagnosticParams
+import org.eclipse.lsp4j.WorkspaceDiagnosticReport
 import org.eclipse.lsp4j.jsonrpc.services.JsonRequest
 import java.util.concurrent.CompletableFuture
 
@@ -211,6 +213,21 @@ interface ByServerExtensions {
      */
     @JsonRequest("by/superMembers")
     fun superMembers(args: BySuperMembersParams): CompletableFuture<List<BySuperMember>?>
+
+    /**
+     * Every file of the workspace checked, answered as soon as the check is done.
+     *
+     * The same parameters and report as `workspace/diagnostic`, which `by` long-polls: a request
+     * whose answer the client already has — no file changed, or no file has anything wrong — is
+     * held open until that stops being so. That keeps a problems list current, and it is what
+     * [dev.basedpython.pycharm.lsp.diagnostics.ByProjectDiagnostics] uses. An inspection run asks
+     * once and needs the answer, including "nothing", so it asks this instead.
+     *
+     * Refused with an error, rather than answered empty, when the server is not checking the
+     * workspace at all.
+     */
+    @JsonRequest("by/checkWorkspace")
+    fun checkWorkspace(params: WorkspaceDiagnosticParams): CompletableFuture<WorkspaceDiagnosticReport?>
 }
 
 /**
