@@ -12,6 +12,7 @@ import com.intellij.platform.lsp.api.customization.LspFindReferencesDisabled
 import com.intellij.platform.lsp.api.customization.LspFoldingRangeDisabled
 import com.intellij.platform.lsp.api.customization.LspGoToDefinitionDisabled
 import com.intellij.platform.lsp.api.customization.LspGoToTypeDefinitionDisabled
+import com.intellij.platform.lsp.api.customization.LspInheritanceMarkersSupport
 import com.intellij.platform.lsp.api.customization.LspInlayHintDisabled
 import com.intellij.platform.lsp.api.customization.LspRenameDisabled
 import com.intellij.platform.lsp.api.customization.LspRenameSupport
@@ -207,6 +208,20 @@ class LspServerDescriptorTest {
   fun `the rename toggle still switches by's rename off`() {
     BasedPythonSettings.getInstance(project).byRename = false
     assertSame(LspRenameDisabled, byDescriptor().lspCustomization.renameCustomizer)
+  }
+
+  @Test
+  fun `by draws inheritance markers in by files`() {
+    // Off in the platform unless a customization turns them on.
+    val c = byDescriptor().lspCustomization.inheritanceMarkersCustomizer
+    assertTrue(c is LspInheritanceMarkersSupport, "inheritance markers must be on for by: $c")
+    assertTrue((c as LspInheritanceMarkersSupport).shouldAskServerForMarkers(fixture.configureByText("a.by", "").virtualFile))
+  }
+
+  @Test
+  fun `by draws no inheritance markers where another language already does`() {
+    val c = byDescriptor().lspCustomization.inheritanceMarkersCustomizer as LspInheritanceMarkersSupport
+    assertFalse(c.shouldAskServerForMarkers(makeFile("readme.txt")))
   }
 
   @Test

@@ -32,6 +32,8 @@ import com.intellij.platform.lsp.api.customization.LspFindReferencesDisabled
 import com.intellij.platform.lsp.api.customization.LspFoldingRangeDisabled
 import com.intellij.platform.lsp.api.customization.LspGoToDefinitionDisabled
 import com.intellij.platform.lsp.api.customization.LspGoToTypeDefinitionDisabled
+import com.intellij.platform.lsp.api.customization.LspInheritanceMarkersCustomizer
+import com.intellij.platform.lsp.api.customization.LspInheritanceMarkersSupport
 import com.intellij.platform.lsp.api.customization.LspInlayHintDisabled
 import com.intellij.platform.lsp.api.customization.LspRenameDisabled
 import com.intellij.platform.lsp.api.customization.LspRenameSupport
@@ -44,6 +46,7 @@ import dev.basedpython.pycharm.BasedPythonIcons
 import dev.basedpython.pycharm.debug.dfa.ByDataFlowServer
 import dev.basedpython.pycharm.env.ByLaunch
 import dev.basedpython.pycharm.lang.BasedPythonFile
+import dev.basedpython.pycharm.lang.BasedPythonFileType
 import dev.basedpython.pycharm.lang.dialect.BasedPythonProjectDetector
 import dev.basedpython.pycharm.lsp.diagnostics.ByDiagnosticsSupport
 import dev.basedpython.pycharm.settings.BasedPythonSettings
@@ -258,6 +261,15 @@ internal class ByLspServerDescriptor(
     override val signatureHelpCustomizer
       get() = if (s.bySignatureHelp) super.signatureHelpCustomizer else LspSignatureHelpDisabled
     /**
+     * The gutter's *is overridden*, *is implemented* and *is subclassed* icons, from `by`'s
+     * `textDocument/implementation` and `typeHierarchy/subtypes` — off in the platform unless a
+     * server's customization turns them on. See [ByInheritanceMarkers].
+     *
+     * Not a toggle of its own: the platform lists the provider under *Settings | Editor | General |
+     * Gutter Icons*, which is where every other gutter icon is switched off.
+     */
+    override val inheritanceMarkersCustomizer: LspInheritanceMarkersCustomizer = ByInheritanceMarkers
+    /**
      * Always off — and that is not the feature being switched off, only the platform's rendering
      * of it.
      *
@@ -275,6 +287,25 @@ internal class ByLspServerDescriptor(
 
   private object ByDocumentHighlights : LspDocumentHighlightsSupport() {
     override fun shouldAskServerForDocumentHighlights(psiFile: PsiFile): Boolean = true
+  }
+
+  /**
+   * Inheritance markers in basedpython's own files and nowhere else.
+   *
+   * The platform's provider is registered for every language, and a `.py` file the IDE reads as
+   * python already has these icons from the python plugin's own line markers, which would then be
+   * drawn twice.
+   *
+   * What it costs, measured on a 574-line `.by` of 14 classes and 182 methods: once the document has
+   * been still for a second (`lsp.inheritance.markers.quiescence.ms`) the platform asks
+   * `documentSymbol`, then `implementation` for each method of a class that has subclasses and
+   * `prepareTypeHierarchy` + `typeHierarchy/subtypes` for each class, four at a time. That took an
+   * edit from 19 requests to 220, answered in under 80ms from the first to the last (each at most 7ms
+   * for `implementation`, 30ms for `subtypes`). A file with more than 200 classes and methods gets no
+   * markers and asks nothing beyond the `documentSymbol` (`lsp.inheritance.markers.max.symbols`).
+   */
+  internal object ByInheritanceMarkers : LspInheritanceMarkersSupport() {
+    override fun shouldAskServerForMarkers(file: VirtualFile): Boolean = file.fileType == BasedPythonFileType.INSTANCE
   }
 
   /**
