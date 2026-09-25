@@ -2,6 +2,7 @@ package dev.basedpython.pycharm.editor
 
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.editor.Document
+import com.intellij.openapi.editor.StripTrailingSpacesFilter
 import com.intellij.openapi.editor.ex.EditorSettingsExternalizable
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.testFramework.junit5.RunInEdt
@@ -12,6 +13,7 @@ import dev.basedpython.pycharm.lsp.outline.OutlineSpec
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 
@@ -125,6 +127,43 @@ class ByStripTrailingSpacesFilterTest {
         WriteCommandAction.runWriteCommandAction(fixture.project) { document.insertString(0, "z = 3\n") }
         OutlineSpec.remember(fixture.project, document) { string("$q\n    kept   \n$q") }
         assertEquals("z = 3\ny = 2\nx = 1\ns = $q\n    kept   \n$q\n", save())
+    }
+
+    /**
+     * No outline says "not now", not "never": the filter must not lean on the platform retrying a
+     * `NOT_ALLOWED` document, which is the reverse of what the two constants promise.
+     */
+    @Test
+    fun `with no outline for this text the filter postpones rather than forbids`() {
+        typed("x = 1   \n")
+
+        assertSame(
+            StripTrailingSpacesFilter.POSTPONED,
+            ByStripTrailingSpacesFilterFactory().createFilter(fixture.project, document),
+        )
+    }
+
+    /**
+     * In the default mode a save clears which lines were modified, so the lines of a save made
+     * before `by`'s outline keep their spaces through later saves — a Save All with the outline in
+     * hand included — until they are edited again, and then they are stripped.
+     */
+    @Test
+    fun `in modified-lines mode a line saved before its outline keeps its spaces until it is edited again`() {
+        settings.stripTrailingSpaces = EditorSettingsExternalizable.STRIP_TRAILING_SPACES_CHANGED
+        fixture.configureByText("a.by", "x = 1\n")
+        fixture.editor.caretModel.moveToOffset(0)
+        WriteCommandAction.runWriteCommandAction(fixture.project) { document.insertString(document.textLength, "y = 2   \n") }
+
+        assertEquals("x = 1\ny = 2   \n", save())
+
+        OutlineSpec.remember(fixture.project, document) {}
+        FileDocumentManager.getInstance().saveAllDocuments()
+        assertEquals("x = 1\ny = 2   \n", document.text)
+
+        WriteCommandAction.runWriteCommandAction(fixture.project) { document.insertString(document.getLineEndOffset(1) - 3, "0") }
+        OutlineSpec.remember(fixture.project, document) {}
+        assertEquals("x = 1\ny = 20\n", save())
     }
 
     @Test

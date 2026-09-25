@@ -34,11 +34,28 @@ import java.util.BitSet
  * stripped, and [ByOutlines.current] asks in the background for next time.
  *
  * The filter says so with [StripTrailingSpacesFilter.POSTPONED], whose contract is that the platform
- * tries the document again later. Measured on 263.5153, it does not: `StripTrailingSpacesUtil`
+ * tries the document again later. It does not: `StripTrailingSpacesUtil.stripTrailingSpaces`
  * reports a postponed document as done and a `NOT_ALLOWED` one as the one to try again, the reverse
- * of the two constants' documentation. So in practice the lines of such a save keep their trailing
- * spaces until the file is next edited and saved. Returning `NOT_ALLOWED` to be retried would lean on
- * that inversion; `POSTPONED` is what is true here, and starts retrying once the platform does.
+ * of the two constants' documentation — and the try again is at the next Save All, not when an
+ * answer arrives. Returning `NOT_ALLOWED` to be retried would lean on that inversion, and would buy
+ * nothing in the default mode, "Modified lines": the save clears the lines' modified flags, so the
+ * retry has no lines left to strip. Measured in PyCharm 263.5153.49 with a probe filter returning
+ * each constant once: in "All" mode the next Save All stripped the `NOT_ALLOWED` document and not
+ * the `POSTPONED` one; in "Modified lines" mode it stripped neither.
+ *
+ * Nor can the plugin strip the document again itself once the outline arrives: the platform's entry
+ * points that strip through the filters (`TrailingSpacesStripper.strip`,
+ * `DocumentImpl.stripTrailingSpaces`) are `@ApiStatus.Internal`, and saving a document that is
+ * already saved (`FileDocumentManager.saveDocument`) writes nothing and strips nothing. Vetoing the
+ * save until the outline arrives would strip, and would leave the file unsaved for whatever the save
+ * was for — a run or build reading the file from disk.
+ *
+ * So the lines of such a save keep their trailing spaces: in "All" mode until the file is next saved
+ * with an outline in hand, in "Modified lines" mode until those lines are edited again. Nothing in a
+ * string is ever touched. The window is small — measured there, an edit's outline was in 15–46ms
+ * (median 23ms over 40 edits, `by` a debug build on a loaded machine), while a person takes longer
+ * than that to press Ctrl+S — except while `by` is busy with a first check of the project, or not
+ * running at all.
  *
  * An outline `by` declined to give (language services are off) is not an outline of a file with no
  * strings, so it strips nothing either: [StripTrailingSpacesFilter.NOT_ALLOWED].
