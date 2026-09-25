@@ -1,5 +1,8 @@
 package dev.basedpython.pycharm.lsp.inlay
 
+import com.google.gson.JsonElement
+import com.google.gson.JsonObject
+import com.google.gson.JsonPrimitive
 import org.eclipse.lsp4j.InlayHint
 import org.eclipse.lsp4j.InlayHintKind
 import org.eclipse.lsp4j.InlayHintLabelPart
@@ -111,71 +114,64 @@ class ByInlayHintsTest {
 
     // endregion
 
-    // region: shape
+    // region: kind
 
-    private fun shapeOf(text: String, kind: InlayHintKind? = null): ByHintShape {
-        val hint = textHint(text, kind)
-        return ByInlayHints.shapeOf(hint, ByInlayHints.labelOf(hint))
+    private fun tagged(tag: JsonElement?, text: String = "int"): InlayHint =
+        textHint(text, InlayHintKind.Type).also { hint ->
+            hint.data = JsonObject().apply { if (tag != null) add("kind", tag) }
+        }
+
+    private fun tagged(option: String, text: String = "int"): InlayHint = tagged(JsonPrimitive(option), text)
+
+    @Test
+    fun `a hint is filed under the option by tags it with`() {
+        for (kind in ByHintKind.entries.filter { it.option != null }) {
+            assertEquals(kind, ByInlayHints.kindOf(tagged(kind.option!!)), kind.option)
+        }
     }
 
     /**
-     * Every label `by` writes, copied from the constructors in `ty_ide::InlayHint` that write them,
-     * with the LSP kind each one is sent under.
-     *
-     * This is the table the whole classification rests on: the protocol carries two kinds for the
-     * eighteen things the server distinguishes, and the rest is recovered from these shapes.
+     * Labels as `by` `main` writes them, measured: a revealed type is the bare type, with the
+     * `  revealed: ` the plugin once looked for long gone, so every revealed type was filed under
+     * "Other hints". The kind is the tag's, whatever the label happens to look like.
      */
     @Test
-    fun `every label by writes is recognised as the kind that wrote it`() {
-        val cases = listOf(
-            Triple(": int", InlayHintKind.Type, ByHintShape.TYPE),
-            Triple(": list[int]", InlayHintKind.Type, ByHintShape.TYPE),
-            Triple("[int]", InlayHintKind.Type, ByHintShape.TYPE_ARGUMENTS),
-            Triple("[T=int, U=str]", InlayHintKind.Type, ByHintShape.TYPE_ARGUMENTS),
-            Triple("T=", InlayHintKind.Type, ByHintShape.TYPE_ARGUMENT_NAME),
-            Triple(" | int", InlayHintKind.Type, ByHintShape.NUMERIC_PROMOTION),
-            Triple(" | float | int", InlayHintKind.Type, ByHintShape.NUMERIC_PROMOTION),
-            Triple("  revealed: int", InlayHintKind.Type, ByHintShape.REVEALED_TYPE),
-            Triple(" raises ValueError", InlayHintKind.Type, ByHintShape.RAISES),
-            Triple("override ", InlayHintKind.Type, ByHintShape.OVERRIDE),
-            Triple("reified ", InlayHintKind.Type, ByHintShape.REIFICATION),
-            Triple("out ", InlayHintKind.Type, ByHintShape.VARIANCE),
-            Triple("in ", InlayHintKind.Type, ByHintShape.VARIANCE),
-            Triple("in out ", InlayHintKind.Type, ByHintShape.VARIANCE),
-            Triple(" reads count, items", InlayHintKind.Type, ByHintShape.READS),
-            Triple(" reads …", InlayHintKind.Type, ByHintShape.READS),
-            Triple("unstable ", InlayHintKind.Type, ByHintShape.STABILITY),
-            Triple(" depends on name, email", InlayHintKind.Type, ByHintShape.DERIVED_DEPENDENCIES),
-            Triple(" invalidates Counter, Total", InlayHintKind.Type, ByHintShape.INVALIDATIONS),
-            Triple(" invalidates nothing", InlayHintKind.Type, ByHintShape.INVALIDATIONS),
-            Triple("x=", InlayHintKind.Parameter, ByHintShape.ARGUMENT_NAME),
-            Triple("self", InlayHintKind.Parameter, ByHintShape.IMPLICIT_PARAMETER),
-            Triple("it: int", InlayHintKind.Parameter, ByHintShape.IMPLICIT_PARAMETER),
-            Triple("self, it: int", InlayHintKind.Parameter, ByHintShape.IMPLICIT_PARAMETER),
-            Triple(", ctx=my_context", InlayHintKind.Parameter, ByHintShape.IMPLICIT_ARGUMENT),
+    fun `the label plays no part in which kind a hint is`() {
+        assertEquals(ByHintKind.REVEALED_TYPES, ByInlayHints.kindOf(tagged("revealedTypes", "list[int]")))
+        assertEquals(ByHintKind.REVEALED_TYPES, ByInlayHints.kindOf(tagged("revealedTypes", "1")))
+        assertEquals(ByHintKind.CALL_TYPE_ARGUMENTS, ByInlayHints.kindOf(tagged("callTypeArguments", "[int]")))
+        assertEquals(ByHintKind.INFERRED_RETURN_TYPES, ByInlayHints.kindOf(tagged("inferredReturnTypes", "-> int")))
+        assertEquals(ByHintKind.ENUM_VALUES, ByInlayHints.kindOf(tagged("enumValues", "1")))
+        assertEquals(ByHintKind.INHERITED_PARAMETER_DEFAULTS, ByInlayHints.kindOf(tagged("inheritedParameterDefaults", "=1")))
+        assertEquals(ByHintKind.PROPERTY_TYPES, ByInlayHints.kindOf(tagged("propertyTypes", ": int")))
+    }
+
+    @Test
+    fun `an untagged hint is other, whatever its LSP kind or label`() {
+        val untagged = listOf(
+            textHint("  revealed: int", InlayHintKind.Type),
+            textHint(": int", InlayHintKind.Type),
+            textHint("x=", InlayHintKind.Parameter),
+            textHint("override", InlayHintKind.Type),
+            textHint("raises ValueError"),
         )
-        for ((label, kind, expected) in cases) {
-            assertEquals(expected, shapeOf(label, kind), "\"$label\" as $kind")
+        for (hint in untagged) {
+            assertEquals(ByHintKind.OTHER, ByInlayHints.kindOf(hint), ByInlayHints.labelOf(hint))
         }
     }
 
     @Test
-    fun `the LSP kind is what splits an argument's name from a type argument's`() {
-        // `t=` and `T=` are the same characters standing for different things, and the kind `by`
-        // sends them under is the only thing that says which.
-        assertEquals(ByHintShape.ARGUMENT_NAME, shapeOf("t=", InlayHintKind.Parameter))
-        assertEquals(ByHintShape.TYPE_ARGUMENT_NAME, shapeOf("T=", InlayHintKind.Type))
+    fun `a kind from a newer by, or a tag that is not a name, is other`() {
+        assertEquals(ByHintKind.OTHER, ByInlayHints.kindOf(tagged("borrowChecks")))
+        assertEquals(ByHintKind.OTHER, ByInlayHints.kindOf(tagged(JsonPrimitive(3))))
+        assertEquals(ByHintKind.OTHER, ByInlayHints.kindOf(tagged(null)))
+        assertEquals(ByHintKind.OTHER, ByInlayHints.kindOf(textHint("int").also { it.data = JsonPrimitive("revealedTypes") }))
     }
 
     @Test
-    fun `a shape from a newer by is its own kind, not the nearest one`() {
-        for (label in listOf("=> 3", "«borrowed»", "-> bool")) {
-            assertEquals(
-                ByHintShape.UNKNOWN,
-                shapeOf(label, InlayHintKind.Type),
-                "\"$label\" should fall to the kind that has a setting for anything else",
-            )
-        }
+    fun `other is the only kind no by option names`() {
+        assertEquals(listOf(ByHintKind.OTHER), ByHintKind.entries.filter { it.option == null })
+        assertEquals(ByHintKind.OTHER, ByHintKind.ofOption("other"), "the catch-all's settings key is not a tag")
     }
 
     // endregion
@@ -237,31 +233,6 @@ class ByInlayHintsTest {
     }
 
     @Test
-    fun `a shape takes the mode of the kind that wrote it`() {
-        val modes = ByHintModes.all(ByHintMode.NEVER).let {
-            ByHintModes(ByHintKind.entries.associateWith { kind ->
-                if (kind == ByHintKind.INFERRED_OVERRIDE) ByHintMode.ON_PUSH else it[kind]
-            })
-        }
-        assertEquals(ByHintMode.ON_PUSH, modes.forShape(ByHintShape.OVERRIDE))
-        assertEquals(ByHintMode.NEVER, modes.forShape(ByHintShape.TYPE))
-    }
-
-    @Test
-    fun `where two kinds are written alike, the more visible setting wins`() {
-        // `by` writes a variable's type and a lambda parameter's identically, so a hint of that
-        // shape cannot be attributed to one of them. Showing it always is the answer that never
-        // hides a hint someone asked to see.
-        val modes = ByHintModes(
-            mapOf(
-                ByHintKind.VARIABLE_TYPES to ByHintMode.ALWAYS,
-                ByHintKind.LAMBDA_PARAMETER_TYPES to ByHintMode.ON_PUSH,
-            ),
-        )
-        assertEquals(ByHintMode.ALWAYS, modes.forShape(ByHintShape.TYPE))
-    }
-
-    @Test
     fun `nothing is collected only when every kind is off`() {
         assertFalse(ByHintModes.all(ByHintMode.NEVER).anyCollected)
         assertTrue(ByHintModes.all(ByHintMode.ON_PUSH).anyCollected)
@@ -286,16 +257,18 @@ class ByInlayHintsTest {
 
     @Test
     fun `the hints that introduce what follows them anchor forwards, the rest backwards`() {
-        assertFalse(ByHintShape.ARGUMENT_NAME.relatesToPrecedingText)
-        assertFalse(ByHintShape.IMPLICIT_PARAMETER.relatesToPrecedingText)
-        assertFalse(ByHintShape.OVERRIDE.relatesToPrecedingText)
-        assertFalse(ByHintShape.VARIANCE.relatesToPrecedingText)
-        assertFalse(ByHintShape.REIFICATION.relatesToPrecedingText)
-        assertTrue(ByHintShape.TYPE.relatesToPrecedingText)
-        assertTrue(ByHintShape.TYPE_ARGUMENTS.relatesToPrecedingText)
-        assertTrue(ByHintShape.RAISES.relatesToPrecedingText)
-        assertTrue(ByHintShape.INVALIDATIONS.relatesToPrecedingText)
-        assertTrue(ByHintShape.UNKNOWN.relatesToPrecedingText)
+        val forwards = setOf(
+            ByHintKind.CALL_ARGUMENT_NAMES,
+            ByHintKind.IMPLICIT_PARAMETERS,
+            ByHintKind.IMPLICIT_SELF,
+            ByHintKind.INFERRED_OVERRIDE,
+            ByHintKind.INFERRED_VARIANCE,
+            ByHintKind.INFERRED_REIFICATION,
+            ByHintKind.PARAMETER_STABILITY,
+        )
+        for (kind in ByHintKind.entries) {
+            assertEquals(kind !in forwards, kind.relatesToPrecedingText, kind.name)
+        }
     }
 
     // endregion

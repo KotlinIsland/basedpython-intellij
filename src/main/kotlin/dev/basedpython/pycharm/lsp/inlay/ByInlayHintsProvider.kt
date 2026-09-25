@@ -183,8 +183,8 @@ private class ByInlayHintsCollector(
             val parts = ByInlayHints.partsOf(hint)
             val label = parts.joinToString("") { it.text }
             if (label.isEmpty()) continue
-            val shape = ByInlayHints.shapeOf(hint, label)
-            val mode = modes.forShape(shape)
+            val kind = ByInlayHints.kindOf(hint)
+            val mode = modes[kind]
             // Ordinarily nothing arrives that is switched off, `by` having been told not to compute
             // it; this is what covers the window before that setting reaches a running server.
             if (!mode.isCollected) continue
@@ -208,7 +208,7 @@ private class ByInlayHintsCollector(
             val tooltip = ByInlayHints.tooltipOf(hint) ?: label.takeIf { it != text }
             sink.addInlineElement(
                 offset,
-                shape.relatesToPrecedingText,
+                kind.relatesToPrecedingText,
                 tooltip?.let { factory.withTooltip(it, presentation) } ?: presentation,
                 false,
             )

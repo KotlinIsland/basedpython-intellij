@@ -11,7 +11,6 @@ import dev.basedpython.pycharm.debug.bpd.ByDebugBackend
 import dev.basedpython.pycharm.lsp.inlay.ByHintKind
 import dev.basedpython.pycharm.lsp.inlay.ByHintMode
 import dev.basedpython.pycharm.lsp.inlay.ByHintModes
-import dev.basedpython.pycharm.lsp.inlay.ByHintShape
 import dev.basedpython.pycharm.lsp.inlay.ByPushKey
 
 /**
@@ -205,14 +204,11 @@ class BasedPythonSettings : PersistentStateComponent<BasedPythonSettings.State> 
    * Which of the two old toggles covered [kind].
    *
    * They were "parameter name hints" and "variable type hints", and between them they switched
-   * everything `by` sent: the parameter-shaped hints went with the first and the rest with the
-   * second, whatever they actually were.
+   * everything `by` sent: the hints it sends as LSP parameters went with the first and the rest with
+   * the second, whatever they actually were.
    */
-  private fun legacyInlayMode(kind: ByHintKind): ByHintMode = when (kind.shape) {
-    ByHintShape.ARGUMENT_NAME, ByHintShape.IMPLICIT_PARAMETER, ByHintShape.IMPLICIT_ARGUMENT ->
-      ByHintMode.of(state.inlayParameterHints)
-    else -> ByHintMode.of(state.inlayTypeHints)
-  }
+  private fun legacyInlayMode(kind: ByHintKind): ByHintMode =
+    ByHintMode.of(if (kind.parameterHint) state.inlayParameterHints else state.inlayTypeHints)
 
   /** Every kind's mode at once, which is how the hints collector and the server config read them. */
   val inlayModes: ByHintModes

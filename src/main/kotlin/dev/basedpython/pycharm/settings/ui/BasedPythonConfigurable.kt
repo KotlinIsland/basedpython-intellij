@@ -79,7 +79,7 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
     // one ticked on the other page was quietly turned back off.
 
     /**
-     * One mode per kind of hint `by` sends, in `by`'s own list order (see [ByHintKind]): each kind
+     * One mode per kind of hint `by` sends, in [ByHintKind]'s order: each kind
      * can be off, always on, or shown only while the push key is held.
      */
     private val inlayModeCombos: Map<ByHintKind, ComboBox<ByHintMode>> =
@@ -154,7 +154,13 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
             }
             group("Inlay hints") {
                 for ((kind, combo) in inlayModeCombos) {
-                    row("${kind.display}:") { cell(combo) }
+                    val row = row("${kind.display}:") { cell(combo) }
+                    if (kind == ByHintKind.OTHER) {
+                        row.comment(
+                            "Hints of a kind this plugin does not know yet, and every hint from a by " +
+                                "that does not say which kind each hint is. Never still works per kind.",
+                        )
+                    }
                 }
                 row("Push key:") { cell(inlayPushKeyCombo) }
                     .comment("Hold this key to see the hints set to show while it is held.")

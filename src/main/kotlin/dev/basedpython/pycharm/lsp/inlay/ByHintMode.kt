@@ -27,19 +27,6 @@ enum class ByHintMode(val id: String, val display: String) {
     ON_PUSH("push", "While the push key is held"),
     ;
 
-    /**
-     * How much of the file's hints this mode shows, as a number two modes can be compared by.
-     *
-     * Written out rather than left to the declaration order, since [ByHintModes.forShape] turns on
-     * it: two kinds the wire cannot separate are drawn under the more visible of their settings.
-     */
-    val visibility: Int
-        get() = when (this) {
-            NEVER -> 0
-            ON_PUSH -> 1
-            ALWAYS -> 2
-        }
-
     /** Whether a hint in this mode is drawn right now, [pushed] being whether the key is down. */
     fun isShown(pushed: Boolean): Boolean = when (this) {
         NEVER -> false
@@ -91,19 +78,6 @@ class ByHintModes(private val modes: Map<ByHintKind, ByHintMode>) {
 
     /** Whether anything at all is worth asking `by` for. */
     val anyCollected: Boolean get() = ByHintKind.entries.any { this[it].isCollected }
-
-    /**
-     * The mode a hint of this shape is drawn under.
-     *
-     * A shape can stand for more than one kind — `by` writes a variable's type and a lambda
-     * parameter's identically — and the wire cannot say which arrived. Where their settings
-     * disagree the more visible one wins, so a peek at one of them is never mistaken for the other
-     * being switched off. The disagreement can only be *always* against *on push*: a kind set to
-     * [ByHintMode.NEVER] is switched off at the server and never arrives to be confused with
-     * anything (see [ByHintKind.option]).
-     */
-    fun forShape(shape: ByHintShape): ByHintMode =
-        ByHintKind.of(shape).maxByOrNull { this[it].visibility }?.let { this[it] } ?: ByHintMode.ALWAYS
 
     /**
      * What to send `by` as its `inlayHints` options: every kind it knows a name for, on unless the

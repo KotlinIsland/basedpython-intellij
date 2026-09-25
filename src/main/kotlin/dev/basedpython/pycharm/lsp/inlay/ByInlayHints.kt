@@ -1,7 +1,7 @@
 package dev.basedpython.pycharm.lsp.inlay
 
+import com.google.gson.JsonObject
 import org.eclipse.lsp4j.InlayHint
-import org.eclipse.lsp4j.InlayHintKind
 import org.eclipse.lsp4j.Location
 
 /**
@@ -23,29 +23,6 @@ object ByInlayHints {
     const val MAX_CHARS: Int = 60
 
     private const val ELLIPSIS = "…"
-
-    /**
-     * The literal openings `by` writes each kind of hint with.
-     *
-     * Not patterns to match loosely: these are the exact strings its label constructors emit
-     * (`ty_ide::InlayHint::inferred_raises`, `revealed_type`, `inferred_override` and friends), and
-     * matching them is how the eighteen kinds are recovered from the two LSP carries.
-     */
-    private const val RAISES = "raises "
-    private const val REVEALED = "revealed:"
-    private const val OVERRIDE = "override"
-    private const val REIFIED = "reified"
-    private const val READS = "reads "
-    private const val UNSTABLE = "unstable"
-    private const val DEPENDS_ON = "depends on "
-    private const val INVALIDATES = "invalidates "
-    private const val PROMOTION_BAR = "|"
-    private const val TYPE_COLON = ":"
-    private const val TYPE_ARGUMENT_BRACKET = "["
-    private const val BINDS = "="
-
-    /** The whole of what a variance hint can say, keyword for keyword. */
-    private val VARIANCE_KEYWORDS = setOf("out", "in", "in out")
 
     /**
      * The hint's text, with the label's parts joined and nothing else done to it.
@@ -98,43 +75,23 @@ object ByInlayHints {
     }
 
     /**
-     * What the hint looks like on the wire, which is as much as can be told about it.
+     * The kind of hint this is, as `by` tagged it: `data.kind`, the name of the `inlayHints` option
+     * that switches it (`"revealedTypes"`, `"inferredOverride"`, …).
      *
-     * LSP says only "type" or "parameter"; the rest is read off the label, and can be, because
-     * `by`'s labels are fixed strings rather than free text. `override ` is written `override `
-     * every time. See [ByHintShape].
-     *
-     * The two LSP kinds still do work: they split `name=` on an argument from `T=` on a type
-     * argument, which are the same characters standing for different things, and they mark the
-     * hints that name a parameter the source never spells.
+     * Read from that tag and nothing else. LSP's own `kind` carries two values for the two dozen
+     * things `by` distinguishes, and the label is what the hint says, not what it is: a revealed
+     * `list[int]` and a call's `[int]` are one bracket apart, and every label format `by` has ever
+     * changed moved hints between settings without anyone noticing. A hint with no tag — from a `by`
+     * that does not send one — or with a name this plugin does not know is [ByHintKind.OTHER].
      */
-    fun shapeOf(hint: InlayHint, label: String): ByHintShape {
-        val text = label.trim()
-        if (hint.kind == InlayHintKind.Parameter) {
-            return when {
-                // `x=` names the argument that follows it; `ctx=value` *is* the argument.
-                text.endsWith(BINDS) -> ByHintShape.ARGUMENT_NAME
-                text.contains(BINDS) -> ByHintShape.IMPLICIT_ARGUMENT
-                else -> ByHintShape.IMPLICIT_PARAMETER
-            }
-        }
-        return when {
-            text.startsWith(RAISES) -> ByHintShape.RAISES
-            text.startsWith(REVEALED) -> ByHintShape.REVEALED_TYPE
-            text == OVERRIDE -> ByHintShape.OVERRIDE
-            text == REIFIED -> ByHintShape.REIFICATION
-            text.startsWith(READS) -> ByHintShape.READS
-            text == UNSTABLE -> ByHintShape.STABILITY
-            text.startsWith(DEPENDS_ON) -> ByHintShape.DERIVED_DEPENDENCIES
-            text.startsWith(INVALIDATES) -> ByHintShape.INVALIDATIONS
-            text in VARIANCE_KEYWORDS -> ByHintShape.VARIANCE
-            text.startsWith(PROMOTION_BAR) -> ByHintShape.NUMERIC_PROMOTION
-            text.startsWith(TYPE_ARGUMENT_BRACKET) -> ByHintShape.TYPE_ARGUMENTS
-            text.endsWith(BINDS) -> ByHintShape.TYPE_ARGUMENT_NAME
-            text.startsWith(TYPE_COLON) -> ByHintShape.TYPE
-            else -> ByHintShape.UNKNOWN
-        }
+    fun kindOf(hint: InlayHint): ByHintKind {
+        val data = hint.data as? JsonObject ?: return ByHintKind.OTHER
+        val tag = data.get(KIND_TAG)?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }
+        return ByHintKind.ofOption(tag?.asString)
     }
+
+    /** The member of a hint's `data` that `by` names its kind in. */
+    private const val KIND_TAG = "kind"
 
     /** The hint's tooltip text, if it has one — lsp4j's `string | MarkupContent`. */
     fun tooltipOf(hint: InlayHint): String? {

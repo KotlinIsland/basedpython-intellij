@@ -317,15 +317,17 @@ class LspServerDescriptorTest {
   @Test
   fun `the option names are the ones by answers to`() {
     // Names `by` does not recognise are reported back to the user as unknown options, so this is
-    // spelling that has to match the server's `InlayHintOptions`, field for field.
+    // spelling that has to match the server's `InlayHintOptions`, field for field — every field but
+    // the two django-template ones, whose hints this plugin does not draw.
     @Suppress("UNCHECKED_CAST")
     val hints =
       (byDescriptor().createInitializationOptions() as Map<String, Any>)["inlayHints"] as Map<String, Boolean>
     assertEquals(
       setOf(
-        "variableTypes", "lambdaParameterTypes", "callTypeArguments", "typeArgumentNames",
-        "numericPromotions", "revealedTypes", "inferredRaises", "callArgumentNames",
-        "implicitParameters", "implicitSelf", "implicitArguments", "inferredOverride",
+        "variableTypes", "lambdaParameterTypes", "inheritedParameterTypes", "propertyTypes",
+        "inferredReturnTypes", "callTypeArguments", "typeArgumentNames", "numericPromotions",
+        "revealedTypes", "inferredRaises", "enumValues", "callArgumentNames", "implicitParameters",
+        "implicitSelf", "implicitArguments", "inheritedParameterDefaults", "inferredOverride",
         "inferredVariance", "inferredReification", "inferredReads", "parameterStability",
         "derivedDependencies", "inferredInvalidations",
       ),

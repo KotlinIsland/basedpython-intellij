@@ -116,6 +116,8 @@ class BasedPythonSettingsTest {
         assertEquals(ByHintMode.NEVER, settings.inlayMode(ByHintKind.CALL_ARGUMENT_NAMES))
         assertEquals(ByHintMode.NEVER, settings.inlayMode(ByHintKind.IMPLICIT_SELF))
         assertEquals(ByHintMode.NEVER, settings.inlayMode(ByHintKind.IMPLICIT_ARGUMENTS))
+        assertEquals(ByHintMode.NEVER, settings.inlayMode(ByHintKind.INHERITED_PARAMETER_DEFAULTS))
+        assertEquals(ByHintMode.ALWAYS, settings.inlayMode(ByHintKind.REVEALED_TYPES))
         assertEquals(ByHintMode.ALWAYS, settings.inlayMode(ByHintKind.VARIABLE_TYPES))
         assertEquals(ByHintMode.ALWAYS, settings.inlayMode(ByHintKind.INFERRED_OVERRIDE))
         assertEquals(ByHintMode.ALWAYS, settings.inlayMode(ByHintKind.OTHER))

@@ -101,9 +101,10 @@ support, run configurations, CLI actions, and editor tooling.
   paths (with **Test** buttons + live detection), per-server toggles, extra args,
   format-on-save, and inlay-hint modes.
 - Inlay hints configured per kind, one row for each kind `by` computes: variable types,
-  lambda parameter types, call type arguments, type argument names, numeric promotions,
-  revealed types, inferred raises, call argument names, implicit parameters, implicit
-  self, implicit arguments, inferred override, variance and reification, and the four about
+  lambda parameter types, inherited parameter types, property types, inferred return types,
+  call type arguments, type argument names, numeric promotions, revealed types, inferred
+  raises, enum values, call argument names, implicit parameters, implicit self, implicit
+  arguments, inherited parameter defaults, inferred override, variance and reification, and the four about
   basedpython-ui — inferred state reads, unstable parameters, derived dependencies and inferred
   invalidations (the composables a state write re-runs). Each is *never*,
   *always*, or **push-to-hint**: drawn only while you hold a key (`Ctrl+Alt` by default,
