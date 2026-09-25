@@ -52,6 +52,7 @@ import dev.basedpython.pycharm.lang.dialect.BasedPythonProjectDetector
 import dev.basedpython.pycharm.lsp.diagnostics.ByDiagnosticsSupport
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import dev.basedpython.pycharm.ui.log.BasedPythonLog
+import dev.basedpython.pycharm.util.BasedPythonBundle
 
 private val LOG = Logger.getInstance("dev.basedpython.pycharm.lsp")
 
@@ -133,15 +134,16 @@ private fun byDescriptor(project: Project): ByLspServerDescriptor? {
 }
 
 /**
- * Starts `by` for [project] if it is not running, for work that asks about the whole project rather
- * than about a file somebody opened — an inspection run, which in a batch run has no editor at all.
- * `false` when it cannot be started: turned off in settings, or no binary.
+ * Asks the platform to start `by` for [project] if it is not running, for work that asks about the
+ * whole project rather than about a file somebody opened. Returns why it cannot be started — turned
+ * off in settings, or no binary — or `null` once the start has been asked for. The start itself is
+ * the platform's and asynchronous; [awaitByServer] is what waits for it.
  */
-internal fun startByServer(project: Project): Boolean {
-  if (!BasedPythonSettings.getInstance(project).byEnabled) return false
-  val descriptor = byDescriptor(project) ?: return false
+internal fun startByServer(project: Project): String? {
+  if (!BasedPythonSettings.getInstance(project).byEnabled) return BasedPythonBundle.message("by.start.disabled")
+  val descriptor = byDescriptor(project) ?: return BasedPythonBundle.message("by.start.noBinary")
   LspClientManager.getInstance(project).ensureClientStarted(ByLspServerSupportProvider::class.java, descriptor)
-  return true
+  return null
 }
 
 internal class ByLspServerSupportProvider : LspIntegrationProvider {

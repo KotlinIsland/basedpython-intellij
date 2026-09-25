@@ -8,6 +8,7 @@ import com.intellij.refactoring.move.MoveHandlerDelegate
 import com.intellij.refactoring.rename.RenamePsiElementProcessor
 import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
+import dev.basedpython.pycharm.settings.BasedPythonSettings
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
 import org.eclipse.lsp4j.Position
 import org.eclipse.lsp4j.Range
@@ -19,6 +20,7 @@ import org.junit.jupiter.api.Assertions.assertInstanceOf
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
+import kotlinx.coroutines.runBlocking
 
 /**
  * Renaming or moving a `.by` module or package goes through `by` for the imports that name it.
@@ -26,6 +28,11 @@ import org.junit.jupiter.api.assertThrows
  * No server runs here, and that is the case that matters most to state: a rename that cannot ask
  * `by` must say so before anything moves, rather than rename the file and leave every import naming
  * a module that has gone — which is what the platform's own file rename did.
+ *
+ * A rename starts `by` when nothing has, so the tests that rename switch it off: the start does not
+ * go through the platform's integration list the fixture masks, and a `by` on `PATH` would otherwise
+ * be started behind the test. Switched off is also a reason the start cannot get past, which is what
+ * the conflict has to name.
  */
 @TestFixtures
 @RunInEdt(writeIntent = true)
@@ -56,35 +63,61 @@ class ByModuleRenameTest {
         assertFalse(handler.canMove(arrayOf(notes.containingDirectory), null, null))
     }
 
+    /** Runs [body] with `by` switched off for the shared light project, and switches it back. */
+    private fun <T> withByOff(body: () -> T): T {
+        val settings = BasedPythonSettings.getInstance(fixture.project)
+        val was = settings.byEnabled
+        settings.byEnabled = false
+        try {
+            return body()
+        } finally {
+            settings.byEnabled = was
+        }
+    }
+
     @Test
-    fun `renaming a module with no by running is a conflict, and nothing is renamed`() {
+    fun `renaming a module when by cannot start is a conflict that says why, and nothing is renamed`() {
         val util = fixture.addFileToProject("util.by", "def helper() -> int:\n    return 1\n")
         fixture.addFileToProject("main.by", "import util\n")
 
-        val conflict = assertThrows<ConflictsInTestsException> { fixture.renameElement(util, "helpers.by") }
+        val conflict = withByOff { assertThrows<ConflictsInTestsException> { fixture.renameElement(util, "helpers.by") } }
 
         assertEquals(
-            listOf("The by language server is not running, so the imports that name util.by cannot be updated and will name a module that no longer exists."),
+            listOf(
+                "The imports that name util.by cannot be updated, and will name a module that no longer exists: " +
+                    "by is switched off in Settings | basedpython.",
+            ),
             conflict.messages.toList(),
         )
         assertEquals("util.by", util.name)
     }
 
     @Test
-    fun `moving a package with no by running is a conflict, and nothing moves`() {
+    fun `moving a package when by cannot start is a conflict that says why, and nothing moves`() {
         val module = fixture.addFileToProject("pkg/mod.by", "")
         val dest = fixture.addFileToProject("dest/keep.txt", "").containingDirectory
         val pkg = module.containingDirectory
 
-        val conflict = assertThrows<ConflictsInTestsException> {
-            MoveHandler.doMove(fixture.project, arrayOf(pkg), dest, null, null)
+        val conflict = withByOff {
+            assertThrows<ConflictsInTestsException> { MoveHandler.doMove(fixture.project, arrayOf(pkg), dest, null, null) }
         }
 
         assertEquals(
-            listOf("The by language server is not running, so the imports that name pkg cannot be updated and will name a module that no longer exists."),
+            listOf(
+                "The imports that name pkg cannot be updated, and will name a module that no longer exists: " +
+                    "by is switched off in Settings | basedpython.",
+            ),
             conflict.messages.toList(),
         )
         assertEquals("src", pkg.parentDirectory?.name)
+    }
+
+    @Test
+    fun `the modules page is told why a rename cannot rewrite imports`() {
+        assertEquals(
+            "by is switched off in Settings | basedpython.",
+            withByOff { runBlocking { ByModuleRenames.whyUnsupported(fixture.project) } },
+        )
     }
 
     @Test

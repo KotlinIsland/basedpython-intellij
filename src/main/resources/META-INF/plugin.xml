@@ -403,6 +403,10 @@
         <bundledColorScheme path="/colorSchemes/BasedPythonLight"/>
         <postStartupActivity
             implementation="dev.basedpython.pycharm.lsp.reload.BasedPythonLspReloadActivity"/>
+        <!-- `by` running before a module is renamed or moved from the Project view: the platform
+             cannot start a server from inside the modal dialogs those run in. -->
+        <postStartupActivity
+            implementation="dev.basedpython.pycharm.lsp.ByStartOnOpen"/>
         <!-- Asks `by` again how the project's modules run and which tests they hold whenever the
              project's own sources or configuration change. Runs nothing. -->
         <postStartupActivity

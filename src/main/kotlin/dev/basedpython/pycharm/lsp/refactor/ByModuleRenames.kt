@@ -2,12 +2,13 @@ package dev.basedpython.pycharm.lsp.refactor
 
 import com.intellij.openapi.project.Project
 import com.intellij.platform.lsp.api.LspClient
-import com.intellij.platform.lsp.api.LspClientManager
-import com.intellij.platform.lsp.api.LspServerState
+import com.intellij.openapi.progress.runBlockingCancellable
 import com.intellij.util.concurrency.annotations.RequiresBackgroundThread
 import dev.basedpython.pycharm.lsp.ByAnswer
-import dev.basedpython.pycharm.lsp.ByLspServerSupportProvider
+import dev.basedpython.pycharm.lsp.ByServerStart
 import dev.basedpython.pycharm.lsp.askBy
+import dev.basedpython.pycharm.lsp.awaitByServer
+import dev.basedpython.pycharm.util.BasedPythonBundle
 import org.eclipse.lsp4j.FileRename
 import org.eclipse.lsp4j.RenameFilesParams
 import org.eclipse.lsp4j.WorkspaceEdit
@@ -25,8 +26,8 @@ sealed interface ByImportRewrites {
     /** The server answered: nothing imports what moves, or nothing that moves is a module. */
     data object NoneNeeded : ByImportRewrites
 
-    /** No `by` is running for the project, so nothing could be asked. */
-    data object NoServer : ByImportRewrites
+    /** No `by` is running for the project to ask; [why] says why, in a sentence for the user. */
+    data class NoServer(val why: String) : ByImportRewrites
 
     /** The running `by` does not say it answers `workspace/willRenameFiles`. */
     data object NotSupported : ByImportRewrites
@@ -61,14 +62,20 @@ sealed interface ByImportRewrites {
 object ByModuleRenames {
 
     /**
-     * Asks the project's `by` what [moves] cost, without applying anything.
+     * Asks the project's `by` what [moves] cost, without applying anything — waiting for it to finish
+     * initializing if it is still starting.
      *
-     * Background only; the wait polls cancellation, so a cancelled caller unwinds instead of hanging
-     * on the server.
+     * Background only, under the caller's progress: the wait and the request both honour its
+     * cancellation, so a cancelled caller unwinds instead of hanging on the server. Every caller asks
+     * from inside a modal dialog or progress, where a new start cannot finish (see [awaitByServer]),
+     * so one is only asked for, and the answer says so.
      */
     @RequiresBackgroundThread
     fun ask(project: Project, moves: List<ByFileMove>): ByImportRewrites {
-        val server = server(project) ?: return ByImportRewrites.NoServer
+        val server = when (val start = runBlockingCancellable { awaitByServer(project, waitForNewStart = false) }) {
+            is ByServerStart.Running -> start.client
+            is ByServerStart.Unavailable -> return ByImportRewrites.NoServer(start.why)
+        }
         if (!advertises(server)) return ByImportRewrites.NotSupported
         val renames = moves.filter { it.from != it.to }
         if (renames.isEmpty()) return ByImportRewrites.NoneNeeded
@@ -84,18 +91,24 @@ object ByModuleRenames {
         }
     }
 
-    /** True when a `by` is running for [project] and says it answers for a rename. */
-    fun isSupported(project: Project): Boolean = server(project)?.let(::advertises) == true
+    /**
+     * Why a rename of modules cannot have its imports rewritten, or `null` when it can: the project's
+     * `by` says it answers `workspace/willRenameFiles`.
+     *
+     * Suspends, cancellably, while a `by` that is starting initializes. Asked from the Modules page,
+     * which is in the modal Settings dialog, so a `by` that is not running at all is only asked to
+     * start, as in [ask].
+     */
+    suspend fun whyUnsupported(project: Project): String? =
+        when (val start = awaitByServer(project, waitForNewStart = false)) {
+            is ByServerStart.Unavailable -> start.why
+            is ByServerStart.Running ->
+                if (advertises(start.client)) null else BasedPythonBundle.message("refactoring.by.renameFiles.unsupported")
+        }
 
     /** The server's own word on whether it handles `workspace/willRenameFiles`. */
     private fun advertises(server: LspClient): Boolean =
         server.initializeResult?.capabilities?.workspace?.fileOperations?.willRename != null
-
-    /** The project's `by`, if one is running. There is one per project, whatever the file. */
-    private fun server(project: Project): LspClient? =
-        LspClientManager.getInstance(project)
-            .getClients(ByLspServerSupportProvider::class.java)
-            .firstOrNull { it.state == LspServerState.Running }
 
     /**
      * The URI form a path goes out as.

@@ -34,8 +34,8 @@ import javax.swing.JComponent
  * (`workspace/willRenameFiles`), which resolves every import in the project against the same search
  * paths the checker uses and can tell a use of the module from a local variable spelled like it.
  *
- * So the field is editable exactly when a running `by` says it can answer that question, and
- * disabled with the reason when it cannot. A rename that moved the directory and left every import
+ * So the field is editable exactly when `by` says it can answer that question, and disabled with
+ * the reason when it cannot. A rename that moved the directory and left every import
  * naming the old one would be worse than no rename at all: a broken project, made by a button that
  * looked like it worked.
  */
@@ -43,16 +43,19 @@ internal class EditModuleDialog(
     private val project: Project,
     private val module: ProjectModule,
     private val layout: ModuleLayout,
-) : DialogWrapper(project) {
-
     /**
-     * Editable only when the server can say what the rename costs — see the class documentation.
+     * Why the server cannot say what a rename costs, or `null` when it can — asked by the caller
+     * before the dialog opens ([ModuleImportEdits.whyUnsupported]), under a modal progress, since
+     * answering it can mean waiting for `by` to finish initializing.
      *
-     * Read once, when the dialog opens, rather than on each keystroke: it is a question about the
-     * server that started with the project, and a field that became editable halfway through typing
+     * Asked once rather than on each keystroke: a field that became editable halfway through typing
      * would be stranger than one that never did.
      */
-    private val canRename: Boolean = ModuleImportEdits.isSupported(project) && !module.isRoot
+    private val renameUnsupported: String?,
+) : DialogWrapper(project) {
+
+    /** Editable only when the server can say what the rename costs — see the class documentation. */
+    private val canRename: Boolean = renameUnsupported == null && !module.isRoot
 
     private val nameField = JBTextField(module.name, 24).apply { isEditable = canRename }
 
@@ -81,9 +84,11 @@ internal class EditModuleDialog(
         row(BasedPythonBundle.message("modules.edit.name")) {
             cell(nameField)
         }.rowComment(
-            BasedPythonBundle.message(
-                if (canRename) "modules.edit.name.hint" else "modules.edit.name.hint.unsupported",
-            ),
+            when {
+                canRename -> BasedPythonBundle.message("modules.edit.name.hint")
+                renameUnsupported != null -> BasedPythonBundle.message("modules.edit.name.hint.unsupported", renameUnsupported)
+                else -> BasedPythonBundle.message("modules.edit.name.hint.root")
+            },
         )
 
         row(BasedPythonBundle.message("modules.edit.location")) {

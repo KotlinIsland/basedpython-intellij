@@ -4,6 +4,7 @@ import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.WriteAction
 import com.intellij.openapi.command.CommandProcessor
 import com.intellij.openapi.fileEditor.FileDocumentManager
+import com.intellij.openapi.progress.runBlockingCancellable
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 import dev.basedpython.pycharm.format.ByCleanup
@@ -32,21 +33,21 @@ import org.eclipse.lsp4j.WorkspaceEdit
  *
  * ### When the server cannot answer
  *
- * [isSupported] is false for a `by` that does not advertise the capability, and the rename is not
- * offered at all rather than offered and half-done. A rename that moves a directory and leaves every
- * `import` in the project naming the old one is worse than no rename: it is a broken project, made
- * by a button that looked like it worked.
+ * [whyUnsupported] names a reason for a `by` that is not running or does not advertise the
+ * capability, and the rename is not offered at all rather than offered and half-done. A rename that
+ * moves a directory and leaves every `import` in the project naming the old one is worse than no
+ * rename: it is a broken project, made by a button that looked like it worked.
  */
 internal object ModuleImportEdits {
 
     /**
-     * True when a `by` server is running for this project and can answer for a rename.
+     * Why the project's `by` cannot answer for a rename, or `null` when it can.
      *
      * Read from what the server said at startup rather than by trying it: a server that does not
      * know the request answers with an error, and an error is indistinguishable from a rename that
-     * needed no edits.
+     * needed no edits. Suspends, cancellably, while a `by` that is starting initializes.
      */
-    fun isSupported(project: Project): Boolean = ByModuleRenames.isSupported(project)
+    suspend fun whyUnsupported(project: Project): String? = ByModuleRenames.whyUnsupported(project)
 
     /**
      * Asks the server what [moves] cost, without applying anything yet.
@@ -59,12 +60,14 @@ internal object ModuleImportEdits {
      * Must be called from a background thread.
      */
     fun prepare(project: Project, moves: List<ModuleRenamePlan.Move>): ModuleRename.ImportEdits? {
-        if (moves.isEmpty()) return Prepared(project, emptyMap()).takeIf { isSupported(project) }
+        if (moves.isEmpty()) {
+            return Prepared(project, emptyMap()).takeIf { runBlockingCancellable { whyUnsupported(project) } == null }
+        }
         return when (val answer = ByModuleRenames.ask(project, moves.map { ByFileMove(it.from, it.to) })) {
             is ByImportRewrites.Edits -> Prepared(project, editsByFile(answer.edit))
             // The server answered "nothing to change", which is an ordinary answer.
             ByImportRewrites.NoneNeeded -> Prepared(project, emptyMap())
-            ByImportRewrites.NoServer, ByImportRewrites.NotSupported, ByImportRewrites.Failed -> null
+            is ByImportRewrites.NoServer, ByImportRewrites.NotSupported, ByImportRewrites.Failed -> null
         }
     }
 

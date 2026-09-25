@@ -16,18 +16,14 @@ import com.intellij.openapi.progress.runBlockingCancellable
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.TextRange
 import com.intellij.platform.lsp.api.LspClient
-import com.intellij.platform.lsp.api.LspClientManager
-import com.intellij.platform.lsp.api.LspServerState
 import com.intellij.psi.PsiManager
 import dev.basedpython.pycharm.lsp.ByAnswer
-import dev.basedpython.pycharm.lsp.ByLspLifecycleListener
-import dev.basedpython.pycharm.lsp.ByLspServerSupportProvider
+import dev.basedpython.pycharm.lsp.ByServerStart
+import dev.basedpython.pycharm.lsp.awaitByServer
 import dev.basedpython.pycharm.util.BasedPythonBundle
 import dev.basedpython.pycharm.lsp.awaitingAgain
 import dev.basedpython.pycharm.lsp.isMethodNotFound
 import dev.basedpython.pycharm.lsp.ext.ByServerExtensions
-import dev.basedpython.pycharm.lsp.startByServer
-import kotlinx.coroutines.CompletableDeferred
 import java.util.concurrent.CancellationException
 import org.eclipse.lsp4j.Diagnostic
 import org.eclipse.lsp4j.Position
@@ -112,7 +108,10 @@ internal class ByDiagnosticsInspection : GlobalInspectionTool() {
 
     /** The running `by`'s check of the workspace, or why there is none. */
     private suspend fun check(project: Project): Checked {
-        val client = runningServer(project) ?: return Checked.Not(BasedPythonBundle.message("inspection.by.noServer"))
+        val client = when (val start = awaitByServer(project)) {
+            is ByServerStart.Running -> start.client
+            is ByServerStart.Unavailable -> return Checked.Not(BasedPythonBundle.message("inspection.by.noServer", start.why))
+        }
         val params = WorkspaceDiagnosticParams(emptyList())
         var refusal: Throwable? = null
         // No timeout: a whole-project check takes as long as the project takes, and the run can be
@@ -135,36 +134,6 @@ internal class ByDiagnosticsInspection : GlobalInspectionTool() {
                     else -> BasedPythonBundle.message("inspection.by.noAnswer")
                 },
             )
-        }
-    }
-
-    /**
-     * The running `by`, started first if it is not — waiting, cancellably, for it to finish
-     * initializing — or `null` when it cannot be started.
-     */
-    private suspend fun runningServer(project: Project): LspClient? {
-        fun running() = LspClientManager.getInstance(project).getClients(ByLspServerSupportProvider::class.java)
-            .firstOrNull { it.state == LspServerState.Running }
-        running()?.let { return it }
-        val initialized = CompletableDeferred<Unit>()
-        val connection = project.messageBus.connect()
-        try {
-            connection.subscribe(ByLspLifecycleListener.TOPIC, object : ByLspLifecycleListener {
-                override fun serverInitialized(serverName: String) {
-                    if (serverName == "by") initialized.complete(Unit)
-                }
-
-                override fun serverStopped(serverName: String, shutdownNormally: Boolean) {
-                    if (serverName == "by") initialized.complete(Unit)
-                }
-            })
-            // subscribed before asking, so a start that finishes in between is still heard
-            running()?.let { return it }
-            if (!startByServer(project)) return null
-            initialized.await()
-            return running()
-        } finally {
-            connection.disconnect()
         }
     }
 

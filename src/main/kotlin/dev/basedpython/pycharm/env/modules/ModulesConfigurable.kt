@@ -16,6 +16,7 @@ import com.intellij.openapi.project.DumbAwareAction
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.vfs.LocalFileSystem
+import com.intellij.platform.ide.progress.runWithModalProgressBlocking
 import com.intellij.ui.DoubleClickListener
 import com.intellij.ui.ToolbarDecorator
 import com.intellij.ui.components.JBLabel
@@ -190,7 +191,16 @@ internal class ModulesConfigurable(private val project: Project) : SearchableCon
 
     private fun edit(module: ProjectModule) {
         val layout = service.status.modules ?: return
-        val edit = EditModuleDialog(project, module, layout).ask() ?: return
+        // Whether the name can change is `by`'s to say, and asking can mean waiting for it to finish
+        // initializing. Off the EDT, cancellable, before the dialog.
+        val renameUnsupported = if (module.isRoot) {
+            null
+        } else {
+            runWithModalProgressBlocking(project, BasedPythonBundle.message("modules.edit.progress.by")) {
+                ModuleImportEdits.whyUnsupported(project)
+            }
+        }
+        val edit = EditModuleDialog(project, module, layout, renameUnsupported).ask() ?: return
         ModuleOperations.apply(project, module, edit)
     }
 

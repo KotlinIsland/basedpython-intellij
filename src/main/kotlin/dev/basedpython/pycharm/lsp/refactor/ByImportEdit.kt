@@ -110,7 +110,7 @@ class ByImportsUnknown(element: PsiElement, private val description: String) :
 
 /** What a user is told when the imports of [name] cannot be updated, for each reason that happens. */
 internal fun importsUnknownMessage(answer: ByImportRewrites, name: String): String? = when (answer) {
-    ByImportRewrites.NoServer -> BasedPythonBundle.message("refactoring.by.imports.noServer", name)
+    is ByImportRewrites.NoServer -> BasedPythonBundle.message("refactoring.by.imports.noServer", name, answer.why)
     ByImportRewrites.NotSupported -> BasedPythonBundle.message("refactoring.by.imports.notSupported", name)
     ByImportRewrites.Failed -> BasedPythonBundle.message("refactoring.by.imports.failed", name)
     is ByImportRewrites.Edits, ByImportRewrites.NoneNeeded -> null
