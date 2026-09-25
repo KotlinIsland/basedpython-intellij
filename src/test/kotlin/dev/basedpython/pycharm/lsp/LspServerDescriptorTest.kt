@@ -14,6 +14,7 @@ import com.intellij.platform.lsp.api.customization.LspGoToDefinitionDisabled
 import com.intellij.platform.lsp.api.customization.LspGoToTypeDefinitionDisabled
 import com.intellij.platform.lsp.api.customization.LspInlayHintDisabled
 import com.intellij.platform.lsp.api.customization.LspRenameDisabled
+import com.intellij.platform.lsp.api.customization.LspRenameSupport
 import com.intellij.platform.lsp.api.customization.LspSelectionRangeDisabled
 import com.intellij.platform.lsp.api.customization.LspSemanticTokensDisabled
 import com.intellij.platform.lsp.api.customization.LspSignatureHelpDisabled
@@ -184,6 +185,28 @@ class LspServerDescriptorTest {
     assertNotSame(LspCompletionDisabled, c.completionCustomizer)
     assertNotSame(LspFindReferencesDisabled, c.findReferencesCustomizer)
     assertNotSame(LspRenameDisabled, c.renameCustomizer)
+  }
+
+  @Test
+  fun `by renames in a by file`() {
+    // The platform's own rename support only runs in plain-text and TextMate files, so without this
+    // Shift+F6 was disabled in every `.by` file however the toggle was set.
+    val c = byDescriptor().lspCustomization.renameCustomizer
+    assertTrue(c is LspRenameSupport, "rename must not be disabled for by: $c")
+    val byFile = fixture.configureByText("a.by", "x = 1\n")
+    assertTrue((c as LspRenameSupport).shouldRunRename(byFile))
+  }
+
+  @Test
+  fun `by leaves renaming a plain text file to whoever else renames it`() {
+    val c = byDescriptor().lspCustomization.renameCustomizer as LspRenameSupport
+    assertFalse(c.shouldRunRename(fixture.configureByText("notes.txt", "x\n")))
+  }
+
+  @Test
+  fun `the rename toggle still switches by's rename off`() {
+    BasedPythonSettings.getInstance(project).byRename = false
+    assertSame(LspRenameDisabled, byDescriptor().lspCustomization.renameCustomizer)
   }
 
   @Test

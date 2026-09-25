@@ -34,6 +34,7 @@ import com.intellij.platform.lsp.api.customization.LspGoToDefinitionDisabled
 import com.intellij.platform.lsp.api.customization.LspGoToTypeDefinitionDisabled
 import com.intellij.platform.lsp.api.customization.LspInlayHintDisabled
 import com.intellij.platform.lsp.api.customization.LspRenameDisabled
+import com.intellij.platform.lsp.api.customization.LspRenameSupport
 import com.intellij.platform.lsp.api.customization.LspSelectionRangeDisabled
 import com.intellij.platform.lsp.api.customization.LspSemanticTokensDisabled
 import com.intellij.platform.lsp.api.customization.LspSignatureHelpDisabled
@@ -42,6 +43,7 @@ import com.intellij.platform.lsp.api.lsWidget.LspClientWidgetItem
 import dev.basedpython.pycharm.BasedPythonIcons
 import dev.basedpython.pycharm.debug.dfa.ByDataFlowServer
 import dev.basedpython.pycharm.env.ByLaunch
+import dev.basedpython.pycharm.lang.BasedPythonFile
 import dev.basedpython.pycharm.lang.dialect.BasedPythonProjectDetector
 import dev.basedpython.pycharm.lsp.diagnostics.ByDiagnosticsSupport
 import dev.basedpython.pycharm.settings.BasedPythonSettings
@@ -224,8 +226,16 @@ internal class ByLspServerDescriptor(
       get() = if (s.byGoToDefinition) super.goToTypeDefinitionCustomizer else LspGoToTypeDefinitionDisabled
     override val findReferencesCustomizer
       get() = if (s.byFindReferences) super.findReferencesCustomizer else LspFindReferencesDisabled
+    /**
+     * `by`'s rename, offered in `.by` files at all.
+     *
+     * The platform's [LspRenameSupport] only runs a rename in plain-text and TextMate files, on the
+     * same assumption as its document highlights: a language with PSI renames through it. `.by`'s
+     * PSI is flat, so there was nothing to rename and Shift+F6 was disabled in every `.by` file —
+     * the toggle above switched a request that was never sent. See [ByRename].
+     */
     override val renameCustomizer
-      get() = if (s.byRename) super.renameCustomizer else LspRenameDisabled
+      get() = if (s.byRename) ByRename else LspRenameDisabled
     override val semanticTokensCustomizer
       get() = if (s.bySemanticTokens) {
         dev.basedpython.pycharm.lsp.semantic.BasedPythonLspSemanticTokensSupport()
@@ -265,6 +275,20 @@ internal class ByLspServerDescriptor(
 
   private object ByDocumentHighlights : LspDocumentHighlightsSupport() {
     override fun shouldAskServerForDocumentHighlights(psiFile: PsiFile): Boolean = true
+  }
+
+  /**
+   * Renames through `by` in basedpython's own files and nowhere else.
+   *
+   * Only there, rather than in every file this server is handed: a `.py` the IDE reads as python, and
+   * a django template, have PSI of their own and rename handlers that act on it, and a second handler
+   * available on the same caret makes the platform ask which of the two to run on every Shift+F6.
+   * A `.by` file has no such handler — its PSI is one leaf per token — so `by` is the only thing that
+   * can rename in it. The platform asks `prepareRename` first, so a name `by` will not rename — a
+   * builtin, a keyword — is turned down before anything is typed.
+   */
+  internal object ByRename : LspRenameSupport() {
+    override fun shouldRunRename(psiFile: PsiFile): Boolean = psiFile is BasedPythonFile
   }
 }
 
