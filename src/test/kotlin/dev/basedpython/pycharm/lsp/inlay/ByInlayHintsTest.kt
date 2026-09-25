@@ -3,8 +3,10 @@ package dev.basedpython.pycharm.lsp.inlay
 import org.eclipse.lsp4j.InlayHint
 import org.eclipse.lsp4j.InlayHintKind
 import org.eclipse.lsp4j.InlayHintLabelPart
+import org.eclipse.lsp4j.Location
 import org.eclipse.lsp4j.MarkupContent
 import org.eclipse.lsp4j.Position
+import org.eclipse.lsp4j.Range
 import org.eclipse.lsp4j.jsonrpc.messages.Either
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -41,8 +43,8 @@ class ByInlayHintsTest {
 
     @Test
     fun `the label's own spacing survives`() {
-        // `by`'s `override ` hint before a `def` is a word and a trailing space; trimming it would
-        // render `overridedef`.
+        // `by` asks for the gap after `override` with `paddingRight` these days, but a label that
+        // carries its own space is drawn as sent: trimming this one would render `overridedef`.
         assertEquals("override ", ByInlayHints.labelOf(textHint("override ")))
         assertEquals(
             "override ",
@@ -53,6 +55,58 @@ class ByInlayHintsTest {
     @Test
     fun `a missing label is empty rather than null`() {
         assertEquals("", ByInlayHints.labelOf(InlayHint()))
+    }
+
+    // endregion
+
+    // region: links
+
+    private fun location(line: Int) = Location("file:///p/a.by", Range(Position(line, 0), Position(line, 4)))
+
+    /** `: list[int]` as `by` sends it: the names carry where they are declared, the brackets do not. */
+    private val listOfInt = listOf(
+        InlayHintLabelPart(": "),
+        InlayHintLabelPart("list").also { it.location = location(1) },
+        InlayHintLabelPart("["),
+        InlayHintLabelPart("int").also { it.location = location(2) },
+        InlayHintLabelPart("]"),
+    )
+
+    @Test
+    fun `each part keeps the place it names`() {
+        assertEquals(
+            listOf(
+                ByHintPart(": ", null),
+                ByHintPart("list", location(1)),
+                ByHintPart("[", null),
+                ByHintPart("int", location(2)),
+                ByHintPart("]", null),
+            ),
+            ByInlayHints.partsOf(hint(Either.forRight(listOfInt))),
+        )
+    }
+
+    @Test
+    fun `a string label is one part naming nothing`() {
+        assertEquals(listOf(ByHintPart(": int", null)), ByInlayHints.partsOf(textHint(": int")))
+    }
+
+    @Test
+    fun `the links are the named parts' character ranges in the drawn text`() {
+        val parts = ByInlayHints.partsOf(hint(Either.forRight(listOfInt)))
+        assertEquals(
+            listOf(ByHintLink(2, 6, location(1)), ByHintLink(7, 10, location(2))),
+            ByInlayHints.linksOf(parts, ": list[int]"),
+        )
+    }
+
+    @Test
+    fun `a cut shortens the link it reaches and drops the ones it removes`() {
+        val parts = ByInlayHints.partsOf(hint(Either.forRight(listOfInt)))
+        // `: li…` — the ellipsis stands for the rest and goes nowhere
+        val drawn = ByInlayHints.truncate(": list[int]", max = 5)
+        assertEquals(": li…", drawn)
+        assertEquals(listOf(ByHintLink(2, 4, location(1))), ByInlayHints.linksOf(parts, drawn))
     }
 
     // endregion

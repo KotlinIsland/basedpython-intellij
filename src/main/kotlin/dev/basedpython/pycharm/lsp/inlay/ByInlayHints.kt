@@ -2,6 +2,7 @@ package dev.basedpython.pycharm.lsp.inlay
 
 import org.eclipse.lsp4j.InlayHint
 import org.eclipse.lsp4j.InlayHintKind
+import org.eclipse.lsp4j.Location
 
 /**
  * Reading `by`'s `textDocument/inlayHint` replies — the parts that are pure, and so testable
@@ -49,22 +50,51 @@ object ByInlayHints {
     /**
      * The hint's text, with the label's parts joined and nothing else done to it.
      *
-     * `label` is `string | InlayHintLabelPart[]`; the parts carry per-part tooltips and go-to-def
-     * targets, which this drops — the text is what gets drawn, and the parts of one hint are always
-     * meant to be read as one string.
+     * `label` is `string | InlayHintLabelPart[]`; the parts of one hint are always meant to be read
+     * as one string, and this is that string. Where each part goes is [partsOf]'s.
      *
-     * Verbatim, whitespace included: `by` writes the spacing a hint needs into the label rather than
-     * through `paddingLeft`/`paddingRight` (which it never sets). Its `override ` hint before a
-     * `def` is a trailing space and nothing else, so trimming the label — which looks like the
-     * tidy thing to do — is what would render `overridedef`.
+     * Verbatim, whitespace included: the gap around a hint is asked for separately, with
+     * `paddingLeft`/`paddingRight` (`override` before a `def` arrives as `override` with
+     * `paddingRight`), so whatever whitespace a label does hold is part of what it says.
      */
-    fun labelOf(hint: InlayHint): String {
-        val label = hint.label ?: return ""
+    fun labelOf(hint: InlayHint): String = partsOf(hint).joinToString("") { it.text }
+
+    /**
+     * The hint's label as the runs `by` sent it in, each with the place it names when it names one.
+     *
+     * `by` puts a location on the part of a hint that stands for something declared elsewhere — the
+     * `list` and the `int` of `: list[int]`, the parameter a `name=` names, the class an `override`
+     * overrides — and nothing on the punctuation between them.
+     */
+    fun partsOf(hint: InlayHint): List<ByHintPart> {
+        val label = hint.label ?: return emptyList()
         return when {
-            label.isLeft -> label.left.orEmpty()
-            label.isRight -> label.right.orEmpty().joinToString("") { it.value.orEmpty() }
-            else -> ""
+            label.isLeft -> listOf(ByHintPart(label.left.orEmpty(), null))
+            label.isRight -> label.right.orEmpty().map { ByHintPart(it.value.orEmpty(), it.location) }
+            else -> emptyList()
         }
+    }
+
+    /**
+     * The runs of [drawn] — the hint's text as drawn, which [truncate] may have cut — that go
+     * somewhere, as character ranges into it.
+     *
+     * A run the cut reaches is shortened to what is still drawn, and one it removes entirely is
+     * gone: the ellipsis stands for the text it replaced and goes nowhere of its own. Neighbouring
+     * runs naming the same place stay two links, as `by` sent them.
+     */
+    fun linksOf(parts: List<ByHintPart>, drawn: String): List<ByHintLink> {
+        val label = parts.joinToString("") { it.text }
+        val visible = if (drawn == label) drawn.length else drawn.length - ELLIPSIS.length
+        val links = ArrayList<ByHintLink>()
+        var start = 0
+        for (part in parts) {
+            val end = start + part.text.length
+            val location = part.location
+            if (location != null && start < visible) links += ByHintLink(start, minOf(end, visible), location)
+            start = end
+        }
+        return links
     }
 
     /**
@@ -121,3 +151,9 @@ object ByInlayHints {
     fun truncate(text: String, max: Int = MAX_CHARS): String =
         if (text.length <= max) text else text.take(max - ELLIPSIS.length) + ELLIPSIS
 }
+
+/** One run of a hint's label, and the place it names — `null` for the punctuation between names. */
+data class ByHintPart(val text: String, val location: Location?)
+
+/** Characters [start] until [end] of a drawn hint, which name [location]. */
+data class ByHintLink(val start: Int, val end: Int, val location: Location)

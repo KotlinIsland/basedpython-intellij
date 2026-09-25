@@ -3,18 +3,26 @@ package dev.basedpython.pycharm.lsp.inlay
 import com.intellij.codeInsight.hints.presentation.BasePresentation
 import com.intellij.codeInsight.hints.presentation.InlayPresentation
 import com.intellij.openapi.editor.Editor
+import com.intellij.openapi.editor.colors.EditorColors
 import com.intellij.openapi.editor.colors.EditorFontType
+import com.intellij.openapi.editor.ex.EditorEx
 import com.intellij.openapi.editor.ex.util.EditorUIUtil
 import com.intellij.openapi.editor.markup.TextAttributes
+import com.intellij.openapi.util.SystemInfo
 import com.intellij.ui.scale.JBUIScale
 import com.intellij.util.ui.GraphicsUtil
 import java.awt.Color
+import java.awt.Cursor
 import java.awt.Dimension
 import java.awt.Font
 import java.awt.FontMetrics
 import java.awt.Graphics2D
+import java.awt.Point
 import java.awt.Rectangle
+import java.awt.event.MouseEvent
+import javax.swing.SwingUtilities
 import kotlin.math.roundToInt
+import org.eclipse.lsp4j.Location
 
 /**
  * A hint drawn in the editor's own font, at the editor's own size, shadowed rather than boxed.
@@ -48,6 +56,13 @@ import kotlin.math.roundToInt
  * the peek instant: the alternative, collecting these hints only while the key is held, means a
  * daemon pass and a round trip to `by` on every press and every release. The platform's inlay pass
  * would not even run one, since it skips a file whose PSI has not changed.
+ *
+ * **Clicks.** The runs of the text that name something — each of [links] — go there on Ctrl+click
+ * (Cmd+click on macOS) or a middle click, and underline while Ctrl is held over them: what the
+ * platform's own LSP hints do with a label part's `location`. A double click writes the hint into
+ * the source when `by` sent the edit that does it ([accept]), which is what LSP's `textEdits` on a
+ * hint are for and how VS Code offers them. What either does is the collector's business, handed in
+ * as [navigate] and [accept]; this only decides which of them a click meant.
  */
 class ByInlayHintPresentation(
     override val editor: Editor,
@@ -56,6 +71,9 @@ class ByInlayHintPresentation(
     private val padRight: Boolean,
     private val mode: ByHintMode = ByHintMode.ALWAYS,
     private val pushKey: ByPushKey = ByPushKey.CTRL_ALT,
+    private val links: List<ByHintLink> = emptyList(),
+    private val navigate: ((Location) -> Unit)? = null,
+    private val accept: (() -> Unit)? = null,
 ) : BasePresentation(), ByHintPush.Watcher {
 
     /**
@@ -85,6 +103,12 @@ class ByInlayHintPresentation(
      */
     @Volatile
     internal var seat: ByAlignedColumn.Seat? = null
+
+    /**
+     * The link under the mouse while Ctrl is held, drawn as a hyperlink; `null` the rest of the time.
+     * Mouse events and painting are both on the EDT.
+     */
+    private var hovered: ByHintLink? = null
 
     /**
      * Exactly what the same characters would measure as source, and **not a pixel more** — except
@@ -190,12 +214,113 @@ class ByInlayHintPresentation(
             EditorUIUtil.setupAntialiasing(g)
             g.font = font
             g.color = hint.foregroundColor
-            g.drawString(text, leftPadding(metrics), baseline(metrics))
+            val link = hovered
+            if (link == null) {
+                g.drawString(text, leftPadding(metrics), baseline(metrics))
+            } else {
+                paintHovered(g, metrics, link, hint.foregroundColor)
+            }
         } finally {
             g.font = savedFont
             g.color = savedColor
         }
     }
+
+    /**
+     * The text with [link] drawn as the editor draws a Ctrl-hovered reference: in the scheme's
+     * hyperlink colour, underlined.
+     *
+     * The three runs are placed at the advance of everything before them, measured in the font they
+     * are drawn in, so the glyphs land where the unbroken string puts them and nothing shifts as the
+     * mouse moves over the hint.
+     */
+    private fun paintHovered(g: Graphics2D, metrics: FontMetrics, link: ByHintLink, plain: Color?) {
+        val reference = editor.colorsScheme.getAttributes(EditorColors.REFERENCE_HYPERLINK_COLOR)
+        val baseline = baseline(metrics)
+        val left = leftPadding(metrics)
+        fun run(from: Int, to: Int, color: Color?) {
+            if (from >= to) return
+            g.color = color
+            g.drawString(text.substring(from, to), left + advance(metrics, from), baseline.toFloat())
+        }
+        run(0, link.start, plain)
+        val linkColor = reference?.foregroundColor ?: plain
+        run(link.start, link.end, linkColor)
+        run(link.end, text.length, plain)
+        g.color = linkColor
+        val underline = baseline + 1
+        g.drawLine(
+            (left + advance(metrics, link.start)).roundToInt(),
+            underline,
+            (left + advance(metrics, link.end)).roundToInt() - 1,
+            underline,
+        )
+    }
+
+    /** How far the first [end] characters of [text] reach, fractional, in [metrics]'s font. */
+    private fun advance(metrics: FontMetrics, end: Int): Float =
+        metrics.font.getStringBounds(text, 0, end, metrics.fontRenderContext).width.toFloat()
+
+    /**
+     * The link drawn at [x], relative to this hint, or `null` over anything else — punctuation, the
+     * padding, the ellipsis, or a hint that is not drawn at all.
+     */
+    internal fun linkAt(x: Int): ByHintLink? {
+        if (!shown || links.isEmpty()) return null
+        val metrics = metrics(font(ByInlayColors.attributes(editor.colorsScheme).fontType))
+        val left = leftPadding(metrics)
+        return links.firstOrNull { x >= left + advance(metrics, it.start) && x < left + advance(metrics, it.end) }
+    }
+
+    override fun mouseMoved(event: MouseEvent, translated: Point) {
+        hover(if (isControlDown(event)) linkAt(translated.x) else null)
+    }
+
+    override fun mouseExited() {
+        hover(null)
+    }
+
+    /**
+     * Ctrl+click or a middle click on a link goes where it names, the platform's own gestures for an
+     * LSP hint's label part.
+     */
+    override fun mouseClicked(event: MouseEvent, translated: Point) {
+        val navigate = navigate ?: return
+        val linkGesture = SwingUtilities.isMiddleMouseButton(event) ||
+            SwingUtilities.isLeftMouseButton(event) && isControlDown(event)
+        if (!linkGesture) return
+        val link = linkAt(translated.x) ?: return
+        hover(null)
+        navigate(link.location)
+    }
+
+    /**
+     * A double click writes the hint into the source, on the second *press* rather than the click
+     * that follows it, and keeps that press from the editor.
+     *
+     * The editor reads a double click as "select the word here", and a hint sits against a word, so
+     * the press has to be consumed or the edit lands with the argument after it left selected. A
+     * consumed press is also one the editor sends no click for — measured: consuming it and waiting
+     * for the click wrote nothing — so the press is where the edit happens.
+     */
+    override fun mousePressed(event: MouseEvent, translated: Point) {
+        if (accept == null || !shown || !SwingUtilities.isLeftMouseButton(event)) return
+        if (event.clickCount != 2 || isControlDown(event)) return
+        event.consume()
+        accept()
+    }
+
+    private fun hover(link: ByHintLink?) {
+        if (link == hovered) return
+        hovered = link
+        // A string rather than this object as the requestor: the editor keeps it in a map until it is
+        // cleared, and a plugin object there would outlive an unload.
+        (editor as? EditorEx)?.setCustomCursor(CURSOR_REQUESTOR, if (link == null) null else Cursor.getPredefinedCursor(Cursor.HAND_CURSOR))
+        fireContentChanged(Rectangle(0, 0, width, height))
+    }
+
+    /** The modifier that makes a click a navigation: Cmd on macOS, Ctrl elsewhere, as for code. */
+    private fun isControlDown(event: MouseEvent): Boolean = if (SystemInfo.isMac) event.isMetaDown else event.isControlDown
 
     /**
      * The tint behind the text — what keeps a hint from reading as dead code (see [ByInlayColors]).
@@ -242,10 +367,10 @@ class ByInlayHintPresentation(
     /**
      * The gap the server asked for, one space of the editor font wide.
      *
-     * `paddingLeft` / `paddingRight` are the LSP way of saying where a hint needs air. `by` does not
-     * use them — it writes the space it wants into the label instead — so in practice this is zero
-     * today and the honouring is for the spec's sake. A space of the very font the hint is drawn in
-     * is what would make the gap match the code's own spacing.
+     * `paddingLeft` / `paddingRight` are the LSP way of saying where a hint needs air, and how `by`
+     * asks for it: `override` before a `def` comes with `paddingRight`, a revealed type after a call
+     * with `paddingLeft`. A space of the very font the hint is drawn in is what makes the gap match
+     * the code's own spacing.
      */
     private fun leftPadding(metrics: FontMetrics): Int = if (padLeft) metrics.charWidth(' ') else 0
 
@@ -341,6 +466,9 @@ class ByInlayHintPresentation(
 
         /** Just enough to take the corners off. Anything more reads as a capsule. */
         private val ARC: Int = JBUIScale.scale(2)
+
+        /** Who set the hand cursor over a link, as the editor's custom-cursor map knows it. */
+        private const val CURSOR_REQUESTOR = "basedpython.inlay.link"
 
         /**
          * What a hidden hint measures.

@@ -3,21 +3,30 @@ package dev.basedpython.pycharm.lsp.inlay
 import com.intellij.codeInsight.hints.presentation.PresentationListener
 import com.intellij.codeInsight.hints.presentation.PresentationRenderer
 import com.intellij.openapi.editor.Editor
+import com.intellij.openapi.editor.colors.EditorFontType
+import com.intellij.openapi.util.SystemInfo
 import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.awt.Dimension
+import java.awt.Point
 import java.awt.Rectangle
 import java.awt.event.InputEvent
 import java.awt.event.KeyEvent
+import java.awt.event.MouseEvent
 import javax.swing.JPanel
+import org.eclipse.lsp4j.Location
+import org.eclipse.lsp4j.Position
+import org.eclipse.lsp4j.Range
 
 /**
- * What a push-to-hint hint measures, and that it says so when the key moves.
+ * What a push-to-hint hint measures, that it says so when the key moves, and what a click on a hint
+ * means.
  *
  * The size event is the whole mechanism: the platform listens on every presentation it renders and
  * turns one into `Inlay.update()`, which is what re-measures a width it has already cached. Tested
@@ -208,4 +217,119 @@ class ByInlayHintPresentationTest {
         hold(ctrlAlt)
         assertTrue(hint(ByHintMode.ON_PUSH).width > 1)
     }
+
+    // region: clicks
+
+    private val listLocation = Location("file:///p/builtins.byi", Range(Position(1, 6), Position(1, 10)))
+
+    private val navigated = mutableListOf<Location>()
+    private var accepted = 0
+
+    /** `: list[int]` with `list` linked, as the collector builds it. */
+    private fun linkedHint(accept: Boolean = true) = ByInlayHintPresentation(
+        editor = editor(),
+        text = ": list[int]",
+        padLeft = false,
+        padRight = false,
+        links = listOf(ByHintLink(2, 6, listLocation)),
+        navigate = { navigated += it },
+        accept = if (accept) ({ accepted++ }) else null,
+    )
+
+    /** The x a click lands on to hit the middle of characters [from] until [to] of [text]. */
+    private fun ByInlayHintPresentation.xOf(from: Int, to: Int): Int {
+        val font = editor.colorsScheme.getFont(EditorFontType.PLAIN)
+        val metrics = editor.contentComponent.getFontMetrics(font)
+        fun advance(end: Int) = font.getStringBounds(text, 0, end, metrics.fontRenderContext).width
+        return ((advance(from) + advance(to)) / 2).toInt()
+    }
+
+    private val navigateModifier = if (SystemInfo.isMac) InputEvent.META_DOWN_MASK else InputEvent.CTRL_DOWN_MASK
+
+    /** A press and the click after it, which is how the editor hands a presentation a gesture's last click. */
+    private fun click(presentation: ByInlayHintPresentation, x: Int, modifiers: Int = 0, button: Int = MouseEvent.BUTTON1, count: Int = 1) {
+        val source = presentation.editor.contentComponent
+        val press = MouseEvent(source, MouseEvent.MOUSE_PRESSED, 0L, modifiers, x, 5, count, false, button)
+        presentation.mousePressed(press, Point(x, 5))
+        // the editor sends no click for a press something consumed
+        if (press.isConsumed) return
+        presentation.mouseClicked(MouseEvent(source, MouseEvent.MOUSE_CLICKED, 0L, modifiers, x, 5, count, false, button), Point(x, 5))
+    }
+
+    @Test
+    fun `a Ctrl+click on a named part goes where it names`() {
+        val hint = linkedHint()
+        click(hint, hint.xOf(2, 6), navigateModifier)
+        assertEquals(listOf(listLocation), navigated)
+    }
+
+    @Test
+    fun `a middle click on a named part goes there too`() {
+        val hint = linkedHint()
+        click(hint, hint.xOf(2, 6), button = MouseEvent.BUTTON2)
+        assertEquals(listOf(listLocation), navigated)
+    }
+
+    @Test
+    fun `a plain click goes nowhere, as a click on code does not`() {
+        val hint = linkedHint()
+        click(hint, hint.xOf(2, 6))
+        assertTrue(navigated.isEmpty())
+        assertEquals(0, accepted)
+    }
+
+    @Test
+    fun `a Ctrl+click on punctuation goes nowhere`() {
+        val hint = linkedHint()
+        click(hint, hint.xOf(6, 7), navigateModifier)
+        assertTrue(navigated.isEmpty())
+    }
+
+    @Test
+    fun `a double click writes the hint in`() {
+        val hint = linkedHint()
+        click(hint, hint.xOf(0, 1), count = 2)
+        assertEquals(1, accepted)
+        assertTrue(navigated.isEmpty())
+    }
+
+    @Test
+    fun `the press that makes it a double click is kept from the editor, which would select a word`() {
+        fun press(hint: ByInlayHintPresentation, count: Int): MouseEvent {
+            val event = MouseEvent(hint.editor.contentComponent, MouseEvent.MOUSE_PRESSED, 0L, InputEvent.BUTTON1_DOWN_MASK, 1, 5, count, false, MouseEvent.BUTTON1)
+            hint.mousePressed(event, Point(1, 5))
+            return event
+        }
+        assertFalse(press(linkedHint(), 1).isConsumed)
+        assertTrue(press(linkedHint(), 2).isConsumed)
+        // nothing to write in, so a double click on it is the editor's as on any other text
+        assertFalse(press(linkedHint(accept = false), 2).isConsumed)
+    }
+
+    @Test
+    fun `a hint by sent no edit for ignores a double click`() {
+        val hint = linkedHint(accept = false)
+        click(hint, hint.xOf(0, 1), count = 2)
+        assertEquals(0, accepted)
+    }
+
+    @Test
+    fun `a push hint that is not drawn cannot be clicked`() {
+        val hint = ByInlayHintPresentation(
+            editor = editor(),
+            text = ": list[int]",
+            padLeft = false,
+            padRight = false,
+            mode = ByHintMode.ON_PUSH,
+            links = listOf(ByHintLink(2, 6, listLocation)),
+            navigate = { navigated += it },
+            accept = { accepted++ },
+        )
+        click(hint, hint.xOf(2, 6), navigateModifier)
+        click(hint, hint.xOf(0, 1), count = 2)
+        assertTrue(navigated.isEmpty())
+        assertEquals(0, accepted)
+    }
+
+    // endregion
 }

@@ -8,14 +8,18 @@ import com.intellij.codeInsight.hints.InlayHintsSink
 import com.intellij.codeInsight.hints.NoSettings
 import com.intellij.codeInsight.hints.SettingsKey
 import com.intellij.codeInsight.hints.presentation.PresentationFactory
+import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.editor.Document
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.ex.util.EditorUtil
 import com.intellij.openapi.project.DumbAware
+import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.platform.lsp.api.LspClient
+import com.intellij.platform.lsp.util.applyTextEdits
 import com.intellij.platform.lsp.util.getLsp4jRange
 import com.intellij.platform.lsp.util.getOffsetInDocument
+import com.intellij.platform.lsp.util.navigateToLocation
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
 import dev.basedpython.pycharm.lang.BasedPythonFile
@@ -28,8 +32,10 @@ import dev.basedpython.pycharm.lsp.ext.ByServerExtensions
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import dev.basedpython.pycharm.util.BasedPythonBundle
 import org.eclipse.lsp4j.InlayHintParams
+import org.eclipse.lsp4j.Location
 import org.eclipse.lsp4j.Range
 import org.eclipse.lsp4j.TextDocumentIdentifier
+import org.eclipse.lsp4j.TextEdit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
@@ -152,6 +158,17 @@ private class ByInlayHintsCollector(
         }.value ?: return true
 
         val factory = PresentationFactory(editor)
+        val project = file.project
+        // What the hints were computed against: an edit written into the source is only the right
+        // edit for the text it was worked out on, so a double click after a further change does
+        // nothing and the pass that change starts brings fresh hints.
+        val stamp = document.modificationStamp
+        // Opens a place a hint names. The server is looked up when it is clicked rather than
+        // captured now, so a restart in between does not leave the hint holding a dead one.
+        val navigate = { location: Location ->
+            byServerFor(project, virtualFile)?.let { navigateToLocation(it, location) }
+            Unit
+        }
         val thread = Thread.currentThread().name
         val collected = ArrayList<ByInlayAudit.Collected>(hints.size)
         // Every hint that was built, by the offset it sits at, so that the alignment pass below can
@@ -163,7 +180,8 @@ private class ByInlayHintsCollector(
             // A hint whose position no longer exists: the reply raced an edit, and the pass this is
             // running in is about to be restarted against the new text anyway.
             val offset = getOffsetInDocument(document, position) ?: continue
-            val label = ByInlayHints.labelOf(hint)
+            val parts = ByInlayHints.partsOf(hint)
+            val label = parts.joinToString("") { it.text }
             if (label.isEmpty()) continue
             val shape = ByInlayHints.shapeOf(hint, label)
             val mode = modes.forShape(shape)
@@ -172,6 +190,8 @@ private class ByInlayHintsCollector(
             if (!mode.isCollected) continue
 
             val text = ByInlayHints.truncate(label)
+            val links = ByInlayHints.linksOf(parts, text)
+            val edits = hint.textEdits.orEmpty()
             val presentation = ByInlayHintPresentation(
                 editor = editor,
                 text = text,
@@ -179,6 +199,9 @@ private class ByInlayHintsCollector(
                 padRight = hint.paddingRight == true,
                 mode = mode,
                 pushKey = pushKey,
+                links = links,
+                navigate = navigate.takeIf { links.isNotEmpty() },
+                accept = if (edits.isEmpty()) null else { { acceptHint(project, document, stamp, edits) } },
             )
             // The server's own tooltip when it sent one; otherwise the untruncated text, so a hint
             // that had to be cut can still be read in full.
@@ -286,6 +309,18 @@ private class ByInlayHintsCollector(
         if (end - start != member.gapEndColumn - member.gapStartColumn) return null
         val gap = document.charsSequence.subSequence(start, end)
         return if (gap.all { it == ' ' }) start to end else null
+    }
+
+    /**
+     * Writes a hint into the source with the edits `by` sent for it — the annotation a `: T` stands
+     * for, with any import it needs, or the `name=` an argument hint stands for — as one undoable
+     * step, provided the document is still the one they were worked out on.
+     */
+    private fun acceptHint(project: Project, document: Document, stamp: Long, edits: List<TextEdit>) {
+        if (document.modificationStamp != stamp) return
+        WriteCommandAction.writeCommandAction(project)
+            .withName(BasedPythonBundle.message("inlay.hints.accept.command"))
+            .run<RuntimeException> { applyTextEdits(document, edits) }
     }
 
     private companion object {
