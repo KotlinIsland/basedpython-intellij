@@ -311,6 +311,10 @@
         <editor.backspaceModeOverride
             language="basedpython"
             implementationClass="dev.basedpython.pycharm.editor.smart.BasedPythonBackspaceModeOverride"/>
+        <!-- Strip trailing spaces on save leaves string literals alone: the spaces are part of the
+             string. Which lines are inside one is `by`'s outline; see the class. -->
+        <stripTrailingSpacesFilterFactory
+            implementation="dev.basedpython.pycharm.editor.ByStripTrailingSpacesFilterFactory"/>
 
         <!-- ===== Stream W: environment UX ===== -->
         <editorNotificationProvider

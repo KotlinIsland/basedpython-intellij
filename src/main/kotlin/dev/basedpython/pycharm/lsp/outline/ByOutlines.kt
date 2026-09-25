@@ -192,8 +192,9 @@ internal class ByOutlines(private val project: Project) : Disposable {
         }
         val outline = when (answer) {
             is ByAnswer.Answer -> ByOutlineReplies.read(answer.value, document) ?: return null
-            // Declined: language services are off. An ordinary answer, with nothing in it.
-            ByAnswer.None -> ByOutline(document.modificationStamp, emptyList(), emptyList())
+            // Declined: language services are off. An ordinary answer, with nothing in it — and
+            // marked as such, since "nothing said about strings" is not "no strings".
+            ByAnswer.None -> ByOutline(document.modificationStamp, emptyList(), emptyList(), declined = true)
             ByAnswer.Failed -> return null
         }
         answers[virtualFile] = outline

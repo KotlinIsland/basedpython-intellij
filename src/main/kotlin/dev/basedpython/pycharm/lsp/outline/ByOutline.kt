@@ -24,6 +24,13 @@ class ByOutline(
     val statements: List<Statement>,
     /** Every string literal part, in source order. */
     val strings: List<StringPart>,
+    /**
+     * Whether `by` declined to outline the document (it does when language services are off), in
+     * which case [statements] and [strings] are empty because nothing was said, not because the
+     * file has none. A feature that falls back to the platform's behaviour on an empty outline
+     * need not look; one that would act on "no strings here" must.
+     */
+    val declined: Boolean = false,
 ) {
 
     /** One statement: [range] runs from its first token, a decorator included, to its body's end. */
