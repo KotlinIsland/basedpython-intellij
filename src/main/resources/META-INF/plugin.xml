@@ -258,6 +258,12 @@
         <lang.surroundDescriptor
             language="basedpython"
             implementationClass="dev.basedpython.pycharm.editor.templates.BasedPythonSurroundDescriptor"/>
+        <!-- The platform's own Extract/Introduce and Inline actions (Ctrl+Alt+V, C, M, N), each one of
+             by's refactorings: the edit, and the reason when it refuses, are the server's. -->
+        <lang.refactoringSupport
+            language="basedpython"
+            implementationClass="dev.basedpython.pycharm.lsp.refactor.ByRefactoringSupportProvider"/>
+        <inlineActionHandler implementation="dev.basedpython.pycharm.lsp.refactor.ByInlineActionHandler"/>
 
         <!-- ===== Stream O: project scaffolding + config awareness ===== -->
         <!-- The EP is `newProjectWizard.generator`; the *interface* is GeneratorNewProjectWizard.
@@ -642,25 +648,6 @@
         <action id="basedpython.modules.Show"
                 class="dev.basedpython.pycharm.env.modules.ShowModulesAction">
             <add-to-group group-id="basedpython.ActionGroup" anchor="after" relative-to-action="basedpython.env.Show"/>
-        </action>
-
-        <!-- by's refactorings, asked for explicitly: the same code actions Alt+Enter offers, with the
-             server's reason when one does not apply -->
-        <action id="basedpython.refactor.InlineVariable"
-                class="dev.basedpython.pycharm.lsp.refactor.ByInlineVariableAction">
-            <add-to-group group-id="RefactoringMenu" anchor="last"/>
-        </action>
-        <action id="basedpython.refactor.ExtractVariable"
-                class="dev.basedpython.pycharm.lsp.refactor.ByExtractVariableAction">
-            <add-to-group group-id="RefactoringMenu" anchor="last"/>
-        </action>
-        <action id="basedpython.refactor.IntroduceConstant"
-                class="dev.basedpython.pycharm.lsp.refactor.ByIntroduceConstantAction">
-            <add-to-group group-id="RefactoringMenu" anchor="last"/>
-        </action>
-        <action id="basedpython.refactor.ExtractFunction"
-                class="dev.basedpython.pycharm.lsp.refactor.ByExtractFunctionAction">
-            <add-to-group group-id="RefactoringMenu" anchor="last"/>
         </action>
 
         <!-- ===== Wave 12: download prebuilt binaries (§58) ===== -->

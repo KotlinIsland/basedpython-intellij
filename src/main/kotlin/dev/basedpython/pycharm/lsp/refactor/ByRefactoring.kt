@@ -8,6 +8,7 @@ import com.intellij.util.concurrency.annotations.RequiresBackgroundThread
 import com.intellij.util.concurrency.annotations.RequiresReadLock
 import dev.basedpython.pycharm.lsp.ByAnswer
 import dev.basedpython.pycharm.lsp.askBy
+import dev.basedpython.pycharm.util.BasedPythonBundle
 import org.eclipse.lsp4j.CodeAction
 import org.eclipse.lsp4j.CodeActionContext
 import org.eclipse.lsp4j.CodeActionParams
@@ -21,13 +22,16 @@ import org.eclipse.lsp4j.jsonrpc.messages.Either
  * The refactorings `by` performs, each named by the code action kind it offers it under.
  *
  * The refactoring itself — what it reads, what it refuses, the edit — is the server's. These are
- * only the names the editor's menu entries ask for.
+ * only the names the platform's refactoring actions ask for, and the name each is shown under.
  */
-enum class ByRefactoring(val kind: String) {
-    InlineVariable("refactor.inline.variable"),
-    ExtractVariable("refactor.extract.variable"),
-    IntroduceConstant("refactor.extract.constant"),
-    ExtractFunction("refactor.extract.function"),
+enum class ByRefactoring(val kind: String, private val titleKey: String) {
+    InlineVariable("refactor.inline.variable", "refactoring.by.title.inlineVariable"),
+    ExtractVariable("refactor.extract.variable", "refactoring.by.title.extractVariable"),
+    IntroduceConstant("refactor.extract.constant", "refactoring.by.title.introduceConstant"),
+    ExtractFunction("refactor.extract.function", "refactoring.by.title.extractFunction"),
+    ;
+
+    val title: String get() = BasedPythonBundle.message(titleKey)
 }
 
 /** What `by` said about a refactoring at a range. */
