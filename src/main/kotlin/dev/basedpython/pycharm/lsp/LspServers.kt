@@ -245,8 +245,11 @@ internal class ByLspServerDescriptor(
       } else {
         LspSemanticTokensDisabled
       }
+    private val codeLenses = ByCodeLensSupport()
+
+    /** `by`'s lenses, with the navigating ones navigated here rather than sent back to it. */
     override val codeLensCustomizer
-      get() = if (s.byCodeLens) super.codeLensCustomizer else LspCodeLensDisabled
+      get() = if (s.byCodeLens) codeLenses else LspCodeLensDisabled
     /**
      * `by`'s document highlights, asked for in `.by` files too.
      *

@@ -225,6 +225,14 @@ class LspServerDescriptorTest {
   }
 
   @Test
+  fun `by's navigating code lenses are run by the client`() {
+    // `editor.action.showReferences` is not a command `by` executes; sent back to it, it is refused.
+    assertTrue(byDescriptor().lspCustomization.codeLensCustomizer is ByCodeLensSupport)
+    BasedPythonSettings.getInstance(project).byCodeLens = false
+    assertSame(LspCodeLensDisabled, byDescriptor().lspCustomization.codeLensCustomizer)
+  }
+
+  @Test
   fun `by's refactorings reach Alt+Enter as intentions`() {
     // `by`'s refactorings are code actions that are not quick fixes. The platform only asks for
     // those, and lists them in Alt+Enter, through a code actions customizer that supports
