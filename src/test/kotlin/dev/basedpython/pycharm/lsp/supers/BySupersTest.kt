@@ -4,15 +4,24 @@ import com.intellij.lang.CodeInsightActions
 import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.lang.BasedPythonLanguage
+import dev.basedpython.pycharm.lsp.ext.BySuperMember
+import dev.basedpython.pycharm.testFramework.AnsweringClient
+import dev.basedpython.pycharm.testFramework.AnsweringClient.Companion.answered
+import dev.basedpython.pycharm.testFramework.AnsweringClient.Companion.failed
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import dev.basedpython.pycharm.util.BasedPythonBundle
+import kotlinx.coroutines.runBlocking
 import org.eclipse.lsp4j.DocumentSymbol
 import org.eclipse.lsp4j.Location
 import org.eclipse.lsp4j.Position
 import org.eclipse.lsp4j.Range
 import org.eclipse.lsp4j.SymbolInformation
 import org.eclipse.lsp4j.SymbolKind
+import org.eclipse.lsp4j.TextDocumentIdentifier
 import org.eclipse.lsp4j.TypeHierarchyItem
 import org.eclipse.lsp4j.jsonrpc.messages.Either
+import org.eclipse.lsp4j.jsonrpc.messages.ResponseErrorCode
+import java.util.concurrent.CompletableFuture
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertInstanceOf
 import org.junit.jupiter.api.Assertions.assertNull
@@ -118,6 +127,74 @@ class BySupersTest {
         assertEquals(
             BySuperTarget("Polygon", "shapes", Location("file:///shapes.by", Range(Position(10, 6), Position(10, 13)))),
             BySupers.classTarget(item),
+        )
+    }
+
+    /** Go to Super on `area`, a method of `Shape`, answered by a `by` that says [answer]. */
+    private fun overridden(answer: (String) -> CompletableFuture<*>): Pair<BySuperAnswer, List<String>> {
+        val asked = mutableListOf<String>()
+        val client = AnsweringClient(fixture.project) { method -> asked += method; answer(method) }
+        val shape = (outline[0].right)
+        val subject = BySuperSubject.Member(shape.children[1], shape)
+        val result = runBlocking { BySupers.overridden(client, TextDocumentIdentifier("file:///shapes.by"), subject) }
+        return result to asked
+    }
+
+    private val loud = BySuperMember("area", "Loud", "file:///bases.by", range(5, 6), Range(Position(5, 8), Position(5, 12)))
+    private val quiet = BySuperMember("area", "Quiet", "file:///bases.by", range(9, 10), Range(Position(9, 8), Position(9, 12)))
+
+    @Test
+    fun `a member goes to what by says it overrides, in the order by gives`() {
+        val (answer, asked) = overridden { answered(listOf(loud, quiet)) }
+
+        assertEquals(listOf("by/superMembers"), asked)
+        answer as BySuperAnswer.Targets
+        assertEquals(BasedPythonBundle.message("goto.super.member.chooser", "Shape.area"), answer.chooserTitle)
+        assertEquals(
+            listOf(
+                BySuperTarget("Loud.area", "bases.by", Location("file:///bases.by", Range(Position(5, 8), Position(5, 12)))),
+                BySuperTarget("Quiet.area", "bases.by", Location("file:///bases.by", Range(Position(9, 8), Position(9, 12)))),
+            ),
+            answer.targets,
+        )
+    }
+
+    @Test
+    fun `a member that overrides nothing is said to`() {
+        val (answer, _) = overridden { answered(emptyList<BySuperMember>()) }
+        assertEquals(BySuperAnswer.Nowhere(BasedPythonBundle.message("goto.super.member.none", "Shape.area")), answer)
+    }
+
+    @Test
+    fun `no member where the outline has one is by's answer, and said as that`() {
+        val (answer, _) = overridden { answered(null) }
+        assertEquals(BySuperAnswer.Nowhere(BasedPythonBundle.message("goto.super.member.unknown", "Shape.area")), answer)
+    }
+
+    @Test
+    fun `a by without the request is said to be one, and nothing else is asked instead`() {
+        val (answer, asked) = overridden { failed(ResponseErrorCode.MethodNotFound, "Unhandled method by/superMembers") }
+
+        assertEquals(BySuperAnswer.Nowhere(BasedPythonBundle.message("goto.super.member.unsupported", "Shape.area")), answer)
+        assertEquals(listOf("by/superMembers"), asked)
+    }
+
+    @Test
+    fun `any other error is a by that did not answer`() {
+        val (answer, _) = overridden { failed(ResponseErrorCode.InternalError) }
+        assertEquals(BySuperAnswer.Nowhere(BasedPythonBundle.message("goto.super.noAnswer", "by/superMembers")), answer)
+    }
+
+    @Test
+    fun `a member the superclass synthesizes says so beside its file`() {
+        val init = BySuperMember("__init__", "Point", "file:///p%20q/points.by", range(3, 5), Range(Position(3, 6), Position(3, 11)), synthesized = true)
+        assertEquals(
+            BySuperTarget(
+                "Point.__init__",
+                BasedPythonBundle.message("goto.super.member.synthesized", "points.by"),
+                Location("file:///p%20q/points.by", Range(Position(3, 6), Position(3, 11))),
+            ),
+            BySupers.memberTarget(init),
         )
     }
 

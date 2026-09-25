@@ -192,7 +192,49 @@ interface ByServerExtensions {
      */
     @JsonRequest("by/syntaxOutline")
     fun syntaxOutline(args: BySyntaxOutlineParams): CompletableFuture<BySyntaxOutlineResponse?>
+
+    /**
+     * The superclass members a class member overrides — see
+     * [dev.basedpython.pycharm.lsp.supers.BySupers].
+     *
+     * **Why the server.** What a member overrides is the override checks' answer: which bases count,
+     * which declarations along the MRO a member is compared with, what a `private` member or a
+     * synthesized one does. `by` answers it from the checks' own walk, so Go to Super goes to exactly
+     * what `invalid-method-override` holds the member to.
+     *
+     * **Why not the standard requests.** `textDocument/implementation` goes the other way, from a
+     * member to the members that override it, and `typeHierarchy/supertypes` answers about classes,
+     * not their members.
+     *
+     * A `null` answer means no class member is declared at the position; an **empty** list is a
+     * member that overrides nothing. A `by` from before the request answers `MethodNotFound`.
+     */
+    @JsonRequest("by/superMembers")
+    fun superMembers(args: BySuperMembersParams): CompletableFuture<List<BySuperMember>?>
 }
+
+/**
+ * The member to ask about: a position on the name it is declared with — a `def`'s, or a name a class
+ * body assigns or annotates.
+ *
+ * Field names are the wire format and must match `ty_server`'s `SuperMembersParams`, which is
+ * `deny_unknown_fields`.
+ */
+data class BySuperMembersParams(val textDocument: TextDocumentIdentifier, val position: Position)
+
+/** One superclass member the member overrides. In MRO order, the nearest along each branch. */
+data class BySuperMember(
+    val name: String? = null,
+    /** The superclass that declares it. */
+    val containerName: String? = null,
+    val uri: String? = null,
+    /** The whole declaration. */
+    val range: Range? = null,
+    /** The declared name, which is where to go. */
+    val selectionRange: Range? = null,
+    /** The superclass synthesizes the member rather than writing it; the ranges are the class's. */
+    val synthesized: Boolean = false,
+)
 
 /** Field names are the wire format of `ty_server`'s `EntryPointParams`, which is `deny_unknown_fields`. */
 data class ByEntryPointParams(val uri: String)

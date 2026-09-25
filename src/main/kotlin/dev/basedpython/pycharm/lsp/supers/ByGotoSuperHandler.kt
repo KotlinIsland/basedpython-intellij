@@ -17,7 +17,8 @@ import dev.basedpython.pycharm.util.BasedPythonBundle
 import javax.swing.JList
 
 /**
- * Go to Super (Ctrl+U) for basedpython: from a class to its bases.
+ * Go to Super (Ctrl+U) for basedpython: from a class to its bases, and from a class member to the
+ * members it overrides.
  *
  * Without this the action is dead in a `.by` file — the platform finds no handler registered for
  * the language and does nothing at all. Where to go is [BySupers]'s, which asks `by`; this runs the

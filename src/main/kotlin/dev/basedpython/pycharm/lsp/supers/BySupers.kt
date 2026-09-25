@@ -8,7 +8,12 @@ import com.intellij.platform.lsp.util.getLsp4jPosition
 import dev.basedpython.pycharm.lsp.ByAnswer
 import dev.basedpython.pycharm.lsp.ByServerDocuments
 import dev.basedpython.pycharm.lsp.awaitBy
+import dev.basedpython.pycharm.lsp.awaitingAgain
+import dev.basedpython.pycharm.lsp.ext.ByServerExtensions
+import dev.basedpython.pycharm.lsp.ext.BySuperMember
+import dev.basedpython.pycharm.lsp.ext.BySuperMembersParams
 import dev.basedpython.pycharm.lsp.hasDocument
+import dev.basedpython.pycharm.lsp.isMethodNotFound
 import dev.basedpython.pycharm.util.BasedPythonBundle
 import org.eclipse.lsp4j.DocumentSymbol
 import org.eclipse.lsp4j.DocumentSymbolParams
@@ -58,7 +63,8 @@ internal sealed interface BySuperSubject {
  * Everything that decides where to go is `by`'s. Which definition the caret is in comes from its
  * `textDocument/documentSymbol` outline, and a class's bases from its type hierarchy: the
  * `typeHierarchy/supertypes` of the class, which are its explicit bases in the order the class
- * lists them — the order they take in its MRO, which C3 linearisation keeps.
+ * lists them — the order they take in its MRO, which C3 linearisation keeps. What a member
+ * overrides is `by/superMembers`, the override checks' own answer.
  */
 internal object BySupers {
 
@@ -90,7 +96,7 @@ internal object BySupers {
         return when (val subject = subjectAt(symbols, caret)) {
             null -> nowhere("goto.super.nothingHere")
             is BySuperSubject.Class -> bases(server, identifier, subject.symbol)
-            is BySuperSubject.Member -> nowhere("goto.super.member.notAsked", subject.symbol.name)
+            is BySuperSubject.Member -> overridden(server, identifier, subject)
         }
     }
 
@@ -119,6 +125,55 @@ internal object BySupers {
         return BySuperAnswer.Targets(
             BasedPythonBundle.message("goto.super.class.chooser", item.name),
             supertypes.map(::classTarget),
+        )
+    }
+
+    /**
+     * What [subject], a class member, overrides, from `by/superMembers`.
+     *
+     * A `by` that does not know the request is said to be one, rather than read as a member that
+     * overrides nothing or answered some other way: nothing else can say what a member overrides.
+     */
+    suspend fun overridden(
+        server: LspClient,
+        document: TextDocumentIdentifier,
+        subject: BySuperSubject.Member,
+    ): BySuperAnswer {
+        val member = "${subject.owner.name}.${subject.symbol.name}"
+        val params = BySuperMembersParams(document, subject.symbol.selectionRange.start)
+        var unknownRequest = false
+        val answer = awaitingAgain<List<BySuperMember>>("by/superMembers", LspClient.DEFAULT_REQUEST_TIMEOUT_MS.toLong()) { sent ->
+            try {
+                server.sendRequest { (it as ByServerExtensions).superMembers(params).also(sent) }
+            } catch (e: Exception) {
+                if (isMethodNotFound(e)) unknownRequest = true
+                throw e
+            }
+        }
+        val members = when (answer) {
+            is ByAnswer.Answer -> answer.value
+            ByAnswer.None -> return nowhere("goto.super.member.unknown", member)
+            ByAnswer.Failed ->
+                return if (unknownRequest) {
+                    nowhere("goto.super.member.unsupported", member)
+                } else {
+                    nowhere("goto.super.noAnswer", "by/superMembers")
+                }
+        }
+        val targets = members.mapNotNull(::memberTarget)
+        if (targets.isEmpty()) return nowhere("goto.super.member.none", member)
+        return BySuperAnswer.Targets(BasedPythonBundle.message("goto.super.member.chooser", member), targets)
+    }
+
+    /** Where an overridden member is: `Class.member`, and the file that declares it. */
+    fun memberTarget(member: BySuperMember): BySuperTarget? {
+        val uri = member.uri ?: return null
+        val range = member.selectionRange ?: return null
+        val file = (runCatching { java.net.URI(uri).path }.getOrNull() ?: uri).substringAfterLast('/')
+        return BySuperTarget(
+            "${member.containerName}.${member.name}",
+            if (member.synthesized) BasedPythonBundle.message("goto.super.member.synthesized", file) else file,
+            Location(uri, range),
         )
     }
 

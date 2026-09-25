@@ -139,6 +139,12 @@ internal fun isContentModified(error: Throwable): Boolean =
         it is ResponseErrorException && it.responseError.code == ResponseErrorCode.ContentModified.value
     }
 
+/** Whether [error] is the server saying it has no such request: a `by` from before the request. */
+internal fun isMethodNotFound(error: Throwable): Boolean =
+    generateSequence(error) { it.cause }.any {
+        it is ResponseErrorException && it.responseError.code == ResponseErrorCode.MethodNotFound.value
+    }
+
 /**
  * [askBy] for a coroutine: suspends rather than blocks, and stops waiting the moment the caller is
  * cancelled — which a blocked thread outside any progress indicator cannot be told.

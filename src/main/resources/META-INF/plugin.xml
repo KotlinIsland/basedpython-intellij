@@ -299,7 +299,8 @@
         <codeInsight.typeInfo
             language="basedpython"
             implementationClass="dev.basedpython.pycharm.lsp.typeinfo.ByTypeInfoProvider"/>
-        <!-- Go to Super (Ctrl+U): a class's bases, from the `by` server's type hierarchy. -->
+        <!-- Go to Super (Ctrl+U): a class's bases from the `by` server's type hierarchy, and what a member
+             overrides from its `by/superMembers`. -->
         <codeInsight.gotoSuper
             language="basedpython"
             implementationClass="dev.basedpython.pycharm.lsp.supers.ByGotoSuperHandler"/>
