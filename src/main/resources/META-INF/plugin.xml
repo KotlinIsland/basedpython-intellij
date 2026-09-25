@@ -494,6 +494,14 @@
             <keyboard-shortcut keymap="$default" first-keystroke="control alt F8"/>
         </action>
 
+        <!-- Set next statement for a `.by` debug session, beside Run to Cursor where PyCharm puts its
+             own. The platform's DAP client has none; see ByJumps. -->
+        <action id="basedpython.JumpToCursor"
+                class="dev.basedpython.pycharm.debug.ByJumpToCursorAction">
+            <add-to-group group-id="DebugMainMenu" relative-to-action="ForceRunToCursor" anchor="after"/>
+            <add-to-group group-id="EditorPopupMenuDebug" relative-to-action="ForceRunToCursor" anchor="after"/>
+        </action>
+
         <!-- ===== Stream D: Tools menu group + popup entries ===== -->
         <group id="basedpython.ActionGroup"
                class="dev.basedpython.pycharm.actions.BasedPythonActionGroup"

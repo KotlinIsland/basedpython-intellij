@@ -55,6 +55,24 @@ enum class ByDebugBackend {
             DEBUGPY -> false
         }
 
+    /**
+     * Whether this backend can move a paused frame to a line of a `.by` file — Jump To Cursor.
+     *
+     * Not the same fact as the `supportsGotoTargetsRequest` both adapters answer `initialize` with.
+     * [BPD] moves the frame through its own source map and says why when cpython will not.
+     * [DEBUGPY] advertises the capability, and pydevd takes the `.by` line through the map the
+     * bootstrap handed it, but the move does not happen: measured against debugpy 1.8.21 on
+     * python 3.14, a jump back to a line of the paused function was refused with cpython's "line 22
+     * comes after the current code block" (22 being the transpiled line), and a jump forward left
+     * the frame where it was, with no stop and nothing said. A menu item that does that is broken
+     * rather than unavailable, so under debugpy there is none.
+     */
+    val setsNextStatement: Boolean
+        get() = when (this) {
+            BPD -> true
+            DEBUGPY -> false
+        }
+
     companion object {
         /**
          * The backend a setting names, or [BPD] when it names nothing recognisable.

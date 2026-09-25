@@ -290,8 +290,12 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
      * bpd sends these as prose to a client that has not said it reads them, and this one says so in
      * the `launch` ([ByBpdEvents.UNDERSTOOD]), so this is a rewrite of a line rather than a second
      * copy of one.
+     *
+     * A move Jump To Cursor asked for is handed to [ByJumps] as well, which says a refusal at the
+     * caret the action was invoked from: that is where the user is looking for the frame to move.
      */
     private fun report(moved: ByMoved) {
+        process?.jumps?.moved(moved)
         val text = moved.report() ?: return
         val console = executionResult?.executionConsole as? ConsoleView ?: return
         val type =
@@ -334,8 +338,12 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
             // asks, by which time the program is running and the record is complete.
             recordFile = setup?.infoFile,
             recompositionLink = link,
-        )
+        ).also { process = it }
     }
+
+    /** The session's process, once [createXDebugProcess] has made it: where a jump's outcome goes. */
+    @Volatile
+    private var process: ByDapXDebugProcess? = null
 
     /**
      * The arguments the session is started with: [provided], as the launch-arguments provider built
@@ -522,6 +530,9 @@ internal class ByDapXDebugProcess(
     startRequestArguments,
 ) {
     override fun doGetProcessHandler(): ProcessHandler? = result?.processHandler ?: super.doGetProcessHandler()
+
+    /** Jump To Cursor in this session: what [ByJumpToCursorAction] asks the adapter through. */
+    internal val jumps = ByJumps(session, dapDebugSession, xDebugProcessScope, backend)
 }
 
 /**
