@@ -184,6 +184,12 @@ internal suspend fun <R : Any> awaitingAgain(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
+            if (isMethodNotFound(e)) {
+                // A `by` from before the request, which is not a fault: what it means is the
+                // caller's to say — Go to Super says `by` needs updating, a gutter icon says nothing.
+                LOG.debug("$what is not a request this server answers")
+                return@withTimeoutOrNull ByAnswer.Failed
+            }
             if (!isContentModified(e)) {
                 LOG.warn("$what request failed", e)
                 return@withTimeoutOrNull ByAnswer.Failed

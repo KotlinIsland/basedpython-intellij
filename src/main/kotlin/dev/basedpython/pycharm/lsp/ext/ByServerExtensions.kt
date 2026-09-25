@@ -218,6 +218,22 @@ interface ByServerExtensions {
     fun superMembers(args: BySuperMembersParams): CompletableFuture<List<BySuperMember>?>
 
     /**
+     * Every class member of a document that overrides something, each with what `by/superMembers`
+     * answers for it — see [dev.basedpython.pycharm.lsp.supers.ByOverridingMarkers], which draws
+     * the gutter's *overrides* and *implements* icons from it.
+     *
+     * **Why one request for the document.** The icons are drawn on every highlighting pass, so
+     * `by/superMembers` per member would be a request per member per pass, most of them answered
+     * with an empty list. `by` answers this from the same code in one pass over the document.
+     *
+     * A `null` answer means the server declined — language services are off, or the document is not
+     * one it answers for. An **empty** list is a document none of whose members overrides anything.
+     * A `by` from before the request answers `MethodNotFound`.
+     */
+    @JsonRequest("by/documentSuperMembers")
+    fun documentSuperMembers(args: ByDocumentSuperMembersParams): CompletableFuture<List<ByOverridingMember>?>
+
+    /**
      * Every file of the workspace checked, answered as soon as the check is done.
      *
      * The same parameters and report as `workspace/diagnostic`, which `by` long-polls: a request
@@ -255,6 +271,34 @@ data class BySuperMember(
     val selectionRange: Range? = null,
     /** The superclass synthesizes the member rather than writing it; the ranges are the class's. */
     val synthesized: Boolean = false,
+    /**
+     * The member is abstract where the superclass declares it — an `@abstractmethod`, or a protocol
+     * method with no implementation — so that overriding it implements it. Absent from a `by` from
+     * before it was said, which reads as not abstract.
+     */
+    val abstract: Boolean = false,
+)
+
+/**
+ * The document to answer for, and the text of it to answer for — see
+ * [dev.basedpython.pycharm.lsp.ByTextHash].
+ *
+ * Field names are the wire format and must match `ty_server`'s `DocumentSuperMembersParams`, which
+ * is `deny_unknown_fields`; `textHash` is taken out by the server's dispatcher before that.
+ */
+data class ByDocumentSuperMembersParams(val textDocument: TextDocumentIdentifier, val textHash: String)
+
+/** A class member of the document that overrides at least one superclass member. */
+data class ByOverridingMember(
+    val name: String? = null,
+    /** The class whose body declares it. */
+    val containerName: String? = null,
+    /** The name it is declared with: where `by/superMembers` answers the same members. */
+    val selectionRange: Range? = null,
+    /** The member is itself abstract, in the sense of [BySuperMember.abstract]. */
+    val abstract: Boolean = false,
+    /** What it overrides directly, in MRO order, as `by/superMembers` answers it. */
+    val superMembers: List<BySuperMember> = emptyList(),
 )
 
 /** Field names are the wire format of `ty_server`'s `EntryPointParams`, which is `deny_unknown_fields`. */

@@ -9,6 +9,7 @@ import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.editor.Document
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.ui.popup.JBPopup
 import com.intellij.openapi.ui.popup.JBPopupFactory
 import com.intellij.platform.ide.progress.withBackgroundProgress
 import com.intellij.platform.lsp.api.LspClient
@@ -95,20 +96,38 @@ class ByGotoSuperHandler : CodeInsightActionHandler {
     }
 
     private fun go(server: LspClient, editor: Editor, answer: BySuperAnswer.Targets) {
-        val single = answer.targets.singleOrNull()
-        if (single != null) return navigateToLocation(server, single.location)
-        JBPopupFactory.getInstance()
-            .createPopupChooserBuilder(answer.targets)
-            .setTitle(answer.chooserTitle)
-            .setRenderer(TargetRenderer())
-            .setItemChosenCallback { navigateToLocation(server, it.location) }
-            .createPopup()
-            .showInBestPositionFor(editor)
+        BySuperChooser.go(server, answer) { it.showInBestPositionFor(editor) }
     }
 
     private fun hint(editor: Editor, text: String) {
         LOG.debug("Go to Super goes nowhere: $text")
         HintManager.getInstance().showInformationHint(editor, text)
+    }
+
+    private companion object {
+        val LOG = logger<ByGotoSuperHandler>()
+    }
+}
+
+/**
+ * Goes where Go to Super's answer says: to its one target, or, for several, to the one chosen from a
+ * list of them in the order `by` gave — the same list from Ctrl+U and from the gutter's *overrides*
+ * icon.
+ */
+internal object BySuperChooser {
+
+    /** Goes to [answer]'s one target, or hands [show] the chooser among several. EDT only. */
+    fun go(server: LspClient, answer: BySuperAnswer.Targets, show: (JBPopup) -> Unit) {
+        val single = answer.targets.singleOrNull()
+        if (single != null) return navigateToLocation(server, single.location)
+        show(
+            JBPopupFactory.getInstance()
+                .createPopupChooserBuilder(answer.targets)
+                .setTitle(answer.chooserTitle)
+                .setRenderer(TargetRenderer())
+                .setItemChosenCallback { navigateToLocation(server, it.location) }
+                .createPopup(),
+        )
     }
 
     /** The name, and where it lives in grey after it. */
@@ -123,10 +142,6 @@ class ByGotoSuperHandler : CodeInsightActionHandler {
             append(value.name, SimpleTextAttributes.REGULAR_ATTRIBUTES)
             value.where?.let { append("  $it", SimpleTextAttributes.GRAYED_ATTRIBUTES) }
         }
-    }
-
-    private companion object {
-        val LOG = logger<ByGotoSuperHandler>()
     }
 }
 

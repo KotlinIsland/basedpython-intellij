@@ -333,6 +333,11 @@
         <codeInsight.gotoSuper
             language="basedpython"
             implementationClass="dev.basedpython.pycharm.lsp.supers.ByGotoSuperHandler"/>
+        <!-- The gutter's "overrides" / "implements" icons, from `by/documentSuperMembers`. The "is
+             overridden" ones are the platform's LSP provider, switched on by the server descriptor. -->
+        <codeInsight.lineMarkerProvider
+            language="basedpython"
+            implementationClass="dev.basedpython.pycharm.lsp.supers.ByOverridingMarkers"/>
 
         <!-- ===== Stream V: smart editing ===== -->
         <enterHandlerDelegate

@@ -148,9 +148,22 @@ internal object BySupers {
         document: TextDocumentIdentifier,
         textHash: String,
         subject: BySuperSubject.Member,
+    ): BySuperAnswer =
+        overridden(server, document, textHash, subject.symbol.selectionRange.start, "${subject.owner.name}.${subject.symbol.name}")
+
+    /**
+     * What the class member declared at [name], a position on its name in the text [textHash]
+     * names, overrides: the same question, asked from where the member's name is rather than from
+     * `by`'s outline. [member] is what to call it, `Class.member`.
+     */
+    suspend fun overridden(
+        server: LspClient,
+        document: TextDocumentIdentifier,
+        textHash: String,
+        name: Position,
+        member: String,
     ): BySuperAnswer {
-        val member = "${subject.owner.name}.${subject.symbol.name}"
-        val params = BySuperMembersParams(document, subject.symbol.selectionRange.start, textHash)
+        val params = BySuperMembersParams(document, name, textHash)
         var unknownRequest = false
         val answer = awaitingAgain<List<BySuperMember>>("by/superMembers", LspClient.DEFAULT_REQUEST_TIMEOUT_MS.toLong()) { sent ->
             try {

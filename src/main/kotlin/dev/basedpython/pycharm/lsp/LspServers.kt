@@ -327,6 +327,9 @@ internal class ByLspServerDescriptor(
    * edit from 19 requests to 220, answered in under 80ms from the first to the last (each at most 7ms
    * for `implementation`, 30ms for `subtypes`). A file with more than 200 classes and methods gets no
    * markers and asks nothing beyond the `documentSymbol` (`lsp.inheritance.markers.max.symbols`).
+   *
+   * These point down only. The *overrides* and *implements* icons pointing up are
+   * [dev.basedpython.pycharm.lsp.supers.ByOverridingMarkers], one request per edit.
    */
   internal object ByInheritanceMarkers : LspInheritanceMarkersSupport() {
     override fun shouldAskServerForMarkers(file: VirtualFile): Boolean = file.fileType == BasedPythonFileType.INSTANCE
