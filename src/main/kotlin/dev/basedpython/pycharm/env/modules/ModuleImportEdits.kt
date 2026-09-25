@@ -5,19 +5,14 @@ import com.intellij.openapi.application.WriteAction
 import com.intellij.openapi.command.CommandProcessor
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.platform.lsp.api.LspClient
-import com.intellij.platform.lsp.api.LspClientManager
 import dev.basedpython.pycharm.format.ByCleanup
-import dev.basedpython.pycharm.lsp.ByAnswer
-import dev.basedpython.pycharm.lsp.ByLspServerSupportProvider
-import dev.basedpython.pycharm.lsp.askBy
+import dev.basedpython.pycharm.lsp.refactor.ByFileMove
+import dev.basedpython.pycharm.lsp.refactor.ByImportRewrites
+import dev.basedpython.pycharm.lsp.refactor.ByModuleRenames
+import dev.basedpython.pycharm.lsp.refactor.ByWorkspaceEditFiles
 import dev.basedpython.pycharm.util.BasedPythonBundle
-import org.eclipse.lsp4j.FileRename
-import org.eclipse.lsp4j.RenameFilesParams
 import org.eclipse.lsp4j.WorkspaceEdit
-import java.nio.file.Path
 
 /**
  * The `import` statements a module rename leaves pointing at a name that is gone.
@@ -51,11 +46,7 @@ internal object ModuleImportEdits {
      * know the request answers with an error, and an error is indistinguishable from a rename that
      * needed no edits.
      */
-    fun isSupported(project: Project): Boolean = server(project)?.let(::advertises) == true
-
-    /** The server's own word on whether it handles `workspace/willRenameFiles`. */
-    private fun advertises(server: LspClient): Boolean =
-        server.initializeResult?.capabilities?.workspace?.fileOperations?.willRename != null
+    fun isSupported(project: Project): Boolean = ByModuleRenames.isSupported(project)
 
     /**
      * Asks the server what [moves] cost, without applying anything yet.
@@ -68,29 +59,19 @@ internal object ModuleImportEdits {
      * Must be called from a background thread.
      */
     fun prepare(project: Project, moves: List<ModuleRenamePlan.Move>): ModuleRename.ImportEdits? {
-        val server = server(project) ?: return null
-        if (!advertises(server)) return null
-        if (moves.isEmpty()) return Prepared(project, emptyMap())
-
-        val params = RenameFilesParams(
-            moves.map { FileRename(uriOf(it.from), uriOf(it.to)) },
-        )
-
-        val answer = server.askBy("workspace/willRenameFiles", REQUEST_TIMEOUT_MS) {
-            it.workspaceService.willRenameFiles(params)
-        }
-        return when (answer) {
-            is ByAnswer.Answer -> Prepared(project, editsByFile(answer.value))
+        if (moves.isEmpty()) return Prepared(project, emptyMap()).takeIf { isSupported(project) }
+        return when (val answer = ByModuleRenames.ask(project, moves.map { ByFileMove(it.from, it.to) })) {
+            is ByImportRewrites.Edits -> Prepared(project, editsByFile(answer.edit))
             // The server answered "nothing to change", which is an ordinary answer.
-            ByAnswer.None -> Prepared(project, emptyMap())
-            ByAnswer.Failed -> null
+            ByImportRewrites.NoneNeeded -> Prepared(project, emptyMap())
+            ByImportRewrites.NoServer, ByImportRewrites.NotSupported, ByImportRewrites.Failed -> null
         }
     }
 
     /** The edits per file, dropping files the IDE cannot find and files with nothing to change. */
     private fun editsByFile(edit: WorkspaceEdit): Map<VirtualFile, List<org.eclipse.lsp4j.TextEdit>> =
-        uris(edit).mapNotNull { uri ->
-            val file = fileOf(uri) ?: return@mapNotNull null
+        ByWorkspaceEditFiles.uris(edit).mapNotNull { uri ->
+            val file = ByWorkspaceEditFiles.fileOf(uri) ?: return@mapNotNull null
             val edits = ByCleanup.editsFor(edit, uri).edits.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
             file to edits
         }.toMap()
@@ -160,37 +141,4 @@ internal object ModuleImportEdits {
             before.clear()
         }
     }
-
-    /** Every document URI the edit names, in either of the two shapes a workspace edit can take. */
-    private fun uris(edit: WorkspaceEdit): Set<String> =
-        edit.changes?.keys.orEmpty() +
-            edit.documentChanges.orEmpty()
-                .mapNotNull { change -> change.takeIf { it.isLeft }?.left?.textDocument?.uri }
-
-    private fun fileOf(uri: String): VirtualFile? = runCatching {
-        LocalFileSystem.getInstance().findFileByNioFile(Path.of(java.net.URI.create(uri)))
-    }.getOrNull()
-
-    /**
-     * The URI form a path goes out as.
-     *
-     * Built from the `java.nio` path rather than by string concatenation so that spaces, non-ASCII
-     * names and Windows drive letters are encoded the one way both ends already agree on.
-     */
-    private fun uriOf(path: Path): String = path.toUri().toString()
-
-    /** The `by` server for this project, if one is running. */
-    private fun server(project: Project): LspClient? =
-        LspClientManager.getInstance(project)
-            .getClients(ByLspServerSupportProvider::class.java)
-            .firstOrNull()
-
-    /**
-     * How long the server gets.
-     *
-     * Longer than an editor request, because this one reads every file in the project rather than
-     * one document — and shorter than forever, because a rename dialog waiting on a server that has
-     * stopped answering has to end in something the user can act on.
-     */
-    private const val REQUEST_TIMEOUT_MS = 30_000
 }

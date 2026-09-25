@@ -264,6 +264,15 @@
             language="basedpython"
             implementationClass="dev.basedpython.pycharm.lsp.refactor.ByRefactoringSupportProvider"/>
         <inlineActionHandler implementation="dev.basedpython.pycharm.lsp.refactor.ByInlineActionHandler"/>
+        <!-- Renaming or moving a .by module or package also rewrites the imports that name it, as
+             by works them out (workspace/willRenameFiles) before anything moves. Ahead of the
+             platform's own file rename and move, which these extend and which keep everything else. -->
+        <renamePsiElementProcessor
+            implementation="dev.basedpython.pycharm.lsp.refactor.ByModuleRenameProcessor"
+            order="first"/>
+        <refactoring.moveHandler
+            implementation="dev.basedpython.pycharm.lsp.refactor.ByModuleMoveHandler"
+            order="first"/>
 
         <!-- ===== Stream O: project scaffolding + config awareness ===== -->
         <!-- The EP is `newProjectWizard.generator`; the *interface* is GeneratorNewProjectWizard.
