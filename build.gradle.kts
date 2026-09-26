@@ -3,6 +3,8 @@ import org.jetbrains.changelog.markdownToHTML
 import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
 import org.jetbrains.intellij.platform.gradle.TestFrameworkType
 import org.jetbrains.intellij.platform.gradle.tasks.VerifyPluginTask
+import org.jetbrains.kotlin.gradle.dsl.JvmDefaultMode
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
   id("org.jetbrains.kotlin.jvm")
@@ -96,6 +98,42 @@ dependencies {
       plugin("com.jonnyzzz.mcp-steroid", "0.102.0-r-c68d8f15d")
     }
   }
+}
+
+kotlin {
+  compilerOptions {
+    // Not the default, and not in the plugin template: Kotlin 2.2+ compiles in `ENABLE` mode, and
+    // this deliberately leaves it. In `ENABLE` (and `DISABLE`) mode a class that implements a Kotlin
+    // interface gets a generated override of every default method it does not override itself,
+    // each just calling `super` — for binary compatibility with Kotlin code compiled before default
+    // methods, which nothing here has. Those stubs are real overrides and calls in the bytecode, so
+    // the verifier reports them as ours: `ByLogpointUndoUnloadGuard`, which overrides only
+    // `beforePluginUnload`, was reported as overriding and invoking the deprecated
+    // `DynamicPluginListener.checkUnloadPlugin`, and 60 of the 355 experimental API usages were
+    // such stubs. No compiler warning points at them, since the source never names the method.
+    // Measured on a one-class listener against 263.5153.20: `ENABLE` and `DISABLE` generate
+    // `pluginsLoaded`, `beforePluginsUnloaded` and `checkUnloadPlugin`; `NO_COMPATIBILITY`
+    // generates none. It also drops the `DefaultImpls` classes of this plugin's own interfaces,
+    // which only matters to Kotlin code compiled against this plugin's jar, and there is none.
+    // It replaces the per-class `@JvmDefaultWithoutCompatibility` that b0c3773 put on six classes
+    // for the same stubs, which the next class to implement a platform interface did not get.
+    jvmDefault = JvmDefaultMode.NO_COMPATIBILITY
+  }
+}
+
+// The plugin uses a deprecated API only when no replacement exists across the supported range, and
+// then visibly: `@Suppress("DEPRECATION")` or `@Suppress("OVERRIDE_DEPRECATION")` at the use, with a
+// comment saying why. As warnings, `ReadAction.run` went in with `runBlocking` sitting beside it in
+// the floor build. Compiling against the floor (`platformVersion`) sees the floor's deprecations;
+// the newest build's are the verifier's (see `verifyPlugin` below).
+//
+// Main sources only, because that is what ships: the tests still hold 167 deprecated usages, 160 of
+// them `@RunInEdt`, whose replacement changes which thread each test runs on and is its own change.
+tasks.named<KotlinCompile>("compileKotlin") {
+  compilerOptions.freeCompilerArgs.addAll(
+    "-Xwarning-level=DEPRECATION:error",
+    "-Xwarning-level=OVERRIDE_DEPRECATION:error",
+  )
 }
 
 // --- Bundled `by` / `buff` binaries (FEATURES.md §58) ------------------------------------------
@@ -247,10 +285,13 @@ intellijPlatform {
     // that introduces it. When something genuinely has no public equivalent, the answer is an IJPL
     // issue and an entry in docs/internal-api.md, not quietly relaxing this.
     //
-    // Deprecated and experimental usages stay informational: a deprecation is a migration to
-    // schedule rather than a build to stop, because its replacement has to exist at both ends of
-    // the range before it can be taken. The LSP API's LspServer* to LspClient* rename was one; it
-    // is done, and the 263 report lists no `platform.lsp.api` deprecation.
+    // Deprecated usages fail the build too, but not through this list: DEPRECATED_API_USAGES fails
+    // on any, and some are forced — `breakpointsDescription` is deprecated at the floor and abstract
+    // at the top, so overriding it is a deprecated usage at one end or a missing one at the other —
+    // and `-ignored-problems` does not filter deprecated usages (measured on 263.5153.20: still 4
+    // with a pattern matching one). The check after `verifyPlugin` below fails on any the report
+    // lists that `allowedDeprecatedUsages` does not explain. Experimental usages stay informational:
+    // the DAP client and the Problems view have no non-experimental API to use instead.
     //
     // MISSING_DEPENDENCIES is deliberately *not* here, though the optional dependency that used to
     // be the reason — `org.intellij.plugins.markdown` — is gone with the fence suggester. The level
@@ -367,7 +408,56 @@ changelog {
   versionPrefix = ""
 }
 
+// Deprecated API the verifier may report, each a substring of one line of its
+// `deprecated-usages.txt`, with why no replacement is usable across the supported range. The
+// verifier's side of `-Xwarning-level=DEPRECATION:error` above: it also sees the newest build's
+// deprecations, which compiling against the floor cannot, and bytecode the compiler generated.
+// An entry that stops matching fails the build too, so the list cannot outlive its reasons.
+val allowedDeprecatedUsages: Map<String, String> = mapOf(
+  "DebugAdapterDescriptor.getBreakpointsDescription() : com.intellij.platform.dap.DapBreakpointsDescription is overridden in class dev.basedpython.pycharm.debug.ByDebugAdapterDescriptor"
+    to "deprecated in 263.5153 in favour of the customization's DapBreakpointsSupport, and abstract " +
+    "on the descriptor in 263.5701, where nothing else declares it (see ByDebugAdapter)",
+)
+
+// A task of its own, run after every `verifyPlugin`, so it can also be run alone against the
+// reports a verification already wrote.
+val checkDeprecatedApiUsages = tasks.register("checkDeprecatedApiUsages") {
+  description = "Fails on deprecated API usages in the verifier's reports that allowedDeprecatedUsages does not explain."
+  val reports = tasks.verifyPlugin.flatMap { it.verificationReportsDirectory }
+  val allowed = allowedDeprecatedUsages
+  doLast {
+    val root = reports.get().asFile
+    val usages = root.walk()
+      .filter { it.name == "deprecated-usages.txt" }
+      .flatMap { file ->
+        val ide = file.relativeTo(root).path.substringBefore(File.separatorChar)
+        file.readLines().filter { it.isNotBlank() }.map { "$ide: $it" }
+      }
+      .toList()
+    val unexplained = usages.filter { usage -> allowed.keys.none { usage.contains(it) } }
+    val stale = allowed.keys.filter { entry -> usages.none { it.contains(entry) } }
+    if (unexplained.isNotEmpty() || stale.isNotEmpty()) {
+      throw GradleException(
+        buildString {
+          if (unexplained.isNotEmpty()) {
+            appendLine("Deprecated API used without a reason in allowedDeprecatedUsages (build.gradle.kts):")
+            unexplained.forEach { appendLine("  $it") }
+          }
+          if (stale.isNotEmpty()) {
+            appendLine("allowedDeprecatedUsages entries the verifier no longer reports; remove them:")
+            stale.forEach { appendLine("  $it") }
+          }
+        },
+      )
+    }
+  }
+}
+
 tasks {
+  verifyPlugin {
+    finalizedBy(checkDeprecatedApiUsages)
+  }
+
   test {
     useJUnitPlatform()
     // The platform's test framework ships TestLoggerExtension/TestLoggerInterceptor as

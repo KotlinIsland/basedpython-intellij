@@ -78,11 +78,11 @@ internal class ByDiagnosticsInspection : GlobalInspectionTool() {
             val diagnostics = full.items.orEmpty().filter { ByProjectProblem.severityOf(it) != null }
             if (diagnostics.isEmpty()) continue
             ProgressManager.checkCanceled()
-            ReadAction.run<RuntimeException> {
-                val file = client.descriptor.findFileByUri(full.uri) ?: return@run
-                if (!scope.contains(file)) return@run
-                val psiFile = PsiManager.getInstance(project).findFile(file) ?: return@run
-                val document = FileDocumentManager.getInstance().getDocument(file) ?: return@run
+            ReadAction.runBlocking<RuntimeException> {
+                val file = client.descriptor.findFileByUri(full.uri) ?: return@runBlocking
+                if (!scope.contains(file)) return@runBlocking
+                val psiFile = PsiManager.getInstance(project).findFile(file) ?: return@runBlocking
+                val document = FileDocumentManager.getInstance().getDocument(file) ?: return@runBlocking
                 val descriptors = diagnostics.map { d ->
                     manager.createProblemDescriptor(
                         psiFile,

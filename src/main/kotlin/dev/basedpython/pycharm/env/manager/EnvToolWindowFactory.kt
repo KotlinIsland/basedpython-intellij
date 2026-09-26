@@ -11,8 +11,6 @@ import java.nio.file.Files
 import java.nio.file.Paths
 
 /** Backs the "basedpython Environment" tool window (registered in plugin.xml) with [EnvPanel]. */
-// No compiler bridges to the deprecated `isApplicable` / `isDoNotActivateOnStart` defaults.
-@JvmDefaultWithoutCompatibility
 internal class EnvToolWindowFactory : ToolWindowFactory, DumbAware {
 
     override fun shouldBeAvailable(project: Project): Boolean = EnvToolWindow.hasBackend(project)

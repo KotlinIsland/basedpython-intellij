@@ -17,8 +17,6 @@ import dev.basedpython.pycharm.lang.dialect.BasedPythonProjectDetector
  * Only offered to projects that are actually basedpython: its data is `by`'s, so a project with no
  * `by` has nothing to show and no business growing a stripe button for it.
  */
-// No compiler bridges to the deprecated `isApplicable` / `isDoNotActivateOnStart` defaults.
-@JvmDefaultWithoutCompatibility
 internal class ByTestNodeToolWindowFactory : ToolWindowFactory, DumbAware {
 
     override fun shouldBeAvailable(project: Project): Boolean =
