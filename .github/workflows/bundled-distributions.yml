@@ -1,4 +1,4 @@
-# Builds one plugin distribution per platform with the `by` / `buff` binaries inside it
+# Builds one plugin distribution per platform with the `by` / `buff` / `bpd` binaries inside it
 # (FEATURES.md §58, `BundledBinaries`).
 #
 # Everything here is packaging, not compiling: the binaries come out of the prebuilt basedpython
@@ -17,7 +17,8 @@
 # IntelliJ Platform Gradle Plugin has no support for it, which is why the gating is patched in by
 # hand and why the artifacts are checked for it before anything is uploaded.
 #
-# Releasing: set `basedpythonVersion` in gradle.properties to the basedpython release to bundle, then
+# Releasing: set `basedpythonVersion` and `basedpythonDebuggerVersion` in gradle.properties to the
+# basedpython and basedpython-debugger releases to bundle, then
 # create a GitHub release whose tag is `v<version>` — publishing it runs this workflow, which builds
 # the six bundles, attaches them to the release, publishes them to Marketplace, and rolls the
 # changelog's Unreleased section over to that version. The tag is the plugin version: `v1.2.3`
@@ -41,6 +42,11 @@ on:
     inputs:
       basedpython-version:
         description: 'basedpython release to bundle, as PyPI names it (defaults to basedpythonVersion in gradle.properties)'
+        required: false
+        default: ''
+        type: string
+      basedpython-debugger-version:
+        description: 'basedpython-debugger release to bundle, as PyPI names it (defaults to basedpythonDebuggerVersion in gradle.properties)'
         required: false
         default: ''
         type: string
@@ -101,6 +107,7 @@ jobs:
         env:
           TAG: ${{ github.event.release.tag_name }}
           INPUT_BASEDPYTHON: ${{ inputs.basedpython-version }}
+          INPUT_DEBUGGER: ${{ inputs.basedpython-debugger-version }}
           INPUT_PLUGIN: ${{ inputs.plugin-version }}
         run: |
           set -euo pipefail
@@ -114,6 +121,14 @@ jobs:
           fi
           echo "basedpython=$basedpython" >> "$GITHUB_OUTPUT"
 
+          checked_in=$(sed -n 's/^basedpythonDebuggerVersion *= *//p' gradle.properties)
+          debugger="${INPUT_DEBUGGER:-$checked_in}"
+          if [ -z "$debugger" ]; then
+            echo "No basedpython-debugger version: none in gradle.properties, and none given" >&2
+            exit 1
+          fi
+          echo "debugger=$debugger" >> "$GITHUB_OUTPUT"
+
           # Empty means "leave gradle.properties alone", which is only reachable from a dispatch.
           plugin="${INPUT_PLUGIN:-$tag}"
           if [ -n "$plugin" ]; then
@@ -121,16 +136,18 @@ jobs:
           else
             echo "plugin-arg=" >> "$GITHUB_OUTPUT"
           fi
-          echo "bundling basedpython $basedpython as plugin version ${plugin:-<gradle.properties>}"
+          echo "bundling basedpython $basedpython and basedpython-debugger $debugger as plugin version ${plugin:-<gradle.properties>}"
 
-      - name: Download by/buff for ${{ matrix.platform }}
+      - name: Download by/buff/bpd for ${{ matrix.platform }}
         env:
-          VERSION: ${{ steps.version.outputs.basedpython }}
+          BASEDPYTHON: ${{ steps.version.outputs.basedpython }}
+          DEBUGGER: ${{ steps.version.outputs.debugger }}
           PLATFORM: ${{ matrix.platform }}
         run: |
           set -euo pipefail
-          python3 .github/scripts/fetch-bundled-binaries.py "$VERSION" "$PLATFORM" build/bundled-binaries
-          ls -l build/bundled-binaries
+          python3 .github/scripts/fetch-bundled-binaries.py "$PLATFORM" build/bundled-binaries \
+            --basedpython "$BASEDPYTHON" --basedpython-debugger "$DEBUGGER"
+          find build/bundled-binaries -type f | sort
 
       - name: Build the bundled distribution
         run: >
@@ -154,13 +171,22 @@ jobs:
             windows-*) exe=".exe" ;;
             *)         exe="" ;;
           esac
-          for entry in "bin/by${exe}" "bin/buff${exe}" bin/platform.txt; do
-            unzip -l "$zip" | grep -q "/${entry}$" || {
+          # by and buff always; beyond that, whatever the fetch put down — it is the one that knows
+          # which platform goes without bpd, and fails for any other that lacks it — so every file
+          # it fetched has to have reached the zip's bin/, agents included.
+          entries=("bin/by${exe}" "bin/buff${exe}" bin/platform.txt)
+          while IFS= read -r file; do
+            entries+=("bin/${file#build/bundled-binaries/}")
+          done < <(find build/bundled-binaries -type f)
+          listing=$(unzip -Z1 "$zip")
+          for entry in "${entries[@]}"; do
+            grep -qxF "basedpython-intellij/${entry}" <<< "$listing" || {
               echo "missing $entry in $zip" >&2
-              unzip -l "$zip" >&2
+              echo "$listing" >&2
               exit 1
             }
           done
+          echo "bin/ holds all ${#entries[@]} expected files"
 
           # plugin.xml lives in the plugin jar inside the zip, so this is a nested extraction.
           os=${PLATFORM%%-*}

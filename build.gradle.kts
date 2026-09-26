@@ -134,7 +134,7 @@ tasks.withType<KotlinCompile>().configureEach {
   )
 }
 
-// --- Bundled `by` / `buff` binaries (FEATURES.md §58) ------------------------------------------
+// --- Bundled `by` / `buff` / `bpd` binaries (FEATURES.md §58) ----------------------------------
 //
 // `-PbundledBinariesDir=<dir>` copies that directory into `<plugin>/bin` in the sandbox and in the
 // distribution zip, so the plugin ships a working toolchain and needs neither a venv nor a download

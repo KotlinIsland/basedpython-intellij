@@ -3,6 +3,7 @@ package dev.basedpython.pycharm.debug.bpd
 import dev.basedpython.pycharm.env.ByEnvironmentKind
 import dev.basedpython.pycharm.env.ByLaunch
 import dev.basedpython.pycharm.env.Executables
+import dev.basedpython.pycharm.env.bundled.BundledBinaries
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -24,11 +25,14 @@ object ByBpdExecutable {
     /** The two `bpd`s the IDE can find itself: beside `by`, and on `PATH`. Either may be absent. */
     data class Found(val besideBy: Path?, val onPath: Path?)
 
+    /** The binary's name, without the platform's executable suffix. */
+    const val BPD: String = "bpd"
+
     /** What the binary is called, per platform. */
     private fun name(): String = if (System.getProperty("os.name").lowercase().startsWith("windows")) {
-        "bpd.exe"
+        "$BPD.exe"
     } else {
-        "bpd"
+        BPD
     }
 
     /** The `bpd` beside the `by` [launch] starts, and the one on `PATH`. */
@@ -45,9 +49,17 @@ object ByBpdExecutable {
      * whatever else was installed wherever uv was, which says nothing about this project. Its `bpd`
      * is the one in the environment the program runs on, which the wrapper finds beside the
      * interpreter.
+     *
+     * A bundled `by` has the `bpd` bundled with it, in the same `bin/`, and that one comes through
+     * [BundledBinaries.find]: the plugin installer drops unix modes, so it is not executable on
+     * first use, and `find` is what puts the bit back for `by` and `buff`.
      */
     private fun besideBy(launch: ByLaunch?): Path? {
         if (launch == null || launch.kind == ByEnvironmentKind.UV) return null
+        if (launch.kind == ByEnvironmentKind.BUNDLED) {
+            // `<plugin>/bin/by`, so the plugin root is two up.
+            return BundledBinaries.find(BPD, pluginRoot = launch.exe.parent?.parent)
+        }
         val sibling = launch.exe.parent?.resolve(name()) ?: return null
         return if (Files.isRegularFile(sibling)) sibling else null
     }

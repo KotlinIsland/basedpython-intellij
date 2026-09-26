@@ -4,6 +4,7 @@ import dev.basedpython.pycharm.env.ByEnvironmentKind
 import dev.basedpython.pycharm.env.ByLaunch
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.condition.DisabledOnOs
 import org.junit.jupiter.api.condition.OS
@@ -50,6 +51,28 @@ class ByBpdExecutableTest {
         executable(dir.resolve("tools/bpd"))
 
         assertNull(ByBpdExecutable.find(launch(uv, ByEnvironmentKind.UV)).besideBy)
+    }
+
+    /**
+     * The plugin installer drops unix modes, so the `bpd` bundled beside the bundled `by` arrives
+     * without its execute bit, and is only usable once it is put back.
+     */
+    @Test
+    fun `the bpd bundled beside a bundled by is found and made executable`(@TempDir dir: Path) {
+        val by = executable(dir.resolve("plugin/bin/by"))
+        val bpd = dir.resolve("plugin/bin/bpd")
+        Files.writeString(bpd, "#!/bin/sh\n")
+        bpd.toFile().setExecutable(false)
+
+        assertEquals(bpd, ByBpdExecutable.find(launch(by, ByEnvironmentKind.BUNDLED)).besideBy)
+        assertTrue(Files.isExecutable(bpd), "the bundled bpd was found but left unable to run")
+    }
+
+    @Test
+    fun `a bundled by with no bpd bundled beside it has none there`(@TempDir dir: Path) {
+        val by = executable(dir.resolve("plugin/bin/by"))
+
+        assertNull(ByBpdExecutable.find(launch(by, ByEnvironmentKind.BUNDLED)).besideBy)
     }
 
     @Test

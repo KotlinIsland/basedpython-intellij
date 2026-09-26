@@ -1,5 +1,12 @@
 ## [Unreleased]
 
+### Added
+
+- `bpd`, basedpython's debugger, is bundled beside `by` and `buff`, with the agents it loads into a
+  debuggee, so debugging a `.by` program needs nothing installed. Windows arm64 goes without it:
+  basedpython-debugger publishes no build for it, and there the installed `bpd` is looked for as
+  before.
+
 ## [0.0.3]
 
 ### Fixed

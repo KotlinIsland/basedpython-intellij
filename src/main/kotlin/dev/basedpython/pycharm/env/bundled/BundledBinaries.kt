@@ -14,7 +14,8 @@ import java.nio.file.Path
 import java.nio.file.Paths
 
 /**
- * `by` / `buff` shipped inside the plugin itself, at `<plugin>/bin/`.
+ * `by` / `buff` / `bpd` shipped inside the plugin itself, at `<plugin>/bin/` — `bpd` with the
+ * agents it loads into a debuggee in `bin/agents/`, beside it, where it looks for them.
  *
  * The counterpart to [dev.basedpython.pycharm.env.download.DownloadBinariesAction]: same binaries,
  * same per-OS asset naming ([ByBinaryDownloadPlan.Platform]), but placed at *build* time by
@@ -101,7 +102,7 @@ object BundledBinaries {
      * An installed plugin is laid out as `<plugin>/lib/<jar>`, so the root is the jar's
      * grandparent. Anything else — a class loaded from a directory, as in a test, or an unexpected
      * layout — returns null, the same answer as no installation. A wrong directory would be worse
-     * than none: it is where bundled `by` and `buff` binaries are looked for.
+     * than none: it is where bundled `by`, `buff` and `bpd` binaries are looked for.
      */
     fun pluginRoot(classResource: URL?): Path? {
         if (classResource?.protocol != "jar") return null

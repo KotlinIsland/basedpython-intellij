@@ -1,24 +1,30 @@
-"""Fetch `by` and `buff` for one platform out of the basedpython wheel on PyPI.
+"""Fetch the toolchain a bundle carries, for one platform, out of the wheels on PyPI.
 
-    python fetch-bundled-binaries.py <basedpython version> <platform slug> <output dir>
+    python fetch-bundled-binaries.py <platform slug> <output dir> \\
+        --basedpython <version> --basedpython-debugger <version>
 
-The CI half of the plugin's own download (`ByBinaryDownloadPlan`): the same distribution, the same
-wheel-tag rules per platform slug, the same `.data/scripts/` entries, and the same refusal of a file
-that is yanked or carries no SHA-256. Keep `WHEEL_TAGS` in step with `ByBinaryDownloadPlan.Platform`
-so that a bundle holds exactly the binaries the IDE would download on that machine.
+`by` and `buff` come from the `basedpython` wheel; `bpd` and the agents it loads into a debuggee from
+the `basedpython-debugger` wheel. The output directory becomes the plugin's `bin/`: the executables
+at its top, and `bpd`'s `agents/<tag>/` beside `bpd`, which is where `bpd` looks for them.
 
-Fails, rather than picking something close, when the release has no wheel for the platform or more
-than one: a release that silently lost a target is what this exists to catch.
+The CI half of the plugin's own download (`ByBinaryDownloadPlan`): the same wheel-tag rules per
+platform slug, the same `.data/scripts/` entries, and the same refusal of a file that is yanked or
+carries no SHA-256. Keep `WHEEL_TAGS` in step with `ByBinaryDownloadPlan.Platform` so that a bundle
+holds exactly the binaries the IDE would download on that machine.
+
+Fails, rather than picking something close, when a release has no wheel for the platform or more
+than one: a release that silently lost a target is what this exists to catch. The one exception is
+declared in `NOT_PUBLISHED`, with the reason.
 """
 
+import argparse
 import hashlib
 import json
+import shutil
 import sys
 import urllib.request
 import zipfile
 from pathlib import Path
-
-DISTRIBUTION = "basedpython"
 
 # slug -> (whether a single platform tag runs there, executable suffix).
 # Mirrors ByBinaryDownloadPlan.Platform, glibc-only on Linux for the reason given there.
@@ -31,6 +37,21 @@ WHEEL_TAGS = {
     "windows-arm64": (lambda t: t == "win_arm64", ".exe"),
 }
 
+# distribution -> (executables under `.data/scripts/`, directories under `.data/data/` to copy)
+DISTRIBUTIONS = {
+    "basedpython": (["by", "buff"], []),
+    "basedpython-debugger": (["bpd"], ["agents"]),
+}
+
+# (distribution, slug) -> why that distribution publishes no wheel for that platform. A bundle for
+# the platform goes without it, and the IDE looks for it where it looks for an installed one.
+NOT_PUBLISHED = {
+    ("basedpython-debugger", "windows-arm64"): (
+        "basedpython-debugger has never built or tested windows-arm64, and publishes no wheel for "
+        "it on purpose (its docs/development/releasing.md)"
+    ),
+}
+
 
 def runs_wheel(filename: str, tag_runs) -> bool:
     if not filename.endswith(".whl"):
@@ -39,10 +60,14 @@ def runs_wheel(filename: str, tag_runs) -> bool:
     return any(tag_runs(tag) for tag in tags.split("."))
 
 
-def main(version: str, slug: str, out: Path) -> None:
+def fetch(distribution: str, version: str, slug: str, out: Path) -> None:
+    if (distribution, slug) in NOT_PUBLISHED:
+        print(f"{slug}: no {distribution}: {NOT_PUBLISHED[distribution, slug]}")
+        return
+
     tag_runs, exe = WHEEL_TAGS[slug]
-    url = f"https://pypi.org/pypi/{DISTRIBUTION}/{version}/json"
-    with urllib.request.urlopen(url) as response:
+    scripts, data_dirs = DISTRIBUTIONS[distribution]
+    with urllib.request.urlopen(f"https://pypi.org/pypi/{distribution}/{version}/json") as response:
         files = json.load(response)["urls"]
 
     wheels = [
@@ -53,7 +78,7 @@ def main(version: str, slug: str, out: Path) -> None:
     if len(wheels) != 1:
         available = "\n  ".join(sorted(f["filename"] for f in files))
         sys.exit(
-            f"{DISTRIBUTION} {version} has {len(wheels)} wheels for {slug}, expected exactly one. "
+            f"{distribution} {version} has {len(wheels)} wheels for {slug}, expected exactly one. "
             f"Files in the release:\n  {available}"
         )
     wheel = wheels[0]
@@ -68,18 +93,38 @@ def main(version: str, slug: str, out: Path) -> None:
         sys.exit(f"{wheel['filename']}: SHA-256 {digest}, PyPI says {wheel['digests']['sha256']}")
 
     with zipfile.ZipFile(archive) as zf:
-        for binary in ("by", "buff"):
-            name = binary + exe
-            entries = [e for e in zf.namelist() if e.endswith(f".data/scripts/{name}")]
+        names = zf.namelist()
+        for script in scripts:
+            name = script + exe
+            entries = [e for e in names if e.endswith(f".data/scripts/{name}")]
             if len(entries) != 1:
                 sys.exit(f"{wheel['filename']}: expected one .data/scripts/{name}, found {entries}")
             target = out / name
             target.write_bytes(zf.read(entries[0]))
             target.chmod(0o755)
+        for directory in data_dirs:
+            marker = f".data/data/{directory}/"
+            entries = [e for e in names if marker in e and not e.endswith("/")]
+            if not entries:
+                sys.exit(f"{wheel['filename']}: nothing under .data/data/{directory}/")
+            for entry in entries:
+                target = out / directory / entry.split(marker, 1)[1]
+                target.parent.mkdir(parents=True, exist_ok=True)
+                with zf.open(entry) as source, open(target, "wb") as sink:
+                    shutil.copyfileobj(source, sink)
     archive.unlink()
 
 
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("slug", choices=sorted(WHEEL_TAGS))
+    parser.add_argument("out", type=Path)
+    for distribution in DISTRIBUTIONS:
+        parser.add_argument(f"--{distribution}", required=True, metavar="VERSION")
+    args = parser.parse_args()
+    for distribution in DISTRIBUTIONS:
+        fetch(distribution, getattr(args, distribution.replace("-", "_")), args.slug, args.out)
+
+
 if __name__ == "__main__":
-    if len(sys.argv) != 4 or sys.argv[2] not in WHEEL_TAGS:
-        sys.exit(f"usage: {sys.argv[0]} <version> <{'|'.join(WHEEL_TAGS)}> <output dir>")
-    main(sys.argv[1], sys.argv[2], Path(sys.argv[3]))
+    main()
