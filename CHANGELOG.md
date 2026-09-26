@@ -1,5 +1,7 @@
 ## [Unreleased]
 
+## [0.0.4]
+
 ### Added
 
 - `bpd`, basedpython's debugger, is bundled beside `by` and `buff`, with the agents it loads into a
