@@ -5,6 +5,10 @@
 - The `by` and `buff` a per-platform build carries are used: an installed plugin never found its
   own directory, so it never looked in `bin/`, and a project with neither on `PATH` nor in its
   environment said the binary was not found although the plugin held both.
+- *Configure…* on the missing-binary banner opens Settings on the basedpython page rather than on
+  Editor | Color Scheme | basedpython, and so do the outdated-`by` notification, the
+  binary-not-configured inspection's fix, the log's notification and the welcome notification,
+  which all asked for the page by a name or an id where the platform looks for a display name.
 
 ## [0.0.2]
 

@@ -4,7 +4,6 @@ import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.DefaultActionGroup
-import com.intellij.openapi.options.ShowSettingsUtil
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.popup.JBPopupFactory
 import com.intellij.openapi.wm.StatusBar
@@ -15,7 +14,7 @@ import com.intellij.util.Consumer
 import dev.basedpython.pycharm.lsp.BuffLspServerSupportProvider
 import dev.basedpython.pycharm.lsp.ByLspLifecycleListener
 import dev.basedpython.pycharm.lsp.ByLspServerSupportProvider
-import dev.basedpython.pycharm.settings.ui.BasedPythonConfigurable
+import dev.basedpython.pycharm.settings.ui.BasedPythonSettingsPage
 import java.awt.event.MouseEvent
 
 // No compiler bridges to the deprecated getPresentation(PlatformType), getPopupStep, getMaxValue.
@@ -96,7 +95,7 @@ internal class BasedPythonStatusBarWidget(private val project: Project) :
             })
             add(object : AnAction("Open Settings…") {
                 override fun actionPerformed(e: AnActionEvent) {
-                    ShowSettingsUtil.getInstance().showSettingsDialog(project, BasedPythonConfigurable::class.java)
+                    BasedPythonSettingsPage.show(project)
                 }
             })
             add(object : AnAction("Show Logs") {

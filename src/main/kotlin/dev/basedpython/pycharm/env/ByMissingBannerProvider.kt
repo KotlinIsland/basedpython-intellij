@@ -1,7 +1,6 @@
 package dev.basedpython.pycharm.env
 
 import com.intellij.openapi.fileEditor.FileEditor
-import com.intellij.openapi.options.ShowSettingsUtil
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.wm.ToolWindowManager
@@ -15,6 +14,7 @@ import dev.basedpython.pycharm.env.manager.EnvService
 import dev.basedpython.pycharm.env.manager.EnvToolWindow
 import dev.basedpython.pycharm.lang.BasedPythonFileType
 import dev.basedpython.pycharm.lsp.BasedPythonBinaries
+import dev.basedpython.pycharm.settings.ui.BasedPythonSettingsPage
 import dev.basedpython.pycharm.util.BasedPythonBundle
 import java.util.function.Function
 import javax.swing.JComponent
@@ -75,7 +75,7 @@ class ByMissingBannerProvider : EditorNotificationProvider {
                 ?.activate(null)
         }
         panel.createActionLabel(BasedPythonBundle.message("banner.byMissing.configure")) {
-            ShowSettingsUtil.getInstance().showSettingsDialog(project, "basedpython")
+            BasedPythonSettingsPage.show(project)
         }
         panel.createActionLabel(BasedPythonBundle.message("banner.byMissing.dismiss")) {
             dismissed.add(file)

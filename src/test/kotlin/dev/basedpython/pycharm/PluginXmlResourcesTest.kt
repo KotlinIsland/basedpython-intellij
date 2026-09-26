@@ -2,6 +2,7 @@ package dev.basedpython.pycharm
 
 import dev.basedpython.pycharm.debug.recompose.ByRecompositionToolWindow
 import dev.basedpython.pycharm.env.manager.EnvToolWindow
+import dev.basedpython.pycharm.settings.ui.BasedPythonSettingsPage
 import dev.basedpython.pycharm.tasks.ByTaskToolWindow
 import dev.basedpython.pycharm.ui.log.BasedPythonLogNotifications
 import java.nio.file.FileSystemAlreadyExistsException
@@ -69,6 +70,14 @@ class PluginXmlResourcesTest {
      * extension is covered the day it is added rather than the day somebody remembers to add it
      * here.
      */
+    @Test
+    fun `the settings page is registered under the id every link to it opens it by`() {
+        assertTrue(
+            BasedPythonSettingsPage.ID in attr("projectConfigurable", "id"),
+            "no projectConfigurable with id ${BasedPythonSettingsPage.ID}: every link to the basedpython settings page would open Settings on nothing",
+        )
+    }
+
     @Test
     fun `every class named in plugin xml resolves`() {
         val named = listOf("implementation", "implementationClass", "class", "instance", "factoryClass", "serviceImplementation", "interface", "topic")

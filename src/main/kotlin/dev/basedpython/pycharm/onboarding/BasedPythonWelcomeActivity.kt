@@ -6,7 +6,6 @@ import com.intellij.notification.NotificationAction
 import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
 import com.intellij.openapi.application.smartReadAction
-import com.intellij.openapi.options.ShowSettingsUtil
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.startup.ProjectActivity
 import com.intellij.psi.search.FileTypeIndex
@@ -14,6 +13,7 @@ import com.intellij.psi.search.GlobalSearchScope
 import dev.basedpython.pycharm.docs.BasedPythonDocEntries
 import dev.basedpython.pycharm.lang.BasedPythonFileType
 import dev.basedpython.pycharm.lang.dialect.BasedPythonProjectDetector
+import dev.basedpython.pycharm.settings.ui.BasedPythonSettingsPage
 import dev.basedpython.pycharm.util.BasedPythonBundle
 
 /**
@@ -73,7 +73,7 @@ internal class BasedPythonWelcomeActivity : ProjectActivity {
         notification
             .addAction(
                 NotificationAction.createSimple({ BasedPythonBundle.message("notification.action.openSettings") }) {
-                    ShowSettingsUtil.getInstance().showSettingsDialog(project, SETTINGS_ID)
+                    BasedPythonSettingsPage.show(project)
                 },
             )
             .addAction(
@@ -93,8 +93,5 @@ internal class BasedPythonWelcomeActivity : ProjectActivity {
     private companion object {
         const val NOTIFICATION_GROUP_ID: String = "basedpython.Actions"
         const val WELCOME_SHOWN_KEY: String = "dev.basedpython.pycharm.welcomeShown"
-
-        /** Matches the `<projectConfigurable id>` registered in plugin.xml. */
-        const val SETTINGS_ID: String = "dev.basedpython.pycharm.settings"
     }
 }

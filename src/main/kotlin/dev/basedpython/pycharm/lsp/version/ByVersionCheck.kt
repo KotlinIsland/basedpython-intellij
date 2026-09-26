@@ -5,7 +5,6 @@ import com.intellij.notification.NotificationAction
 import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
 import com.intellij.openapi.application.ApplicationManager
-import com.intellij.openapi.options.ShowSettingsUtil
 import com.intellij.openapi.project.Project
 import com.intellij.platform.lsp.api.LspClientManager
 import com.intellij.platform.lsp.api.LspIntegrationProvider
@@ -13,6 +12,7 @@ import com.intellij.platform.lsp.api.LspServerState
 import dev.basedpython.pycharm.actions.ByCli
 import dev.basedpython.pycharm.lsp.ByLspLifecycleListener
 import dev.basedpython.pycharm.lsp.ByLspServerSupportProvider
+import dev.basedpython.pycharm.settings.ui.BasedPythonSettingsPage
 import dev.basedpython.pycharm.util.BasedPythonBundle
 
 /**
@@ -62,7 +62,7 @@ internal class ByVersionCheck(private val project: Project) : ByLspLifecycleList
                 NotificationType.WARNING,
             )
             .addAction(NotificationAction.createSimple(BasedPythonBundle.message("notification.action.openSettings")) {
-                ShowSettingsUtil.getInstance().showSettingsDialog(project, "basedpython")
+                BasedPythonSettingsPage.show(project)
             })
             .notify(project)
     }

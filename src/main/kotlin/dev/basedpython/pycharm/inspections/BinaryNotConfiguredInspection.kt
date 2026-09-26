@@ -5,11 +5,11 @@ import com.intellij.codeInspection.LocalInspectionTool
 import com.intellij.codeInspection.LocalQuickFix
 import com.intellij.codeInspection.ProblemDescriptor
 import com.intellij.codeInspection.ProblemHighlightType
-import com.intellij.openapi.options.ShowSettingsUtil
 import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiFile
 import dev.basedpython.pycharm.lang.BasedPythonFile
 import dev.basedpython.pycharm.lsp.BasedPythonBinaries
+import dev.basedpython.pycharm.settings.ui.BasedPythonSettingsPage
 
 /**
  * File-level weak warning when the `by` binary cannot be found on this machine.
@@ -45,7 +45,7 @@ class BinaryNotConfiguredInspection : LocalInspectionTool() {
         override fun getFamilyName(): String = "Open basedpython settings"
 
         override fun applyFix(project: Project, descriptor: ProblemDescriptor) {
-            ShowSettingsUtil.getInstance().showSettingsDialog(project, "basedpython")
+            BasedPythonSettingsPage.show(project)
         }
     }
 }

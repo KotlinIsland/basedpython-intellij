@@ -10,9 +10,9 @@ import com.intellij.openapi.actionSystem.ActionUiKind
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.ex.ActionUtil
 import com.intellij.openapi.actionSystem.impl.SimpleDataContext
-import com.intellij.openapi.options.ShowSettingsUtil
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.wm.ToolWindowManager
+import dev.basedpython.pycharm.settings.ui.BasedPythonSettingsPage
 import dev.basedpython.pycharm.util.BasedPythonBundle
 
 /**
@@ -23,9 +23,6 @@ internal object BasedPythonLogNotifications {
 
     /** Notification group id (see [dev.basedpython.pycharm.actions.ByCli]). */
     private const val GROUP_ID = "basedpython.Actions"
-
-    /** Settings configurable id (see plugin.xml / BasedPythonWelcomeActivity). */
-    private const val SETTINGS_ID = "dev.basedpython.pycharm.settings"
 
     /** Action id of the existing Restart LSP action (plugin.xml). */
     private const val RESTART_LSP_ACTION_ID = "basedpython.RestartLsp"
@@ -53,7 +50,7 @@ internal object BasedPythonLogNotifications {
 
     fun openSettings(project: Project): NotificationAction =
         NotificationAction.createSimple(BasedPythonBundle.message("notification.action.openSettings")) {
-            ShowSettingsUtil.getInstance().showSettingsDialog(project, SETTINGS_ID)
+            BasedPythonSettingsPage.show(project)
         }
 
     fun restartLsp(project: Project): NotificationAction =
