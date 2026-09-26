@@ -1,9 +1,9 @@
 # Builds one plugin distribution per platform with the `by` / `buff` binaries inside it
 # (FEATURES.md §58, `BundledBinaries`).
 #
-# Everything here is packaging, not compiling: the binaries are downloaded as prebuilt release
-# assets from the basedpython repository, so a single Linux runner can produce the mac and Windows
-# zips too. The matrix exists for parallelism and for one artifact per platform, not because the
+# Everything here is packaging, not compiling: the binaries come out of the prebuilt basedpython
+# wheels on PyPI, the one place basedpython publishes them, so a single Linux runner can produce the
+# mac and Windows zips too. The matrix exists for parallelism and for one artifact per platform, not because the
 # jobs need different operating systems.
 #
 # Why one zip per platform: `by` is ~200 MB, so a single distribution carrying all six targets
@@ -17,11 +17,14 @@
 # IntelliJ Platform Gradle Plugin has no support for it, which is why the gating is patched in by
 # hand and why the artifacts are checked for it before anything is uploaded.
 #
-# Releasing: create a GitHub release whose tag is `v<version>` — publishing it runs this workflow,
-# which builds the six bundles, attaches them to the release, publishes them to Marketplace, and
-# rolls the changelog's Unreleased section over to that version. The tag is the version: `v1.2.3`
-# builds plugin 1.2.3 and bundles the basedpython toolchain release of the same name. A manual
-# dispatch builds artifacts only, unless `publish` is ticked.
+# Releasing: set `basedpythonVersion` in gradle.properties to the basedpython release to bundle, then
+# create a GitHub release whose tag is `v<version>` — publishing it runs this workflow, which builds
+# the six bundles, attaches them to the release, publishes them to Marketplace, and rolls the
+# changelog's Unreleased section over to that version. The tag is the plugin version: `v1.2.3`
+# builds plugin 1.2.3. The toolchain is versioned on its own (basedpython 0.0.1b1 went into plugin
+# 0.0.2), so it is read from the tag's gradle.properties, where it is reviewed with the release,
+# rather than derived from the tag. A manual dispatch builds artifacts only, unless `publish` is
+# ticked.
 #
 # Marketplace secrets, all read from the environment by the IntelliJ Platform Gradle Plugin:
 #   PUBLISH_TOKEN         — Marketplace personal access token (required to publish)
@@ -37,18 +40,14 @@ on:
   workflow_dispatch:
     inputs:
       basedpython-version:
-        description: 'basedpython release to bundle (bare x.y.z, no leading v)'
-        required: true
+        description: 'basedpython release to bundle, as PyPI names it (defaults to basedpythonVersion in gradle.properties)'
+        required: false
+        default: ''
         type: string
       plugin-version:
         description: 'Plugin version to stamp (bare x.y.z; defaults to the one in gradle.properties)'
         required: false
         default: ''
-        type: string
-      basedpython-repo:
-        description: 'GitHub repo holding the by/buff release assets'
-        required: false
-        default: 'basedpython/basedpython'
         type: string
       publish:
         description: 'Upload every built artifact to JetBrains Marketplace'
@@ -80,7 +79,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           # A release event's default checkout is the tag's commit already, but naming it means a
-          # release cut from an older commit builds that commit rather than whatever master is now.
+          # release cut from an older commit builds that commit rather than whatever main is now.
           ref: ${{ github.event.release.tag_name || github.ref }}
 
       # JDK 25: the build sets no toolchain, so it compiles against whatever JVM Gradle runs on,
@@ -92,10 +91,11 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v6
 
-      # The tag is the source of truth for a release, gradle.properties only for a dispatch that
-      # names no version. Marketplace keys updates by version string and rejects one it has already
-      # seen, so a release that stamped the development version would be unpublishable a second
-      # time — hence resolving it here rather than relying on the checked-in default.
+      # The tag is the source of truth for the plugin version of a release, gradle.properties only
+      # for a dispatch that names no version. Marketplace keys updates by version string and rejects
+      # one it has already seen, so a release that stamped the development version would be
+      # unpublishable a second time — hence resolving it here rather than relying on the checked-in
+      # default. The toolchain version is always gradle.properties' unless a dispatch overrides it.
       - name: Resolve the versions
         id: version
         env:
@@ -106,10 +106,10 @@ jobs:
           set -euo pipefail
           tag="${TAG#v}"
 
-          # A tag bundles the toolchain release of the same name: v1.2.3 -> 1.2.3.
-          basedpython="${INPUT_BASEDPYTHON:-$tag}"
+          checked_in=$(sed -n 's/^basedpythonVersion *= *//p' gradle.properties)
+          basedpython="${INPUT_BASEDPYTHON:-$checked_in}"
           if [ -z "$basedpython" ]; then
-            echo "No basedpython version: not a release, and none given" >&2
+            echo "No basedpython version: none in gradle.properties, and none given" >&2
             exit 1
           fi
           echo "basedpython=$basedpython" >> "$GITHUB_OUTPUT"
@@ -125,23 +125,11 @@ jobs:
 
       - name: Download by/buff for ${{ matrix.platform }}
         env:
-          REPO: ${{ inputs.basedpython-repo || 'basedpython/basedpython' }}
           VERSION: ${{ steps.version.outputs.basedpython }}
           PLATFORM: ${{ matrix.platform }}
         run: |
           set -euo pipefail
-          # Mirrors ByBinaryDownloadPlan.downloadUrl: <base>/v<version>/<binary>-<slug>[.exe]
-          case "$PLATFORM" in
-            windows-*) exe=".exe" ;;
-            *)         exe="" ;;
-          esac
-          mkdir -p build/bundled-binaries
-          for binary in by buff; do
-            curl --fail --location --retry 3 --retry-delay 5 \
-              --output "build/bundled-binaries/${binary}${exe}" \
-              "https://github.com/${REPO}/releases/download/v${VERSION}/${binary}-${PLATFORM}${exe}"
-          done
-          chmod +x build/bundled-binaries/*
+          python3 .github/scripts/fetch-bundled-binaries.py "$VERSION" "$PLATFORM" build/bundled-binaries
           ls -l build/bundled-binaries
 
       - name: Build the bundled distribution
@@ -239,7 +227,7 @@ jobs:
       # The tag's commit is not a branch, and the patched changelog has to land on one.
       - uses: actions/checkout@v4
         with:
-          ref: master
+          ref: ${{ github.event.repository.default_branch }}
 
       - uses: actions/setup-java@v4
         with:

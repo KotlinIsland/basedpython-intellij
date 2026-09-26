@@ -340,11 +340,14 @@ intellijPlatform {
 
     val changelog = project.changelog // local variable for configuration cache compatibility
     val repositoryUrl = providers.gradleProperty("pluginRepositoryUrl")
-    // Get the latest available change notes from the changelog file
-    changeNotes = version.map { pluginVersion ->
+    // The release's section, looked up by the project version: the descriptor's `version` above
+    // carries the bundled platform's suffix (`0.0.2-mac-arm64`), which names no section, and
+    // looking that up fell back to an empty Unreleased and shipped every bundle without notes.
+    val releaseVersion = project.version.toString()
+    changeNotes = providers.provider {
       with(changelog) {
         renderItem(
-          (getOrNull(pluginVersion) ?: getUnreleased())
+          (getOrNull(releaseVersion) ?: getUnreleased())
             .withHeader(false)
             .withEmptySections(false),
           Changelog.OutputType.HTML,
