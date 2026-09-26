@@ -1,5 +1,7 @@
 ## [Unreleased]
 
+## [0.0.3]
+
 ### Fixed
 
 - The `by` and `buff` a per-platform build carries are used: an installed plugin never found its
