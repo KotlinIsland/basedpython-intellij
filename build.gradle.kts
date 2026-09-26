@@ -24,8 +24,7 @@ plugins {
 // snapshot as well as this build (see `ides { }`), and `-PplatformVersion=263.+` — or any build —
 // compiles and tests against the top, which catches what the verifier cannot.
 //
-// 263.5153.20 because it is the build the floor was measured on (see `sinceBuild`); the public EAP,
-// 263.5153.40, is what `recommended()` verifies.
+// 263.5153.20 because it is the build the floor was measured on (see `sinceBuild`).
 val platformVersion: String = providers.gradleProperty("platformVersion").getOrElse("263.5153.20-EAP-CANDIDATE")
 
 dependencies {
@@ -264,23 +263,28 @@ intellijPlatform {
       VerifyPluginTask.FailureLevel.INVALID_PLUGIN,
       VerifyPluginTask.FailureLevel.INTERNAL_API_USAGES,
     )
-    // The release feed and the snapshot repository both. `recommended()` asks Marketplace's release
-    // feed what to verify against, and that feed has lagged the range this plugin claims: on
-    // 2026-09-03 it listed no 263 build at all, so a plugin claiming 262 through 263.* was verified
-    // against IU-262.10315.69 and nothing else, and 2026.3's lsp4j swap — `Diagnostic.getMessage()`
-    // returning `Either<String, MarkupContent>` — reached a running IDE as a NoSuchMethodError on
-    // every diagnostic rather than a red build here. On 2026-09-23 it offered IU-263.5153.40, the
-    // public 2026.3 EAP: inside the range, but neither end of it.
+    // The snapshot repository, not Marketplace's release feed. `recommended()` asks that feed what to
+    // verify against, and it has lagged the range this plugin claims: on 2026-09-03 it listed no 263
+    // build at all, so a plugin claiming 262 through 263.* was verified against IU-262.10315.69 and
+    // nothing else, and 2026.3's lsp4j swap — `Diagnostic.getMessage()` returning
+    // `Either<String, MarkupContent>` — reached a running IDE as a NoSuchMethodError on every
+    // diagnostic rather than a red build here. On 2026-09-23 it offered IU-263.5153.40, the public
+    // 2026.3 EAP: inside the range, but neither end of it. It cannot offer anything the two ends below
+    // miss either — `untilBuild` holds it to 263, and the snapshot top is at least as new as any 263
+    // release — and once 2026.3 shipped it named the top's own build: on 2026-09-26 `recommended()`
+    // gave IU-263.5701.42 and `263.+` gave 263.5701.42-EAP, the verifier wrote both reports to
+    // `pluginVerifier/IU-263.5701.42/`, and the second failed the task with a
+    // FileAlreadyExistsException after all three verdicts had come back Compatible.
     //
-    // So the snapshot repository supplies a 263 build whatever the feed says, as it did before the
-    // floor moved — `defaultRepositories()` already declares it. `useInstaller = false` because
+    // So the snapshot repository supplies the 263 builds, as it did before the floor moved —
+    // `defaultRepositories()` already declares it. `useInstaller = false` because
     // those are Maven artifacts rather than installers, and the verifier wants an unpacked
     // distribution, which is what the artifact is.
     //
     // Then two 263 builds, the two ends of the range as far as a repository can supply them. The
     // floor is the pinned build everything compiles against (`platformVersion`), verified so the
     // artifact is checked against the oldest IDE `sinceBuild` lets install it — nothing else checks
-    // that, `recommended()` included. The top is dynamic on purpose, and is the one place in the
+    // that. The top is dynamic on purpose, and is the one place in the
     // build that is: pinning it would freeze the check at whatever platform existed the day it was
     // pinned. It means a JetBrains change can turn this red without a change here — that is the
     // signal, not noise: 263.4732 to 263.5153 rewrote the DAP client and turned it red in 70 places.
@@ -291,7 +295,6 @@ intellijPlatform {
     // dependency that makes it right. That one is caught by `-PplatformVersion=263.+`, compiling
     // against the top, and by running there.
     ides {
-      recommended()
       create(IntelliJPlatformType.IntellijIdea, platformVersion) { useInstaller = false }
       create(IntelliJPlatformType.IntellijIdea, "263.+") { useInstaller = false }
 
