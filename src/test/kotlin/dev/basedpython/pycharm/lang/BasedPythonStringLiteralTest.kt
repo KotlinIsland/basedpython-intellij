@@ -4,9 +4,9 @@ import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.util.TextRange
 import com.intellij.psi.ElementManipulators
 import com.intellij.psi.util.PsiTreeUtil
-import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import dev.basedpython.pycharm.testFramework.onEdt
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
@@ -21,7 +21,6 @@ import org.junit.jupiter.api.Test
  * feature in the plugin reads the `BY_STRING` leaf, and wrapping it must not move it.
  */
 @TestFixtures
-@RunInEdt(writeIntent = true)
 class BasedPythonStringLiteralTest {
 
     private val fixture by codeInsightFixture()
@@ -36,13 +35,13 @@ class BasedPythonStringLiteralTest {
     // region: the tree
 
     @Test
-    fun `every string in a file is one element`() {
+    fun `every string in a file is one element`() = onEdt {
         val literals = literalsIn("a = \"one\"\nb = 'two'\nc = \"\"\"three\"\"\"\n")
         assertEquals(listOf("\"one\"", "'two'", "\"\"\"three\"\"\""), literals.map { it.text })
     }
 
     @Test
-    fun `the token underneath is still the token everything else reads`() {
+    fun `the token underneath is still the token everything else reads`() = onEdt {
         val literal = literal("a = \"hi\"\n")
         val leaf = literal.node.firstChildNode
         assertEquals(BasedPythonTokenTypes.STRING, leaf.elementType)
@@ -51,7 +50,7 @@ class BasedPythonStringLiteralTest {
     }
 
     @Test
-    fun `nothing but strings gains a node`() {
+    fun `nothing but strings gains a node`() = onEdt {
         val file = fixture.configureByText("b.by", "a = 1  # note\n")
         assertEquals(0, PsiTreeUtil.findChildrenOfType(file, BasedPythonStringLiteral::class.java).size)
     }
@@ -61,29 +60,29 @@ class BasedPythonStringLiteralTest {
     // region: what can be injected into
 
     @Test
-    fun `an ordinary literal is a host`() {
+    fun `an ordinary literal is a host`() = onEdt {
         assertTrue(literal("a = \"hi\"\n").isValidHost)
         assertTrue(literal("a = r\"hi\"\n").isValidHost)
         assertTrue(literal("a = \"\"\"hi\"\"\"\n").isValidHost)
     }
 
     @Test
-    fun `an f-string is not, because its braces are code`() {
+    fun `an f-string is not, because its braces are code`() = onEdt {
         assertFalse(literal("a = f\"{x}\"\n").isValidHost)
     }
 
     @Test
-    fun `bytes are not, because they are not text`() {
+    fun `bytes are not, because they are not text`() = onEdt {
         assertFalse(literal("a = b\"hi\"\n").isValidHost)
     }
 
     @Test
-    fun `a literal still being typed is not`() {
+    fun `a literal still being typed is not`() = onEdt {
         assertFalse(literal("a = \"hi\n").isValidHost)
     }
 
     @Test
-    fun `the content range stops inside the quotes`() {
+    fun `the content range stops inside the quotes`() = onEdt {
         assertEquals(TextRange(1, 3), literal("a = \"hi\"\n").contentRange)
         assertEquals(TextRange(2, 4), literal("a = r\"hi\"\n").contentRange)
         assertEquals(TextRange(3, 5), literal("a = \"\"\"hi\"\"\"\n").contentRange)
@@ -94,7 +93,7 @@ class BasedPythonStringLiteralTest {
     // region: reading and writing the content
 
     @Test
-    fun `the escaper decodes the content the platform will inject`() {
+    fun `the escaper decodes the content the platform will inject`() = onEdt {
         val literal = literal("a = \"<a href=\\\"/\\\">\"\n")
         val escaper = literal.createLiteralTextEscaper()
         val decoded = StringBuilder()
@@ -103,7 +102,7 @@ class BasedPythonStringLiteralTest {
     }
 
     @Test
-    fun `an offset in the decoded text maps back into the literal`() {
+    fun `an offset in the decoded text maps back into the literal`() = onEdt {
         val literal = literal("a = \"<a href=\\\"/\\\">\"\n")
         val escaper = literal.createLiteralTextEscaper()
         val decoded = StringBuilder()
@@ -116,13 +115,13 @@ class BasedPythonStringLiteralTest {
     }
 
     @Test
-    fun `only a triple-quoted literal can hold more than one line`() {
+    fun `only a triple-quoted literal can hold more than one line`() = onEdt {
         assertTrue(literal("a = \"hi\"\n").createLiteralTextEscaper().isOneLine)
         assertFalse(literal("a = \"\"\"hi\"\"\"\n").createLiteralTextEscaper().isOneLine)
     }
 
     @Test
-    fun `changing the content writes it back as source`() {
+    fun `changing the content writes it back as source`() = onEdt {
         val literal = literal("a = \"hi\"\n")
         WriteCommandAction.runWriteCommandAction(fixture.project) {
             ElementManipulators.handleContentChange(literal, "say \"hi\"")
@@ -131,7 +130,7 @@ class BasedPythonStringLiteralTest {
     }
 
     @Test
-    fun `a raw literal given content no raw literal can spell loses its prefix`() {
+    fun `a raw literal given content no raw literal can spell loses its prefix`() = onEdt {
         val literal = literal("a = r\"\\d\"\n")
         WriteCommandAction.runWriteCommandAction(fixture.project) {
             ElementManipulators.handleContentChange(literal, "say \"hi\"")
@@ -140,7 +139,7 @@ class BasedPythonStringLiteralTest {
     }
 
     @Test
-    fun `a raw literal that can still spell its content keeps its prefix`() {
+    fun `a raw literal that can still spell its content keeps its prefix`() = onEdt {
         val literal = literal("a = r\"\\d\"\n")
         WriteCommandAction.runWriteCommandAction(fixture.project) {
             ElementManipulators.handleContentChange(literal, "\\w+")
@@ -149,7 +148,7 @@ class BasedPythonStringLiteralTest {
     }
 
     @Test
-    fun `a triple-quoted literal keeps its line breaks and all but the quotes that would close it`() {
+    fun `a triple-quoted literal keeps its line breaks and all but the quotes that would close it`() = onEdt {
         val literal = literal("a = \"\"\"hi\"\"\"\n")
         WriteCommandAction.runWriteCommandAction(fixture.project) {
             ElementManipulators.handleContentChange(literal, "<p class=\"x\">\n</p>")

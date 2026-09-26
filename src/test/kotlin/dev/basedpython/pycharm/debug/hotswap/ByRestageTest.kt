@@ -1,9 +1,9 @@
 package dev.basedpython.pycharm.debug.hotswap
 
-import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.testFramework.RecordingByClient
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import dev.basedpython.pycharm.testFramework.onEdt
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 
@@ -24,13 +24,12 @@ import org.junit.jupiter.api.Test
  * instead; see [ByRestage.ask].
  */
 @TestFixtures
-@RunInEdt(writeIntent = true)
 class ByRestageTest {
 
     private val fixture by codeInsightFixture()
 
     @Test
-    fun `by is told an edited file changed on disk before it is asked about it`() {
+    fun `by is told an edited file changed on disk before it is asked about it`() = onEdt {
         val client = RecordingByClient(fixture.project)
         val ticker = fixture.configureByText("ticker.by", "def tick(n: int) -> None:\n    print(n)\n").virtualFile
 
@@ -40,7 +39,7 @@ class ByRestageTest {
     }
 
     @Test
-    fun `every file of the set is told about, and the set is asked about once`() {
+    fun `every file of the set is told about, and the set is asked about once`() = onEdt {
         val client = RecordingByClient(fixture.project)
         val ticker = fixture.addFileToProject("ticker.by", "def tick(n: int) -> None:\n    print(n)\n").virtualFile
         val tock = fixture.addFileToProject("tock.by", "def tock(n: int) -> None:\n    print(n)\n").virtualFile

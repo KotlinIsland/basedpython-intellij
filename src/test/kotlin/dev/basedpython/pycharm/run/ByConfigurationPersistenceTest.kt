@@ -2,13 +2,13 @@ package dev.basedpython.pycharm.run
 
 import com.intellij.execution.configurations.RunConfiguration
 import com.intellij.openapi.util.JDOMUtil
-import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.run.test.ByTestConfiguration
 import dev.basedpython.pycharm.run.test.ByTestConfigurationType
 import dev.basedpython.pycharm.tasks.ByTaskConfiguration
 import dev.basedpython.pycharm.tasks.ByTaskConfigurationType
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import dev.basedpython.pycharm.testFramework.onEdt
 import org.jdom.Element
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -25,7 +25,6 @@ import org.junit.jupiter.api.Test
  * reaches a run started from a clone.
  */
 @TestFixtures
-@RunInEdt(writeIntent = true)
 class ByConfigurationPersistenceTest {
 
     private val fixture by codeInsightFixture()
@@ -85,7 +84,7 @@ class ByConfigurationPersistenceTest {
     )
 
     @Test
-    fun `the environment survives being written and read back`() {
+    fun `the environment survives being written and read back`() = onEdt {
         for (c in configurations()) {
             val original = c.make().also { c.set(it, env, false) }
             val element = Element("configuration").also(original::writeExternal)
@@ -98,7 +97,7 @@ class ByConfigurationPersistenceTest {
     }
 
     @Test
-    fun `the environment survives a clone and the clone does not share it`() {
+    fun `the environment survives a clone and the clone does not share it`() = onEdt {
         for (c in configurations()) {
             val original = c.make().also { c.set(it, env, false) }
 
@@ -114,7 +113,7 @@ class ByConfigurationPersistenceTest {
     }
 
     @Test
-    fun `an untouched configuration writes no environment and inherits the parent's`() {
+    fun `an untouched configuration writes no environment and inherits the parent's`() = onEdt {
         for (c in configurations()) {
             val element = Element("configuration").also(c.make()::writeExternal)
             val xml = JDOMUtil.write(element)

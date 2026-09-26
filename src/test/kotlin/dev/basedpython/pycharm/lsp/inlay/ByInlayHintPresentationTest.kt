@@ -5,9 +5,9 @@ import com.intellij.codeInsight.hints.presentation.PresentationRenderer
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.colors.EditorFontType
 import com.intellij.openapi.util.SystemInfo
-import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import dev.basedpython.pycharm.testFramework.onEdt
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -33,7 +33,6 @@ import org.eclipse.lsp4j.Range
  * against a real editor, since the width is the editor's own font metrics.
  */
 @TestFixtures
-@RunInEdt(writeIntent = true)
 class ByInlayHintPresentationTest {
 
     private val fixture by codeInsightFixture()
@@ -66,7 +65,7 @@ class ByInlayHintPresentationTest {
 
     /** The push state is the application's, and so is shared with whatever ran before this. */
     @BeforeEach
-    fun releaseEverything() {
+    fun releaseEverything() = onEdt {
         hold(0)
     }
 
@@ -93,7 +92,7 @@ class ByInlayHintPresentationTest {
      * a hint and as source and the two lines stay together, whatever the text.
      */
     @Test
-    fun `no annotation drifts when a hint stands in for it`() {
+    fun `no annotation drifts when a hint stands in for it`() = onEdt {
         val annotations = listOf(": int", ": A[int]", ": dict[Key=str, Value=int]", "override ", "t=")
         for ((index, annotation) in annotations.withIndex()) {
             // A file each: the fixture hands back one editor per name, and inlays added to it would
@@ -131,7 +130,7 @@ class ByInlayHintPresentationTest {
      * things, not about what this class returns.
      */
     @Test
-    fun `a hinted line and the written-out line land in the same place`() {
+    fun `a hinted line and the written-out line land in the same place`() = onEdt {
         fixture.configureByText("a.by", "a = A(1)\na: A[int] = A(1)")
         val editor = fixture.editor
 
@@ -165,7 +164,7 @@ class ByInlayHintPresentationTest {
     }
 
     @Test
-    fun `an always hint measures its text whether or not the key is down`() {
+    fun `an always hint measures its text whether or not the key is down`() = onEdt {
         val presentation = hint(ByHintMode.ALWAYS)
         val width = presentation.width
         assertTrue(width > 1, "expected the text's own width, got $width")
@@ -175,7 +174,7 @@ class ByInlayHintPresentationTest {
     }
 
     @Test
-    fun `a push hint takes no room until the key goes down, and gives it back after`() {
+    fun `a push hint takes no room until the key goes down, and gives it back after`() = onEdt {
         val presentation = hint(ByHintMode.ON_PUSH)
         assertEquals(1, presentation.width, "a hidden hint is the narrowest inlay the editor allows")
 
@@ -187,7 +186,7 @@ class ByInlayHintPresentationTest {
     }
 
     @Test
-    fun `the key moving is reported as a resize, which is what re-measures the inlay`() {
+    fun `the key moving is reported as a resize, which is what re-measures the inlay`() = onEdt {
         val presentation = hint(ByHintMode.ON_PUSH)
         val listener = RecordingListener()
         presentation.addListener(listener)
@@ -205,14 +204,14 @@ class ByInlayHintPresentationTest {
     }
 
     @Test
-    fun `a hint held under a key that is not its own stays hidden`() {
+    fun `a hint held under a key that is not its own stays hidden`() = onEdt {
         val presentation = hint(ByHintMode.ON_PUSH)
         hold(InputEvent.SHIFT_DOWN_MASK)
         assertEquals(1, presentation.width)
     }
 
     @Test
-    fun `a hint built while the key is already down starts out visible`() {
+    fun `a hint built while the key is already down starts out visible`() = onEdt {
         // An editor opened mid-push, or a daemon pass that ran during one.
         hold(ctrlAlt)
         assertTrue(hint(ByHintMode.ON_PUSH).width > 1)
@@ -257,21 +256,21 @@ class ByInlayHintPresentationTest {
     }
 
     @Test
-    fun `a Ctrl+click on a named part goes where it names`() {
+    fun `a Ctrl+click on a named part goes where it names`() = onEdt {
         val hint = linkedHint()
         click(hint, hint.xOf(2, 6), navigateModifier)
         assertEquals(listOf(listLocation), navigated)
     }
 
     @Test
-    fun `a middle click on a named part goes there too`() {
+    fun `a middle click on a named part goes there too`() = onEdt {
         val hint = linkedHint()
         click(hint, hint.xOf(2, 6), button = MouseEvent.BUTTON2)
         assertEquals(listOf(listLocation), navigated)
     }
 
     @Test
-    fun `a plain click goes nowhere, as a click on code does not`() {
+    fun `a plain click goes nowhere, as a click on code does not`() = onEdt {
         val hint = linkedHint()
         click(hint, hint.xOf(2, 6))
         assertTrue(navigated.isEmpty())
@@ -279,14 +278,14 @@ class ByInlayHintPresentationTest {
     }
 
     @Test
-    fun `a Ctrl+click on punctuation goes nowhere`() {
+    fun `a Ctrl+click on punctuation goes nowhere`() = onEdt {
         val hint = linkedHint()
         click(hint, hint.xOf(6, 7), navigateModifier)
         assertTrue(navigated.isEmpty())
     }
 
     @Test
-    fun `a double click writes the hint in`() {
+    fun `a double click writes the hint in`() = onEdt {
         val hint = linkedHint()
         click(hint, hint.xOf(0, 1), count = 2)
         assertEquals(1, accepted)
@@ -294,7 +293,7 @@ class ByInlayHintPresentationTest {
     }
 
     @Test
-    fun `the press that makes it a double click is kept from the editor, which would select a word`() {
+    fun `the press that makes it a double click is kept from the editor, which would select a word`() = onEdt {
         fun press(hint: ByInlayHintPresentation, count: Int): MouseEvent {
             val event = MouseEvent(hint.editor.contentComponent, MouseEvent.MOUSE_PRESSED, 0L, InputEvent.BUTTON1_DOWN_MASK, 1, 5, count, false, MouseEvent.BUTTON1)
             hint.mousePressed(event, Point(1, 5))
@@ -307,14 +306,14 @@ class ByInlayHintPresentationTest {
     }
 
     @Test
-    fun `a hint by sent no edit for ignores a double click`() {
+    fun `a hint by sent no edit for ignores a double click`() = onEdt {
         val hint = linkedHint(accept = false)
         click(hint, hint.xOf(0, 1), count = 2)
         assertEquals(0, accepted)
     }
 
     @Test
-    fun `a push hint that is not drawn cannot be clicked`() {
+    fun `a push hint that is not drawn cannot be clicked`() = onEdt {
         val hint = ByInlayHintPresentation(
             editor = editor(),
             text = ": list[int]",

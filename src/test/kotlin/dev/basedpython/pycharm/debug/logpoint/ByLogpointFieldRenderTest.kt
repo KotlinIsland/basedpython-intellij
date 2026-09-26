@@ -1,7 +1,6 @@
 package dev.basedpython.pycharm.debug.logpoint
 
 import com.intellij.openapi.editor.ex.EditorEx
-import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import com.intellij.xdebugger.XDebuggerManager
 import com.intellij.xdebugger.XDebuggerUtil
@@ -10,6 +9,7 @@ import com.intellij.xdebugger.breakpoints.XLineBreakpointAdditionalInfo
 import com.intellij.xdebugger.breakpoints.XLineBreakpointVerticalPlacement
 import dev.basedpython.pycharm.debug.ByLineBreakpointType
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import dev.basedpython.pycharm.testFramework.onEdt
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -37,7 +37,6 @@ import javax.imageio.ImageIO
  * editor.
  */
 @TestFixtures
-@RunInEdt(writeIntent = true)
 class ByLogpointFieldRenderTest {
 
     private val fixture by codeInsightFixture()
@@ -45,7 +44,7 @@ class ByLogpointFieldRenderTest {
     private val type get() = XDebuggerUtil.getInstance().findBreakpointType(ByLineBreakpointType::class.java)!!
 
     @Test
-    fun `the box is the size of a box`() {
+    fun `the box is the size of a box`() = onEdt {
         fixture.configureByText("main.by", "a = 1\nprint(\"bye\")\n")
         val editor = fixture.editor as EditorEx
         val info = XLineBreakpointAdditionalInfo.Builder()

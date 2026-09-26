@@ -10,7 +10,6 @@ import com.intellij.psi.PsiDocumentManager
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
 import com.intellij.psi.util.PsiTreeUtil
-import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.lsp.ext.ByOverridingMember
 import dev.basedpython.pycharm.lsp.ext.BySuperMember
@@ -18,6 +17,7 @@ import dev.basedpython.pycharm.testFramework.AnsweringClient
 import dev.basedpython.pycharm.testFramework.AnsweringClient.Companion.answered
 import dev.basedpython.pycharm.testFramework.AnsweringClient.Companion.failed
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import dev.basedpython.pycharm.testFramework.onEdt
 import dev.basedpython.pycharm.util.BasedPythonBundle
 import kotlinx.coroutines.runBlocking
 import org.eclipse.lsp4j.Position
@@ -36,7 +36,6 @@ import java.util.concurrent.TimeUnit
  * on the right token with the right face, and never drawing an answer about other text.
  */
 @TestFixtures
-@RunInEdt(writeIntent = true)
 class ByOverridingMarkersTest {
 
     private val fixture by codeInsightFixture()
@@ -74,7 +73,7 @@ class ByOverridingMarkersTest {
     private val LineMarkerInfo<PsiElement>.tooltip: String? get() = lineMarkerTooltip
 
     @Test
-    fun `a member that overrides gets the overriding icon on its name, on the right`() {
+    fun `a member that overrides gets the overriding icon on its name, on the right`() = onEdt {
         val file = file()
         val marker = markers(file, listOf(f)).single()
 
@@ -86,7 +85,7 @@ class ByOverridingMarkersTest {
     }
 
     @Test
-    fun `a member that overrides only abstract members implements them`() {
+    fun `a member that overrides only abstract members implements them`() = onEdt {
         val marker = markers(file(), listOf(greet)).single()
 
         assertSame(AllIcons.Gutter.ImplementingMethod, marker.icon)
@@ -94,13 +93,13 @@ class ByOverridingMarkersTest {
     }
 
     @Test
-    fun `an abstract member overriding an abstract one still leaves it to be implemented`() {
+    fun `an abstract member overriding an abstract one still leaves it to be implemented`() = onEdt {
         val marker = markers(file(), listOf(greet.copy(abstract = true))).single()
         assertSame(AllIcons.Gutter.OverridingMethod, marker.icon)
     }
 
     @Test
-    fun `a member overriding a concrete and an abstract member overrides, and names both`() {
+    fun `a member overriding a concrete and an abstract member overrides, and names both`() = onEdt {
         val both = f.copy(superMembers = listOf(overridden("Base", "f", 3), overridden("Greeter", "f", 7, abstract = true)))
         val marker = markers(file(), listOf(both)).single()
 
@@ -109,14 +108,14 @@ class ByOverridingMarkersTest {
     }
 
     @Test
-    fun `a class attribute gets the icon on the name it assigns`() {
+    fun `a class attribute gets the icon on the name it assigns`() = onEdt {
         val size = ByOverridingMember("size", "A", name(3, 4, 8), superMembers = listOf(overridden("Base", "size", 1)))
         val marker = markers(file(), listOf(size)).single()
         assertEquals("size", marker.element!!.text)
     }
 
     @Test
-    fun `only members whose names are among the pass's elements are marked`() {
+    fun `only members whose names are among the pass's elements are marked`() = onEdt {
         val file = file()
         val document = PsiDocumentManager.getInstance(fixture.project).getDocument(file)!!
         val onlyGreet = setOf(file.findElementAt(source.indexOf("greet"))!!)
@@ -127,7 +126,7 @@ class ByOverridingMarkersTest {
     }
 
     @Test
-    fun `nothing is drawn for a member with nowhere to go`() {
+    fun `nothing is drawn for a member with nowhere to go`() = onEdt {
         val nowhere = f.copy(superMembers = listOf(BySuperMember("f", "Base")))
         assertTrue(markers(file(), listOf(nowhere)).isEmpty())
     }
@@ -138,7 +137,7 @@ class ByOverridingMarkersTest {
      * that is no icons at all.
      */
     @Test
-    fun `an answer is drawn for its own revision and not after an edit`() {
+    fun `an answer is drawn for its own revision and not after an edit`() = onEdt {
         val file = file()
         val document = PsiDocumentManager.getInstance(fixture.project).getDocument(file)!!
         ByOverridingMembers.getInstance(fixture.project).remember(document, file.virtualFile, listOf(f, greet))
@@ -154,7 +153,7 @@ class ByOverridingMarkersTest {
     /** What the provider draws for [file], collected as the pass does: off the EDT, in a read action. */
     private fun slowMarkers(file: PsiFile): List<LineMarkerInfo<*>> =
         ApplicationManager.getApplication().executeOnPooledThread<List<LineMarkerInfo<*>>> {
-            ReadAction.compute<List<LineMarkerInfo<*>>, RuntimeException> {
+            ReadAction.computeBlocking<List<LineMarkerInfo<*>>, RuntimeException> {
                 val result = mutableListOf<LineMarkerInfo<*>>()
                 ByOverridingMarkers().collectSlowLineMarkers(PsiTreeUtil.collectElements(file) { true }.toList(), result)
                 result
@@ -170,20 +169,20 @@ class ByOverridingMarkersTest {
     }
 
     @Test
-    fun `one request answers every member of the document`() {
+    fun `one request answers every member of the document`() = onEdt {
         val (answer, asked) = ask { answered(listOf(f, greet)) }
         assertEquals(ByOverridingMembers.Asked.Answered(listOf(f, greet)), answer)
         assertEquals(listOf("by/documentSuperMembers"), asked)
     }
 
     @Test
-    fun `a by that declines is a document with nothing to draw`() {
+    fun `a by that declines is a document with nothing to draw`() = onEdt {
         val (answer, _) = ask { answered<Any>(null) }
         assertEquals(ByOverridingMembers.Asked.Answered(emptyList()), answer)
     }
 
     @Test
-    fun `a by without the request is told apart from one that failed`() {
+    fun `a by without the request is told apart from one that failed`() = onEdt {
         val (unknown, asked) = ask { failed(ResponseErrorCode.MethodNotFound, "Unhandled method by/documentSuperMembers") }
         assertEquals(ByOverridingMembers.Asked.Unknown, unknown)
         assertEquals(listOf("by/documentSuperMembers"), asked)

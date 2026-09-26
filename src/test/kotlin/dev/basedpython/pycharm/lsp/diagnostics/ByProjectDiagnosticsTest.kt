@@ -13,10 +13,10 @@ import com.intellij.platform.lsp.api.LspClientDescriptor
 import com.intellij.platform.lsp.api.LspIntegrationProvider
 import com.intellij.platform.lsp.api.LspServerState
 import com.intellij.testFramework.junit5.fixture.TestFixtures
-import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.PlatformTestUtil
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import dev.basedpython.pycharm.testFramework.onEdt
 import kotlinx.coroutines.future.await
 import org.eclipse.lsp4j.Diagnostic
 import org.eclipse.lsp4j.DiagnosticSeverity
@@ -50,7 +50,6 @@ import java.util.concurrent.TimeUnit
  * script: what each answer lists, what the next request carries, and that rows go when they should.
  */
 @TestFixtures
-@RunInEdt(writeIntent = true)
 class ByProjectDiagnosticsTest {
 
     private val fixture by codeInsightFixture()
@@ -58,13 +57,13 @@ class ByProjectDiagnosticsTest {
     private val service get() = ByProjectDiagnostics.getInstance(fixture.project)
 
     @AfterEach
-    fun stopFollowing() {
+    fun stopFollowing() = onEdt {
         BasedPythonSettings.getInstance(fixture.project).byProjectDiagnostics = false
         service.settingChanged()
     }
 
     @Test
-    fun `an answer lists each file's problems, and the next request carries their result ids`() {
+    fun `an answer lists each file's problems, and the next request carries their result ids`() = onEdt {
         val a = fixture.addFileToProject("a.by", "x: int = ''\n").virtualFile
         val b = fixture.addFileToProject("b.by", "y: str = 1\n").virtualFile
         val server = follow()
@@ -80,7 +79,7 @@ class ByProjectDiagnosticsTest {
     }
 
     @Test
-    fun `an unchanged file keeps its rows, and a fixed one loses them and its result id`() {
+    fun `an unchanged file keeps its rows, and a fixed one loses them and its result id`() = onEdt {
         val a = fixture.addFileToProject("a.by", "x: int = ''\n").virtualFile
         val b = fixture.addFileToProject("b.by", "y: str = 1\n").virtualFile
         val server = follow()
@@ -94,7 +93,7 @@ class ByProjectDiagnosticsTest {
     }
 
     @Test
-    fun `an edit that cancels a check is asked again, and anything else stops following`() {
+    fun `an edit that cancels a check is asked again, and anything else stops following`() = onEdt {
         val a = fixture.addFileToProject("a.by", "x: int = ''\n").virtualFile
         val server = follow()
         server.step(report(full(a, "ra", error("bad a"))))
@@ -109,7 +108,7 @@ class ByProjectDiagnosticsTest {
     }
 
     @Test
-    fun `turning the setting off takes every row away`() {
+    fun `turning the setting off takes every row away`() = onEdt {
         val a = fixture.addFileToProject("a.by", "x: int = ''\n").virtualFile
         val server = follow()
         server.step(report(full(a, "ra", error("bad a"))))
@@ -122,7 +121,7 @@ class ByProjectDiagnosticsTest {
     }
 
     @Test
-    fun `a server that cancelled a check and said not to ask again is not asked again`() {
+    fun `a server that cancelled a check and said not to ask again is not asked again`() = onEdt {
         assertTrue(ByProjectDiagnostics.isAskAgain(serverCancelled(retrigger = true)))
         assertFalse(ByProjectDiagnostics.isAskAgain(serverCancelled(retrigger = false)))
         assertTrue(

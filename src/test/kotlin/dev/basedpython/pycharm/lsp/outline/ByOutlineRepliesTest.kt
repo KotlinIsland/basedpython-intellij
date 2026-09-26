@@ -2,10 +2,10 @@ package dev.basedpython.pycharm.lsp.outline
 
 import com.google.gson.Gson
 import com.intellij.openapi.util.TextRange
-import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.lsp.ext.BySyntaxOutlineResponse
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import dev.basedpython.pycharm.testFramework.onEdt
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
@@ -19,7 +19,6 @@ import org.junit.jupiter.api.Test
  * writes the same shapes for the other tests, and this is what keeps it honest.
  */
 @TestFixtures
-@RunInEdt(writeIntent = true)
 class ByOutlineRepliesTest {
 
     private val fixture by codeInsightFixture()
@@ -35,7 +34,7 @@ class ByOutlineRepliesTest {
     }
 
     @Test
-    fun `the reply reads into the statements, clauses and strings of the document`() {
+    fun `the reply reads into the statements, clauses and strings of the document`() = onEdt {
         val (text, outline) = read()
         checkNotNull(outline)
         fun TextRange.text() = substring(text)
@@ -67,7 +66,7 @@ class ByOutlineRepliesTest {
     }
 
     @Test
-    fun `a reply that does not fit the document is not read`() {
+    fun `a reply that does not fit the document is not read`() = onEdt {
         val response = Gson().fromJson(resource("golden.json"), BySyntaxOutlineResponse::class.java)
         fixture.configureByText("short.by", "x = 1\n")
         assertNull(ByOutlineReplies.read(response, fixture.editor.document))

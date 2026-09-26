@@ -9,7 +9,6 @@ import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.fileEditor.TextEditor
 import com.intellij.openapi.fileEditor.impl.text.TextEditorProvider
 import com.intellij.testFramework.PlatformTestUtil
-import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import com.intellij.xdebugger.XDebuggerManager
 import com.intellij.xdebugger.XDebuggerUtil
@@ -18,6 +17,7 @@ import com.intellij.xdebugger.breakpoints.XLineBreakpoint
 import dev.basedpython.pycharm.debug.ByBreakpointProperties
 import dev.basedpython.pycharm.debug.ByLineBreakpointType
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import dev.basedpython.pycharm.testFramework.onEdt
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
@@ -34,7 +34,6 @@ import org.junit.jupiter.api.Test
  * could not be undone.
  */
 @TestFixtures
-@RunInEdt(writeIntent = true)
 class ByLogpointsTest {
 
     private val fixture by codeInsightFixture()
@@ -64,7 +63,7 @@ class ByLogpointsTest {
                 .contains("Add Log Point")
 
     @Test
-    fun `a breakpoint that logs instead of suspending is a log point, whoever made it`() {
+    fun `a breakpoint that logs instead of suspending is a log point, whoever made it`() = onEdt {
         val breakpoint = gutterLoggingBreakpoint()
 
         assertNotNull(
@@ -74,7 +73,7 @@ class ByLogpointsTest {
     }
 
     @Test
-    fun `a breakpoint that still suspends is not a log point`() {
+    fun `a breakpoint that still suspends is not a log point`() = onEdt {
         val breakpoint = gutterLoggingBreakpoint()
         breakpoint.suspendPolicy = SuspendPolicy.ALL
 
@@ -85,7 +84,7 @@ class ByLogpointsTest {
     }
 
     @Test
-    fun `a breakpoint that logs nothing is not a log point`() {
+    fun `a breakpoint that logs nothing is not a log point`() = onEdt {
         val breakpoint = gutterLoggingBreakpoint()
         breakpoint.logExpressionObject = null
 
@@ -93,7 +92,7 @@ class ByLogpointsTest {
     }
 
     @Test
-    fun `a temporary breakpoint is not a log point`() {
+    fun `a temporary breakpoint is not a log point`() = onEdt {
         val breakpoint = gutterLoggingBreakpoint()
         breakpoint.isTemporary = true
 
@@ -101,7 +100,7 @@ class ByLogpointsTest {
     }
 
     @Test
-    fun `an empty log point this plugin made is still a log point`() {
+    fun `an empty log point this plugin made is still a log point`() = onEdt {
         // Add Log Point makes one with nothing to log yet. It is a log point the moment it exists,
         // which is what the property carries and behaviour cannot.
         fixture.configureByText("main.by", "def f(x):\n    return x\n")
@@ -116,7 +115,7 @@ class ByLogpointsTest {
     }
 
     @Test
-    fun `the gutter route makes a log point in two steps, and the pair is one undo`() {
+    fun `the gutter route makes a log point in two steps, and the pair is one undo`() = onEdt {
         // Add Logging Breakpoint… adds a plain breakpoint and then edits it, so the log point comes
         // into existence as a *change*. Undo has to join the two or the gesture cannot be taken back.
         fixture.configureByText("main.by", "def f(x):\n    return x\n")
@@ -138,7 +137,7 @@ class ByLogpointsTest {
     }
 
     @Test
-    fun `a breakpoint converted long after it was made is not undone away`() {
+    fun `a breakpoint converted long after it was made is not undone away`() = onEdt {
         fixture.configureByText("main.by", "def f(x):\n    return x\n")
         val editor: TextEditor = TextEditorProvider.getInstance().getTextEditor(fixture.editor)
         val listener = ByLogpointFields(fixture.project)
@@ -160,7 +159,7 @@ class ByLogpointsTest {
     }
 
     @Test
-    fun `a log point created outside a command can still be undone`() {
+    fun `a log point created outside a command can still be undone`() = onEdt {
         // Every gutter route is outside a command — the platform's Add Logging Breakpoint… and
         // IntelliJ IDEA's click in the gutter gap both are — so there was no undo step to join and
         // Ctrl+Z did nothing.
@@ -180,7 +179,7 @@ class ByLogpointsTest {
     }
 
     @Test
-    fun `undo and redo put back the same log point, once`() {
+    fun `undo and redo put back the same log point, once`() = onEdt {
         val breakpoint = gutterLoggingBreakpoint()
         val document = FileDocumentManager.getInstance().getDocument(fixture.file.virtualFile)!!
         val editor: TextEditor = TextEditorProvider.getInstance().getTextEditor(fixture.editor)
@@ -203,7 +202,7 @@ class ByLogpointsTest {
      * one class of this plugin's in it is what kept the plugin from unloading.
      */
     @Test
-    fun `the undo step a log point records holds nothing of this plugin's`() {
+    fun `the undo step a log point records holds nothing of this plugin's`() = onEdt {
         val breakpoint = gutterLoggingBreakpoint()
         val document = FileDocumentManager.getInstance().getDocument(fixture.file.virtualFile)!!
         val editor: TextEditor = TextEditorProvider.getInstance().getTextEditor(fixture.editor)
@@ -228,7 +227,7 @@ class ByLogpointsTest {
      * then took back the typing and the log point together.
      */
     @Test
-    fun `a log point reported off the EDT does not join the command the EDT is in`() {
+    fun `a log point reported off the EDT does not join the command the EDT is in`() = onEdt {
         fixture.configureByText("main.by", "def f(x):\n    return x\n")
         val editor: TextEditor = TextEditorProvider.getInstance().getTextEditor(fixture.editor)
         val document = fixture.editor.document

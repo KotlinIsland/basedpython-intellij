@@ -7,12 +7,12 @@ import com.intellij.platform.dap.DapStartRequest
 import com.intellij.platform.dap.DebugAdapterSupportProvider
 import com.intellij.execution.RunManager
 import com.intellij.openapi.project.Project
-import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
 import dev.basedpython.pycharm.debug.bpd.ByDebugBackend
 import dev.basedpython.pycharm.run.BasedPythonRunConfigurationType
 import dev.basedpython.pycharm.settings.BasedPythonSettings
+import dev.basedpython.pycharm.testFramework.onEdt
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -35,7 +35,6 @@ import org.junit.jupiter.api.Test
  * else's test. The light project answers the routing question just as well.
  */
 @TestFixtures
-@RunInEdt(writeIntent = true)
 class ByDebugRoutingTest {
 
     private val fixture by codeInsightFixture()
@@ -56,7 +55,7 @@ class ByDebugRoutingTest {
         .configuration
 
     @Test
-    fun `the adapter is one the platform knows about`() {
+    fun `the adapter is one the platform knows about`() = onEdt {
         val adapters = DebugAdapterSupportProvider.EP_NAME.extensionList
         assertTrue(
             adapters.any { it.adapterId == ByDebugAdapter },
@@ -66,7 +65,7 @@ class ByDebugRoutingTest {
     }
 
     @Test
-    fun `only the debug executor routes a by run configuration`() {
+    fun `only the debug executor routes a by run configuration`() = onEdt {
         val provider = provider()
         val profile = configuration()
 
@@ -84,7 +83,7 @@ class ByDebugRoutingTest {
     }
 
     @Test
-    fun `the bpd backend asks the platform for a launch`() {
+    fun `the bpd backend asks the platform for a launch`() = onEdt {
         val settings = BasedPythonSettings.getInstance(project)
         val previous = settings.debugBackend
         try {
@@ -117,7 +116,7 @@ class ByDebugRoutingTest {
     }
 
     @Test
-    fun `the debugpy backend asks the platform to attach`() {
+    fun `the debugpy backend asks the platform to attach`() = onEdt {
         val settings = BasedPythonSettings.getInstance(project)
         val previous = settings.debugBackend
         try {

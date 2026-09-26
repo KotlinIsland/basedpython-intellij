@@ -2,12 +2,12 @@ package dev.basedpython.pycharm.run.marker
 
 import com.intellij.execution.lineMarker.RunLineMarkerContributor
 import com.intellij.psi.PsiElement
-import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.run.main.ByRunWithArgumentsAction
 import dev.basedpython.pycharm.run.model.ByProgramModel
 import dev.basedpython.pycharm.run.model.ByReplies
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import dev.basedpython.pycharm.testFramework.onEdt
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
@@ -24,7 +24,6 @@ import org.junit.jupiter.api.Test
  * fill in.
  */
 @TestFixtures
-@RunInEdt(writeIntent = true)
 class ByRunLineMarkerContributorTest {
 
     private val fixture by codeInsightFixture()
@@ -58,7 +57,7 @@ class ByRunLineMarkerContributorTest {
         get() = info?.actions?.firstOrNull() is ByRunWithArgumentsAction
 
     @Test
-    fun `a main that requires an argument says so, and still leads with Run`() {
+    fun `a main that requires an argument says so, and still leads with Run`() = onEdt {
         // Run is never the wrong choice: the configuration asks for what it is missing as it
         // starts, so the form is here to *change* arguments, not to rescue a run that cannot go.
         val marker = markerFor("def main(a: int):\n    print(a)\n")
@@ -69,7 +68,7 @@ class ByRunLineMarkerContributorTest {
     }
 
     @Test
-    fun `a main whose arguments are all optional is offered the form too`() {
+    fun `a main whose arguments are all optional is offered the form too`() = onEdt {
         val marker = markerFor("def main(name: str = \"world\"):\n    print(name)\n")
         assertTrue(marker.offersArguments)
         assertFalse(marker.offersArgumentsFirst)
@@ -77,14 +76,14 @@ class ByRunLineMarkerContributorTest {
     }
 
     @Test
-    fun `a main with no parameters is offered nothing extra`() {
+    fun `a main with no parameters is offered nothing extra`() = onEdt {
         val marker = markerFor("def main():\n    print(1)\n")
         assertNotNull(marker.info)
         assertFalse(marker.offersArguments)
     }
 
     @Test
-    fun `a main that is no entry point says so`() {
+    fun `a main that is no entry point says so`() = onEdt {
         // No `__main__` guard is generated for this one, so running the module does nothing at all.
         val marker = markerFor("def main(db: Database):\n    print(db)\n")
         assertFalse(marker.offersArguments)
@@ -92,14 +91,14 @@ class ByRunLineMarkerContributorTest {
     }
 
     @Test
-    fun `a module that invokes main itself has no generated command line to fill`() {
+    fun `a module that invokes main itself has no generated command line to fill`() = onEdt {
         val marker = markerFor("def main(a: int):\n    print(a)\n\nmain(1)\n")
         assertNotNull(marker.info)
         assertFalse(marker.offersArguments)
     }
 
     @Test
-    fun `the guard line keeps its plain icon`() {
+    fun `the guard line keeps its plain icon`() = onEdt {
         val marker = markerFor("if __name__ == \"__main__\":\n    main()\n")
         assertNotNull(marker.info)
         assertFalse(marker.offersArguments)
@@ -108,7 +107,7 @@ class ByRunLineMarkerContributorTest {
 
     /** A generic `main` is still `main`: the transpiler generates its guard and its parser alike. */
     @Test
-    fun `a generic main is an entry point with arguments`() {
+    fun `a generic main is an entry point with arguments`() = onEdt {
         val marker = markerFor("def main[T](name: str):\n    print(name)\n")
         assertNotNull(marker.info)
         assertTrue(marker.offersArguments)
@@ -116,7 +115,7 @@ class ByRunLineMarkerContributorTest {
 
     /** `main(` at the start of a docstring line is prose, not the module calling its entry point. */
     @Test
-    fun `a main call written in a docstring leaves the command line alone`() {
+    fun `a main call written in a docstring leaves the command line alone`() = onEdt {
         val marker = markerFor("\"\"\"\nmain(x) runs it\n\"\"\"\n\ndef main(name: str):\n    print(name)\n", line = 4)
         assertNotNull(marker.info)
         assertTrue(marker.offersArguments)
@@ -125,13 +124,13 @@ class ByRunLineMarkerContributorTest {
 
     /** `private` renames `main`, so nothing runs it. */
     @Test
-    fun `a private main gets no icon`() {
+    fun `a private main gets no icon`() = onEdt {
         assertNull(markerFor("private def main(a: int):\n    print(a)\n").info)
     }
 
     /** Nothing is guessed while `by` has said nothing — the icon follows its answer. */
     @Test
-    fun `no answer from by draws no icon`() {
+    fun `no answer from by draws no icon`() = onEdt {
         assertNull(markerFor("def main():\n    print(1)\n", known = false).info)
     }
 
@@ -155,7 +154,7 @@ class ByRunLineMarkerContributorTest {
 
     /** A `.py` this plugin does not own belongs to the Python plugin, icons included. */
     @Test
-    fun `an unowned py file gets no icon at all`() {
+    fun `an unowned py file gets no icon at all`() = onEdt {
         assertNull(pyMarkerFor("if __name__ == \"__main__\":\n    main()\n").info)
     }
 
@@ -173,6 +172,7 @@ class ByRunLineMarkerContributorTest {
      * both back. Pinned rather than left on AUTO so the outcome does not depend on whether the IDE
      * running the tests happens to provide the Python language.
      */
-    private fun asBasedPythonProject(body: () -> Unit) =
+    private fun asBasedPythonProject(body: () -> Unit) = onEdt {
         dev.basedpython.pycharm.testFramework.asBasedPythonProject(fixture.project, body)
+    }
 }

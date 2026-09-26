@@ -1,9 +1,9 @@
 package dev.basedpython.pycharm.editor.smart
 
-import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.lsp.outline.OutlineSpec
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import dev.basedpython.pycharm.testFramework.onEdt
 import org.junit.jupiter.api.Test
 
 /**
@@ -14,12 +14,11 @@ import org.junit.jupiter.api.Test
  * with one — so a test only passes by reading the outline.
  */
 @TestFixtures
-@RunInEdt(writeIntent = true)
 class BasedPythonEnterHandlerTest {
 
     private val fixture by codeInsightFixture()
 
-    private fun enter(before: String, after: String, outline: (OutlineSpec.Suite.() -> Unit)?) {
+    private fun enter(before: String, after: String, outline: (OutlineSpec.Suite.() -> Unit)?) = onEdt {
         fixture.configureByText("a.by", before)
         if (outline != null) OutlineSpec.remember(fixture.project, fixture.editor.document, outline)
         fixture.type('\n')
@@ -91,7 +90,7 @@ class BasedPythonEnterHandlerTest {
     )
 
     @Test
-    fun `an answer for an earlier revision is not used`() {
+    fun `an answer for an earlier revision is not used`() = onEdt {
         fixture.configureByText("a.by", "def f():\n    pass<caret>")
         OutlineSpec.remember(fixture.project, fixture.editor.document) {
             compound { clause("def f():") { simple("pass") } }

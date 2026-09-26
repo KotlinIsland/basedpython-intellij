@@ -4,7 +4,6 @@ import com.intellij.execution.PsiLocation
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.psi.PsiFile
 import com.intellij.psi.search.GlobalSearchScope
-import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.lsp.build.ByBuildOutputs
 import dev.basedpython.pycharm.lsp.ext.ByBuildOutput
@@ -13,6 +12,7 @@ import dev.basedpython.pycharm.run.model.ByReplies
 import dev.basedpython.pycharm.run.test.node.ByTestNodeActions
 import dev.basedpython.pycharm.run.test.node.ByTestSource
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import dev.basedpython.pycharm.testFramework.onEdt
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -25,7 +25,6 @@ import org.junit.jupiter.api.Test
  * search of the text for something that looks like its declaration.
  */
 @TestFixtures
-@RunInEdt(writeIntent = true)
 class ByTestLocatorTest {
 
     private val fixture by codeInsightFixture()
@@ -75,7 +74,7 @@ class ByTestLocatorTest {
     }
 
     @Test
-    fun `a test lands on the declaration pytest collects, not the first one spelled like it`() {
+    fun `a test lands on the declaration pytest collects, not the first one spelled like it`() = onEdt {
         val file = addStagedTestFile("test_located.by", "test_located.py")
         val (found, offset) = checkNotNull(locate("test_located.py::test_top"))
         assertEquals(file.virtualFile, found.virtualFile)
@@ -83,7 +82,7 @@ class ByTestLocatorTest {
     }
 
     @Test
-    fun `a method lands inside its class`() {
+    fun `a method lands inside its class`() = onEdt {
         addStagedTestFile("test_method.by", "test_method.py")
         val (_, offset) = checkNotNull(locate("test_method.py::TestGroup::test_in_class"))
         assertEquals(source.indexOf("test_in_class"), offset)
@@ -91,7 +90,7 @@ class ByTestLocatorTest {
 
     /** `src/tests/test_srclayout.by` is staged as `tests/test_srclayout.py`, which is what pytest reports. */
     @Test
-    fun `a src-layout test is found through where by stages it`() {
+    fun `a src-layout test is found through where by stages it`() = onEdt {
         val file = addStagedTestFile("src/tests/test_srclayout.by", "tests/test_srclayout.py")
         val (found, offset) = checkNotNull(locate("tests/test_srclayout.py::test_top[1-2]"))
         assertEquals(file.virtualFile, found.virtualFile)
@@ -99,7 +98,7 @@ class ByTestLocatorTest {
     }
 
     @Test
-    fun `the node view opens the same place`() {
+    fun `the node view opens the same place`() = onEdt {
         val file = addStagedTestFile("src/tests/test_opened.by", "tests/test_opened.py")
         assertTrue(ByTestNodeActions.navigate(project, "tests/test_opened.py::test_top", ByTestSource.TRANSPILED))
         val editor = checkNotNull(FileEditorManager.getInstance(project).selectedTextEditor)

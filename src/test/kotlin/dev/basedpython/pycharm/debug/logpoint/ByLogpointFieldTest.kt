@@ -1,7 +1,6 @@
 package dev.basedpython.pycharm.debug.logpoint
 
 import com.intellij.openapi.editor.ex.EditorEx
-import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import com.intellij.xdebugger.XDebuggerManager
 import com.intellij.xdebugger.XDebuggerUtil
@@ -11,6 +10,7 @@ import com.intellij.xdebugger.evaluation.EvaluationMode
 import dev.basedpython.pycharm.debug.ByLineBreakpointType
 import dev.basedpython.pycharm.lang.BasedPythonLanguage
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import dev.basedpython.pycharm.testFramework.onEdt
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotEquals
@@ -33,7 +33,6 @@ import javax.swing.JComponent
  * itself, which is what every focus bug in this feature came from.
  */
 @TestFixtures
-@RunInEdt(writeIntent = true)
 class ByLogpointFieldTest {
 
     private val fixture by codeInsightFixture()
@@ -61,7 +60,7 @@ class ByLogpointFieldTest {
     }
 
     @Test
-    fun `a log point that already has an expression still gets a box`() {
+    fun `a log point that already has an expression still gets a box`() = onEdt {
         // The print quick fix supplies the expression itself, so this log point never sees a prompt.
         val logpoint = logpointAt(1, expression = "x * 2")
         val field = ByLogpointField.show(fixture.project, editor(), logpoint)
@@ -72,7 +71,7 @@ class ByLogpointFieldTest {
     }
 
     @Test
-    fun `committing writes the expression and leaves the box in place`() {
+    fun `committing writes the expression and leaves the box in place`() = onEdt {
         val logpoint = logpointAt(1)
         val field = ByLogpointField.show(fixture.project, editor(), logpoint)!!
 
@@ -84,7 +83,7 @@ class ByLogpointFieldTest {
     }
 
     @Test
-    fun `nothing the box does removes the log point`() {
+    fun `nothing the box does removes the log point`() = onEdt {
         val logpoint = logpointAt(1)
         val field = ByLogpointField.show(fixture.project, editor(), logpoint)!!
 
@@ -98,7 +97,7 @@ class ByLogpointFieldTest {
     }
 
     @Test
-    fun `reverting puts back what the log point says`() {
+    fun `reverting puts back what the log point says`() = onEdt {
         val logpoint = logpointAt(1, expression = "kept")
         val field = ByLogpointField.show(fixture.project, editor(), logpoint)!!
 
@@ -110,7 +109,7 @@ class ByLogpointFieldTest {
     }
 
     @Test
-    fun `a reopened editor gets its own box rather than the closed one`() {
+    fun `a reopened editor gets its own box rather than the closed one`() = onEdt {
         // A breakpoint outlives every editor showing it. Parking the box on the breakpoint meant a
         // reopened tab found a disposed one still attached and drew nothing but the gutter icon.
         val logpoint = logpointAt(1, expression = "x")
@@ -125,7 +124,7 @@ class ByLogpointFieldTest {
     }
 
     @Test
-    fun `asking twice returns the same box rather than stacking another`() {
+    fun `asking twice returns the same box rather than stacking another`() = onEdt {
         val logpoint = logpointAt(1)
         val first = ByLogpointField.show(fixture.project, editor(), logpoint)
         val second = ByLogpointField.show(fixture.project, editor(), logpoint)
@@ -135,7 +134,7 @@ class ByLogpointFieldTest {
     }
 
     @Test
-    fun `closing the box takes the inlay with it`() {
+    fun `closing the box takes the inlay with it`() = onEdt {
         val logpoint = logpointAt(1)
         ByLogpointField.show(fixture.project, editor(), logpoint)!!.close()
 
@@ -144,13 +143,13 @@ class ByLogpointFieldTest {
     }
 
     @Test
-    fun `a line the document does not have gets no box`() {
+    fun `a line the document does not have gets no box`() = onEdt {
         val logpoint = logpointAt(99)
         assertNull(ByLogpointField.show(fixture.project, editor(), logpoint))
     }
 
     @Test
-    fun `the box starts where the code it logs starts`() {
+    fun `the box starts where the code it logs starts`() = onEdt {
         // A block inlay is drawn at the left edge of the text whatever offset it is anchored to, so
         // the box on an indented statement used to sit under the `def` of the line above it.
         val logpoint = logpointAt(1, expression = "x")
@@ -164,7 +163,7 @@ class ByLogpointFieldTest {
     }
 
     @Test
-    fun `a box on an unindented line starts at the gutter`() {
+    fun `a box on an unindented line starts at the gutter`() = onEdt {
         val logpoint = logpointAt(0, expression = "x")
         val field = ByLogpointField.show(fixture.project, editor(), logpoint)!!
 
@@ -174,7 +173,7 @@ class ByLogpointFieldTest {
     }
 
     @Test
-    fun `re-indenting the line takes the box with it`() {
+    fun `re-indenting the line takes the box with it`() = onEdt {
         // The indentation is measured at layout, not remembered from when the box was made — which
         // is what the document listener that asks for that layout is for.
         val logpoint = logpointAt(1, expression = "x")
@@ -195,7 +194,7 @@ class ByLogpointFieldTest {
     }
 
     @Test
-    fun `the box takes the file's caret while it has focus, and gives it back`() {
+    fun `the box takes the file's caret while it has focus, and gives it back`() = onEdt {
         // Two carets is what the file showed otherwise. EditorImpl.focusGained activates its caret
         // and focusLost only stops the blink — it never passivates — and this box is a component
         // inlay, so the editor does not even count itself unfocused while the box has the keyboard.
@@ -212,7 +211,7 @@ class ByLogpointFieldTest {
     }
 
     @Test
-    fun `a file with no caret showing does not gain one from being logged`() {
+    fun `a file with no caret showing does not gain one from being logged`() = onEdt {
         val logpoint = logpointAt(1, expression = "x")
         val field = ByLogpointField.show(fixture.project, editor(), logpoint)!!
         editor().setCaretVisible(false)
@@ -224,7 +223,7 @@ class ByLogpointFieldTest {
     }
 
     @Test
-    fun `the caption is the log point's own colour while the box has focus`() {
+    fun `the caption is the log point's own colour while the box has focus`() = onEdt {
         val logpoint = logpointAt(1, expression = "x")
         val field = ByLogpointField.show(fixture.project, editor(), logpoint)!!
         val caption = field.component.components.first { it is JBLabel } as JBLabel

@@ -1,9 +1,9 @@
 package dev.basedpython.pycharm.editor.smart
 
 import com.intellij.openapi.actionSystem.IdeActions
-import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import dev.basedpython.pycharm.testFramework.onEdt
 import org.junit.jupiter.api.Test
 
 /**
@@ -16,12 +16,11 @@ import org.junit.jupiter.api.Test
  * column.
  */
 @TestFixtures
-@RunInEdt(writeIntent = true)
 class BasedPythonBackspaceTest {
 
     private val fixture by codeInsightFixture()
 
-    private fun backspace(before: String, after: String) {
+    private fun backspace(before: String, after: String) = onEdt {
         fixture.configureByText("a.by", before)
         fixture.performEditorAction(IdeActions.ACTION_EDITOR_BACKSPACE)
         fixture.checkResult(after)

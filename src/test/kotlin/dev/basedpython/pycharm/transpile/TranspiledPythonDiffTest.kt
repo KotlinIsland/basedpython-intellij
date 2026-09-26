@@ -2,9 +2,9 @@ package dev.basedpython.pycharm.transpile
 
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.testFramework.PlatformTestUtil
-import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import dev.basedpython.pycharm.testFramework.onEdt
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -17,7 +17,6 @@ import kotlin.time.Duration.Companion.milliseconds
  * the diff is on screen, and nothing at all watching once it is closed.
  */
 @TestFixtures
-@RunInEdt(writeIntent = true)
 class TranspiledPythonDiffTest {
 
   private val fixture by codeInsightFixture()
@@ -32,7 +31,7 @@ class TranspiledPythonDiffTest {
       "python of $source",
       transpile = { _, file ->
         transpiles.incrementAndGet()
-        com.intellij.openapi.application.runReadAction {
+        com.intellij.openapi.application.runReadActionBlocking {
           "python of ${com.intellij.openapi.fileEditor.FileDocumentManager.getInstance().getDocument(file)!!.text}"
         }
       },
@@ -63,7 +62,7 @@ class TranspiledPythonDiffTest {
   }
 
   @Test
-  fun `the python side is rewritten in place while the diff is shown`() {
+  fun `the python side is rewritten in place while the diff is shown`() = onEdt {
     val (diff, source) = diffOf("x = 1\n")
     val python = diff.pythonDocument
 
@@ -76,7 +75,7 @@ class TranspiledPythonDiffTest {
   }
 
   @Test
-  fun `nothing is watched before the diff is shown or after it is closed`() {
+  fun `nothing is watched before the diff is shown or after it is closed`() = onEdt {
     val (diff, source) = diffOf("x = 1\n")
     assertFalse(diff.isWatching)
 
@@ -97,7 +96,7 @@ class TranspiledPythonDiffTest {
 
   /** The same request can be on screen twice; it keeps watching until the last viewer lets go. */
   @Test
-  fun `watching lasts until every viewer has let go`() {
+  fun `watching lasts until every viewer has let go`() = onEdt {
     val (diff, _) = diffOf("x = 1\n")
 
     diff.onAssigned(true)

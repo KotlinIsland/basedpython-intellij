@@ -1,10 +1,10 @@
 package dev.basedpython.pycharm.debug.recompose
 
 import com.intellij.testFramework.PlatformTestUtil
-import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import dev.basedpython.pycharm.testFramework.onEdt
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
@@ -31,7 +31,6 @@ private const val TIMED_OUT = "bpd did not answer within 2 s"
  * stream drop kept as a gap.
  */
 @TestFixtures
-@RunInEdt(writeIntent = true)
 class ByRecompositionSessionTest {
 
     private val fixture by codeInsightFixture()
@@ -77,7 +76,7 @@ class ByRecompositionSessionTest {
     }
 
     @AfterEach
-    fun forget() {
+    fun forget() = onEdt {
         link?.let { waitUntil("the link's requests to finish") { it.inFlight.get() == 0 } }
         link?.let(service::sessionEnded)
         link = null
@@ -122,7 +121,7 @@ class ByRecompositionSessionTest {
      * other one's program is still pushing are that program's records, not this one's.
      */
     @Test
-    fun `a watch event from a session that is not the current one is dropped`() {
+    fun `a watch event from a session that is not the current one is dropped`() = onEdt {
         val older = Scripted()
         service.sessionStarted(older)
         val newer = start()
@@ -133,7 +132,7 @@ class ByRecompositionSessionTest {
     }
 
     @Test
-    fun `a pull's answer landing after the session ended is dropped`() {
+    fun `a pull's answer landing after the session ended is dropped`() = onEdt {
         val link = start()
         service.sessionEnded(link)
         service.publish(link, read(run(1, 5)))
@@ -146,7 +145,7 @@ class ByRecompositionSessionTest {
     }
 
     @Test
-    fun `a pull's answer of an older session leaves the newer one alone`() {
+    fun `a pull's answer of an older session leaves the newer one alone`() = onEdt {
         val older = start()
         service.publish(older, read(run(1, 5)))
         val newer = start()
@@ -165,7 +164,7 @@ class ByRecompositionSessionTest {
     }
 
     @Test
-    fun `a stale pull cannot overwrite a newer one's answer`() {
+    fun `a stale pull cannot overwrite a newer one's answer`() = onEdt {
         val link = start()
         service.publish(link, read(run(2, 5), dropped = 7), ticket = 1_000)
         service.publish(link, read(run(1, 4), dropped = 3), ticket = 999)
@@ -185,7 +184,7 @@ class ByRecompositionSessionTest {
      * toolbar's to say — never the window's state.
      */
     @Test
-    fun `the watch is sent again at a stop and after a pull until bpd confirms`() {
+    fun `the watch is sent again at a stop and after a pull until bpd confirms`() = onEdt {
         service.setWatching(true)
         val link = start(Scripted(pullAnswer = ByRecompositionAnswer.Answered(emptyAnswer()), watchAnswer = ByRecompositionAnswer.Refused(TRACING_OFF)))
 
@@ -216,7 +215,7 @@ class ByRecompositionSessionTest {
 
     /** With the preference off nothing is sent, however often the program stops. */
     @Test
-    fun `no watch is sent while the preference is off`() {
+    fun `no watch is sent while the preference is off`() = onEdt {
         val link = start(Scripted(pullAnswer = ByRecompositionAnswer.Answered(emptyAnswer())))
         service.paused(link)
         settled(link) { live().pulled }
@@ -231,7 +230,7 @@ class ByRecompositionSessionTest {
      * whatever order the platform sends its other requests in.
      */
     @Test
-    fun `the launch asks for the stream exactly when the preference and the setting are on`() {
+    fun `the launch asks for the stream exactly when the preference and the setting are on`() = onEdt {
         val settings = BasedPythonSettings.getInstance(fixture.project)
         settings.debuggerRecompositions = true
         assertFalse(service.watchesFromTheStart, "the preference is off")
@@ -246,7 +245,7 @@ class ByRecompositionSessionTest {
      * confirmation until the first stop sends it again and bpd confirms it.
      */
     @Test
-    fun `a watch asked for in the launch is confirmed at the first stop`() {
+    fun `a watch asked for in the launch is confirmed at the first stop`() = onEdt {
         service.setWatching(true)
         val link = start(Scripted(pullAnswer = ByRecompositionAnswer.Answered(emptyAnswer())))
         assertNull(live().watching, "nothing has confirmed the launch's watch yet")
@@ -263,7 +262,7 @@ class ByRecompositionSessionTest {
      * Neither a problem nor bpd confirming the stream is off — and the first stop confirms it.
      */
     @Test
-    fun `a watch bpd holds until the launch is no problem and is confirmed at the first stop`() {
+    fun `a watch bpd holds until the launch is no problem and is confirmed at the first stop`() = onEdt {
         val link = start(
             Scripted(
                 pullAnswer = ByRecompositionAnswer.Answered(emptyAnswer()),
@@ -284,7 +283,7 @@ class ByRecompositionSessionTest {
     }
 
     @Test
-    fun `a toggle mid-session is sent, and its answer is what bpd last confirmed`() {
+    fun `a toggle mid-session is sent, and its answer is what bpd last confirmed`() = onEdt {
         val link = start()
         service.setWatching(true)
         settled(link) { live().watching == true }
@@ -299,7 +298,7 @@ class ByRecompositionSessionTest {
     // ---- no answer ---------------------------------------------------------------
 
     @Test
-    fun `a pull that gets no answer is a state with a sentence, cleared by the next answer`() {
+    fun `a pull that gets no answer is a state with a sentence, cleared by the next answer`() = onEdt {
         val link = start(Scripted(pullAnswer = ByRecompositionAnswer.Unavailable(TIMED_OUT)))
         service.paused(link)
         settled(link) { live().unanswered != null }
@@ -321,7 +320,7 @@ class ByRecompositionSessionTest {
     // ---- the setting -----------------------------------------------------------------
 
     @Test
-    fun `turned off, a stop asks nothing and the stream is dropped`() {
+    fun `turned off, a stop asks nothing and the stream is dropped`() = onEdt {
         BasedPythonSettings.getInstance(fixture.project).debuggerRecompositions = false
         val link = start()
         service.paused(link)
@@ -334,7 +333,7 @@ class ByRecompositionSessionTest {
     // ---- what is held ------------------------------------------------------------------
 
     @Test
-    fun `the held list is bounded, and what was let go is counted`() {
+    fun `the held list is bounded, and what was let go is counted`() = onEdt {
         val link = start()
         val over = 10
         for (i in 1..ByRecompositionSession.HELD_LIMIT + over) service.append(link, ByEvent(run(i.toLong(), i.toLong()), 0))
@@ -356,7 +355,7 @@ class ByRecompositionSessionTest {
     }
 
     @Test
-    fun `a stream drop is kept as a gap where it happened, and a pull fills the frames it carries`() {
+    fun `a stream drop is kept as a gap where it happened, and a pull fills the frames it carries`() = onEdt {
         val link = start()
         service.append(link, ByEvent(run(3, 5), droppedBefore = 4))
         service.append(link, ByEvent(record = null, droppedBefore = 2))
@@ -370,7 +369,7 @@ class ByRecompositionSessionTest {
     }
 
     @Test
-    fun `the snapshot read is the same list until something changes`() {
+    fun `the snapshot read is the same list until something changes`() = onEdt {
         val link = start()
         service.append(link, ByEvent(run(1, 5), 0))
         val first = service.records

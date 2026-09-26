@@ -6,10 +6,10 @@ import com.intellij.refactoring.BaseRefactoringProcessor.ConflictsInTestsExcepti
 import com.intellij.refactoring.move.MoveHandler
 import com.intellij.refactoring.move.MoveHandlerDelegate
 import com.intellij.refactoring.rename.RenamePsiElementProcessor
-import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import dev.basedpython.pycharm.testFramework.onEdt
 import org.eclipse.lsp4j.Position
 import org.eclipse.lsp4j.Range
 import org.eclipse.lsp4j.TextEdit
@@ -35,13 +35,12 @@ import kotlinx.coroutines.runBlocking
  * the conflict has to name.
  */
 @TestFixtures
-@RunInEdt(writeIntent = true)
 class ByModuleRenameTest {
 
     private val fixture by codeInsightFixture()
 
     @Test
-    fun `a by file and a directory of them are renamed by this processor, other files are not`() {
+    fun `a by file and a directory of them are renamed by this processor, other files are not`() = onEdt {
         val module = fixture.addFileToProject("pkg/mod.by", "def g() -> int:\n    return 2\n")
         val notes = fixture.addFileToProject("docs/notes.txt", "hello\n")
 
@@ -52,7 +51,7 @@ class ByModuleRenameTest {
     }
 
     @Test
-    fun `moving a by file or package is this handler's, moving anything else is not`() {
+    fun `moving a by file or package is this handler's, moving anything else is not`() = onEdt {
         val module = fixture.addFileToProject("pkg/mod.by", "")
         val notes = fixture.addFileToProject("docs/notes.txt", "")
         val handler = MoveHandlerDelegate.EP_NAME.findExtensionOrFail(ByModuleMoveHandler::class.java)
@@ -76,7 +75,7 @@ class ByModuleRenameTest {
     }
 
     @Test
-    fun `renaming a module when by cannot start is a conflict that says why, and nothing is renamed`() {
+    fun `renaming a module when by cannot start is a conflict that says why, and nothing is renamed`() = onEdt {
         val util = fixture.addFileToProject("util.by", "def helper() -> int:\n    return 1\n")
         fixture.addFileToProject("main.by", "import util\n")
 
@@ -93,7 +92,7 @@ class ByModuleRenameTest {
     }
 
     @Test
-    fun `moving a package when by cannot start is a conflict that says why, and nothing moves`() {
+    fun `moving a package when by cannot start is a conflict that says why, and nothing moves`() = onEdt {
         val module = fixture.addFileToProject("pkg/mod.by", "")
         val dest = fixture.addFileToProject("dest/keep.txt", "").containingDirectory
         val pkg = module.containingDirectory
@@ -113,7 +112,7 @@ class ByModuleRenameTest {
     }
 
     @Test
-    fun `the modules page is told why a rename cannot rewrite imports`() {
+    fun `the modules page is told why a rename cannot rewrite imports`() = onEdt {
         assertEquals(
             "by is switched off in Settings | basedpython.",
             withByOff { runBlocking { ByModuleRenames.whyUnsupported(fixture.project) } },
@@ -121,7 +120,7 @@ class ByModuleRenameTest {
     }
 
     @Test
-    fun `by's edits become usages in their files and are applied last first`() {
+    fun `by's edits become usages in their files and are applied last first`() = onEdt {
         val main = fixture.addFileToProject("main.by", "import util\nfrom util import helper\n\nprint(util.helper())\n")
         val util = fixture.addFileToProject("util.by", "")
         val uri = "file:///project/main.by"
@@ -148,7 +147,7 @@ class ByModuleRenameTest {
     }
 
     @Test
-    fun `a rename that is not a module's asks nothing and has no conflict`() {
+    fun `a rename that is not a module's asks nothing and has no conflict`() = onEdt {
         val notes = fixture.addFileToProject("notes.txt", "hello\n")
 
         fixture.renameElement(notes, "readme.txt")

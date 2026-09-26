@@ -1,9 +1,9 @@
 package dev.basedpython.pycharm.lsp.inlay
 
 import com.intellij.openapi.editor.Editor
-import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import dev.basedpython.pycharm.testFramework.onEdt
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -24,7 +24,6 @@ import javax.swing.JPanel
  * delivery of it.
  */
 @TestFixtures
-@RunInEdt(writeIntent = true)
 class ByHintPushTest {
 
     private val fixture by codeInsightFixture()
@@ -45,7 +44,7 @@ class ByHintPushTest {
 
     /** The service is the application's, and so is shared with whatever ran before this. */
     @BeforeEach
-    fun releaseEverything() {
+    fun releaseEverything() = onEdt {
         push.onEvent(keyEvent(0))
     }
 
@@ -57,7 +56,7 @@ class ByHintPushTest {
     }
 
     @Test
-    fun `a key event carrying the modifiers is the push going down and coming up`() {
+    fun `a key event carrying the modifiers is the push going down and coming up`() = onEdt {
         push.onEvent(keyEvent(InputEvent.CTRL_DOWN_MASK or InputEvent.ALT_DOWN_MASK))
         assertTrue(push.isHeld(ByPushKey.CTRL_ALT))
         assertTrue(push.isHeld(ByPushKey.CTRL))
@@ -68,7 +67,7 @@ class ByHintPushTest {
     }
 
     @Test
-    fun `watchers hear each change once, and nothing when the state repeats`() {
+    fun `watchers hear each change once, and nothing when the state repeats`() = onEdt {
         val watcher = CountingWatcher(editor())
         push.watch(watcher)
 
@@ -81,7 +80,7 @@ class ByHintPushTest {
     }
 
     @Test
-    fun `modifiers this cannot be asked about are not a change`() {
+    fun `modifiers this cannot be asked about are not a change`() = onEdt {
         val watcher = CountingWatcher(editor())
         push.watch(watcher)
 

@@ -1,9 +1,9 @@
 package dev.basedpython.pycharm.lsp.inlay
 
 import com.intellij.openapi.editor.ex.util.EditorUtil
-import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import dev.basedpython.pycharm.testFramework.onEdt
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -17,7 +17,6 @@ import org.junit.jupiter.api.Test
  * this class happened to compute on the machine the number was written on.
  */
 @TestFixtures
-@RunInEdt(writeIntent = true)
 class ByEditorTextWidthTest {
 
     private val fixture by codeInsightFixture()
@@ -34,12 +33,12 @@ class ByEditorTextWidthTest {
     }
 
     @Test
-    fun `plain ascii measures where the editor draws it`() {
+    fun `plain ascii measures where the editor draws it`() = onEdt {
         assertEquals(drawnAt("basdf = 1\n", 5), measure("basdf = 1\n", 5))
     }
 
     @Test
-    fun `a wide character measures the glyph the editor falls back to, not two columns`() {
+    fun `a wide character measures the glyph the editor falls back to, not two columns`() = onEdt {
         // The case the whole class exists for. Unicode calls `名` two columns wide and `by` counts it
         // as two; neither is what the editor draws, and the difference is what took a block apart.
         val text = "名前 = 1\n"
@@ -52,7 +51,7 @@ class ByEditorTextWidthTest {
     }
 
     @Test
-    fun `a tab reaches the tab stop in pixels`() {
+    fun `a tab reaches the tab stop in pixels`() = onEdt {
         val text = "x:\tlist[int] = [1]\n"
         fixture.configureByText("tabbed.txt", text)
         assertEquals(4, EditorUtil.getTabSize(fixture.editor), "the tab here only reaches column four at a tab size of four")
@@ -60,13 +59,13 @@ class ByEditorTextWidthTest {
     }
 
     @Test
-    fun `an empty run is no width at all`() {
+    fun `an empty run is no width at all`() = onEdt {
         fixture.configureByText("empty.txt", "a = 1\n")
         assertEquals(0f, ByEditorTextWidth(fixture.editor).widthOf(""))
     }
 
     @Test
-    fun `a space is the width the editor lays its own tab stops out with`() {
+    fun `a space is the width the editor lays its own tab stops out with`() = onEdt {
         // `EditorView` takes its plain space width the same way, and a tab stop is a multiple of it,
         // so a separator measured differently would drift against every tabbed line in the file.
         fixture.configureByText("space.txt", "a = 1\n")

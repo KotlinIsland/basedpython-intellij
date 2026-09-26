@@ -4,10 +4,10 @@ import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.platform.lsp.api.LspClientDescriptor
 import com.intellij.platform.lsp.api.LspIntegrationProvider.LspClientStarter
 import com.intellij.testFramework.LightVirtualFile
-import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import dev.basedpython.pycharm.testFramework.onEdt
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -26,7 +26,6 @@ import org.junit.jupiter.api.Test
  * binary-missing branch is asserted to be graceful (no throw, no server started).
  */
 @TestFixtures
-@RunInEdt(writeIntent = true)
 class LspServerSupportProviderTest {
 
   private val fixture by codeInsightFixture()
@@ -45,7 +44,7 @@ class LspServerSupportProviderTest {
   private fun nonSourceFile(): VirtualFile = LightVirtualFile("notes.md", "")
 
   @AfterEach
-  fun resetSettings() {
+  fun resetSettings() = onEdt {
     val s = BasedPythonSettings.getInstance(project)
     s.byEnabled = true
     s.buffEnabled = true
@@ -58,14 +57,14 @@ class LspServerSupportProviderTest {
   // ---------------------------------------------------------------------------
 
   @Test
-  fun `by provider ignores non-source files`() {
+  fun `by provider ignores non-source files`() = onEdt {
     val starter = RecordingStarter()
     ByLspServerSupportProvider().fileOpened(project, nonSourceFile(), starter)
     assertTrue(starter.started.isEmpty(), "must not start a server for a .md file")
   }
 
   @Test
-  fun `buff provider ignores non-source files`() {
+  fun `buff provider ignores non-source files`() = onEdt {
     val starter = RecordingStarter()
     BuffLspServerSupportProvider().fileOpened(project, nonSourceFile(), starter)
     assertTrue(starter.started.isEmpty(), "must not start a server for a .md file")
@@ -76,7 +75,7 @@ class LspServerSupportProviderTest {
   // ---------------------------------------------------------------------------
 
   @Test
-  fun `by provider does nothing when by is disabled`() {
+  fun `by provider does nothing when by is disabled`() = onEdt {
     BasedPythonSettings.getInstance(project).byEnabled = false
     val starter = RecordingStarter()
     ByLspServerSupportProvider().fileOpened(project, byFile(), starter)
@@ -84,7 +83,7 @@ class LspServerSupportProviderTest {
   }
 
   @Test
-  fun `buff provider does nothing when buff is disabled`() {
+  fun `buff provider does nothing when buff is disabled`() = onEdt {
     BasedPythonSettings.getInstance(project).buffEnabled = false
     val starter = RecordingStarter()
     BuffLspServerSupportProvider().fileOpened(project, byFile(), starter)
@@ -96,7 +95,7 @@ class LspServerSupportProviderTest {
   // ---------------------------------------------------------------------------
 
   @Test
-  fun `by provider handles a missing binary without throwing`() {
+  fun `by provider handles a missing binary without throwing`() = onEdt {
     val s = BasedPythonSettings.getInstance(project)
     s.byEnabled = true
     // Point at a path guaranteed not to exist so resolution returns null in CI.
@@ -112,7 +111,7 @@ class LspServerSupportProviderTest {
   }
 
   @Test
-  fun `buff provider handles a missing binary without throwing`() {
+  fun `buff provider handles a missing binary without throwing`() = onEdt {
     val s = BasedPythonSettings.getInstance(project)
     s.buffEnabled = true
     s.buffPath = "/definitely/not/here/buff"
@@ -128,7 +127,7 @@ class LspServerSupportProviderTest {
   // ---------------------------------------------------------------------------
 
   @Test
-  fun `by provider starts a basedpython descriptor when a binary resolves`() {
+  fun `by provider starts a basedpython descriptor when a binary resolves`() = onEdt {
     val s = BasedPythonSettings.getInstance(project)
     s.byEnabled = true
     val exe = makeFakeExecutable("by")

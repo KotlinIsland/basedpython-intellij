@@ -5,9 +5,9 @@ import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.fileEditor.TextEditor
 import com.intellij.openapi.fileEditor.ex.FileEditorManagerEx
 import com.intellij.openapi.vfs.LocalFileSystem
-import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import dev.basedpython.pycharm.testFramework.onEdt
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -18,7 +18,6 @@ import java.nio.file.Path
 
 /** Where the *Convert in place* actions put what they converted, and what they refuse to clobber. */
 @TestFixtures
-@RunInEdt(writeIntent = true)
 class WriteConvertedSourceTest {
 
   private val fixture by codeInsightFixture()
@@ -30,7 +29,7 @@ class WriteConvertedSourceTest {
     writeConvertedSource(fixture.project, path, content, "convert") { confirm }
 
   @Test
-  fun `an existing file is left alone when overwriting is declined`() {
+  fun `an existing file is left alone when overwriting is declined`() = onEdt {
     val target = dir.resolve("hand_written.by")
     Files.writeString(target, "keep me\n")
 
@@ -40,7 +39,7 @@ class WriteConvertedSourceTest {
   }
 
   @Test
-  fun `a new file lands in directories the VFS had never loaded, and the VFS knows it`() {
+  fun `a new file lands in directories the VFS had never loaded, and the VFS knows it`() = onEdt {
     val target = dir.resolve("out/pkg/mod.py")
 
     val written = write(target, "x = 1\n")!!
@@ -50,7 +49,7 @@ class WriteConvertedSourceTest {
   }
 
   @Test
-  fun `overwriting an existing file can be undone`() {
+  fun `overwriting an existing file can be undone`() = onEdt {
     val target = dir.resolve("mod.by")
     Files.writeString(target, "before\n")
     val file = LocalFileSystem.getInstance().refreshAndFindFileByNioFile(target)!!

@@ -2,9 +2,9 @@ package dev.basedpython.pycharm.format
 
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.editor.Document
-import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import dev.basedpython.pycharm.testFramework.onEdt
 import kotlinx.coroutines.runBlocking
 import org.eclipse.lsp4j.CodeAction
 import org.eclipse.lsp4j.Command
@@ -31,7 +31,6 @@ import org.junit.jupiter.api.Test
  * and the runnable has to be a pure apply that refuses edits for a document that has moved on.
  */
 @TestFixtures
-@RunInEdt(writeIntent = true)
 class BuffImportOptimizerTest {
 
   private val fixture by codeInsightFixture()
@@ -60,7 +59,7 @@ class BuffImportOptimizerTest {
   private fun versionOf(document: Document): Int = FakeBuffClient(fixture.project) { emptyList() }.getDocumentVersion(document)
 
   @Test
-  fun `the server is asked before the runnable exists, and the runnable only applies`() {
+  fun `the server is asked before the runnable exists, and the runnable only applies`() = onEdt {
     val psi = fixture.configureByText("a.by", "import os\nimport sys\n")
     val document = psi.viewProvider.document
     val client = FakeBuffClient(fixture.project) { dropFirstLine(it.textDocument.uri, versionOf(document)) }
@@ -76,7 +75,7 @@ class BuffImportOptimizerTest {
   }
 
   @Test
-  fun `edits the server computed for another version are dropped`() {
+  fun `edits the server computed for another version are dropped`() = onEdt {
     val psi = fixture.configureByText("a.by", "import os\nimport sys\n")
     val document = psi.viewProvider.document
     val client = FakeBuffClient(fixture.project) { dropFirstLine(it.textDocument.uri, versionOf(document) - 1) }
@@ -89,7 +88,7 @@ class BuffImportOptimizerTest {
   }
 
   @Test
-  fun `edits are not applied once the document has moved on since they were asked for`() {
+  fun `edits are not applied once the document has moved on since they were asked for`() = onEdt {
     val psi = fixture.configureByText("a.by", "import os\nimport sys\n")
     val document = psi.viewProvider.document
     // No version from the server: the version the request was sent about still stands guard.
@@ -104,7 +103,7 @@ class BuffImportOptimizerTest {
   }
 
   @Test
-  fun `applying refuses edits stamped with another version`() {
+  fun `applying refuses edits stamped with another version`() = onEdt {
     val psi = fixture.configureByText("a.by", "x\n")
     val document = psi.viewProvider.document
     val client = FakeBuffClient(fixture.project) { emptyList() }
@@ -121,7 +120,7 @@ class BuffImportOptimizerTest {
   }
 
   @Test
-  fun `an error answer is no edits to apply, not an exception out of the pass`() {
+  fun `an error answer is no edits to apply, not an exception out of the pass`() = onEdt {
     val psi = fixture.configureByText("a.by", "import os\nimport sys\n")
     val document = psi.viewProvider.document
     val client = FakeBuffClient(fixture.project) {

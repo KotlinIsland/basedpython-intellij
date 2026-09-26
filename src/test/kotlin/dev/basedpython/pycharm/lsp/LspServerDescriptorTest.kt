@@ -22,7 +22,6 @@ import com.intellij.platform.lsp.api.customization.LspSignatureHelpDisabled
 import com.intellij.platform.lsp.api.customization.LspTypeHierarchyDisabled
 import com.intellij.testFramework.LightVirtualFile
 import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.env.ByEnvironmentKind
 import dev.basedpython.pycharm.env.ByLaunch
@@ -30,6 +29,7 @@ import dev.basedpython.pycharm.lsp.inlay.ByHintKind
 import dev.basedpython.pycharm.lsp.inlay.ByHintMode
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import dev.basedpython.pycharm.testFramework.onEdt
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -52,7 +52,6 @@ import java.nio.file.Paths
  * package to reach them.
  */
 @TestFixtures
-@RunInEdt(writeIntent = true)
 class LspServerDescriptorTest {
 
   private val fixture by codeInsightFixture()
@@ -75,12 +74,12 @@ class LspServerDescriptorTest {
   // ---------------------------------------------------------------------------
 
   @Test
-  fun `by descriptor presentable name is basedpython`() {
+  fun `by descriptor presentable name is basedpython`() = onEdt {
     assertEquals("basedpython", byDescriptor().presentableName)
   }
 
   @Test
-  fun `buff descriptor presentable name is buff`() {
+  fun `buff descriptor presentable name is buff`() = onEdt {
     assertEquals("buff", buffDescriptor().presentableName)
   }
 
@@ -89,7 +88,7 @@ class LspServerDescriptorTest {
   // ---------------------------------------------------------------------------
 
   @Test
-  fun `by descriptor supports by byi py and pyi files`() {
+  fun `by descriptor supports by byi py and pyi files`() = onEdt {
     val desc = byDescriptor()
     assertTrue(desc.isSupportedFile(makeFile("a.by")))
     assertTrue(desc.isSupportedFile(makeFile("a.byi")))
@@ -98,7 +97,7 @@ class LspServerDescriptorTest {
   }
 
   @Test
-  fun `by descriptor rejects unrelated files`() {
+  fun `by descriptor rejects unrelated files`() = onEdt {
     val desc = byDescriptor()
     assertFalse(desc.isSupportedFile(makeFile("readme.md")))
     assertFalse(desc.isSupportedFile(makeFile("data.json")))
@@ -106,7 +105,7 @@ class LspServerDescriptorTest {
   }
 
   @Test
-  fun `buff descriptor recognizes the same source extensions as by`() {
+  fun `buff descriptor recognizes the same source extensions as by`() = onEdt {
     val buff = buffDescriptor()
     val by = byDescriptor()
     for (name in listOf("a.by", "a.byi", "b.py", "c.pyi", "x.txt", "noext")) {
@@ -124,7 +123,7 @@ class LspServerDescriptorTest {
   // ---------------------------------------------------------------------------
 
   @Test
-  fun `buff disables navigation completion and structural capabilities`() {
+  fun `buff disables navigation completion and structural capabilities`() = onEdt {
     val c = buffDescriptor().lspCustomization
     assertSame(LspGoToDefinitionDisabled, c.goToDefinitionCustomizer)
     assertSame(LspGoToTypeDefinitionDisabled, c.goToTypeDefinitionCustomizer)
@@ -146,7 +145,7 @@ class LspServerDescriptorTest {
   }
 
   @Test
-  fun `buff keeps formatting hover and code-actions enabled`() {
+  fun `buff keeps formatting hover and code-actions enabled`() = onEdt {
     val c = buffDescriptor().lspCustomization
     // These are NOT replaced with a Disabled singleton, so they keep the default
     // (enabled) customizer. Asserting they differ from the obvious disabled markers
@@ -163,7 +162,7 @@ class LspServerDescriptorTest {
   // ---------------------------------------------------------------------------
 
   @Test
-  fun `by leaves the platform's inlay hint rendering off whatever the toggles say`() {
+  fun `by leaves the platform's inlay hint rendering off whatever the toggles say`() = onEdt {
     // The hints themselves are on: they are fetched and drawn by ByInlayHintsProvider, in the
     // editor font. What this switches off is only the platform's own small-text-in-a-pill
     // rendering of the same hints, which would otherwise draw them a second time.
@@ -176,7 +175,7 @@ class LspServerDescriptorTest {
   }
 
   @Test
-  fun `by does not blanket-disable navigation capabilities`() {
+  fun `by does not blanket-disable navigation capabilities`() = onEdt {
     // Unlike buff, the `by` type-checker advertises full navigation; assert these are
     // NOT the disabled singletons.
     val s = BasedPythonSettings.getInstance(project)
@@ -189,7 +188,7 @@ class LspServerDescriptorTest {
   }
 
   @Test
-  fun `by renames in a by file`() {
+  fun `by renames in a by file`() = onEdt {
     // The platform's own rename support only runs in plain-text and TextMate files, so without this
     // Shift+F6 was disabled in every `.by` file however the toggle was set.
     val c = byDescriptor().lspCustomization.renameCustomizer
@@ -199,19 +198,19 @@ class LspServerDescriptorTest {
   }
 
   @Test
-  fun `by leaves renaming a plain text file to whoever else renames it`() {
+  fun `by leaves renaming a plain text file to whoever else renames it`() = onEdt {
     val c = byDescriptor().lspCustomization.renameCustomizer as LspRenameSupport
     assertFalse(c.shouldRunRename(fixture.configureByText("notes.txt", "x\n")))
   }
 
   @Test
-  fun `the rename toggle still switches by's rename off`() {
+  fun `the rename toggle still switches by's rename off`() = onEdt {
     BasedPythonSettings.getInstance(project).byRename = false
     assertSame(LspRenameDisabled, byDescriptor().lspCustomization.renameCustomizer)
   }
 
   @Test
-  fun `by draws inheritance markers in by files`() {
+  fun `by draws inheritance markers in by files`() = onEdt {
     // Off in the platform unless a customization turns them on.
     val c = byDescriptor().lspCustomization.inheritanceMarkersCustomizer
     assertTrue(c is LspInheritanceMarkersSupport, "inheritance markers must be on for by: $c")
@@ -219,13 +218,13 @@ class LspServerDescriptorTest {
   }
 
   @Test
-  fun `by draws no inheritance markers where another language already does`() {
+  fun `by draws no inheritance markers where another language already does`() = onEdt {
     val c = byDescriptor().lspCustomization.inheritanceMarkersCustomizer as LspInheritanceMarkersSupport
     assertFalse(c.shouldAskServerForMarkers(makeFile("readme.txt")))
   }
 
   @Test
-  fun `by's navigating code lenses are run by the client`() {
+  fun `by's navigating code lenses are run by the client`() = onEdt {
     // `editor.action.showReferences` is not a command `by` executes; sent back to it, it is refused.
     assertTrue(byDescriptor().lspCustomization.codeLensCustomizer is ByCodeLensSupport)
     BasedPythonSettings.getInstance(project).byCodeLens = false
@@ -233,7 +232,7 @@ class LspServerDescriptorTest {
   }
 
   @Test
-  fun `by's refactorings reach Alt+Enter as intentions`() {
+  fun `by's refactorings reach Alt+Enter as intentions`() = onEdt {
     // `by`'s refactorings are code actions that are not quick fixes. The platform only asks for
     // those, and lists them in Alt+Enter, through a code actions customizer that supports
     // intention actions — the only place Inline Variable, Extract Function and the rest now live.
@@ -248,14 +247,14 @@ class LspServerDescriptorTest {
   // ---------------------------------------------------------------------------
 
   @Test
-  fun `a direct binary launch is exe then server`() {
+  fun `a direct binary launch is exe then server`() = onEdt {
     val cmd = ByLspServerDescriptor(project, launch(), emptyList()).createCommandLine()
     assertEquals(dummyBinary.toString(), cmd.exePath)
     assertEquals(listOf("server"), cmd.parametersList.list)
   }
 
   @Test
-  fun `a uv launch puts the prepend args before the server subcommand`() {
+  fun `a uv launch puts the prepend args before the server subcommand`() = onEdt {
     // uv is only "just another source" if its argument prefix lands in the right place:
     // `uv run --project <dir> by server`, not `uv server run …`.
     val uv = Paths.get("/usr/local/bin/uv")
@@ -270,13 +269,13 @@ class LspServerDescriptorTest {
   }
 
   @Test
-  fun `extra args follow the server subcommand`() {
+  fun `extra args follow the server subcommand`() = onEdt {
     val desc = ByLspServerDescriptor(project, launch(), listOf("--verbose"))
     assertEquals(listOf("server", "--verbose"), desc.createCommandLine().parametersList.list)
   }
 
   @Test
-  fun `the activation environment reaches the server process`() {
+  fun `the activation environment reaches the server process`() = onEdt {
     // Resolving `.venv/bin/by` but running it with the IDE's own environment lets anything the
     // server spawns escape the venv it came from; the descriptor must carry activation through.
     val env = mapOf("VIRTUAL_ENV" to "/w/.venv", "PATH" to "/w/.venv/bin")
@@ -286,7 +285,7 @@ class LspServerDescriptorTest {
   }
 
   @Test
-  fun `buff assembles its command line the same way`() {
+  fun `buff assembles its command line the same way`() = onEdt {
     val cmd = BuffLspServerDescriptor(project, launch(), emptyList()).createCommandLine()
     assertEquals(dummyBinary.toString(), cmd.exePath)
     assertEquals(listOf("server"), cmd.parametersList.list)
@@ -297,7 +296,7 @@ class LspServerDescriptorTest {
   // ---------------------------------------------------------------------------
 
   @Test
-  fun `by is told to skip only the kinds of hint set to never`() {
+  fun `by is told to skip only the kinds of hint set to never`() = onEdt {
     val s = BasedPythonSettings.getInstance(project)
     s.setInlayMode(ByHintKind.VARIABLE_TYPES, ByHintMode.NEVER)
     s.setInlayMode(ByHintKind.INFERRED_RAISES, ByHintMode.ON_PUSH)
@@ -315,7 +314,7 @@ class LspServerDescriptorTest {
   }
 
   @Test
-  fun `the option names are the ones by answers to`() {
+  fun `the option names are the ones by answers to`() = onEdt {
     // Names `by` does not recognise are reported back to the user as unknown options, so this is
     // spelling that has to match the server's `InlayHintOptions`, field for field — every field but
     // the two django-template ones, whose hints this plugin does not draw.
@@ -336,7 +335,7 @@ class LspServerDescriptorTest {
   }
 
   @AfterEach
-  fun resetSettings() {
+  fun resetSettings() = onEdt {
     BasedPythonSettings.getInstance(project).loadState(BasedPythonSettings.State())
   }
 

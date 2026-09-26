@@ -1,11 +1,11 @@
 package dev.basedpython.pycharm.project
 
 import com.intellij.openapi.vfs.VfsUtilCore
-import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.lsp.build.ByBuildOutputs
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import dev.basedpython.pycharm.testFramework.onEdt
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
@@ -16,7 +16,6 @@ import org.junit.jupiter.api.Test
  * its own invention.
  */
 @TestFixtures
-@RunInEdt(writeIntent = true)
 class BuildDirectoryExcludePolicyTest {
 
     private val fixture by codeInsightFixture()
@@ -26,12 +25,12 @@ class BuildDirectoryExcludePolicyTest {
     private val outputs get() = ByBuildOutputs.getInstance(project)
 
     @BeforeEach
-    fun setUp() {
+    fun setUp() = onEdt {
         BasedPythonSettings.getInstance(project).indexGeneratedPython = false
     }
 
     @AfterEach
-    fun tearDown() {
+    fun tearDown() = onEdt {
         outputs.loadState(ByBuildOutputs.Directories())
     }
 
@@ -40,14 +39,14 @@ class BuildDirectoryExcludePolicyTest {
     }
 
     @Test
-    fun `a project by has never answered for excludes nothing`() {
+    fun `a project by has never answered for excludes nothing`() = onEdt {
         // Not an `out/` per content root, and not a guessed `build/` either: the old policy excluded
         // a directory in every project the IDE opened, basedpython or not.
         assertEquals(emptyList<String>(), BuildDirectoryExcludePolicy(project).excludeUrlsForProject.toList())
     }
 
     @Test
-    fun `the build directories by reported are excluded`() {
+    fun `the build directories by reported are excluded`() = onEdt {
         answered("/work/app/build", "/work/lib/build")
         assertEquals(
             listOf(VfsUtilCore.pathToUrl("/work/app/build"), VfsUtilCore.pathToUrl("/work/lib/build")),
@@ -56,7 +55,7 @@ class BuildDirectoryExcludePolicyTest {
     }
 
     @Test
-    fun `nothing is excluded when the generated python is wanted in the index`() {
+    fun `nothing is excluded when the generated python is wanted in the index`() = onEdt {
         answered("/work/app/build")
         BasedPythonSettings.getInstance(project).indexGeneratedPython = true
         assertEquals(0, BuildDirectoryExcludePolicy(project).excludeUrlsForProject.size)

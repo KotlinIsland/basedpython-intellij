@@ -2,11 +2,11 @@ package dev.basedpython.pycharm.statusbar
 
 import com.intellij.platform.lsp.api.LspClientManager
 import com.intellij.testFramework.PlatformTestUtil
-import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.lsp.ByLspServerSupportProvider
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import dev.basedpython.pycharm.testFramework.onEdt
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
@@ -20,7 +20,6 @@ import java.nio.file.attribute.PosixFilePermission
  * binaries are looked for.
  */
 @TestFixtures
-@RunInEdt(writeIntent = true)
 class LspServerStateServiceTest {
 
     private val fixture by codeInsightFixture()
@@ -28,7 +27,7 @@ class LspServerStateServiceTest {
     private val temp: Path = Files.createTempDirectory("status-bar-test")
 
     @AfterEach
-    fun cleanUp() {
+    fun cleanUp() = onEdt {
         BasedPythonSettings.getInstance(fixture.project).byPath = null
         temp.toFile().deleteRecursively()
     }
@@ -41,7 +40,7 @@ class LspServerStateServiceTest {
     }
 
     @Test
-    fun `a snapshot reports what the last background look found, not what is on disk now`() {
+    fun `a snapshot reports what the last background look found, not what is on disk now`() = onEdt {
         // A fresh instance, so no earlier test has already looked.
         val service = LspServerStateService(fixture.project)
         try {

@@ -1,9 +1,9 @@
 package dev.basedpython.pycharm.format
 
 import com.intellij.openapi.command.WriteCommandAction
-import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import dev.basedpython.pycharm.testFramework.onEdt
 import org.eclipse.lsp4j.CreateFile
 import org.eclipse.lsp4j.Position
 import org.eclipse.lsp4j.Range
@@ -20,7 +20,6 @@ import org.junit.jupiter.api.Test
 
 /** `buff`'s edits are LSP ranges; these check where they land on a real document. */
 @TestFixtures
-@RunInEdt(writeIntent = true)
 class ByCleanupTest {
 
   private val fixture by codeInsightFixture()
@@ -43,7 +42,7 @@ class ByCleanupTest {
 
   /** The shape almost every `buff` answer takes: one edit replacing a run of whole lines. */
   @Test
-  fun `replaces a run of whole lines`() {
+  fun `replaces a run of whole lines`() = onEdt {
     assertEquals(
       "import abc\nimport sys\n\nprint(sys.argv)\n",
       applied(
@@ -59,7 +58,7 @@ class ByCleanupTest {
    * resolved naively.
    */
   @Test
-  fun `an end one line past the last means end of file`() {
+  fun `an end one line past the last means end of file`() = onEdt {
     assertEquals(
       "x = 1\n",
       applied("x = 1\ny = 2\n", edit(1, 0, 2, 0, "")),
@@ -68,7 +67,7 @@ class ByCleanupTest {
 
   /** Deleting the only import leaves the rest of the file alone. */
   @Test
-  fun `deletes a single line`() {
+  fun `deletes a single line`() = onEdt {
     assertEquals(
       "import sys\n\nprint(sys.argv)\n",
       applied(
@@ -83,7 +82,7 @@ class ByCleanupTest {
    * server saw it. Applied in the given order instead, the second would land at a stale offset.
    */
   @Test
-  fun `applies several edits without shifting each other`() {
+  fun `applies several edits without shifting each other`() = onEdt {
     assertEquals(
       "AAA\nb\nCCC\n",
       applied(
@@ -96,7 +95,7 @@ class ByCleanupTest {
 
   /** A partial-line range is resolved by character offset, not rounded to the line. */
   @Test
-  fun `replaces within a line`() {
+  fun `replaces within a line`() = onEdt {
     assertEquals(
       "x = {\"a\": 1}\n",
       applied("x = {  'a' : 1 }\n", edit(0, 4, 0, 16, "{\"a\": 1}")),
@@ -124,7 +123,7 @@ class ByCleanupTextEditTest {
     ByCleanup.applyEditsTo(text, edits.toList())
 
   @Test
-  fun `replaces a run of whole lines`() {
+  fun `replaces a run of whole lines`() = onEdt {
     assertEquals(
       "import abc\nimport sys\n\nprint(sys.argv)\n",
       applied(
@@ -135,12 +134,12 @@ class ByCleanupTextEditTest {
   }
 
   @Test
-  fun `an end one line past the last means end of file`() {
+  fun `an end one line past the last means end of file`() = onEdt {
     assertEquals("x = 1\n", applied("x = 1\ny = 2\n", edit(1, 0, 2, 0, "")))
   }
 
   @Test
-  fun `deletes a single line`() {
+  fun `deletes a single line`() = onEdt {
     assertEquals(
       "import sys\n\nprint(sys.argv)\n",
       applied("import sys\nimport os\n\nprint(sys.argv)\n", edit(1, 0, 2, 0, "")),
@@ -148,7 +147,7 @@ class ByCleanupTextEditTest {
   }
 
   @Test
-  fun `applies several edits without shifting each other`() {
+  fun `applies several edits without shifting each other`() = onEdt {
     assertEquals(
       "AAA\nb\nCCC\n",
       applied("a\nb\nc\n", edit(0, 0, 0, 1, "AAA"), edit(2, 0, 2, 1, "CCC")),
@@ -156,7 +155,7 @@ class ByCleanupTextEditTest {
   }
 
   @Test
-  fun `replaces within a line`() {
+  fun `replaces within a line`() = onEdt {
     assertEquals(
       "x = {\"a\": 1}\n",
       applied("x = {  'a' : 1 }\n", edit(0, 4, 0, 16, "{\"a\": 1}")),
@@ -165,13 +164,13 @@ class ByCleanupTextEditTest {
 
   /** Nothing to do is the common answer once a file is already laid out; the text comes back as is. */
   @Test
-  fun `no edits leaves the text alone`() {
+  fun `no edits leaves the text alone`() = onEdt {
     assertEquals("x = 1\n", applied("x = 1\n"))
   }
 
   /** A file with no trailing newline still has a last line to resolve a position against. */
   @Test
-  fun `handles text that does not end in a newline`() {
+  fun `handles text that does not end in a newline`() = onEdt {
     assertEquals("x = 2", applied("x = 1", edit(0, 4, 0, 5, "2")))
   }
 }
@@ -180,7 +179,7 @@ class ByCleanupTextEditTest {
 class ByCleanupOpKindTest {
 
   @Test
-  fun `passes map to the server's source action kinds`() {
+  fun `passes map to the server's source action kinds`() = onEdt {
     assertEquals("source.fixAll.ruff", ByCleanupOp.FixAll.kind)
     assertEquals("source.optimizeImports.ruff", ByCleanupOp.OptimizeImports.kind)
     assertEquals(
@@ -194,7 +193,7 @@ class ByCleanupOpKindTest {
    * *Reformat Code* delete imports, which is the whole distinction these three passes draw.
    */
   @Test
-  fun `reformatting and optimizing imports are different passes`() {
+  fun `reformatting and optimizing imports are different passes`() = onEdt {
     assertNotEquals(
       ByCleanupOp.FormatAndOrganizeImports.kind,
       ByCleanupOp.OptimizeImports.kind,
@@ -222,21 +221,21 @@ class ByCleanupWorkspaceEditTest {
   private fun plain(edit: TextEdit) = Either.forLeft<TextEdit, SnippetTextEdit>(edit)
 
   @Test
-  fun `reads edits sent as documentChanges`() {
+  fun `reads edits sent as documentChanges`() = onEdt {
     val workspaceEdit = WorkspaceEdit(listOf(documentEdit(uri, edit("fixed\n"))))
     assertEquals(listOf(edit("fixed\n")), ByCleanup.editsFor(workspaceEdit, uri).edits)
   }
 
   /** The other shape, for a client that did not claim `documentChanges`. */
   @Test
-  fun `reads edits sent as changes`() {
+  fun `reads edits sent as changes`() = onEdt {
     val workspaceEdit = WorkspaceEdit(mapOf(uri to listOf(edit("fixed\n"))))
     assertEquals(listOf(edit("fixed\n")), ByCleanup.editsFor(workspaceEdit, uri).edits)
   }
 
   /** A pass may only rewrite the document it was asked about. */
   @Test
-  fun `ignores edits to other documents`() {
+  fun `ignores edits to other documents`() = onEdt {
     val workspaceEdit = WorkspaceEdit(
       listOf(documentEdit("file:///project/elsewhere.by", edit("no\n"))),
     )
@@ -245,7 +244,7 @@ class ByCleanupWorkspaceEditTest {
 
   /** Creating, renaming and deleting files are not edits, and are not this plugin's to apply. */
   @Test
-  fun `ignores resource operations`() {
+  fun `ignores resource operations`() = onEdt {
     val workspaceEdit = WorkspaceEdit(
       listOf(Either.forRight<TextDocumentEdit, ResourceOperation>(CreateFile(uri))),
     )
@@ -254,12 +253,12 @@ class ByCleanupWorkspaceEditTest {
 
   /** Neither shape filled in means there was nothing to do, not a failure. */
   @Test
-  fun `an empty workspace edit yields no edits`() {
+  fun `an empty workspace edit yields no edits`() = onEdt {
     assertEquals(emptyList<TextEdit>(), ByCleanup.editsFor(WorkspaceEdit(), uri).edits)
   }
 
   @Test
-  fun `documentChanges carry the version the server computed against`() {
+  fun `documentChanges carry the version the server computed against`() = onEdt {
     val workspaceEdit = WorkspaceEdit(
       listOf(
         Either.forLeft<TextDocumentEdit, ResourceOperation>(
@@ -276,7 +275,7 @@ class ByCleanupWorkspaceEditTest {
    * nor with it left out of the edits beside it.
    */
   @Test
-  fun `a document edit carrying a snippet edit yields no edits`() {
+  fun `a document edit carrying a snippet edit yields no edits`() = onEdt {
     val snippet = SnippetTextEdit(Range(Position(1, 0), Position(1, 0)), org.eclipse.lsp4j.StringValue("snippet", "x = \$0\n"))
     val workspaceEdit = WorkspaceEdit(
       listOf(
@@ -293,7 +292,7 @@ class ByCleanupWorkspaceEditTest {
 
   /** The `changes` shape has nowhere to put a version, so none is claimed. */
   @Test
-  fun `changes carry no version`() {
+  fun `changes carry no version`() = onEdt {
     val workspaceEdit = WorkspaceEdit(mapOf(uri to listOf(edit("fixed\n"))))
     assertEquals(null, ByCleanup.editsFor(workspaceEdit, uri).version)
   }

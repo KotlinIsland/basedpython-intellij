@@ -1,10 +1,10 @@
 package dev.basedpython.pycharm.docs.render
 
 import com.intellij.openapi.components.service
-import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.lsp.ByLspLifecycleListener
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import dev.basedpython.pycharm.testFramework.onEdt
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
@@ -16,7 +16,6 @@ import org.junit.jupiter.api.Test
  * the question is as much when it must not as when it must.
  */
 @TestFixtures
-@RunInEdt(writeIntent = true)
 class ByRenderedDocsRefresherTest {
 
     private val fixture by codeInsightFixture()
@@ -24,14 +23,14 @@ class ByRenderedDocsRefresherTest {
     private val refresher get() = fixture.project.service<ByRenderedDocsRefresher>()
 
     @Test
-    fun `a file the server has not answered for is stale`() {
+    fun `a file the server has not answered for is stale`() = onEdt {
         val file = fixture.configureByText("a.by", "x = 1\n")
         assertNull(ByDocstringSpans.recorded(file))
         assertTrue(refresher.isStale(file.virtualFile))
     }
 
     @Test
-    fun `a file the server says has no docstrings is not stale`() {
+    fun `a file the server says has no docstrings is not stale`() = onEdt {
         val file = fixture.configureByText("b.by", "x = 1\n")
         val document = fixture.editor.document
         fixture.project.service<ByDocstringSpanCache>()
@@ -42,7 +41,7 @@ class ByRenderedDocsRefresherTest {
     }
 
     @Test
-    fun `an answer from before the file changed is not an answer`() {
+    fun `an answer from before the file changed is not an answer`() = onEdt {
         val file = fixture.configureByText("c.by", "x = 1\n")
         fixture.project.service<ByDocstringSpanCache>()
             .remember(file.virtualFile, fixture.editor.document.modificationStamp, emptyList())
@@ -52,7 +51,7 @@ class ByRenderedDocsRefresherTest {
     }
 
     @Test
-    fun `a server becoming ready drops what the previous one said`() {
+    fun `a server becoming ready drops what the previous one said`() = onEdt {
         val file = fixture.configureByText("d.by", "x = 1\n")
         refresher
         fixture.project.service<ByDocstringSpanCache>()

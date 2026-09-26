@@ -121,15 +121,13 @@ kotlin {
   }
 }
 
-// The plugin uses a deprecated API only when no replacement exists across the supported range, and
-// then visibly: `@Suppress("DEPRECATION")` or `@Suppress("OVERRIDE_DEPRECATION")` at the use, with a
-// comment saying why. As warnings, `ReadAction.run` went in with `runBlocking` sitting beside it in
-// the floor build. Compiling against the floor (`platformVersion`) sees the floor's deprecations;
-// the newest build's are the verifier's (see `verifyPlugin` below).
-//
-// Main sources only, because that is what ships: the tests still hold 167 deprecated usages, 160 of
-// them `@RunInEdt`, whose replacement changes which thread each test runs on and is its own change.
-tasks.named<KotlinCompile>("compileKotlin") {
+// The plugin and its tests use a deprecated API only when no replacement exists across the
+// supported range, and then visibly: `@Suppress("DEPRECATION")` or `@Suppress("OVERRIDE_DEPRECATION")`
+// at the use, with a comment saying why. As warnings, `ReadAction.run` went in with `runBlocking`
+// sitting beside it in the floor build, and the tests had gathered 167 deprecated usages, 160 of them
+// `@RunInEdt`. Compiling against the floor (`platformVersion`) sees the floor's deprecations; the
+// newest build's are the verifier's (see `verifyPlugin` below), for the plugin's code.
+tasks.withType<KotlinCompile>().configureEach {
   compilerOptions.freeCompilerArgs.addAll(
     "-Xwarning-level=DEPRECATION:error",
     "-Xwarning-level=OVERRIDE_DEPRECATION:error",

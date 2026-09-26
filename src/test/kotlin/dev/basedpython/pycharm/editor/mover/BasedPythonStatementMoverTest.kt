@@ -1,17 +1,16 @@
 package dev.basedpython.pycharm.editor.mover
 
 import com.intellij.openapi.actionSystem.IdeActions
-import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.lsp.outline.OutlineSpec
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import dev.basedpython.pycharm.testFramework.onEdt
 import org.junit.jupiter.api.Test
 
 /**
  * Move Statement Up/Down through the real actions, with `by`'s outline of the file put in by hand.
  */
 @TestFixtures
-@RunInEdt(writeIntent = true)
 class BasedPythonStatementMoverTest {
 
     private val fixture by codeInsightFixture()
@@ -21,7 +20,7 @@ class BasedPythonStatementMoverTest {
         before: String,
         after: String,
         outline: (OutlineSpec.Suite.() -> Unit)?,
-    ) {
+    ) = onEdt {
         fixture.configureByText("a.by", before)
         if (outline != null) OutlineSpec.remember(fixture.project, fixture.editor.document, outline)
         fixture.performEditorAction(

@@ -1,12 +1,12 @@
 package dev.basedpython.pycharm.run.test.node
 
-import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.lsp.build.ByBuildOutputs
 import dev.basedpython.pycharm.lsp.ext.ByBuildOutput
 import dev.basedpython.pycharm.run.model.ByProgramModel
 import dev.basedpython.pycharm.run.model.ByReplies
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import dev.basedpython.pycharm.testFramework.onEdt
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 
@@ -15,7 +15,6 @@ import org.junit.jupiter.api.Test
  * tests in it — which are what a run is launched with and what its outcomes come back keyed by.
  */
 @TestFixtures
-@RunInEdt(writeIntent = true)
 class ByTestNodeServiceTest {
 
     private val fixture by codeInsightFixture()
@@ -26,7 +25,7 @@ class ByTestNodeServiceTest {
      * taken from `by/buildOutput`, not from the source's path.
      */
     @Test
-    fun `a src-layout test is listed under the path by stages it at`() {
+    fun `a src-layout test is listed under the path by stages it at`() = onEdt {
         val source = "def test_addition():\n    assert 1 + 1 == 2\n"
         val file = fixture.addFileToProject("src/tests/test_listed.by", source).virtualFile
         ByProgramModel.getInstance(fixture.project).rememberProjectTests(file, ByReplies.testItems(source))

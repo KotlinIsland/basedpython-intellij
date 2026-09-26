@@ -3,6 +3,7 @@ package dev.basedpython.pycharm.testFramework
 import com.intellij.openapi.Disposable
 import com.intellij.platform.lsp.api.LspIntegrationProvider
 import com.intellij.testFramework.ExtensionTestUtil
+import com.intellij.testFramework.LeakHunter
 import com.intellij.testFramework.LightProjectDescriptor
 import com.intellij.testFramework.PlatformTestUtil
 import com.intellij.testFramework.fixtures.CodeInsightTestFixture
@@ -27,14 +28,16 @@ import org.junit.jupiter.api.extension.ExtensionContext
  * migrated tests keep their original semantics: a shared light project, no real files on disk, and
  * none of the cost of opening a full project per test.
  *
- * Declare it as an instance field so each test gets a clean fixture. `writeIntent = true` matters:
- * `UsefulTestCase` ran JUnit 3 tests on the EDT holding the write-intent lock, and PSI access here
- * expects the same, so without it every test touching PSI fails a read-access assertion.
+ * Declare it as an instance field so each test gets a clean fixture, and run each test body in
+ * [onEdt]: `UsefulTestCase` ran JUnit 3 tests on the EDT holding the write-intent lock, and PSI
+ * access here expects the same, so off it every test touching PSI fails a read-access assertion.
  * ```
  * @TestFixtures
- * @RunInEdt(writeIntent = true)
  * class MyTest {
  *   private val fixture by codeInsightFixture()
+ *
+ *   @Test
+ *   fun `it works`() = onEdt { ... }
  * }
  * ```
  */
@@ -91,7 +94,7 @@ private fun closeLightProjectsBeforeTheApplication(context: ExtensionContext) {
   context.testApplication().getOrThrow()
   context.root.getStore(ExtensionContext.Namespace.GLOBAL).getOrComputeIfAbsent(
     "basedpython.lightProjects",
-    { AutoCloseable { runInEdtAndWait { PlatformTestUtil.cleanupAllProjects() } } },
+    { AutoCloseable { runInEdtAndWait { LeakHunter.cleanupAllProjects() } } },
     AutoCloseable::class.java,
   )
 }

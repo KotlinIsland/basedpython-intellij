@@ -6,10 +6,10 @@ import com.intellij.openapi.actionSystem.impl.ActionToolbarImpl
 import com.intellij.openapi.actionSystem.impl.SimpleDataContext
 import com.intellij.openapi.util.Disposer
 import com.intellij.testFramework.PlatformTestUtil
-import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import com.intellij.ui.treeStructure.Tree
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import dev.basedpython.pycharm.testFramework.onEdt
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -26,7 +26,6 @@ import javax.swing.JComponent
  * into is [ByTestNodesTest]'s subject.
  */
 @TestFixtures
-@RunInEdt(writeIntent = true)
 class ByTestNodePanelTest {
 
     private val fixture by codeInsightFixture()
@@ -50,7 +49,7 @@ class ByTestNodePanelTest {
     }
 
     @Test
-    fun `the panel builds a tree and a toolbar`() {
+    fun `the panel builds a tree and a toolbar`() = onEdt {
         withPanel { panel ->
             assertNotNull(find(panel, Tree::class.java), "the panel should contain a tree")
             assertTrue(panel.toolbar is ActionToolbarImpl, "the panel should have an action toolbar")
@@ -63,7 +62,7 @@ class ByTestNodePanelTest {
      * collection nobody asked for.
      */
     @Test
-    fun `opening the panel runs nothing`() {
+    fun `opening the panel runs nothing`() = onEdt {
         withPanel { panel ->
             val tree = checkNotNull(find(panel, Tree::class.java))
             val service = ByTestNodeService.getInstance(fixture.project)
@@ -80,7 +79,7 @@ class ByTestNodePanelTest {
      * and the one where `update` has no node to read.
      */
     @Test
-    fun `every toolbar action updates with no selection`() {
+    fun `every toolbar action updates with no selection`() = onEdt {
         withPanel { panel ->
             val toolbar = panel.toolbar as ActionToolbarImpl
             // The toolbar holds a group, not a list, until an update has presented it. The update is

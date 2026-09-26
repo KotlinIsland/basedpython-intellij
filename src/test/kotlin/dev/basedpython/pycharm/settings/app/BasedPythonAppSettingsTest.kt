@@ -1,9 +1,9 @@
 package dev.basedpython.pycharm.settings.app
 
-import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import com.intellij.util.xmlb.XmlSerializerUtil
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import dev.basedpython.pycharm.testFramework.onEdt
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -22,7 +22,6 @@ import org.junit.jupiter.api.Test
  * so it is declared here the same way the project-scoped tests declare it.
  */
 @TestFixtures
-@RunInEdt(writeIntent = true)
 class BasedPythonAppSettingsTest {
 
     @Suppress("unused")
@@ -33,21 +32,21 @@ class BasedPythonAppSettingsTest {
     // --- defaults -----------------------------------------------------------
 
     @Test
-    fun `default state path defaults are null`() {
+    fun `default state path defaults are null`() = onEdt {
         val s = BasedPythonAppSettings.State()
         assertNull(s.defaultByPath)
         assertNull(s.defaultBuffPath)
     }
 
     @Test
-    fun `default state toggles enabled`() {
+    fun `default state toggles enabled`() = onEdt {
         val s = BasedPythonAppSettings.State()
         assertTrue(s.defaultByEnabled)
         assertTrue(s.defaultBuffEnabled)
     }
 
     @Test
-    fun `default state scalar defaults`() {
+    fun `default state scalar defaults`() = onEdt {
         val s = BasedPythonAppSettings.State()
         assertEquals("", s.defaultByExtraArgs)
         assertEquals("", s.defaultBuffExtraArgs)
@@ -56,7 +55,7 @@ class BasedPythonAppSettingsTest {
     // --- service registration ----------------------------------------------
 
     @Test
-    fun `getInstance returns app service`() {
+    fun `getInstance returns app service`() = onEdt {
         assertNotNull(settings)
         assertSame(settings, BasedPythonAppSettings.getInstance())
     }
@@ -64,7 +63,7 @@ class BasedPythonAppSettingsTest {
     // --- get and set --------------------------------------------------------
 
     @Test
-    fun `setters mutate state`() {
+    fun `setters mutate state`() = onEdt {
         settings.defaultByPath = "/opt/by"
         settings.defaultBuffPath = "/opt/buff"
         settings.defaultByEnabled = false
@@ -81,7 +80,7 @@ class BasedPythonAppSettingsTest {
     }
 
     @Test
-    fun `getState reflects setter`() {
+    fun `getState reflects setter`() = onEdt {
         settings.defaultByPath = "/x/by"
         assertEquals("/x/by", settings.state.defaultByPath)
     }
@@ -89,7 +88,7 @@ class BasedPythonAppSettingsTest {
     // --- loadState round-trip ----------------------------------------------
 
     @Test
-    fun `loadState copies all fields`() {
+    fun `loadState copies all fields`() = onEdt {
         val incoming = BasedPythonAppSettings.State(
             defaultByPath = "/g/by",
             defaultBuffPath = "/g/buff",
@@ -108,7 +107,7 @@ class BasedPythonAppSettingsTest {
     }
 
     @Test
-    fun `loadState then getState round-trips bean`() {
+    fun `loadState then getState round-trips bean`() = onEdt {
         val incoming = BasedPythonAppSettings.State(
             defaultByPath = "/r/by",
             defaultByEnabled = false,
@@ -120,7 +119,7 @@ class BasedPythonAppSettingsTest {
     }
 
     @Test
-    fun `copyBean produces equal independent state`() {
+    fun `copyBean produces equal independent state`() = onEdt {
         val src = BasedPythonAppSettings.State(
             defaultByPath = "/c/by",
             defaultBuffExtraArgs = "--copy",
@@ -136,7 +135,7 @@ class BasedPythonAppSettingsTest {
     // --- resolution helper through live service -----------------------------
 
     @Test
-    fun `convenience byPath uses app default when project unset`() {
+    fun `convenience byPath uses app default when project unset`() = onEdt {
         settings.defaultByPath = "/app/by"
         assertEquals("/app/by", BasedPythonDefaults.effectiveByPath(null))
         assertEquals("/app/by", BasedPythonDefaults.effectiveByPath(""))
@@ -144,14 +143,14 @@ class BasedPythonAppSettingsTest {
     }
 
     @Test
-    fun `convenience buffPath uses app default when project unset`() {
+    fun `convenience buffPath uses app default when project unset`() = onEdt {
         settings.defaultBuffPath = "/app/buff"
         assertEquals("/app/buff", BasedPythonDefaults.effectiveBuffPath(null))
         assertEquals("/proj/buff", BasedPythonDefaults.effectiveBuffPath("/proj/buff"))
     }
 
     @Test
-    fun `convenience extra args use app defaults`() {
+    fun `convenience extra args use app defaults`() = onEdt {
         settings.defaultByExtraArgs = "--gby"
         settings.defaultBuffExtraArgs = "--gbuff"
         assertEquals("--gby", BasedPythonDefaults.effectiveByExtraArgs(null))
@@ -160,7 +159,7 @@ class BasedPythonAppSettingsTest {
     }
 
     @Test
-    fun `convenience server toggles use app defaults`() {
+    fun `convenience server toggles use app defaults`() = onEdt {
         settings.defaultByEnabled = false
         settings.defaultBuffEnabled = false
         assertFalse(BasedPythonDefaults.effectiveByEnabled(null))
@@ -169,7 +168,7 @@ class BasedPythonAppSettingsTest {
     }
 
     @AfterEach
-    fun resetSettings() {
+    fun resetSettings() = onEdt {
         // Reset to defaults so we don't leak app-level state between tests.
         settings.loadState(BasedPythonAppSettings.State())
     }

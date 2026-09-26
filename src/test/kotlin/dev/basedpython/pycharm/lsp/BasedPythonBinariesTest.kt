@@ -1,11 +1,11 @@
 package dev.basedpython.pycharm.lsp
 
-import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.env.ByEnvironmentKind
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import dev.basedpython.pycharm.settings.app.BasedPythonAppSettings
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import dev.basedpython.pycharm.testFramework.onEdt
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -32,7 +32,6 @@ import java.nio.file.attribute.PosixFilePermission
  * service).
  */
 @TestFixtures
-@RunInEdt(writeIntent = true)
 class BasedPythonBinariesTest {
 
   private val fixture by codeInsightFixture()
@@ -42,12 +41,12 @@ class BasedPythonBinariesTest {
   private lateinit var tmpDir: Path
 
   @BeforeEach
-  fun createTempDir() {
+  fun createTempDir() = onEdt {
     tmpDir = Files.createTempDirectory("bp-binaries-test")
   }
 
   @AfterEach
-  fun cleanUp() {
+  fun cleanUp() = onEdt {
     if (::tmpDir.isInitialized) {
       tmpDir.toFile().deleteRecursively()
     }
@@ -77,7 +76,7 @@ class BasedPythonBinariesTest {
   }
 
   @Test
-  fun `resolveBy honors an executable override path`() {
+  fun `resolveBy honors an executable override path`() = onEdt {
     val exe = makeExecutable("by-fake")
     BasedPythonSettings.getInstance(project).byPath = exe.toString()
 
@@ -87,7 +86,7 @@ class BasedPythonBinariesTest {
   }
 
   @Test
-  fun `resolveBuff honors an executable override path`() {
+  fun `resolveBuff honors an executable override path`() = onEdt {
     val exe = makeExecutable("buff-fake")
     BasedPythonSettings.getInstance(project).buffPath = exe.toString()
 
@@ -97,7 +96,7 @@ class BasedPythonBinariesTest {
   }
 
   @Test
-  fun `a non-executable override is ignored gracefully`() {
+  fun `a non-executable override is ignored gracefully`() = onEdt {
     // A plain (non-executable) file must NOT be returned; resolution falls through.
     val plain = tmpDir.resolve("not-exec")
     Files.createFile(plain)
@@ -114,7 +113,7 @@ class BasedPythonBinariesTest {
   }
 
   @Test
-  fun `a bogus override path does not throw and falls through`() {
+  fun `a bogus override path does not throw and falls through`() = onEdt {
     BasedPythonSettings.getInstance(project).byPath = "/definitely/not/a/real/path/by-xyz"
     // Must not throw; returns whatever PATH/venv yields (likely null in CI).
     val resolved = BasedPythonBinaries.resolveByExe(project)
@@ -126,7 +125,7 @@ class BasedPythonBinariesTest {
   }
 
   @Test
-  fun `resolution returns null or a real path but never crashes`() {
+  fun `resolution returns null or a real path but never crashes`() = onEdt {
     // With no override set, resolution walks the venv + PATH. In CI neither `by` nor
     // `buff` exist, so we expect null; on a dev box it may find one. Either is fine —
     // the contract is "no exception, and any non-null result is executable".
@@ -143,37 +142,37 @@ class BasedPythonBinariesTest {
   // --- searchStartDirs ordering (pure logic; multi-root §186) ---
 
   @Test
-  fun `searchStartDirs prefers content root over project base`() {
+  fun `searchStartDirs prefers content root over project base`() = onEdt {
     val root = Path.of("/work/moduleA")
     val base = Path.of("/work")
     assertEquals(listOf(root, base), BasedPythonBinaries.searchStartDirs(root, base))
   }
 
   @Test
-  fun `searchStartDirs dedupes when content root equals project base`() {
+  fun `searchStartDirs dedupes when content root equals project base`() = onEdt {
     val base = Path.of("/work")
     assertEquals(listOf(base), BasedPythonBinaries.searchStartDirs(base, base))
   }
 
   @Test
-  fun `searchStartDirs with only a content root`() {
+  fun `searchStartDirs with only a content root`() = onEdt {
     val root = Path.of("/work/moduleA")
     assertEquals(listOf(root), BasedPythonBinaries.searchStartDirs(root, null))
   }
 
   @Test
-  fun `searchStartDirs with only a project base`() {
+  fun `searchStartDirs with only a project base`() = onEdt {
     val base = Path.of("/work")
     assertEquals(listOf(base), BasedPythonBinaries.searchStartDirs(null, base))
   }
 
   @Test
-  fun `searchStartDirs is empty when nothing is known`() {
+  fun `searchStartDirs is empty when nothing is known`() = onEdt {
     assertTrue(BasedPythonBinaries.searchStartDirs(null, null).isEmpty())
   }
 
   @Test
-  fun `resolveBy with a content file still honors override`() {
+  fun `resolveBy with a content file still honors override`() = onEdt {
     // contextFile param must not break the override short-circuit.
     val exe = makeExecutable("by-fake2")
     BasedPythonSettings.getInstance(project).byPath = exe.toString()
@@ -186,7 +185,7 @@ class BasedPythonBinariesTest {
   // --- IDE-wide default fallback ---
 
   @Test
-  fun `the app-level default path is used when the project path is blank`() {
+  fun `the app-level default path is used when the project path is blank`() = onEdt {
     // Regression: resolution read the raw project value, so `effectiveByPath` — and with it the
     // whole "basedpython Defaults" page — was dead code and a global default was silently ignored.
     val exe = makeExecutable("by-global")
@@ -203,7 +202,7 @@ class BasedPythonBinariesTest {
   }
 
   @Test
-  fun `a project path wins over the app-level default`() {
+  fun `a project path wins over the app-level default`() = onEdt {
     val projectExe = makeExecutable("by-project")
     val globalExe = makeExecutable("by-global2")
     val app = BasedPythonAppSettings.getInstance()
@@ -221,7 +220,7 @@ class BasedPythonBinariesTest {
   // --- explicit environment kinds ---
 
   @Test
-  fun `an explicit kind does not fall back to other sources`() {
+  fun `an explicit kind does not fall back to other sources`() = onEdt {
     // The point of picking a source explicitly is that it fails loudly rather than silently
     // resolving via some other route. No SDK is configured in this fixture, so SDK must yield null
     // even though an override/PATH binary might otherwise be found.
@@ -230,7 +229,7 @@ class BasedPythonBinariesTest {
   }
 
   @Test
-  fun `an explicit kind ignores the configured override path`() {
+  fun `an explicit kind ignores the configured override path`() = onEdt {
     // The override is layered over an IDE-wide default, so honouring it here would let a global
     // preference beat this run configuration's explicit choice — precedence backwards. It also
     // cannot express uv, so an override would otherwise mean "uv (managed)" silently never runs.
@@ -243,7 +242,7 @@ class BasedPythonBinariesTest {
   }
 
   @Test
-  fun `a resolved launch never has a null exe and describes itself`() {
+  fun `a resolved launch never has a null exe and describes itself`() = onEdt {
     val exe = makeExecutable("by-fake4")
     BasedPythonSettings.getInstance(project).byPath = exe.toString()
     val launch = BasedPythonBinaries.launchBy(project)
@@ -254,7 +253,7 @@ class BasedPythonBinariesTest {
   // --- auto-detection must never reach uv ---
 
   @Test
-  fun `auto-detection never resolves via uv`() {
+  fun `auto-detection never resolves via uv`() = onEdt {
     // `uv run` creates a .venv, writes uv.lock, and can download a CPython toolchain. That is fine
     // when the user asks for it and unacceptable as a side effect of opening a file — and every
     // implicit caller (LSP startup, the missing-binary banner, inspections) resolves with AUTO.
@@ -271,7 +270,7 @@ class BasedPythonBinariesTest {
   }
 
   @Test
-  fun `an override is reported as such rather than as a detected source`() {
+  fun `an override is reported as such rather than as a detected source`() = onEdt {
     // The detection label exists to answer "which source produced this"; labelling an explicitly
     // configured path "Auto-detect" would defeat its only purpose.
     val exe = makeExecutable("by-fake5")
@@ -283,7 +282,7 @@ class BasedPythonBinariesTest {
   }
 
   @Test
-  fun `a detected launch is not reported as an override`() {
+  fun `a detected launch is not reported as an override`() = onEdt {
     BasedPythonSettings.getInstance(project).byPath = null
     val launch = BasedPythonBinaries.launchBy(project)
     if (launch != null) {

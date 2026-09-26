@@ -1,9 +1,9 @@
 package dev.basedpython.pycharm.lsp.semantic
 
 import com.intellij.platform.lsp.api.customization.LspSemanticTokensSupport
-import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import dev.basedpython.pycharm.testFramework.onEdt
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -19,13 +19,12 @@ import org.junit.jupiter.api.Test
  * aren't gated. The failure is silent: no exception, no log line.
  */
 @TestFixtures
-@RunInEdt(writeIntent = true)
 class BasedPythonLspSemanticTokensSupportTest {
 
     private val fixture by codeInsightFixture()
 
     @Test
-    fun `asks server for semantic tokens on by files`() {
+    fun `asks server for semantic tokens on by files`() = onEdt {
         val psiFile = fixture.configureByText("a.by", "a = 1 cast int")
         assertTrue(
             BasedPythonLspSemanticTokensSupport().shouldAskServerForSemanticTokens(psiFile),
@@ -36,7 +35,7 @@ class BasedPythonLspSemanticTokensSupportTest {
 
     /** The exact condition that made this bite: our language is neither of the two the default allows. */
     @Test
-    fun `platform default would not ask for by files`() {
+    fun `platform default would not ask for by files`() = onEdt {
         val psiFile = fixture.configureByText("a.by", "a = 1 cast int")
         assertFalse(
             LspSemanticTokensSupport().shouldAskServerForSemanticTokens(psiFile),

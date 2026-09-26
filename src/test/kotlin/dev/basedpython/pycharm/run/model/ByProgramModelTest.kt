@@ -8,7 +8,6 @@ import com.intellij.openapi.vfs.newvfs.events.VFileContentChangeEvent
 import com.intellij.openapi.vfs.newvfs.events.VFileCreateEvent
 import com.intellij.openapi.vfs.newvfs.events.VFilePropertyChangeEvent
 import com.intellij.psi.PsiDocumentManager
-import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.lsp.build.ByBuildOutputs
 import dev.basedpython.pycharm.lsp.ext.ByBuildOutput
@@ -16,6 +15,7 @@ import dev.basedpython.pycharm.run.BasedPythonRunConfigurationType
 import dev.basedpython.pycharm.run.ByRunConfiguration
 import dev.basedpython.pycharm.run.test.node.ByTestNodeService
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import dev.basedpython.pycharm.testFramework.onEdt
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
@@ -31,7 +31,6 @@ import java.nio.file.Path
  * revision, the tests they describe, and the files whose changes ask again.
  */
 @TestFixtures
-@RunInEdt(writeIntent = true)
 class ByProgramModelTest {
 
     private val fixture by codeInsightFixture()
@@ -46,7 +45,7 @@ class ByProgramModelTest {
             "def outer():\n    def test_inner():\n        assert False\n\ndef test_top():\n    assert True\n"
 
     @Test
-    fun `an answer is only served for the revision it was given about`() {
+    fun `an answer is only served for the revision it was given about`() = onEdt {
         val file = fixture.configureByText("test_rev.by", nested)
         model.rememberTestItems(file.virtualFile, ByReplies.testItems(nested))
         assertEquals(2, model.cachedTestItems(file.virtualFile)?.size)
@@ -60,7 +59,7 @@ class ByProgramModelTest {
     }
 
     @Test
-    fun `the item around a position is the innermost test or class`() {
+    fun `the item around a position is the innermost test or class`() = onEdt {
         val items = ByReplies.testItems(nested)
         val lines = nested.lines()
         fun at(text: String): ByTestItem? {
@@ -76,14 +75,14 @@ class ByProgramModelTest {
     }
 
     @Test
-    fun `a class counts the tests under it`() {
+    fun `a class counts the tests under it`() = onEdt {
         val items = ByReplies.testItems(nested)
         assertEquals(1, items.first { it.isClass }.testCount)
         assertEquals(listOf("TestA", "TestA::test_one", "test_top"), items.walk().map { it.symbols.joinToString("::") }.toList())
     }
 
     @Test
-    fun `an entry point names its lines and its command line`() {
+    fun `an entry point names its lines and its command line`() = onEdt {
         val generic = ByEntryPoint.of(ByReplies.entryPoint("def main[T](name: str):\n    print(name)\n"))
         assertEquals(0, generic.mainLine)
         assertEquals(listOf("name"), generic.commandLine?.required?.map { it.name })
@@ -105,7 +104,7 @@ class ByProgramModelTest {
      * node and matching its outcome work exactly as they do for a collected one.
      */
     @Test
-    fun `the static answer becomes the test tree without running anything`() {
+    fun `the static answer becomes the test tree without running anything`() = onEdt {
         val file = fixture.addFileToProject("tests/test_tree.by", nested)
         model.rememberProjectTests(file.virtualFile, ByReplies.testItems(nested))
         ByBuildOutputs.getInstance(fixture.project).remember(
@@ -130,7 +129,7 @@ class ByProgramModelTest {
     }
 
     @Test
-    fun `a source or configuration file in the project is a change`() {
+    fun `a source or configuration file in the project is a change`() = onEdt {
         val source = local("app.by")
         val config = local("ty.toml")
         assertTrue(touchesProgram(VFileContentChangeEvent(null, source, 0, 1), inContent = { true }))
@@ -145,13 +144,13 @@ class ByProgramModelTest {
      * "is this in your content", not a list of directory names that happens to catch most of them.
      */
     @Test
-    fun `a file outside the project content is not`() {
+    fun `a file outside the project content is not`() = onEdt {
         val source = local("app.by")
         assertFalse(touchesProgram(VFileContentChangeEvent(null, source, 0, 1), inContent = { false }))
     }
 
     @Test
-    fun `a file that decides nothing is not`() {
+    fun `a file that decides nothing is not`() = onEdt {
         val other = local("notes.txt")
         assertFalse(touchesProgram(VFileContentChangeEvent(null, other, 0, 1), inContent = { true }))
         val parent = checkNotNull(LocalFileSystem.getInstance().refreshAndFindFileByNioFile(dir))
@@ -159,7 +158,7 @@ class ByProgramModelTest {
     }
 
     @Test
-    fun `a blank module is by run's run main, and only an error where by run would refuse it`() {
+    fun `a blank module is by run's run main, and only an error where by run would refuse it`() = onEdt {
         val configuration = BasedPythonRunConfigurationType.getInstance().runFactory
             .createTemplateConfiguration(fixture.project) as ByRunConfiguration
         configuration.options.module = ""

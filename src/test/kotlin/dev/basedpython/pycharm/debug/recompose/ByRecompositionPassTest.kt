@@ -5,12 +5,12 @@ import com.intellij.openapi.editor.markup.HighlighterLayer
 import com.intellij.openapi.util.Disposer
 import com.intellij.testFramework.PlatformTestUtil
 import com.intellij.testFramework.fixtures.impl.CodeInsightTestFixtureImpl
-import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import com.intellij.testFramework.replaceService
 import dev.basedpython.pycharm.debug.dfa.ByDataFlowVerdictRenderer
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import dev.basedpython.pycharm.testFramework.onEdt
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
@@ -33,7 +33,6 @@ import org.junit.jupiter.api.Test
  * are published synchronously by the test rather than by a pooled thread racing it.
  */
 @TestFixtures
-@RunInEdt(writeIntent = true)
 class ByRecompositionPassTest {
 
     private val fixture by codeInsightFixture()
@@ -108,13 +107,13 @@ class ByRecompositionPassTest {
     }
 
     @AfterEach
-    fun forget() {
+    fun forget() = onEdt {
         service.sessionEnded(Silent)
         BasedPythonSettings.getInstance(fixture.project).loadState(BasedPythonSettings.State())
     }
 
     @Test
-    fun `every composable that ran in the latest frame is labelled on its definition line`() {
+    fun `every composable that ran in the latest frame is labelled on its definition line`() = onEdt {
         stopWithRecords()
         val text = fixture.editor.document.immutableCharSequence
         assertEquals(
@@ -130,14 +129,14 @@ class ByRecompositionPassTest {
     }
 
     @Test
-    fun `the label is drawn above the colouring and below a warning`() {
+    fun `the label is drawn above the colouring and below a warning`() = onEdt {
         stopWithRecords()
         assertTrue(drawn().isNotEmpty() && drawn().all { it.layer > HighlighterLayer.WEAK_WARNING }, drawn().map { it.layer }.toString())
         assertTrue(drawn().all { it.layer < HighlighterLayer.WARNING }, drawn().map { it.layer }.toString())
     }
 
     @Test
-    fun `the labels go when the program resumes, and come back at the next stop`() {
+    fun `the labels go when the program resumes, and come back at the next stop`() = onEdt {
         stopWithRecords()
         service.resumed(Silent)
         settle()
@@ -150,7 +149,7 @@ class ByRecompositionPassTest {
     }
 
     @Test
-    fun `the labels go when the session ends`() {
+    fun `the labels go when the session ends`() = onEdt {
         stopWithRecords()
         service.sessionEnded(Silent)
         settle()
@@ -159,7 +158,7 @@ class ByRecompositionPassTest {
     }
 
     @Test
-    fun `nothing is drawn when the feature is off`() {
+    fun `nothing is drawn when the feature is off`() = onEdt {
         stopWithRecords(enabled = false)
         assertEquals(emptyList<String>(), drawn().map { it.textAttributesKey?.externalName })
     }
@@ -170,7 +169,7 @@ class ByRecompositionPassTest {
      * setting changed, and they must not stay until the editor closes.
      */
     @Test
-    fun `the labels go when the setting is turned off while stopped`() {
+    fun `the labels go when the setting is turned off while stopped`() = onEdt {
         stopWithRecords()
         assertEquals(2, drawn().size)
         BasedPythonSettings.getInstance(fixture.project).debuggerRecompositions = false
@@ -181,7 +180,7 @@ class ByRecompositionPassTest {
 
     /** The session ending while the setting is off: still no pass, still removed. */
     @Test
-    fun `the labels go when the session ends with the setting off`() {
+    fun `the labels go when the session ends with the setting off`() = onEdt {
         stopWithRecords()
         BasedPythonSettings.getInstance(fixture.project).debuggerRecompositions = false
         service.sessionEnded(Silent)
@@ -190,7 +189,7 @@ class ByRecompositionPassTest {
     }
 
     @Test
-    fun `a session ending after another began leaves the newer one alone`() {
+    fun `a session ending after another began leaves the newer one alone`() = onEdt {
         stopWithRecords()
         val older = object : ByRecompositionLink {
             override fun pull() = ByRecompositionAnswer.Unavailable("no adapter in this test")
@@ -206,7 +205,7 @@ class ByRecompositionPassTest {
      * ours, and one left in an editor that outlives the plugin pins its class loader.
      */
     @Test
-    fun `disposing the session takes down every label the pass drew`() {
+    fun `disposing the session takes down every label the pass drew`() = onEdt {
         val parent = Disposer.newDisposable("a recompositions session of this test's own")
         val scope = CoroutineScope(SupervisorJob())
         try {

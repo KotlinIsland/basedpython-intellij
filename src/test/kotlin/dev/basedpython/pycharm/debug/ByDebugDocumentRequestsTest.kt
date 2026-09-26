@@ -2,12 +2,12 @@ package dev.basedpython.pycharm.debug
 
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.debug.dfa.askDataFlowAt
 import dev.basedpython.pycharm.debug.hotswap.ByRestage
 import dev.basedpython.pycharm.testFramework.RecordingByClient
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import dev.basedpython.pycharm.testFramework.onEdt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.AfterEach
@@ -26,7 +26,6 @@ import java.nio.file.Path
  * question outright and transpiled a re-stage without the IDE's text for the file.
  */
 @TestFixtures
-@RunInEdt(writeIntent = true)
 class ByDebugDocumentRequestsTest {
 
     private val fixture by codeInsightFixture()
@@ -34,7 +33,7 @@ class ByDebugDocumentRequestsTest {
     private val temp: Path = Files.createTempDirectory("debug-document-requests-test")
 
     @AfterEach
-    fun cleanUp() {
+    fun cleanUp() = onEdt {
         temp.toFile().deleteRecursively()
     }
 
@@ -46,7 +45,7 @@ class ByDebugDocumentRequestsTest {
     }
 
     @Test
-    fun `a re-stage opens every file of the edit before it asks`() {
+    fun `a re-stage opens every file of the edit before it asks`() = onEdt {
         val client = RecordingByClient(fixture.project)
         val first = outside("first.by", "x = 1\n")
         val second = outside("second.by", "y = 2\n")
@@ -66,7 +65,7 @@ class ByDebugDocumentRequestsTest {
     }
 
     @Test
-    fun `a data-flow question opens the file before it asks`() {
+    fun `a data-flow question opens the file before it asks`() = onEdt {
         val client = RecordingByClient(fixture.project)
         val file = outside("stopped.by", "x = 1\n")
 
@@ -76,7 +75,7 @@ class ByDebugDocumentRequestsTest {
     }
 
     @Test
-    fun `a file under a content root is not opened, since the platform opens it`() {
+    fun `a file under a content root is not opened, since the platform opens it`() = onEdt {
         val client = RecordingByClient(fixture.project)
         val file = fixture.configureByText("content.by", "x = 1\n").virtualFile
 

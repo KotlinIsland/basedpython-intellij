@@ -2,9 +2,9 @@ package dev.basedpython.pycharm.docs.render
 
 import com.intellij.codeInsight.documentation.render.DocRenderManager
 import com.intellij.codeInsight.documentation.render.DocRenderPassFactory
-import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import dev.basedpython.pycharm.testFramework.onEdt
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 
@@ -19,13 +19,12 @@ import org.junit.jupiter.api.Test
  * `by server`.
  */
 @TestFixtures
-@RunInEdt(writeIntent = true)
 class ByRenderedDocsTest {
 
     private val fixture by codeInsightFixture()
 
     @Test
-    fun `nothing renders without a server to say what a docstring is`() {
+    fun `nothing renders without a server to say what a docstring is`() = onEdt {
         val file = fixture.configureByText(
             "a.by",
             """
@@ -39,7 +38,7 @@ class ByRenderedDocsTest {
     }
 
     @Test
-    fun `the pass is not confused by a file with no docstrings either`() {
+    fun `the pass is not confused by a file with no docstrings either`() = onEdt {
         val file = fixture.configureByText("b.by", "x = 1\nprint(x)\n")
         DocRenderManager.setDocRenderingEnabled(fixture.editor, true)
         assertEquals(

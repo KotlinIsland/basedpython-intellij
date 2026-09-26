@@ -1,7 +1,6 @@
 package dev.basedpython.pycharm.lsp.supers
 
 import com.intellij.lang.CodeInsightActions
-import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.lang.BasedPythonLanguage
 import dev.basedpython.pycharm.lsp.ext.BySuperMember
@@ -9,6 +8,7 @@ import dev.basedpython.pycharm.testFramework.AnsweringClient
 import dev.basedpython.pycharm.testFramework.AnsweringClient.Companion.answered
 import dev.basedpython.pycharm.testFramework.AnsweringClient.Companion.failed
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import dev.basedpython.pycharm.testFramework.onEdt
 import dev.basedpython.pycharm.util.BasedPythonBundle
 import kotlinx.coroutines.runBlocking
 import org.eclipse.lsp4j.DocumentSymbol
@@ -33,7 +33,6 @@ import org.junit.jupiter.api.Test
  * right — the innermost class or class member around the caret — and handing on what `by` said.
  */
 @TestFixtures
-@RunInEdt(writeIntent = true)
 class BySupersTest {
 
     private val fixture by codeInsightFixture()
@@ -66,31 +65,31 @@ class BySupersTest {
     ).map { Either.forRight<SymbolInformation, DocumentSymbol>(it) }
 
     @Test
-    fun `the handler is registered for basedpython, so Ctrl+U is no longer dead there`() {
+    fun `the handler is registered for basedpython, so Ctrl+U is no longer dead there`() = onEdt {
         assertInstanceOf(ByGotoSuperHandler::class.java, CodeInsightActions.GOTO_SUPER.forLanguage(BasedPythonLanguage))
     }
 
     @Test
-    fun `on the class header, the class`() {
+    fun `on the class header, the class`() = onEdt {
         val subject = BySupers.subjectAt(outline, Position(0, 7))
         assertEquals("Shape", (subject as BySuperSubject.Class).symbol.name)
     }
 
     @Test
-    fun `in a class body between its members, the class`() {
+    fun `in a class body between its members, the class`() = onEdt {
         val subject = BySupers.subjectAt(outline, Position(2, 0))
         assertEquals("Shape", (subject as BySuperSubject.Class).symbol.name)
     }
 
     @Test
-    fun `on an attribute, the attribute as a member of its class`() {
+    fun `on an attribute, the attribute as a member of its class`() = onEdt {
         val subject = BySupers.subjectAt(outline, Position(1, 6)) as BySuperSubject.Member
         assertEquals("sides", subject.symbol.name)
         assertEquals("Shape", subject.owner.name)
     }
 
     @Test
-    fun `anywhere in a method, the method, even inside a function nested in it`() {
+    fun `anywhere in a method, the method, even inside a function nested in it`() = onEdt {
         for (caret in listOf(Position(3, 8), Position(7, 10), Position(4, 12))) {
             val subject = BySupers.subjectAt(outline, caret) as BySuperSubject.Member
             assertEquals("area", subject.symbol.name, "at $caret")
@@ -98,19 +97,19 @@ class BySupersTest {
     }
 
     @Test
-    fun `in a class nested in a method, that class`() {
+    fun `in a class nested in a method, that class`() = onEdt {
         val subject = BySupers.subjectAt(outline, Position(6, 16))
         assertEquals("Local", (subject as BySuperSubject.Class).symbol.name)
     }
 
     @Test
-    fun `in a function no class holds, or outside every definition, nothing`() {
+    fun `in a function no class holds, or outside every definition, nothing`() = onEdt {
         assertNull(BySupers.subjectAt(outline, Position(10, 4)))
         assertNull(BySupers.subjectAt(outline, Position(8, 0)))
     }
 
     @Test
-    fun `the flat outline carries no nesting to find a member's class in, so nothing`() {
+    fun `the flat outline carries no nesting to find a member's class in, so nothing`() = onEdt {
         val flat = listOf(
             Either.forLeft<SymbolInformation, DocumentSymbol>(
                 SymbolInformation("Shape", SymbolKind.Class, Location("file:///shapes.by", range(0, 6))),
@@ -120,7 +119,7 @@ class BySupersTest {
     }
 
     @Test
-    fun `a base class is gone to at its name, and shown with its module`() {
+    fun `a base class is gone to at its name, and shown with its module`() = onEdt {
         val item = TypeHierarchyItem("Polygon", SymbolKind.Class, "file:///shapes.by", range(10, 14), Range(Position(10, 6), Position(10, 13)))
         item.detail = "shapes"
 
@@ -144,7 +143,7 @@ class BySupersTest {
     private val quiet = BySuperMember("area", "Quiet", "file:///bases.by", range(9, 10), Range(Position(9, 8), Position(9, 12)))
 
     @Test
-    fun `a member goes to what by says it overrides, in the order by gives`() {
+    fun `a member goes to what by says it overrides, in the order by gives`() = onEdt {
         val (answer, asked) = overridden { answered(listOf(loud, quiet)) }
 
         assertEquals(listOf("by/superMembers"), asked)
@@ -160,19 +159,19 @@ class BySupersTest {
     }
 
     @Test
-    fun `a member that overrides nothing is said to`() {
+    fun `a member that overrides nothing is said to`() = onEdt {
         val (answer, _) = overridden { answered(emptyList<BySuperMember>()) }
         assertEquals(BySuperAnswer.Nowhere(BasedPythonBundle.message("goto.super.member.none", "Shape.area")), answer)
     }
 
     @Test
-    fun `no member where the outline has one is by's answer, and said as that`() {
+    fun `no member where the outline has one is by's answer, and said as that`() = onEdt {
         val (answer, _) = overridden { answered(null) }
         assertEquals(BySuperAnswer.Nowhere(BasedPythonBundle.message("goto.super.member.unknown", "Shape.area")), answer)
     }
 
     @Test
-    fun `a by without the request is said to be one, and nothing else is asked instead`() {
+    fun `a by without the request is said to be one, and nothing else is asked instead`() = onEdt {
         val (answer, asked) = overridden { failed(ResponseErrorCode.MethodNotFound, "Unhandled method by/superMembers") }
 
         assertEquals(BySuperAnswer.Nowhere(BasedPythonBundle.message("goto.super.member.unsupported", "Shape.area")), answer)
@@ -180,13 +179,13 @@ class BySupersTest {
     }
 
     @Test
-    fun `any other error is a by that did not answer`() {
+    fun `any other error is a by that did not answer`() = onEdt {
         val (answer, _) = overridden { failed(ResponseErrorCode.InternalError) }
         assertEquals(BySuperAnswer.Nowhere(BasedPythonBundle.message("goto.super.noAnswer", "by/superMembers")), answer)
     }
 
     @Test
-    fun `a member the superclass synthesizes says so beside its file`() {
+    fun `a member the superclass synthesizes says so beside its file`() = onEdt {
         val init = BySuperMember("__init__", "Point", "file:///p%20q/points.by", range(3, 5), Range(Position(3, 6), Position(3, 11)), synthesized = true)
         assertEquals(
             BySuperTarget(

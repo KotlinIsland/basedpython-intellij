@@ -1,9 +1,9 @@
 package dev.basedpython.pycharm.lsp.inject
 
 import com.intellij.openapi.fileTypes.PlainTextLanguage
-import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import dev.basedpython.pycharm.testFramework.onEdt
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
@@ -16,7 +16,6 @@ import org.junit.jupiter.api.Test
  * into "this IDE has no html" is worse than no test.
  */
 @TestFixtures
-@RunInEdt(writeIntent = true)
 class ByInjectedLanguagesTest {
 
     @Suppress("unused") // The language registry needs an application, which the fixture provides.
@@ -25,33 +24,33 @@ class ByInjectedLanguagesTest {
     private val plainText get() = PlainTextLanguage.INSTANCE
 
     @Test
-    fun `an id spelled exactly as the language registers it`() {
+    fun `an id spelled exactly as the language registers it`() = onEdt {
         assertEquals(plainText, ByInjectedLanguages.find(plainText.id))
     }
 
     @Test
-    fun `case is not what a marker is judged on`() {
+    fun `case is not what a marker is judged on`() = onEdt {
         assertEquals(plainText, ByInjectedLanguages.find(plainText.id.lowercase()))
         assertEquals(plainText, ByInjectedLanguages.find(plainText.id.uppercase()))
     }
 
     @Test
-    fun `the name a language shows a user also names it`() {
+    fun `the name a language shows a user also names it`() = onEdt {
         assertEquals(plainText, ByInjectedLanguages.find(plainText.displayName))
     }
 
     @Test
-    fun `a file extension names the language of that file type`() {
+    fun `a file extension names the language of that file type`() = onEdt {
         assertEquals(plainText, ByInjectedLanguages.find("txt"))
     }
 
     @Test
-    fun `surrounding space is not part of the id`() {
+    fun `surrounding space is not part of the id`() = onEdt {
         assertEquals(plainText, ByInjectedLanguages.find("  ${plainText.id} "))
     }
 
     @Test
-    fun `an id nothing here provides is no language, and not an error`() {
+    fun `an id nothing here provides is no language, and not an error`() = onEdt {
         assertNull(ByInjectedLanguages.find("no-such-language-anywhere"))
         assertNull(ByInjectedLanguages.find(""))
         assertNull(ByInjectedLanguages.find("   "))

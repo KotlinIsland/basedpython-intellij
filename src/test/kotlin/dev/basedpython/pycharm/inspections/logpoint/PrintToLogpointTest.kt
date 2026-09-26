@@ -1,9 +1,9 @@
 package dev.basedpython.pycharm.inspections.logpoint
 
-import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.lsp.outline.OutlineSpec
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import dev.basedpython.pycharm.testFramework.onEdt
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
@@ -18,7 +18,6 @@ import org.junit.jupiter.api.Test
  * does not match what the `print` was writing.
  */
 @TestFixtures
-@RunInEdt(writeIntent = true)
 class PrintToLogpointTest {
 
     private val fixture by codeInsightFixture()
@@ -43,7 +42,7 @@ class PrintToLogpointTest {
     // ------------------------------------------------------------------ accepted
 
     @Test
-    fun `print between two statements logs its argument on the next line`() {
+    fun `print between two statements logs its argument on the next line`() = onEdt {
         val source = "def f(x):\n    print(x)\n    return x * 2"
         val outline: OutlineSpec.Suite.() -> Unit = {
             compound { clause("def f(x):") { call("print(x)"); simple("return x * 2") } }
@@ -53,7 +52,7 @@ class PrintToLogpointTest {
     }
 
     @Test
-    fun `blank lines and comments between do not move the log point off the next statement`() {
+    fun `blank lines and comments between do not move the log point off the next statement`() = onEdt {
         val source = "def f(x):\n    print(x)\n\n    # why\n    return x"
         val outline: OutlineSpec.Suite.() -> Unit = {
             compound { clause("def f(x):") { call("print(x)"); simple("return x") } }
@@ -62,7 +61,7 @@ class PrintToLogpointTest {
     }
 
     @Test
-    fun `the arguments are kept as written`() {
+    fun `the arguments are kept as written`() = onEdt {
         val source = "def f(a, b):\n    print(a, f\"{b!r}\")\n    return a\n"
         assertEquals(
             "a, f\"{b!r}\"",
@@ -72,13 +71,13 @@ class PrintToLogpointTest {
     }
 
     @Test
-    fun `a trailing comment does not disqualify the statement`() {
+    fun `a trailing comment does not disqualify the statement`() = onEdt {
         val source = "print(a)  # debug\nx = 1\n"
         assertEquals("a", only(source) { call("print(a)"); simple("x = 1") }?.expression)
     }
 
     @Test
-    fun `the log point goes on the next statement, not the nearest line`() {
+    fun `the log point goes on the next statement, not the nearest line`() = onEdt {
         val candidate = only("print(1)\n\n\nx = 2\n") { call("print(1)"); simple("x = 2") }
         assertEquals(3, candidate?.followerLine)
         assertEquals(2, candidate?.logpointLine)
@@ -87,7 +86,7 @@ class PrintToLogpointTest {
     // ------------------------------------------------------------------ declined
 
     @Test
-    fun `the last statement of a suite has nowhere to put the log point`() {
+    fun `the last statement of a suite has nowhere to put the log point`() = onEdt {
         // The next line runs at import time, not where the print did.
         assertNull(
             only("def f(x):\n    print(x)\n\nf(1)\n") {
@@ -98,28 +97,28 @@ class PrintToLogpointTest {
     }
 
     @Test
-    fun `a print at the end of the file has nowhere to put the log point`() {
+    fun `a print at the end of the file has nowhere to put the log point`() = onEdt {
         assertNull(only("x = 1\nprint(x)\n") { simple("x = 1"); call("print(x)") })
     }
 
     @Test
-    fun `print with no argument has nothing to log`() {
+    fun `print with no argument has nothing to log`() = onEdt {
         assertNull(only("print()\nx = 1\n") { call("print()"); simple("x = 1") })
     }
 
     @Test
-    fun `keyword or unpacked arguments change what print does, so they are left alone`() {
+    fun `keyword or unpacked arguments change what print does, so they are left alone`() = onEdt {
         assertNull(only("print(x, file=err)\nx = 1\n") { call("print(x, file=err)", positionalOnly = false); simple("x = 1") })
         assertNull(only("print(*xs)\nx = 1\n") { call("print(*xs)", positionalOnly = false); simple("x = 1") })
     }
 
     @Test
-    fun `a call spanning several lines is not offered`() {
+    fun `a call spanning several lines is not offered`() = onEdt {
         assertNull(only("print(\n    x,\n)\ny = 1\n") { call("print(\n    x,\n)"); simple("y = 1") })
     }
 
     @Test
-    fun `a print sharing its line with another statement is not offered`() {
+    fun `a print sharing its line with another statement is not offered`() = onEdt {
         assertNull(only("print(x); y = 1\nz = 2\n") { call("print(x)"); simple("y = 1"); simple("z = 2") })
         assertNull(
             only("if x: print(x)\ny = 1\n") {
@@ -130,7 +129,7 @@ class PrintToLogpointTest {
     }
 
     @Test
-    fun `a call to anything but print is not a print`() {
+    fun `a call to anything but print is not a print`() = onEdt {
         assertNull(only("printer(x)\ny = 1\n") { call("printer(x)"); simple("y = 1") })
         assertNull(only("logger.print(x)\ny = 1\n") { call("logger.print(x)"); simple("y = 1") })
     }
@@ -138,7 +137,7 @@ class PrintToLogpointTest {
     // ------------------------------------------------------------------ lookup by offset
 
     @Test
-    fun `at resolves the candidate the fix was offered for, and nothing else`() {
+    fun `at resolves the candidate the fix was offered for, and nothing else`() = onEdt {
         val source = "def f(x):\n    print(x)\n    return x\n"
         val document = fixture.configureByText("a.by", source).viewProvider.document!!
         val outline = OutlineSpec.outline(document) {
@@ -150,7 +149,7 @@ class PrintToLogpointTest {
     }
 
     @Test
-    fun `every candidate of a file is found`() {
+    fun `every candidate of a file is found`() = onEdt {
         val found = candidates("print(a)\nprint(b)\nx = 1\n") { call("print(a)"); call("print(b)"); simple("x = 1") }
         assertEquals(listOf("a", "b"), found.map { it.expression })
     }

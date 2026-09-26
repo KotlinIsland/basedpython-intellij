@@ -4,11 +4,11 @@ import com.intellij.codeHighlighting.Pass
 import com.intellij.openapi.util.Disposer
 import com.intellij.testFramework.PlatformTestUtil
 import com.intellij.testFramework.fixtures.impl.CodeInsightTestFixtureImpl
-import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import com.intellij.testFramework.replaceService
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import dev.basedpython.pycharm.testFramework.onEdt
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.NonCancellable
@@ -33,7 +33,6 @@ import java.util.concurrent.atomic.AtomicBoolean
  * not what gets drawn.
  */
 @TestFixtures
-@RunInEdt(writeIntent = true)
 class ByDataFlowSessionTest {
 
     private val fixture by codeInsightFixture()
@@ -53,7 +52,7 @@ class ByDataFlowSessionTest {
     }
 
     @AfterEach
-    fun forget() {
+    fun forget() = onEdt {
         service.clear()
         PlatformTestUtil.dispatchAllInvocationEventsInIdeEventQueue()
         BasedPythonSettings.getInstance(fixture.project).loadState(BasedPythonSettings.State())
@@ -86,7 +85,7 @@ class ByDataFlowSessionTest {
     }
 
     @Test
-    fun `an answer that arrives after the next stop's is not drawn`() {
+    fun `an answer that arrives after the next stop's is not drawn`() = onEdt {
         configure()
         val file = fixture.file.virtualFile
         val held = HeldBack("the first stop")
@@ -102,7 +101,7 @@ class ByDataFlowSessionTest {
     }
 
     @Test
-    fun `an answer that arrives after the program resumed is not drawn`() {
+    fun `an answer that arrives after the program resumed is not drawn`() = onEdt {
         configure()
         val file = fixture.file.virtualFile
         val held = HeldBack("a stop that has gone")
@@ -117,7 +116,7 @@ class ByDataFlowSessionTest {
 
     /** The next stop cancels the one before it, so a slow debugger is not asked twice at once for nothing. */
     @Test
-    fun `the next stop cancels the analysis still running for the last one`() {
+    fun `the next stop cancels the analysis still running for the last one`() = onEdt {
         configure()
         val file = fixture.file.virtualFile
         val never = CompletableDeferred<Unit>()
@@ -143,7 +142,7 @@ class ByDataFlowSessionTest {
      * so the pass that used to take them down is not coming.
      */
     @Test
-    fun `the findings go when the setting is turned off while stopped`() {
+    fun `the findings go when the setting is turned off while stopped`() = onEdt {
         configure()
         service.publish(fixture.file.virtualFile, listOf(finding("= true")))
         PlatformTestUtil.dispatchAllInvocationEventsInIdeEventQueue()
@@ -162,7 +161,7 @@ class ByDataFlowSessionTest {
      * a renderer of ours, and one left in an editor that outlives the plugin pins its class loader.
      */
     @Test
-    fun `disposing the service takes down everything the pass drew`() {
+    fun `disposing the service takes down everything the pass drew`() = onEdt {
         val parent = Disposer.newDisposable("a data flow service of this test's own")
         val scope = CoroutineScope(SupervisorJob())
         try {

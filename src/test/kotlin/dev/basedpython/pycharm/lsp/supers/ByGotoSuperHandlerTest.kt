@@ -4,9 +4,9 @@ import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.testFramework.PlatformTestUtil
-import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import dev.basedpython.pycharm.testFramework.onEdt
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.withTimeoutOrNull
@@ -20,7 +20,6 @@ import org.junit.jupiter.api.Test
  * leave that state free, and an answer that comes after the user has moved on is not shown.
  */
 @TestFixtures
-@RunInEdt(writeIntent = true)
 class ByGotoSuperHandlerTest {
 
     private val fixture by codeInsightFixture()
@@ -38,7 +37,7 @@ class ByGotoSuperHandlerTest {
     }
 
     @Test
-    fun `the platform's non-modal work runs while by is asked, so a didOpen by waits for goes out`() {
+    fun `the platform's non-modal work runs while by is asked, so a didOpen by waits for goes out`() = onEdt {
         fixture.configureByText("shapes.by", "class Shape:\n    pass\n")
         var nonModalRan = false
         val shown = mutableListOf<BySuperAnswer>()
@@ -57,7 +56,7 @@ class ByGotoSuperHandlerTest {
     }
 
     @Test
-    fun `an answer for text the user has since changed is not shown`() {
+    fun `an answer for text the user has since changed is not shown`() = onEdt {
         fixture.configureByText("shapes.by", "class Shape:\n    pass\n")
         val document = fixture.editor.document
         var editedMeanwhile = false
@@ -79,7 +78,7 @@ class ByGotoSuperHandlerTest {
     }
 
     @Test
-    fun `an answer for a caret the user has since moved is not shown`() {
+    fun `an answer for a caret the user has since moved is not shown`() = onEdt {
         fixture.configureByText("shapes.by", "class Shape:\n    pass\n")
         val editor = fixture.editor
         var movedMeanwhile = false

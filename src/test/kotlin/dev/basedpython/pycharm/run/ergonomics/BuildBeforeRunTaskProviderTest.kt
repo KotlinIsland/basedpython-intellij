@@ -2,7 +2,6 @@ package dev.basedpython.pycharm.run.ergonomics
 
 import com.intellij.execution.ExecutionException
 import com.intellij.execution.configurations.GeneralCommandLine
-import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.env.ByEnvironmentKind
 import dev.basedpython.pycharm.run.BasedPythonRunConfigurationType
@@ -15,6 +14,7 @@ import dev.basedpython.pycharm.settings.BasedPythonSettings
 import dev.basedpython.pycharm.tasks.ByTaskConfiguration
 import dev.basedpython.pycharm.tasks.ByTaskConfigurationType
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import dev.basedpython.pycharm.testFramework.onEdt
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -32,7 +32,6 @@ import java.nio.file.attribute.PosixFilePermissions
  * project base whatever the configuration said.
  */
 @TestFixtures
-@RunInEdt(writeIntent = true)
 class BuildBeforeRunTaskProviderTest {
 
     private val fixture by codeInsightFixture()
@@ -43,13 +42,13 @@ class BuildBeforeRunTaskProviderTest {
     private lateinit var by: Path
 
     @BeforeEach
-    fun fakeBy() {
+    fun fakeBy() = onEdt {
         by = Files.createFile(dir.resolve("by"), PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwxr-xr-x")))
         BasedPythonSettings.getInstance(fixture.project).byPath = by.toString()
     }
 
     @AfterEach
-    fun forgetBy() {
+    fun forgetBy() = onEdt {
         BasedPythonSettings.getInstance(fixture.project).byPath = null
     }
 
@@ -63,7 +62,7 @@ class BuildBeforeRunTaskProviderTest {
     }
 
     @Test
-    fun `a run configuration's build uses its directory, environment and version`() {
+    fun `a run configuration's build uses its directory, environment and version`() = onEdt {
         val run = ByRunConfiguration(fixture.project, runType.runFactory, "run").apply {
             options.configure()
             options.extraArgs = "--compiled"
@@ -80,7 +79,7 @@ class BuildBeforeRunTaskProviderTest {
     }
 
     @Test
-    fun `a test configuration is a by configuration too`() {
+    fun `a test configuration is a by configuration too`() = onEdt {
         val test = ByTestConfiguration(fixture.project, ByTestConfigurationType().testFactory, "test").apply {
             options.configure()
         }
@@ -92,7 +91,7 @@ class BuildBeforeRunTaskProviderTest {
     }
 
     @Test
-    fun `a check configuration's version is not a minimum version`() {
+    fun `a check configuration's version is not a minimum version`() = onEdt {
         val check = ByCheckConfiguration(fixture.project, runType.checkFactory, "check").apply {
             options.configure()
         }
@@ -101,7 +100,7 @@ class BuildBeforeRunTaskProviderTest {
     }
 
     @Test
-    fun `the configuration's environment choice decides which by builds`() {
+    fun `the configuration's environment choice decides which by builds`() = onEdt {
         // The configured path applies to AUTO only; a run pinned to a venv the project does not
         // have cannot run, and neither can the build before it.
         val run = ByRunConfiguration(fixture.project, runType.runFactory, "run").apply {
@@ -113,7 +112,7 @@ class BuildBeforeRunTaskProviderTest {
     }
 
     @Test
-    fun `any other configuration builds with the project's defaults`() {
+    fun `any other configuration builds with the project's defaults`() = onEdt {
         val task = ByTaskConfiguration(fixture.project, ByTaskConfigurationType().taskFactory, "task")
 
         val cmd = buildCommandLine(task)

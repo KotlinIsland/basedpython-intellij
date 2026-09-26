@@ -5,9 +5,9 @@ import com.intellij.openapi.application.impl.LaterInvocator
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
 import com.intellij.testFramework.PlatformTestUtil
-import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import dev.basedpython.pycharm.testFramework.onEdt
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
@@ -31,7 +31,6 @@ import java.nio.file.Path
  * by starting one and waiting: a test that polls a coroutine is a test that fails on a slow machine.
  */
 @TestFixtures
-@RunInEdt(writeIntent = true)
 class EnvServiceTest {
 
     private val fixture by codeInsightFixture()
@@ -40,7 +39,7 @@ class EnvServiceTest {
     private fun base(): Path? = project.basePath?.let { Path.of(it) }?.takeIf { Files.isDirectory(it) }
 
     @Test
-    fun `the platform can build the service`() {
+    fun `the platform can build the service`() = onEdt {
         val service = EnvService.getInstance(project)
         assertNotNull(service)
         assertSame(service, EnvService.getInstance(project), "project services are singletons")
@@ -48,14 +47,14 @@ class EnvServiceTest {
 
     /** Before anything has looked, "not scanned yet" must be distinguishable from "nothing here". */
     @Test
-    fun `the initial status claims nothing`() {
+    fun `the initial status claims nothing`() = onEdt {
         val service = EnvService.getInstance(project)
         assertEquals(EnvDrift.UNKNOWN, service.status.drift)
         assertEquals(emptyList<EnvPackage>(), service.status.packages)
     }
 
     @Test
-    fun `a project with no manifest is unmanaged`() {
+    fun `a project with no manifest is unmanaged`() = onEdt {
         val base = base()
         assumeTrue(base != null, "the fixture project has no directory on disk")
         requireNotNull(base)
@@ -70,7 +69,7 @@ class EnvServiceTest {
      * Detection is a file check, so writing one is the whole change.
      */
     @Test
-    fun `writing a manifest is what makes a project managed`() {
+    fun `writing a manifest is what makes a project managed`() = onEdt {
         val base = base()
         assumeTrue(base != null, "the fixture project has no directory on disk")
         requireNotNull(base)
@@ -95,7 +94,7 @@ class EnvServiceTest {
      * the page that created it was gone.
      */
     @Test
-    fun `a listener that asks for any modality is told while a dialog is open, the default is not`() {
+    fun `a listener that asks for any modality is told while a dialog is open, the default is not`() = onEdt {
         val service = EnvService.getInstance(project)
         val parent = Disposer.newDisposable("modality test")
         val dialog = Any()

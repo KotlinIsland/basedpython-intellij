@@ -6,7 +6,6 @@ import com.intellij.codeInspection.ProblemDescriptor
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.command.undo.UndoManager
 import com.intellij.openapi.fileEditor.FileEditorManager
-import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import com.intellij.xdebugger.XDebuggerManager
 import com.intellij.xdebugger.XDebuggerUtil
@@ -16,6 +15,7 @@ import dev.basedpython.pycharm.debug.logpoint.ByLogpoints
 import dev.basedpython.pycharm.debug.ByLineBreakpointType
 import dev.basedpython.pycharm.lsp.outline.OutlineSpec
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import dev.basedpython.pycharm.testFramework.onEdt
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -35,7 +35,6 @@ import dev.basedpython.pycharm.lang.BasedPythonLanguage
  * daemon — every pass over the file — for the one inspection's result this is about.
  */
 @TestFixtures
-@RunInEdt(writeIntent = true)
 class PrintToLogpointFixTest {
 
     private val fixture by codeInsightFixture()
@@ -65,7 +64,7 @@ class PrintToLogpointFixTest {
             .checkFile(fixture.file, InspectionManager.getInstance(fixture.project), false)
 
     @Test
-    fun `the call is gone and what replaces it is a log point`() {
+    fun `the call is gone and what replaces it is a log point`() = onEdt {
         val breakpoint = applyFix("def f(x):\n    print(x)\n    return x * 2\n", "print(x)", "return x * 2")
 
         assertEquals("def f(x):\n    return x * 2\n", fixture.editor.document.text)
@@ -77,7 +76,7 @@ class PrintToLogpointFixTest {
     }
 
     @Test
-    fun `the log point logs the argument and does not suspend`() {
+    fun `the log point logs the argument and does not suspend`() = onEdt {
         val breakpoint = applyFix("def f(x):\n    print(f\"x={x}\")\n    return x\n", "print(f\"x={x}\")", "return x")
 
         assertEquals(SuspendPolicy.NONE, breakpoint.suspendPolicy)
@@ -91,7 +90,7 @@ class PrintToLogpointFixTest {
     }
 
     @Test
-    fun `undo takes the log point back along with the deleted line`() {
+    fun `undo takes the log point back along with the deleted line`() = onEdt {
         applyFix("def f(x):\n    print(x)\n    return x * 2\n", "print(x)", "return x * 2")
         assertTrue(
             XDebuggerManager.getInstance(fixture.project).breakpointManager.getBreakpoints(type).isNotEmpty(),
@@ -112,7 +111,7 @@ class PrintToLogpointFixTest {
      * does the breakpoint listener that hears the same addition; recorded twice, redo made two.
      */
     @Test
-    fun `redo puts back exactly one log point`() {
+    fun `redo puts back exactly one log point`() = onEdt {
         applyFix("def f(x):\n    print(x)\n    return x * 2\n", "print(x)", "return x * 2")
         val editor = FileEditorManager.getInstance(fixture.project).getSelectedEditor(fixture.file.virtualFile)
         val undo = UndoManager.getInstance(fixture.project)
@@ -137,7 +136,7 @@ class PrintToLogpointFixTest {
     }
 
     @Test
-    fun `no fix is offered where the log point would have nowhere to bind`() {
+    fun `no fix is offered where the log point would have nowhere to bind`() = onEdt {
         // The print is the last statement of the function; the next line runs at import time.
         configure("def f(x):\n    print(x)\n\nf(1)\n") {
             compound { clause("def f(x):") { call("print(x)") } }

@@ -5,12 +5,12 @@ import com.intellij.openapi.editor.Document
 import com.intellij.openapi.editor.StripTrailingSpacesFilter
 import com.intellij.openapi.editor.ex.EditorSettingsExternalizable
 import com.intellij.openapi.fileEditor.FileDocumentManager
-import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.lsp.outline.ByOutline
 import dev.basedpython.pycharm.lsp.outline.ByOutlines
 import dev.basedpython.pycharm.lsp.outline.OutlineSpec
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import dev.basedpython.pycharm.testFramework.onEdt
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertSame
@@ -23,7 +23,6 @@ import org.junit.jupiter.api.Test
  * reading the strings from an outline put in as `by` would answer it.
  */
 @TestFixtures
-@RunInEdt(writeIntent = true)
 class ByStripTrailingSpacesFilterTest {
 
     private val fixture by codeInsightFixture()
@@ -34,13 +33,13 @@ class ByStripTrailingSpacesFilterTest {
     private var mode: String? = null
 
     @BeforeEach
-    fun rememberMode() {
+    fun rememberMode() = onEdt {
         mode = settings.stripTrailingSpaces
         settings.stripTrailingSpaces = EditorSettingsExternalizable.STRIP_TRAILING_SPACES_WHOLE
     }
 
     @AfterEach
-    fun restoreMode() {
+    fun restoreMode() = onEdt {
         mode?.let { settings.stripTrailingSpaces = it }
     }
 
@@ -58,7 +57,7 @@ class ByStripTrailingSpacesFilterTest {
     }
 
     @Test
-    fun `code lines are stripped and the lines inside a triple-quoted string are not`() {
+    fun `code lines are stripped and the lines inside a triple-quoted string are not`() = onEdt {
         typed("x = 1   \ns = $q\n    kept   \n    also\t\n    $q   \nt = 'one line'   \n")
         OutlineSpec.remember(fixture.project, document) {
             string("$q\n    kept   \n    also\t\n    $q", strippedIndent = 4)
@@ -73,7 +72,7 @@ class ByStripTrailingSpacesFilterTest {
      * would also decide whether basedpython dedents it: a body has to start with the line break.
      */
     @Test
-    fun `the line a string opens on keeps its spaces`() {
+    fun `the line a string opens on keeps its spaces`() = onEdt {
         typed("s = $q   \n    body\n    $q\n")
         OutlineSpec.remember(fixture.project, document) { string("$q   \n    body\n    $q") }
 
@@ -81,7 +80,7 @@ class ByStripTrailingSpacesFilterTest {
     }
 
     @Test
-    fun `an f-string keeps its spaces in the text and in its interpolations`() {
+    fun `an f-string keeps its spaces in the text and in its interpolations`() = onEdt {
         typed("f = f$q{\n    value   \n}   \ntext   \n$q   \n")
         OutlineSpec.remember(fixture.project, document) {
             string("f$q{\n    value   \n}   \ntext   \n$q", interpolations = listOf("{\n    value   \n}"))
@@ -92,7 +91,7 @@ class ByStripTrailingSpacesFilterTest {
 
     /** Where the quotes are is the outline's to say, whatever other quotes are between them. */
     @Test
-    fun `quotes of the other kind do not open or close a string`() {
+    fun `quotes of the other kind do not open or close a string`() = onEdt {
         typed("a = \"'''\"   \nb = '''\"x\"   \n\"   \n'''   \n")
         OutlineSpec.remember(fixture.project, document) {
             string("\"'''\"")
@@ -103,7 +102,7 @@ class ByStripTrailingSpacesFilterTest {
     }
 
     @Test
-    fun `a string spanning many lines keeps every one of them`() {
+    fun `a string spanning many lines keeps every one of them`() = onEdt {
         val body = (1..200).joinToString("") { "line $it  \n" }
         typed("s = '''\n$body'''  \nafter  \n")
         OutlineSpec.remember(fixture.project, document) { string("'''\n$body'''") }
@@ -117,7 +116,7 @@ class ByStripTrailingSpacesFilterTest {
      * strips as usual.
      */
     @Test
-    fun `an edit the outline has not caught up with strips nothing`() {
+    fun `an edit the outline has not caught up with strips nothing`() = onEdt {
         typed("x = 1   \ns = $q\n    kept   \n$q\n")
         OutlineSpec.remember(fixture.project, document) { string("$q\n    kept   \n$q") }
         WriteCommandAction.runWriteCommandAction(fixture.project) { document.insertString(0, "y = 2   \n") }
@@ -134,7 +133,7 @@ class ByStripTrailingSpacesFilterTest {
      * `NOT_ALLOWED` document, which is the reverse of what the two constants promise.
      */
     @Test
-    fun `with no outline for this text the filter postpones rather than forbids`() {
+    fun `with no outline for this text the filter postpones rather than forbids`() = onEdt {
         typed("x = 1   \n")
 
         assertSame(
@@ -149,7 +148,7 @@ class ByStripTrailingSpacesFilterTest {
      * hand included — until they are edited again, and then they are stripped.
      */
     @Test
-    fun `in modified-lines mode a line saved before its outline keeps its spaces until it is edited again`() {
+    fun `in modified-lines mode a line saved before its outline keeps its spaces until it is edited again`() = onEdt {
         settings.stripTrailingSpaces = EditorSettingsExternalizable.STRIP_TRAILING_SPACES_CHANGED
         fixture.configureByText("a.by", "x = 1\n")
         fixture.editor.caretModel.moveToOffset(0)
@@ -167,7 +166,7 @@ class ByStripTrailingSpacesFilterTest {
     }
 
     @Test
-    fun `an outline by declined to give strips nothing`() {
+    fun `an outline by declined to give strips nothing`() = onEdt {
         typed("x = 1   \ns = '''\n  kept  \n'''\n")
         ByOutlines.getInstance(fixture.project)
             .remember(document, ByOutline(document.modificationStamp, emptyList(), emptyList(), declined = true))
@@ -176,7 +175,7 @@ class ByStripTrailingSpacesFilterTest {
     }
 
     @Test
-    fun `other files are stripped as before`() {
+    fun `other files are stripped as before`() = onEdt {
         typed("x = '''   \n'''   \n", name = "a.txt")
 
         assertEquals("x = '''\n'''\n", save())

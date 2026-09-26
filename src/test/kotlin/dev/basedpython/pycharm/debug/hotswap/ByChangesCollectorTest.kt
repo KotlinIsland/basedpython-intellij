@@ -4,10 +4,10 @@ import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import com.intellij.xdebugger.hotswap.SourceFileChangesListener
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import dev.basedpython.pycharm.testFramework.onEdt
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 
@@ -20,7 +20,6 @@ import org.junit.jupiter.api.Test
  * toolbar or the reload action back for the rest of the session.
  */
 @TestFixtures
-@RunInEdt(writeIntent = true)
 class ByChangesCollectorTest {
 
     private val fixture by codeInsightFixture()
@@ -41,7 +40,7 @@ class ByChangesCollectorTest {
         }
     }
 
-    private fun collecting(block: (ByChangesCollector) -> Unit) {
+    private fun collecting(block: (ByChangesCollector) -> Unit) = onEdt {
         val collector = ByChangesCollector(listener) { true }
         try {
             block(collector)

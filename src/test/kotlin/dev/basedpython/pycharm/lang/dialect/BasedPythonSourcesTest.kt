@@ -1,10 +1,10 @@
 package dev.basedpython.pycharm.lang.dialect
 
 import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import dev.basedpython.pycharm.testFramework.onEdt
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -22,7 +22,6 @@ import com.intellij.openapi.vfs.VfsUtil
  * type" popup on every gutter click in it.
  */
 @TestFixtures
-@RunInEdt(writeIntent = true)
 class BasedPythonSourcesTest {
 
     private val fixture by codeInsightFixture()
@@ -49,7 +48,7 @@ class BasedPythonSourcesTest {
         fixture.addFileToProject(relPath, "x = 1\n").virtualFile
 
     @AfterEach
-    fun removeMarkers() {
+    fun removeMarkers() = onEdt {
         WriteAction.runAndWait<RuntimeException> {
             for (marker in createdMarkers) if (marker.isValid) marker.delete(this)
         }
@@ -57,14 +56,14 @@ class BasedPythonSourcesTest {
     }
 
     @Test
-    fun `a by file always accepts a breakpoint`() {
+    fun `a by file always accepts a breakpoint`() = onEdt {
         makeBasedPythonProject()
         assertTrue(BasedPythonSources.isOwnedSource(file("main.by")))
     }
 
     /** `by run` never transpiles this file, so the breakpoint lands on the file itself. */
     @Test
-    fun `a py file we own accepts a breakpoint`() {
+    fun `a py file we own accepts a breakpoint`() = onEdt {
         makeBasedPythonProject()
         assertTrue(BasedPythonSources.isOwnedSource(file("helper.py")))
     }
@@ -74,21 +73,21 @@ class BasedPythonSourcesTest {
      * of ours there would be the second type on the line.
      */
     @Test
-    fun `a py file we do not own does not`() {
+    fun `a py file we do not own does not`() = onEdt {
         makeBasedPythonProject(handling = PyFileHandling.NEVER)
         assertFalse(BasedPythonSources.isOwnedSource(file("untouched.py")))
     }
 
     /** Stubs declare, they do not execute — neither dialect's. */
     @Test
-    fun `stubs never do`() {
+    fun `stubs never do`() = onEdt {
         makeBasedPythonProject()
         assertFalse(BasedPythonSources.isOwnedSource(file("shape.byi")))
         assertFalse(BasedPythonSources.isOwnedSource(file("shape.pyi")))
     }
 
     @Test
-    fun `an unrelated file does not, and neither does no file at all`() {
+    fun `an unrelated file does not, and neither does no file at all`() = onEdt {
         makeBasedPythonProject()
         assertFalse(BasedPythonSources.isOwnedSource(file("notes.md")))
         assertFalse(BasedPythonSources.isOwnedSource(null))

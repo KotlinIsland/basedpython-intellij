@@ -1,8 +1,8 @@
 package dev.basedpython.pycharm.env.manager.index
 
-import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import dev.basedpython.pycharm.testFramework.onEdt
 import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Test
 
@@ -14,14 +14,13 @@ import org.junit.jupiter.api.Test
  * pick is an exception the first time a user opens *Add Package*, not a compile error.
  */
 @TestFixtures
-@RunInEdt(writeIntent = true)
 class PackageIndexCacheServiceTest {
 
     @Suppress("unused")
     private val fixture by codeInsightFixture()
 
     @Test
-    fun `the platform can build the service`() {
+    fun `the platform can build the service`() = onEdt {
         assertSame(PackageIndexCache.getInstance(), PackageIndexCache.getInstance())
     }
 }

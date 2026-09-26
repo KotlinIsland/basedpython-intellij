@@ -5,9 +5,9 @@ import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.platform.lsp.api.LspClientDescriptor
 import com.intellij.platform.lsp.api.LspIntegrationProvider
 import com.intellij.testFramework.PsiTestUtil
-import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import dev.basedpython.pycharm.testFramework.onEdt
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotEquals
@@ -25,7 +25,6 @@ import java.nio.file.attribute.PosixFilePermission
  * to ask, or the server a project gets depends on the order its files were opened in.
  */
 @TestFixtures
-@RunInEdt(writeIntent = true)
 class ByLspServerLaunchTest {
 
     private val fixture by codeInsightFixture()
@@ -34,7 +33,7 @@ class ByLspServerLaunchTest {
     private val roots = mutableListOf<VirtualFile>()
 
     @AfterEach
-    fun cleanUp() {
+    fun cleanUp() = onEdt {
         roots.forEach { PsiTestUtil.removeContentEntry(fixture.module, it) }
         temp.toFile().deleteRecursively()
     }
@@ -75,7 +74,7 @@ class ByLspServerLaunchTest {
     }
 
     @Test
-    fun `the server a project runs does not depend on which module opened a file first`() {
+    fun `the server a project runs does not depend on which module opened a file first`() = onEdt {
         val first = module("first", "by", "buff")
         val second = module("second", "by", "buff")
         // What the old resolution would have picked, so this is not passing on two identical roots.

@@ -10,10 +10,10 @@ import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.platform.lsp.api.LspClient
 import com.intellij.testFramework.PsiTestUtil
-import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.testFramework.RecordingByClient
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import dev.basedpython.pycharm.testFramework.onEdt
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
@@ -28,7 +28,6 @@ import java.nio.file.Path
  * no longer there, and one told to open a file twice refuses the second.
  */
 @TestFixtures
-@RunInEdt(writeIntent = true)
 class ByServerDocumentsTest {
 
     private val fixture by codeInsightFixture()
@@ -37,7 +36,7 @@ class ByServerDocumentsTest {
     private val roots = mutableListOf<VirtualFile>()
 
     @AfterEach
-    fun cleanUp() {
+    fun cleanUp() = onEdt {
         roots.forEach { PsiTestUtil.removeContentEntry(fixture.module, it) }
         temp.toFile().deleteRecursively()
     }
@@ -52,7 +51,7 @@ class ByServerDocumentsTest {
     }
 
     private fun ensureOpen(client: LspClient, file: VirtualFile) =
-        ReadAction.run<RuntimeException> { documents.ensureOpen(client, file) }
+        ReadAction.runBlocking<RuntimeException> { documents.ensureOpen(client, file) }
 
     private fun edit(file: VirtualFile, text: String) {
         val document = FileDocumentManager.getInstance().getDocument(file)!!
@@ -60,7 +59,7 @@ class ByServerDocumentsTest {
     }
 
     @Test
-    fun `a file outside the content roots is opened once and told every edit`() {
+    fun `a file outside the content roots is opened once and told every edit`() = onEdt {
         val client = RecordingByClient(fixture.project)
         val file = outside("scratch.by", "x = 1\n")
 
@@ -80,7 +79,7 @@ class ByServerDocumentsTest {
     }
 
     @Test
-    fun `a file under a content root is the platform's to sync`() {
+    fun `a file under a content root is the platform's to sync`() = onEdt {
         val client = RecordingByClient(fixture.project)
         val file = fixture.configureByText("content.by", "x = 1\n").virtualFile
 
@@ -91,7 +90,7 @@ class ByServerDocumentsTest {
     }
 
     @Test
-    fun `a file that becomes content is closed before the platform opens it`() {
+    fun `a file that becomes content is closed before the platform opens it`() = onEdt {
         val client = RecordingByClient(fixture.project)
         val file = outside("becomes.by", "x = 1\n")
         ensureOpen(client, file)
@@ -105,7 +104,7 @@ class ByServerDocumentsTest {
     }
 
     @Test
-    fun `closing the last editor on a file closes it, and asking again opens it again`() {
+    fun `closing the last editor on a file closes it, and asking again opens it again`() = onEdt {
         val client = RecordingByClient(fixture.project)
         val file = outside("closed.by", "x = 1\n")
         fixture.openFileInEditor(file)
@@ -118,7 +117,7 @@ class ByServerDocumentsTest {
     }
 
     @Test
-    fun `a deleted file is closed under the URI it was opened with`() {
+    fun `a deleted file is closed under the URI it was opened with`() = onEdt {
         val client = RecordingByClient(fixture.project)
         val file = outside("deleted.by", "x = 1\n")
         ensureOpen(client, file)

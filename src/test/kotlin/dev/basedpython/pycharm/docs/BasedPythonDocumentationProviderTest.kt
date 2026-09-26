@@ -1,9 +1,9 @@
 package dev.basedpython.pycharm.docs
 
-import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.lsp.outline.OutlineSpec
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import dev.basedpython.pycharm.testFramework.onEdt
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 
@@ -13,7 +13,6 @@ import org.junit.jupiter.api.Test
  * class` line showed `class def`'s entry, and a `.` anywhere on a line with a `?.` showed `?.`'s.
  */
 @TestFixtures
-@RunInEdt(writeIntent = true)
 class BasedPythonDocumentationProviderTest {
 
     private val fixture by codeInsightFixture()
@@ -26,7 +25,7 @@ class BasedPythonDocumentationProviderTest {
     }
 
     @Test
-    fun `a declaration keyword is documented by the declaration by parsed it into`() {
+    fun `a declaration keyword is documented by the declaration by parsed it into`() = onEdt {
         fixture.configureByText("a.by", "frozen data class P:\n    x: int\nclass Q:\n    class def make(cls): ...\n")
         OutlineSpec.remember(fixture.project, fixture.editor.document) {
             compound(modifiers = listOf("frozen data" to "frozen_data_class")) {
@@ -50,7 +49,7 @@ class BasedPythonDocumentationProviderTest {
     }
 
     @Test
-    fun `a name spelled like a declaration keyword is not documented as one`() {
+    fun `a name spelled like a declaration keyword is not documented as one`() = onEdt {
         fixture.configureByText("b.by", "data = user?.name.upper()\n")
         OutlineSpec.remember(fixture.project, fixture.editor.document) { simple("data = user?.name.upper()") }
 

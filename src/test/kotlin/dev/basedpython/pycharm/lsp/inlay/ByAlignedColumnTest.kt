@@ -4,9 +4,9 @@ import com.intellij.codeInsight.hints.InlayContentListener
 import com.intellij.codeInsight.hints.presentation.PresentationRenderer
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.ex.util.EditorUtil
-import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import dev.basedpython.pycharm.testFramework.onEdt
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
@@ -25,7 +25,6 @@ import javax.swing.JPanel
  * editor's own answer to "where is this character", inlays and all.
  */
 @TestFixtures
-@RunInEdt(writeIntent = true)
 class ByAlignedColumnTest {
 
     private val fixture by codeInsightFixture()
@@ -131,7 +130,7 @@ class ByAlignedColumnTest {
 
     /** The push state is the application's, and so is shared with whatever ran before this. */
     @BeforeEach
-    fun releaseEverything() {
+    fun releaseEverything() = onEdt {
         hold(0)
     }
 
@@ -178,7 +177,7 @@ class ByAlignedColumnTest {
     private fun Editor.columnOf(offset: Int): Int = offsetToXY(offset).x
 
     @Test
-    fun `the source this is all about is aligned to begin with`() {
+    fun `the source this is all about is aligned to begin with`() = onEdt {
         // Not a tautology: everything below compares two x coordinates, and would pass vacuously in a
         // proportional font where the two lines never lined up in the first place.
         val editor = editor()
@@ -186,7 +185,7 @@ class ByAlignedColumnTest {
     }
 
     @Test
-    fun `a hint wider than the padding leaves both equals signs on one column`() {
+    fun `a hint wider than the padding leaves both equals signs on one column`() = onEdt {
         val editor = laidOut(ByHintMode.ALWAYS)
         assertEquals(
             editor.columnOf(ascii.equals1),
@@ -196,7 +195,7 @@ class ByAlignedColumnTest {
     }
 
     @Test
-    fun `the block still moves right, since the hint has to go somewhere`() {
+    fun `the block still moves right, since the hint has to go somewhere`() = onEdt {
         // Alignment is kept, not the original column: eleven columns of hint do not fit in five of
         // padding, so the whole block has to give way — which is the half a client cannot do by
         // narrowing a hint.
@@ -208,7 +207,7 @@ class ByAlignedColumnTest {
     }
 
     @Test
-    fun `letting the push key up puts the block back where it was written`() {
+    fun `letting the push key up puts the block back where it was written`() = onEdt {
         val editor = laidOut(ByHintMode.ON_PUSH)
         assertEquals(
             editor.columnOf(ascii.equals1),
@@ -218,7 +217,7 @@ class ByAlignedColumnTest {
     }
 
     @Test
-    fun `pressing it lines the block up again around the hint`() {
+    fun `pressing it lines the block up again around the hint`() = onEdt {
         val editor = laidOut(ByHintMode.ON_PUSH)
         val resting = editor.columnOf(ascii.equals1)
 
@@ -250,7 +249,7 @@ class ByAlignedColumnTest {
      * furthest right of the measured lines, and every member is brought to it.
      */
     @Test
-    fun `a block whose lead is wide characters is brought onto one column`() {
+    fun `a block whose lead is wide characters is brought onto one column`() = onEdt {
         val plain = editor(wide)
         val resting = plain.columnOf(wide.equals1)
         assertTrue(
@@ -268,14 +267,14 @@ class ByAlignedColumnTest {
     }
 
     @Test
-    fun `a tab before the gap is aligned to begin with at the editor's own tab size`() {
+    fun `a tab before the gap is aligned to begin with at the editor's own tab size`() = onEdt {
         val editor = editor(tabbed)
         assertEquals(4, EditorUtil.getTabSize(editor), "the tabbed block is only square at a tab size of four")
         assertEquals(editor.columnOf(tabbed.equals1), editor.columnOf(tabbed.equals2))
     }
 
     @Test
-    fun `a hint after a tab leaves both equals signs on one column`() {
+    fun `a hint after a tab leaves both equals signs on one column`() = onEdt {
         val editor = laidOut(ByHintMode.ALWAYS, tabbed)
         assertEquals(
             editor.columnOf(tabbed.equals1),

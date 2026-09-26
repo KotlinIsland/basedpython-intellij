@@ -1,12 +1,12 @@
 package dev.basedpython.pycharm.lsp.inject
 
 import com.intellij.openapi.util.TextRange
-import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.lsp.ext.ByInjectionFragment
 import dev.basedpython.pycharm.lsp.ext.ByInjectionsParams
 import dev.basedpython.pycharm.lsp.ext.ByInjectionsResponse
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import dev.basedpython.pycharm.testFramework.onEdt
 import org.eclipse.lsp4j.Position
 import org.eclipse.lsp4j.Range
 import org.eclipse.lsp4j.TextDocumentIdentifier
@@ -25,7 +25,6 @@ import org.junit.jupiter.api.Test
  * catch a rename made only there.
  */
 @TestFixtures
-@RunInEdt(writeIntent = true)
 class ByInjectionRepliesTest {
 
     private val fixture by codeInsightFixture()
@@ -36,7 +35,7 @@ class ByInjectionRepliesTest {
     // region: the wire
 
     @Test
-    fun `the params a client sends are the shape the server accepts`() {
+    fun `the params a client sends are the shape the server accepts`() = onEdt {
         val params = ByInjectionsParams(TextDocumentIdentifier("file:///main.by"), "cbf29ce484222325")
         assertEquals(
             """{"textDocument":{"uri":"file:///main.by"},"textHash":"cbf29ce484222325"}""",
@@ -45,7 +44,7 @@ class ByInjectionRepliesTest {
     }
 
     @Test
-    fun `a response the server sends reads back whole`() {
+    fun `a response the server sends reads back whole`() = onEdt {
         val json = """
             {"injections":[{"language":"html","ranges":[{"start":{"line":3,"character":8},
             "end":{"line":3,"character":21}}],"origin":"comment"}]}
@@ -77,7 +76,7 @@ class ByInjectionRepliesTest {
     ) = ByInjectionFragment(language = language, ranges = ranges.toList(), origin = origin)
 
     @Test
-    fun `a line and a character become an offset in the document`() {
+    fun `a line and a character become an offset in the document`() = onEdt {
         // Line 1 is `b = "<i>x</i>"`, whose content starts at character 5.
         val found = read(
             "a = 1\nb = \"<i>x</i>\"\n",
@@ -87,7 +86,7 @@ class ByInjectionRepliesTest {
     }
 
     @Test
-    fun `the origin comes back as the reason it names`() {
+    fun `the origin comes back as the reason it names`() = onEdt {
         val range = Range(Position(0, 5), Position(0, 6))
         assertEquals(
             listOf(ByInjectionOrigin.COMMENT, ByInjectionOrigin.DECLARED, ByInjectionOrigin.PROPAGATED),
@@ -101,7 +100,7 @@ class ByInjectionRepliesTest {
     }
 
     @Test
-    fun `a fragment with a position the document no longer has is dropped`() {
+    fun `a fragment with a position the document no longer has is dropped`() = onEdt {
         val found = read(
             "a = \"x\"\n",
             fragment(ranges = arrayOf(Range(Position(99, 0), Position(99, 4)))),
@@ -110,7 +109,7 @@ class ByInjectionRepliesTest {
     }
 
     @Test
-    fun `a fragment is dropped whole when only one of its parts is placeable`() {
+    fun `a fragment is dropped whole when only one of its parts is placeable`() = onEdt {
         // The second part is off the end, and a fragment is its parts joined: keeping the first
         // alone would report a different string as the same fragment.
         val found = read(
@@ -126,7 +125,7 @@ class ByInjectionRepliesTest {
     }
 
     @Test
-    fun `an answer this plugin cannot read is dropped rather than guessed at`() {
+    fun `an answer this plugin cannot read is dropped rather than guessed at`() = onEdt {
         val range = Range(Position(0, 5), Position(0, 6))
         assertTrue(read("a = \"x\"\n", fragment(language = "", ranges = arrayOf(range))).isEmpty())
         assertTrue(read("a = \"x\"\n", fragment(origin = "whatever", ranges = arrayOf(range))).isEmpty())

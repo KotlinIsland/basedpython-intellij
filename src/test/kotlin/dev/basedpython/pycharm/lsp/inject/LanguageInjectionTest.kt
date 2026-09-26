@@ -6,11 +6,11 @@ import com.intellij.openapi.fileTypes.PlainTextLanguage
 import com.intellij.openapi.util.TextRange
 import com.intellij.psi.PsiFile
 import com.intellij.psi.util.PsiTreeUtil
-import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.lang.BasedPythonStringLiteral
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import dev.basedpython.pycharm.testFramework.onEdt
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
@@ -31,7 +31,6 @@ import org.junit.jupiter.api.Test
  * html belongs to a plugin that may not be on the test classpath.
  */
 @TestFixtures
-@RunInEdt(writeIntent = true)
 class LanguageInjectionTest {
 
     private val fixture by codeInsightFixture()
@@ -66,7 +65,7 @@ class LanguageInjectionTest {
     // region: the fragment is injected
 
     @Test
-    fun `a string the server reported becomes a document of that language`() {
+    fun `a string the server reported becomes a document of that language`() = onEdt {
         val file = inject("a = \"<b>hi</b>\"\n")
         val injected = injectedAt(file, contentRange(file, 0).startOffset + 1)
 
@@ -76,7 +75,7 @@ class LanguageInjectionTest {
     }
 
     @Test
-    fun `the injected language reads the text the string stands for, not the way it is spelled`() {
+    fun `the injected language reads the text the string stands for, not the way it is spelled`() = onEdt {
         val file = inject("a = \"<a href=\\\"/\\\">\"\n")
         val injected = injectedAt(file, contentRange(file, 0).startOffset + 1)
 
@@ -90,7 +89,7 @@ class LanguageInjectionTest {
     }
 
     @Test
-    fun `a fragment written as adjacent literals is one document`() {
+    fun `a fragment written as adjacent literals is one document`() = onEdt {
         val file = inject("a = \"SELECT *\" \" FROM t\"") { listOf(contentRange(it, 0), contentRange(it, 1)) }
         val injected = injectedAt(file, contentRange(file, 0).startOffset + 1)
 
@@ -99,7 +98,7 @@ class LanguageInjectionTest {
     }
 
     @Test
-    fun `a triple-quoted string is injected across its lines`() {
+    fun `a triple-quoted string is injected across its lines`() = onEdt {
         val file = inject("a = \"\"\"<b>\nhi\n</b>\"\"\"\n")
         val injected = injectedAt(file, contentRange(file, 0).startOffset + 1)
 
@@ -107,7 +106,7 @@ class LanguageInjectionTest {
     }
 
     @Test
-    fun `a dedented triple-quoted string is injected without its indentation`() {
+    fun `a dedented triple-quoted string is injected without its indentation`() = onEdt {
         // basedpython strips a triple-quoted string's incidental indentation, so `by` reports the
         // runs that survive it — one per line — rather than the block between the quotes.
         val source = "def render():\n    page = \"\"\"\n    <div>\n    asdf\n    </div>\n    \"\"\"\n"
@@ -138,19 +137,19 @@ class LanguageInjectionTest {
     // region: the fragment is left alone
 
     @Test
-    fun `a string the server said nothing about is an ordinary string`() {
+    fun `a string the server said nothing about is an ordinary string`() = onEdt {
         val file = fixture.configureByText("plain.by", "a = \"<b>hi</b>\"\n")
         assertNull(injectedAt(file, 6))
     }
 
     @Test
-    fun `a language this IDE does not have is not an error, it is no injection`() {
+    fun `a language this IDE does not have is not an error, it is no injection`() = onEdt {
         val file = inject("a = \"x\"\n", language = "no-such-language-anywhere")
         assertNull(injectedAt(file, contentRange(file, 0).startOffset))
     }
 
     @Test
-    fun `turning the setting off turns the feature off`() {
+    fun `turning the setting off turns the feature off`() = onEdt {
         val settings = BasedPythonSettings.getInstance(fixture.project)
         val was = settings.byLanguageInjection
         try {
@@ -163,7 +162,7 @@ class LanguageInjectionTest {
     }
 
     @Test
-    fun `a fragment whose second part is not a string is dropped whole`() {
+    fun `a fragment whose second part is not a string is dropped whole`() = onEdt {
         // The answer is a revision out of date and its second range now lands on code. Injecting
         // the first half alone would be a fragment with a hole in it.
         val file = inject("a = \"SELECT *\" + name") { listOf(contentRange(it, 0), TextRange(17, 21)) }
@@ -171,7 +170,7 @@ class LanguageInjectionTest {
     }
 
     @Test
-    fun `an f-string is never injected into, whatever the server says`() {
+    fun `an f-string is never injected into, whatever the server says`() = onEdt {
         val file = inject("a = f\"{x}\"\n")
         assertNull(injectedAt(file, contentRange(file, 0).startOffset))
     }
@@ -181,7 +180,7 @@ class LanguageInjectionTest {
     // region: editing through the fragment
 
     @Test
-    fun `the injected range is the literal's own content`() {
+    fun `the injected range is the literal's own content`() = onEdt {
         val file = inject("a = \"<b>hi</b>\"\n")
         val host = literalsIn(file).first()
         val shreds = manager.getInjectedPsiFiles(host)

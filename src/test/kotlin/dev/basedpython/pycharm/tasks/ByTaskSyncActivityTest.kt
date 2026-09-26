@@ -4,9 +4,9 @@ import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.vfs.newvfs.events.VFileMoveEvent
 import com.intellij.openapi.vfs.newvfs.events.VFilePropertyChangeEvent
-import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import dev.basedpython.pycharm.testFramework.onEdt
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -17,7 +17,6 @@ import java.nio.file.Path
 
 /** Which file changes re-scan a project's tasks: its own root's configuration files, and nothing else. */
 @TestFixtures
-@RunInEdt(writeIntent = true)
 class ByTaskSyncActivityTest {
 
     @Suppress("unused")
@@ -29,30 +28,30 @@ class ByTaskSyncActivityTest {
     private val base = "/work/app"
 
     @Test
-    fun `a configuration file at the project root is a change`() {
+    fun `a configuration file at the project root is a change`() = onEdt {
         assertTrue(touchesTaskConfig(listOf("/work/app/.pre-commit-config.yaml"), base))
         assertTrue(touchesTaskConfig(listOf("/work/app/pyproject.toml"), "/work/app/"))
     }
 
     @Test
-    fun `the same name in another project is not`() {
+    fun `the same name in another project is not`() = onEdt {
         // The VFS topic is application-wide: this project hears the other one's saves.
         assertFalse(touchesTaskConfig(listOf("/work/other/pyproject.toml"), base))
         assertFalse(touchesTaskConfig(listOf("/work/app-2/pyproject.toml"), base))
     }
 
     @Test
-    fun `the same name below the root is not either, since a scan never reads it`() {
+    fun `the same name below the root is not either, since a scan never reads it`() = onEdt {
         assertFalse(touchesTaskConfig(listOf("/work/app/packages/lib/pyproject.toml"), base))
     }
 
     @Test
-    fun `a file of another name at the root is not`() {
+    fun `a file of another name at the root is not`() = onEdt {
         assertFalse(touchesTaskConfig(listOf("/work/app/setup.cfg"), base))
     }
 
     @Test
-    fun `renaming a file to a configuration name is a change`() {
+    fun `renaming a file to a configuration name is a change`() = onEdt {
         val file = local("hooks.yaml")
 
         val paths = eventPaths(VFilePropertyChangeEvent(null, file, VirtualFile.PROP_NAME, "hooks.yaml", "lefthook.yml"))
@@ -62,7 +61,7 @@ class ByTaskSyncActivityTest {
     }
 
     @Test
-    fun `moving a configuration file in or out of the root is a change`() {
+    fun `moving a configuration file in or out of the root is a change`() = onEdt {
         val sub = checkNotNull(LocalFileSystem.getInstance().refreshAndFindFileByNioFile(Files.createDirectory(dir.resolve("sub"))))
         val file = local("pyproject.toml")
 

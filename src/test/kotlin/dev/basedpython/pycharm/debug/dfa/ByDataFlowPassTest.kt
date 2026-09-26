@@ -2,10 +2,10 @@ package dev.basedpython.pycharm.debug.dfa
 
 import com.intellij.openapi.editor.markup.HighlighterLayer
 import com.intellij.testFramework.PlatformTestUtil
-import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import dev.basedpython.pycharm.testFramework.onEdt
 import org.eclipse.lsp4j.Position
 import org.eclipse.lsp4j.Range
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -25,7 +25,6 @@ import org.junit.jupiter.api.Test
  * real `by` answered for a real stop, not shapes chosen here.
  */
 @TestFixtures
-@RunInEdt(writeIntent = true)
 class ByDataFlowPassTest {
 
     private val fixture by codeInsightFixture()
@@ -72,7 +71,7 @@ class ByDataFlowPassTest {
     }
 
     @Test
-    fun `a published finding is drawn over the source it is about`() {
+    fun `a published finding is drawn over the source it is about`() = onEdt {
         configure()
         val text = fixture.editor.document.immutableCharSequence
         assertEquals(
@@ -87,7 +86,7 @@ class ByDataFlowPassTest {
     }
 
     @Test
-    fun `the fade is drawn above the colouring it has to override`() {
+    fun `the fade is drawn above the colouring it has to override`() = onEdt {
         // the defect this pins. `.by` files are coloured by `by`'s LSP semantic tokens, which the
         // daemon puts in the document markup at `WEAK_WARNING` — measured in a running IDE, where
         // `print` and `"bye"` carried `BASEDPYTHON_FUNCTION_DECLARATION` and `BASEDPYTHON_STRING`
@@ -164,7 +163,7 @@ class ByDataFlowPassTest {
     )
 
     @Test
-    fun `a settled value is drawn over the read it is about, under its own key`() {
+    fun `a settled value is drawn over the read it is about, under its own key`() = onEdt {
         // the kind the pass grew for the second report. an unknown kind is dropped rather than
         // guessed at, so a `value` the pass did not learn about would be silently absent — which
         // looks exactly like `by` not having decided it
@@ -182,7 +181,7 @@ class ByDataFlowPassTest {
     }
 
     @Test
-    fun `the value's label is the one drawn beside the line`() {
+    fun `the value's label is the one drawn beside the line`() = onEdt {
         // the label is what the reader actually sees, and it is the server's string rather than
         // anything assembled here — a plugin that rebuilt it would be a second place for the
         // spelling to drift
@@ -197,7 +196,7 @@ class ByDataFlowPassTest {
     }
 
     @Test
-    fun `nothing is drawn when the feature is off`() {
+    fun `nothing is drawn when the feature is off`() = onEdt {
         // the control, and the reason the setting is checked in the factory rather than only in
         // the listener: a session that was recorded while it was on must stop drawing when it is
         // turned off, not keep the last stop's marks on screen

@@ -2,9 +2,9 @@ package dev.basedpython.pycharm.lsp.refactor
 
 import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.refactoring.util.CommonRefactoringUtil.RefactoringErrorHintException
-import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import dev.basedpython.pycharm.testFramework.onEdt
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -21,14 +21,13 @@ import org.junit.jupiter.params.provider.ValueSource
  * shows that the action reached `by`'s handler rather than stopping at the action.
  */
 @TestFixtures
-@RunInEdt(writeIntent = true)
 class ByRefactoringActionsTest {
 
     private val fixture by codeInsightFixture()
 
     @ParameterizedTest
     @ValueSource(strings = ["IntroduceVariable", "IntroduceConstant", "ExtractMethod", "Inline"])
-    fun `the platform's refactoring action is enabled in a by file and asks by`(actionId: String) {
+    fun `the platform's refactoring action is enabled in a by file and asks by`(actionId: String) = onEdt {
         fixture.configureByText("main.by", "def f(a: int) -> int:\n    x = <selection>a + 1</selection>\n    return x * 2\n")
 
         val presentation = fixture.testAction(ActionManager.getInstance().getAction(actionId).let { NoPerform(it) })
@@ -40,7 +39,7 @@ class ByRefactoringActionsTest {
 
     @ParameterizedTest
     @ValueSource(strings = ["InlineVariable", "ExtractVariable", "IntroduceConstant", "ExtractFunction"])
-    fun `the plugin's own duplicate menu entries are gone`(name: String) {
+    fun `the plugin's own duplicate menu entries are gone`(name: String) = onEdt {
         assertNull(ActionManager.getInstance().getAction("basedpython.refactor.$name"))
     }
 

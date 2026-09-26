@@ -6,11 +6,11 @@ import com.intellij.openapi.editor.ex.RangeHighlighterEx
 import com.intellij.openapi.editor.impl.event.EditorEventMulticasterImpl
 import com.intellij.openapi.editor.markup.RangeHighlighter
 import com.intellij.openapi.util.Disposer
-import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import com.intellij.testFramework.replaceService
 import dev.basedpython.pycharm.lsp.outline.OutlineSpec
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import dev.basedpython.pycharm.testFramework.onEdt
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -26,7 +26,6 @@ import org.junit.jupiter.api.Test
  * lines — and none of it needs a server to be wrong.
  */
 @TestFixtures
-@RunInEdt(writeIntent = true)
 class ByStringMarginPassTest {
 
     private val fixture by codeInsightFixture()
@@ -51,7 +50,7 @@ class ByStringMarginPassTest {
     }
 
     @Test
-    fun `the pass draws a margin for each literal by strips`() {
+    fun `the pass draws a margin for each literal by strips`() = onEdt {
         fixture.configureByText("a.by", "a = $q\n    one\n    $q\nb = $q\n      two\n  $q\nc = \"three\"\n")
         OutlineSpec.remember(fixture.project, fixture.editor.document) {
             string("$q\n    one\n    $q", strippedIndent = 4)
@@ -68,7 +67,7 @@ class ByStringMarginPassTest {
      * below, marking a strip that never happens.
      */
     @Test
-    fun `no highlighter where by strips nothing`() {
+    fun `no highlighter where by strips nothing`() = onEdt {
         fixture.configureByText("b.by", "a = ${q}Summary.\n    more\n    $q\n")
         OutlineSpec.remember(fixture.project, fixture.editor.document) {
             string("${q}Summary.\n    more\n    $q")
@@ -78,7 +77,7 @@ class ByStringMarginPassTest {
     }
 
     @Test
-    fun `no answer from by is no margin`() {
+    fun `no answer from by is no margin`() = onEdt {
         fixture.configureByText("c.by", "a = $q\n    one\n    $q\n")
         fixture.doHighlighting()
         assertEquals(emptyList<StringMargin>(), drawn())
@@ -90,7 +89,7 @@ class ByStringMarginPassTest {
      * leaves the closing line out of it.
      */
     @Test
-    fun `the margin lands where the content is stripped to, not on the closing quotes`() {
+    fun `the margin lands where the content is stripped to, not on the closing quotes`() = onEdt {
         fixture.configureByText("d.by", "a = $q\n        one\n\n        two\n    $q\n")
         OutlineSpec.remember(fixture.project, fixture.editor.document) {
             string("$q\n        one\n\n        two\n    $q", strippedIndent = 8)
@@ -106,7 +105,7 @@ class ByStringMarginPassTest {
     }
 
     @Test
-    fun `a tab-indented literal is anchored after its tabs`() {
+    fun `a tab-indented literal is anchored after its tabs`() = onEdt {
         val text = "a = $q\n\t\tone\n\t$q\n"
         val margin = StringMargins.marginOf(text, text.indexOf(q), text.lastIndexOf(q) + 3, 2)!!
         assertEquals(text.indexOf("one"), margin.anchorOffset)
@@ -114,7 +113,7 @@ class ByStringMarginPassTest {
 
     /** Between an edit and the next answer the literal can lose its shape; nothing is drawn then. */
     @Test
-    fun `a literal whose shape no longer fits its indent is not drawn`() {
+    fun `a literal whose shape no longer fits its indent is not drawn`() = onEdt {
         val text = "a = $q\n  one\n    $q\n"
         assertNull(StringMargins.marginOf(text, text.indexOf(q), text.lastIndexOf(q) + 3, 4))
     }
@@ -129,7 +128,7 @@ class ByStringMarginPassTest {
      * changes colour partway down, which is what a string-coloured margin actually looked like.
      */
     @Test
-    fun `the rule is drawn in the colour of the editor's own indent guide`() {
+    fun `the rule is drawn in the colour of the editor's own indent guide`() = onEdt {
         fixture.configureByText("e.by", "a = $q\n    one\n    $q\n")
         val scheme = fixture.editor.colorsScheme
         assertEquals(
@@ -143,7 +142,7 @@ class ByStringMarginPassTest {
      * a new highlighter repaints the literal, and there is one of these per string in the file.
      */
     @Test
-    fun `a second pass over unchanged text reuses the highlighters`() {
+    fun `a second pass over unchanged text reuses the highlighters`() = onEdt {
         fixture.configureByText("f.by", "a = $q\n    one\n    $q\n")
         OutlineSpec.remember(fixture.project, fixture.editor.document) {
             string("$q\n    one\n    $q", strippedIndent = 4)
@@ -164,7 +163,7 @@ class ByStringMarginPassTest {
      * alive for as long as the editor stays open.
      */
     @Test
-    fun `disposing the margins takes everything back out of an open editor`() {
+    fun `disposing the margins takes everything back out of an open editor`() = onEdt {
         val owner = Disposer.newDisposable("margins under test")
         try {
             val margins = ByStringMarginEditors()

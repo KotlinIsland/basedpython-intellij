@@ -4,10 +4,10 @@ import com.intellij.codeInsight.template.impl.TemplateManagerImpl
 import com.intellij.codeInsight.template.impl.TemplateSettings
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.editor.Editor
-import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.lang.dialect.BasedPythonSources
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import dev.basedpython.pycharm.testFramework.onEdt
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -29,7 +29,6 @@ import org.junit.jupiter.api.Test
  * The inert case is the one that looks fine everywhere except the editor.
  */
 @TestFixtures
-@RunInEdt(writeIntent = true)
 class LiveTemplateContextTest {
 
     private val fixture by codeInsightFixture()
@@ -62,7 +61,7 @@ class LiveTemplateContextTest {
     }
 
     @Test
-    fun `both bundled template sets load`() {
+    fun `both bundled template sets load`() = onEdt {
         assertEquals(
             listOf("cdef", "dcl", "ecl", "fdcl", "let", "nt", "ovr", "proto"),
             templateKeys("basedpython"),
@@ -82,7 +81,7 @@ class LiveTemplateContextTest {
      * it is asserted instead.
      */
     @Test
-    fun `every bundled template expands in a by file`() {
+    fun `every bundled template expands in a by file`() = onEdt {
         val keys = templateKeys("basedpython") + templateKeys("BasedPythonExtra")
         assertEquals(19, keys.size, "expected the two bundled sets to hold nineteen templates")
         for (key in keys - "main") {
@@ -104,7 +103,7 @@ class LiveTemplateContextTest {
      * `moduleInvokesMain`), which turns off the generated argument parser and the argument form. The template did not just win the wrong race, it wrote the wrong thing.
      */
     @Test
-    fun `the guard template is not offered in a by file`() {
+    fun `the guard template is not offered in a by file`() = onEdt {
         assertEquals("main", expand("a.by", "main"))
     }
 
@@ -135,12 +134,13 @@ class LiveTemplateContextTest {
     }
 
     /** The plugin owning `.py`, which is what puts a `.py` in the basedpython template contexts. */
-    private fun asBasedPythonProject(body: () -> Unit) =
+    private fun asBasedPythonProject(body: () -> Unit) = onEdt {
         dev.basedpython.pycharm.testFramework.asBasedPythonProject(fixture.project, body)
+    }
 
     /** The abbreviation the changelog and the docs name, expanded end to end. */
     @Test
-    fun `dcl expands to a data class`() {
+    fun `dcl expands to a data class`() = onEdt {
         val text = expand("a.by", "dcl")
         assertTrue(text.startsWith("data class "), "expected a `data class` header, got: $text")
     }
@@ -150,7 +150,7 @@ class LiveTemplateContextTest {
      * beside the context id in every block, and this is what says that half still works.
      */
     @Test
-    fun `a bundled template does not expand in a plain text file`() {
+    fun `a bundled template does not expand in a plain text file`() = onEdt {
         assertEquals("dcl", expand("a.txt", "dcl"))
     }
 }

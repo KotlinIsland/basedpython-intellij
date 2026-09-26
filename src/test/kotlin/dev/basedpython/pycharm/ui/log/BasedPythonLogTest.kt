@@ -1,10 +1,10 @@
 package dev.basedpython.pycharm.ui.log
 
-import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
 import com.intellij.execution.ui.ConsoleViewContentType
 import com.intellij.openapi.util.Disposer
+import dev.basedpython.pycharm.testFramework.onEdt
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -18,7 +18,6 @@ import org.junit.jupiter.api.Test
  * before there is anywhere to put it.
  */
 @TestFixtures
-@RunInEdt(writeIntent = true)
 class BasedPythonLogTest {
 
     private val fixture by codeInsightFixture()
@@ -35,13 +34,13 @@ class BasedPythonLogTest {
      * the assertion.
      */
     @Test
-    fun `server error output does not raise an ide error`() {
+    fun `server error output does not raise an ide error`() = onEdt {
         log.serverOutput("by", "2026-01-01 00:00:00 ERROR something broke", isError = true)
         log.serverOutput("by", "request handler panicked at folding_range.rs:439", isError = true)
     }
 
     @Test
-    fun `server output buffers before console exists and does not throw`() {
+    fun `server output buffers before console exists and does not throw`() = onEdt {
         // No console has been created (the tool window was never opened).
         log.serverOutput("by", "INFO Version: ruff/0.15.20", isError = false)
         log.info("plugin-side line")
@@ -54,24 +53,25 @@ class BasedPythonLogTest {
 
     /** A console is a disposable, and one nobody disposes outlives the project it printed for. */
     @Test
-    fun `the console is disposed with the log`() {
-        val parent = Disposer.newDisposable()
+    fun `the console is disposed with the log`() = onEdt {
+        val parent = Disposer.newCheckedDisposable()
         try {
             // The log is a project service and goes with the project; stand in for it with a
             // disposable of our own rather than disposing the shared light project's service.
             val stand = BasedPythonLog(fixture.project)
             Disposer.register(parent, stand)
-            val console = stand.getOrCreateConsole()
-            assertFalse(Disposer.isDisposed(console))
+            // Disposed exactly when the console is, being its child.
+            val console = Disposer.newCheckedDisposable(stand.getOrCreateConsole())
+            assertFalse(console.isDisposed)
             Disposer.dispose(parent)
-            assertTrue(Disposer.isDisposed(console))
+            assertTrue(console.isDisposed)
         } finally {
-            if (!Disposer.isDisposed(parent)) Disposer.dispose(parent)
+            if (!parent.isDisposed) Disposer.dispose(parent)
         }
     }
 
     @Test
-    fun `lines held before the window opens are bounded, newest kept`() {
+    fun `lines held before the window opens are bounded, newest kept`() = onEdt {
         val pending = PendingLines(capacity = 3)
         for (i in 1..5) pending.add("line $i\n", ConsoleViewContentType.NORMAL_OUTPUT)
 
@@ -83,7 +83,7 @@ class BasedPythonLogTest {
     }
 
     @Test
-    fun `console is reused across calls`() {
+    fun `console is reused across calls`() = onEdt {
         assertSame(
             log.getOrCreateConsole(),
             log.getOrCreateConsole(),

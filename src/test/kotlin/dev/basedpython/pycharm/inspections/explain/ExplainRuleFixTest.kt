@@ -7,11 +7,11 @@ import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.util.TextRange
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
-import com.intellij.testFramework.junit5.RunInEdt
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.lang.BasedPythonLanguage
 import dev.basedpython.pycharm.lsp.diagnostics.ByDiagnosticsSupport
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
+import dev.basedpython.pycharm.testFramework.onEdt
 import org.eclipse.lsp4j.Diagnostic
 import org.eclipse.lsp4j.DiagnosticSeverity
 import org.eclipse.lsp4j.Position
@@ -28,7 +28,6 @@ import org.junit.jupiter.api.Test
  * (`[A-Z]{1,4}\d{2,4}`) could never match.
  */
 @TestFixtures
-@RunInEdt(writeIntent = true)
 class ExplainRuleFixTest {
 
   private val fixture by codeInsightFixture()
@@ -40,7 +39,7 @@ class ExplainRuleFixTest {
     }
 
   @Test
-  fun `the code is read off the diagnostic in either spelling`() {
+  fun `the code is read off the diagnostic in either spelling`() = onEdt {
     assertEquals("invalid-argument-type", ExplainRuleFix.codeOf(diagnostic(Either.forLeft("invalid-argument-type"))))
     assertEquals("F401", ExplainRuleFix.codeOf(diagnostic(Either.forLeft("F401"))))
     assertEquals("7", ExplainRuleFix.codeOf(diagnostic(Either.forRight(7))))
@@ -60,7 +59,7 @@ class ExplainRuleFixTest {
   }
 
   @Test
-  fun `each diagnostic offers to explain its own rule, and the action finds it under the caret`() {
+  fun `each diagnostic offers to explain its own rule, and the action finds it under the caret`() = onEdt {
     val disposable = Disposer.newDisposable()
     try {
       LanguageAnnotators.INSTANCE.addExplicitExtension(BasedPythonLanguage, OneDiagnostic(), disposable)
