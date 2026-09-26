@@ -1,5 +1,7 @@
 ## [Unreleased]
 
+## [0.0.2]
+
 ### Added
 
 - basedpython language registration with `.by` file type, icon, and lexer-driven syntax
