@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
+import java.net.URI
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -81,6 +82,38 @@ class BundledBinariesTest {
     }
 
     // --- find ---------------------------------------------------------------
+
+    // --- Plugin root ------------------------------------------------------------
+
+    @Test
+    fun `the plugin root is the grandparent of the jar a class resource names`() {
+        // As the platform's JarLoader spells it for an installed plugin, spaces percent-encoded.
+        val resource = URI(
+            "jar:file:/Users/me/Library/Application%20Support/JetBrains/PyCharm2026.3/plugins/basedpython-intellij/" +
+                "lib/basedpython-intellij-0.0.2-mac-arm64.jar!/dev/basedpython/pycharm/env/bundled/BundledBinaries.class",
+        ).toURL()
+        assertEquals(
+            Path.of("/Users/me/Library/Application Support/JetBrains/PyCharm2026.3/plugins/basedpython-intellij"),
+            BundledBinaries.pluginRoot(resource),
+        )
+    }
+
+    @Test
+    fun `a class loaded from a directory has no plugin root`() {
+        val resource = URI("file:/work/build/classes/kotlin/main/dev/basedpython/pycharm/env/bundled/BundledBinaries.class").toURL()
+        assertNull(BundledBinaries.pluginRoot(resource))
+    }
+
+    @Test
+    fun `a jar outside a lib directory has no plugin root`() {
+        val resource = URI("jar:file:/work/basedpython-intellij.jar!/dev/basedpython/pycharm/env/bundled/BundledBinaries.class").toURL()
+        assertNull(BundledBinaries.pluginRoot(resource))
+    }
+
+    @Test
+    fun `no class resource has no plugin root`() {
+        assertNull(BundledBinaries.pluginRoot(null))
+    }
 
     @Test
     fun `find returns nothing when the distribution bundles no binaries`() {

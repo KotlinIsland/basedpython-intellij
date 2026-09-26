@@ -6,6 +6,9 @@ import com.intellij.openapi.util.SystemInfo
 import dev.basedpython.pycharm.env.Executables
 import dev.basedpython.pycharm.env.download.ByBinaryDownloadPlan
 import dev.basedpython.pycharm.env.download.ByBinaryDownloadPlan.Platform
+import java.net.URI
+import java.net.URISyntaxException
+import java.net.URL
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -72,31 +75,47 @@ object BundledBinaries {
      *
      * Derived from where this class was loaded from rather than asked of the platform: every
      * plugin-descriptor lookup there is `@ApiStatus.Internal` — `PluginManagerCore.getPlugin`,
-     * `PluginManager.getPlugin`, `getPluginByClass`, `findEnabledPlugin` — and the one public
-     * method, `getPluginByClassName`, returns a bare `PluginId` with no path on it. See
+     * `PluginManager.getPlugin`, `getPluginByClass`, `findEnabledPlugin`, and the
+     * `PluginAwareClassLoader` a plugin class is loaded by — and the one public method,
+     * `getPluginByClassName`, returns a bare `PluginId` with no path on it. See
      * docs/internal-api.md.
      *
-     * An installed plugin is laid out as `<plugin>/lib/<jar>`, so the root is the jar's
-     * grandparent. Anything else — a directory on the classpath in a test, an unexpected layout —
-     * fails the `lib` check and returns null, which is the same answer the descriptor lookup gave
-     * when there was no installation. A wrong directory would be worse than none: it is where
-     * bundled `by` and `buff` binaries are looked for.
+     * Read from this class's own resource URL, not its `ProtectionDomain`: the platform's
+     * `UrlClassLoader` defines every plugin class with a null protection domain, so the code source
+     * has no location and a lookup through it finds nothing in any real IDE. Measured on 263.5993
+     * with the installed 0.0.2 jar loaded through that classloader: code source `(null)`, resource
+     * `jar:file:…/plugins/basedpython-intellij/lib/basedpython-intellij-0.0.2-mac-arm64.jar!/…`.
      */
     fun pluginRoot(): Path? =
         try {
-            val source = javaClass.protectionDomain?.codeSource?.location?.toURI()?.let(Paths::get)
-            source?.takeIf { it.fileName.toString().endsWith(".jar") }
-                ?.parent?.takeIf { it.fileName.toString() == "lib" }
-                ?.parent
+            pluginRoot(BundledBinaries::class.java.getResource("${BundledBinaries::class.java.simpleName}.class"))
         } catch (ex: Exception) {
             LOG.debug("Could not locate the plugin directory", ex)
             null
-        } catch (ex: LinkageError) {
-            // A security manager or an exotic classloader can refuse the protection domain. Same
-            // outcome as no installation rather than a failure on a path nothing else depends on.
-            LOG.debug("Could not locate the plugin directory", ex)
-            null
         }
+
+    /**
+     * The plugin directory holding the jar that [classResource] — the URL a classloader gives for
+     * one of the plugin's own `.class` files — was loaded from.
+     *
+     * An installed plugin is laid out as `<plugin>/lib/<jar>`, so the root is the jar's
+     * grandparent. Anything else — a class loaded from a directory, as in a test, or an unexpected
+     * layout — returns null, the same answer as no installation. A wrong directory would be worse
+     * than none: it is where bundled `by` and `buff` binaries are looked for.
+     */
+    fun pluginRoot(classResource: URL?): Path? {
+        if (classResource?.protocol != "jar") return null
+        // `jar:<url of the jar>!/<entry>`; the jar's URL is percent-encoded, which URI decodes.
+        val jarUrl = classResource.path.substringBefore("!/", missingDelimiterValue = "")
+        val jar = try {
+            URI(jarUrl).takeIf { it.scheme == "file" }?.let(Paths::get)
+        } catch (_: URISyntaxException) {
+            null
+        } ?: return null
+        return jar.takeIf { it.fileName.toString().endsWith(".jar") }
+            ?.parent?.takeIf { it.fileName.toString() == "lib" }
+            ?.parent
+    }
 
     /**
      * The bundled [binary] for this machine, or `null` when this distribution ships none, ships

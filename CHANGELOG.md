@@ -1,5 +1,11 @@
 ## [Unreleased]
 
+### Fixed
+
+- The `by` and `buff` a per-platform build carries are used: an installed plugin never found its
+  own directory, so it never looked in `bin/`, and a project with neither on `PATH` nor in its
+  environment said the binary was not found although the plugin held both.
+
 ## [0.0.2]
 
 ### Added

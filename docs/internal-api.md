@@ -142,7 +142,7 @@ Nothing internal ships any more. What each one became, for when the platform cha
 | `LspClientManagerListener.fileOpened`, `DocRenderManager` (17) | Nothing: each request to `by` names the text it is about (`lsp/ByTextHash.kt`), and `by` answers about that text whether or not the platform has opened the document on it; `FileContentUtilCore.reparseFiles` in place of `resetEditorToDefaultState` — see below |
 | `DapInitializationException.userVisible` (2) | Nothing: since 263.5153 the platform classifies a failed start itself, reports it with the adapter's own sentence, and stops quietly on `CustomProcessedCantRunException` — so the plugin's start sequence, and the question it needed this for, are gone |
 | `ShadowJava2DBorder` (2) | `ByLogpointBoxBorder`, a rounded rect and a few translucent passes |
-| `PluginManagerCore.getPlugin` (1) | The plugin's own code source — `<plugin>/lib/<jar>` grandparent. Every descriptor lookup in the platform is internal |
+| `PluginManagerCore.getPlugin` (1) | The jar in the plugin's own class resource URL — `<plugin>/lib/<jar>` grandparent. Every descriptor lookup in the platform is internal. Not the class's code source, as this first said: the platform defines plugin classes with a null protection domain, so that found nothing in a real IDE and an installed plugin never used its bundled binaries until this was fixed |
 | `AdditionalFenceLanguageSuggester` (2) | **Dropped.** See below |
 
 ### When a document is open on `by`
