@@ -636,6 +636,10 @@
              task runner, until another build replaces them; see run.build.ByBuildWindow. -->
         <listener class="dev.basedpython.pycharm.run.build.ByBuildWindowUnloadGuard"
                   topic="com.intellij.ide.plugins.DynamicPluginListener"/>
+        <!-- A run target keeps its basedpython runtime's object, of this plugin's class, for as long
+             as the project is open; see run.target.ByTargetRuntimes. -->
+        <listener class="dev.basedpython.pycharm.run.target.ByTargetRuntimesUnloadGuard"
+                  topic="com.intellij.ide.plugins.DynamicPluginListener"/>
     </applicationListeners>
 
     <projectListeners>
