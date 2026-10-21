@@ -137,7 +137,6 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
      * On the descriptor rather than on [ByBreakpointsSupport], because 263.5701 declares it here and
      * nowhere else.
      */
-    @Suppress("OVERRIDE_DEPRECATION")
     override val breakpointsDescription: DapBreakpointsDescription = object : DapBreakpointsDescription(
         sourceBreakpointType = ByLineBreakpointType::class.java,
         exceptionBreakpointType = ByExceptionBreakpointType::class.java,

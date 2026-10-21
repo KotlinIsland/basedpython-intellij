@@ -431,11 +431,7 @@ changelog {
 // verifier's side of `-Xwarning-level=DEPRECATION:error` above: it also sees the newest build's
 // deprecations, which compiling against the floor cannot, and bytecode the compiler generated.
 // An entry that stops matching fails the build too, so the list cannot outlive its reasons.
-val allowedDeprecatedUsages: Map<String, String> = mapOf(
-  "DebugAdapterDescriptor.getBreakpointsDescription() : com.intellij.platform.dap.DapBreakpointsDescription is overridden in class dev.basedpython.pycharm.debug.ByDebugAdapterDescriptor"
-    to "deprecated in 263.5153 in favour of the customization's DapBreakpointsSupport, and abstract " +
-    "on the descriptor in 263.5701, where nothing else declares it (see ByDebugAdapter)",
-)
+val allowedDeprecatedUsages: Map<String, String> = mapOf()
 
 // A task of its own, run after every `verifyPlugin`, so it can also be run alone against the
 // reports a verification already wrote.
