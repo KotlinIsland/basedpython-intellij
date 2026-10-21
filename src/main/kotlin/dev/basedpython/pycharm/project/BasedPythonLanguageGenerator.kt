@@ -2,57 +2,59 @@ package dev.basedpython.pycharm.project
 
 import com.intellij.ide.util.projectWizard.WizardContext
 import com.intellij.ide.wizard.AbstractNewProjectWizardStep
-import com.intellij.ide.wizard.GeneratorNewProjectWizard
-import com.intellij.ide.wizard.NewProjectWizardBaseStep
-import com.intellij.ide.wizard.NewProjectWizardChainStep
 import com.intellij.ide.wizard.NewProjectWizardStep
-import com.intellij.ide.wizard.RootNewProjectWizardStep
+import com.intellij.ide.wizard.language.LanguageGeneratorNewProjectWizard
 import com.intellij.openapi.application.WriteAction
+import com.intellij.openapi.module.GeneralModuleType
+import com.intellij.openapi.module.ModuleManager
 import com.intellij.openapi.project.Project
-import dev.basedpython.pycharm.BasedPythonIcons
+import com.intellij.openapi.roots.ModuleRootModificationUtil
+import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.openapi.vfs.VirtualFile
+import dev.basedpython.pycharm.BasedPythonIcons
 import javax.swing.Icon
 
 /**
- * New-project generator for basedpython projects.
+ * basedpython in the New Project wizard's list of languages, beside Java and Kotlin, in IntelliJ
+ * IDEA.
  *
- * Shown in the "New Project" wizard under the generator list.
- * Scaffolds what [BasedPythonProjectScaffold] lists: pyproject.toml, src/main.by, .gitignore,
- * README.md.
+ * The platform puts the steps every language shares in front of [createStep]'s — the project's name
+ * and location, and Git — so what is left is [BasedPythonScaffoldStep], which writes the project
+ * [BasedPythonProjectScaffold] lists.
  *
- * Registration in plugin.xml (Stream O integration):
- *
- *   <generatorNewProjectWizard
- *       implementation="dev.basedpython.pycharm.project.BasedPythonProjectGenerator"/>
+ * Only for a new project: the scaffold is a project's, its `pyproject.toml` at the project's root.
  */
-class BasedPythonProjectGenerator : GeneratorNewProjectWizard {
-
-    override val id: String = "basedpython"
+class BasedPythonLanguageGenerator : LanguageGeneratorNewProjectWizard {
 
     override val name: String = "basedpython"
 
-    override val icon: Icon =
-        BasedPythonIcons.Logo
+    override val icon: Icon = BasedPythonIcons.Logo
 
-    override fun createStep(context: WizardContext): NewProjectWizardStep {
-        val root = RootNewProjectWizardStep(context)
-        val base = NewProjectWizardBaseStep(root).also { it.defaultName = "my-basedpython-project" }
-        return NewProjectWizardChainStep(base).nextStep { ScaffoldStep(it) }
-    }
+    override fun isEnabled(context: WizardContext): Boolean = context.isCreatingNewProject
 
-    // -------------------------------------------------------------------
-    // Scaffold step — runs after the base name/location step
-    // -------------------------------------------------------------------
+    override fun createStep(parent: NewProjectWizardStep): NewProjectWizardStep = BasedPythonScaffoldStep(parent)
+}
 
-    private inner class ScaffoldStep(parent: NewProjectWizardBaseStep) :
-        AbstractNewProjectWizardStep(parent) {
+/**
+ * Writes the new project: the files [BasedPythonProjectScaffold] lists, and a module holding them.
+ *
+ * The module because IntelliJ IDEA's wizard makes none — each generator makes its own, as its own
+ * *Empty Project* does — and without one the project has no content: nothing in the Project view
+ * and no file the language server is started for. A project that has a module already, as one
+ * opened from a directory does, is left with the one it has.
+ */
+internal class BasedPythonScaffoldStep(parent: NewProjectWizardStep) : AbstractNewProjectWizardStep(parent) {
 
-        override fun setupProject(project: Project) {
-            val basePath = project.basePath ?: return
-            val baseDir = VfsUtil.findFileByIoFile(java.io.File(basePath), true) ?: return
-            WriteAction.runAndWait<Throwable> {
-                scaffoldProject(baseDir, project.name)
+    override fun setupProject(project: Project) {
+        val basePath = project.basePath ?: return
+        val baseDir = LocalFileSystem.getInstance().refreshAndFindFileByPath(basePath) ?: return
+        WriteAction.runAndWait<Throwable> {
+            scaffoldProject(baseDir, project.name)
+            if (ModuleManager.getInstance(project).modules.isEmpty()) {
+                val module = ModuleManager.getInstance(project)
+                    .newModule(baseDir.toNioPath().resolve("${project.name}.iml"), GeneralModuleType.TYPE_ID)
+                ModuleRootModificationUtil.addContentRoot(module, baseDir)
             }
         }
     }

@@ -284,12 +284,14 @@
             order="first"/>
 
         <!-- ===== Stream O: project scaffolding + config awareness ===== -->
-        <!-- The EP is `newProjectWizard.generator`; the *interface* is GeneratorNewProjectWizard.
-             Named after the interface, the entry binds to an extension point that does not exist,
-             and the platform neither fails the build nor logs an error at load — the wizard entry
-             is simply absent, and the plugin silently loses the ability to be unloaded. -->
-        <newProjectWizard.generator
-            implementation="dev.basedpython.pycharm.project.BasedPythonProjectGenerator"/>
+        <!-- basedpython among IntelliJ IDEA's New Project languages. Not also a
+             `newProjectWizard.generator`, which IDEA 263 lists in the same section — measured, it
+             showed basedpython twice — and which PyCharm's New Project dialog does not read. The EP
+             is named, not its interface (LanguageGeneratorNewProjectWizard): an entry named after
+             the interface binds to an extension point that does not exist, and the platform neither
+             fails the build nor logs an error at load. -->
+        <newProjectWizard.languageGenerator
+            implementation="dev.basedpython.pycharm.project.BasedPythonLanguageGenerator"/>
         <completion.contributor
             language="TOML"
             implementationClass="dev.basedpython.pycharm.project.PyprojectCompletionContributor"/>
