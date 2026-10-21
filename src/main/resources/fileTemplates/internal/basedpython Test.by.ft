@@ -1,0 +1,9 @@
+#if (${IMPORT} != "")
+from ${MODULE} import ${IMPORT}
+#else
+import ${MODULE}
+#end
+
+
+def ${TEST_NAME}() -> None:
+    ...

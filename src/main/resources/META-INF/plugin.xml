@@ -346,6 +346,15 @@
         <qualifiedNameProvider
             order="first"
             implementation="dev.basedpython.pycharm.navigation.ByQualifiedNameProvider"/>
+        <!-- Go to Test / Go to Test Subject (Ctrl+Shift+T), and Create New Test in its popup: what a
+             test calls and the tests that call some code, `by/testSubjects` and `by/subjectTests`. -->
+        <testFinder
+            implementation="dev.basedpython.pycharm.navigation.tests.ByTestFinder"/>
+        <testCreator
+            language="basedpython"
+            implementationClass="dev.basedpython.pycharm.navigation.tests.ByTestCreator"/>
+        <internalFileTemplate name="basedpython Test"/>
+        <internalFileTemplate name="basedpython Test Function"/>
 
         <!-- ===== Stream S: run line markers + test config ===== -->
         <runLineMarkerContributor

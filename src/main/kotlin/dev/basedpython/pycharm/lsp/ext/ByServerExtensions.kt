@@ -4,7 +4,9 @@ import org.eclipse.lsp4j.DocumentSymbolParams
 import org.eclipse.lsp4j.Position
 import org.eclipse.lsp4j.Range
 import org.eclipse.lsp4j.SemanticTokensParams
+import org.eclipse.lsp4j.SymbolKind
 import org.eclipse.lsp4j.TextDocumentIdentifier
+import org.eclipse.lsp4j.TextEdit
 import org.eclipse.lsp4j.TypeHierarchyPrepareParams
 import org.eclipse.lsp4j.WorkspaceDiagnosticParams
 import org.eclipse.lsp4j.WorkspaceDiagnosticReport
@@ -273,11 +275,82 @@ interface ByServerExtensions {
      */
     @JsonRequest("by/moduleName")
     fun moduleName(args: ByModuleNameParams): CompletableFuture<String?>
+
+    /**
+     * The code a test, a class of tests or a test module exercises: the project's own functions,
+     * methods and classes it calls — see [dev.basedpython.pycharm.navigation.tests.ByTestFinder].
+     *
+     * **Why the server.** A test exercises what it calls, which is call hierarchy's answer, and which
+     * declarations are tests is pytest's collection as `by/testItems` models it. Neither is a file
+     * name: `test_circle.by` tests whatever it calls, wherever that is.
+     *
+     * A `null` answer means no test is collected from the document. A `by` from before the request
+     * answers `MethodNotFound`.
+     */
+    @JsonRequest("by/testSubjects")
+    fun testSubjects(args: ByTestLinksParams): CompletableFuture<List<ByTestLink>?>
+
+    /**
+     * The collected tests that call a function, a method, a class or anything a module declares,
+     * and where a new test of it goes — the other direction of [testSubjects].
+     *
+     * A `null` answer means the document is not one of the project's. A `by` from before the request
+     * answers `MethodNotFound`.
+     */
+    @JsonRequest("by/subjectTests")
+    fun subjectTests(args: ByTestLinksParams): CompletableFuture<BySubjectTests?>
 }
 
 /** The file or directory to name. */
 data class ByModuleNameParams(val uri: String)
 
+/**
+ * Where to start from: a test, a class of tests or anywhere in a test module for `by/testSubjects`;
+ * a function, a method, a class or anywhere else in a module for `by/subjectTests`.
+ *
+ * No `textHash`: both are asked from Go to Test, which the platform runs under a modal progress,
+ * and a request naming its text would wait there for a `didOpen` the platform only sends outside
+ * one. Without it `by` answers about its buffer, which the platform's `didChange`s keep current, and
+ * refuses a document the platform has not opened on it yet — which is said as `by` not answering:
+ * Go to Test is asked from an editor, which the platform opens the document for when it opens.
+ */
+data class ByTestLinksParams(val textDocument: TextDocumentIdentifier, val position: Position)
+
+/** A test, or code a test exercises. */
+data class ByTestLink(
+    /** For a test, its pytest node id after the file, `TestTotal::test_total`; otherwise `Circle.area`. */
+    val name: String? = null,
+    val kind: SymbolKind? = null,
+    /** The module it is declared in. */
+    val module: String? = null,
+    val uri: String? = null,
+    val range: Range? = null,
+    /** Its name, which is where to go. */
+    val selectionRange: Range? = null,
+)
+
+/** The tests that exercise some code, and where a new one goes. */
+data class BySubjectTests(
+    val tests: List<ByTestLink> = emptyList(),
+    /** Absent when the code's module has no importable name, or is a test module itself. */
+    val newTest: ByNewTest? = null,
+)
+
+/** Where a new test goes, and what it imports — all `by`'s, so Create Test writes nothing it worked out. */
+data class ByNewTest(
+    /** The test module: `test_<module>.by`, beside the project's other test modules. */
+    val uri: String? = null,
+    /** The test module exists, so the test is added to it rather than created with it. */
+    val exists: Boolean = false,
+    /** The module the code is in. */
+    val module: String? = null,
+    /** The name to import from [module]; absent for a module, which a test imports whole. */
+    val import: String? = null,
+    /** A name for the test function. */
+    val testName: String? = null,
+    /** For a test module that exists, the edits that import [import] into it. */
+    val importEdits: List<TextEdit> = emptyList(),
+)
 
 /**
  * The member to ask about: a position on the name it is declared with — a `def`'s, or a name a class
