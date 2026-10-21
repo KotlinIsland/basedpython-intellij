@@ -1,0 +1,16 @@
+<!--
+  Loaded only where the platform's coverage support is: the `intellij.platform.coverage` product
+  module, whose alias this file depends on. IDEA and PyCharm both ship it; it is the platform's, not
+  the Python plugin's, whose PyCoverageEngine only registers into it.
+
+  `by run` measures with its coverage flag and writes an LCOV report already mapped onto `.by` lines; everything
+  here only runs it and shows the report.
+-->
+<idea-plugin>
+    <extensions defaultExtensionNs="com.intellij">
+        <coverageEngine implementation="dev.basedpython.pycharm.run.coverage.ByCoverageEngine"/>
+        <coverageRunner implementation="dev.basedpython.pycharm.run.coverage.ByCoverageRunner"/>
+        <programRunner implementation="dev.basedpython.pycharm.run.coverage.ByCoverageProgramRunner"/>
+        <editorFactoryListener implementation="dev.basedpython.pycharm.run.coverage.ByCoverageAnnotator$EditorOpened"/>
+    </extensions>
+</idea-plugin>

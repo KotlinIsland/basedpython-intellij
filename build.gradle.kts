@@ -88,6 +88,11 @@ dependencies {
     bundledModule("intellij.platform.debugger")
     // XDebuggerExpressionEditor, which the log point field is built on.
     bundledModule("intellij.platform.debugger.impl.ui")
+    // *Run with Coverage*: the coverage engine, runner and suite API, and the report model
+    // (`ProjectData`, `LineData`) it loads into. Product modules in both IDEA and PyCharm, not the
+    // Python plugin's; an optional dependency in plugin.xml (see basedpython-coverage.xml).
+    bundledModule("intellij.platform.coverage")
+    bundledModule("intellij.platform.coverage.agent")
 
     // `./gradlew runIde -PideAgent` — puts MCP Steroid in the sandbox, which exposes the running
     // IDE over a local MCP server: execute Kotlin inside its JVM, screenshot windows, send real

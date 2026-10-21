@@ -98,6 +98,31 @@ class PluginXmlResourcesTest {
     }
 
     /**
+     * A descriptor the platform cannot parse is skipped with a log line, and the plugin loads
+     * without it, so its features are simply absent. A `--` in an XML comment is enough: it is
+     * well-formed to a lenient reader and an error to the platform's.
+     */
+    @Test
+    fun `every optional descriptor parses and names only classes that exist`() {
+        val descriptors = attr("depends", "config-file")
+        assertTrue("basedpython-coverage.xml" in descriptors, "the coverage descriptor is not loaded: $descriptors")
+        for (name in descriptors) {
+            val bytes = checkNotNull(javaClass.getResourceAsStream("/META-INF/$name")) {
+                "$name missing from the test classpath"
+            }.use { it.readBytes() }
+            val parser = javax.xml.parsers.DocumentBuilderFactory.newInstance().newDocumentBuilder()
+            parser.setErrorHandler(null)
+            val parsed = runCatching { parser.parse(bytes.inputStream()) }
+            assertTrue(parsed.isSuccess, "$name is not well-formed XML: ${parsed.exceptionOrNull()?.message}")
+            val missing = Regex("""implementation="([^"]+)"""").findAll(bytes.decodeToString())
+                .map { it.groupValues[1] }
+                .filter { runCatching { Class.forName(it) }.isFailure }
+                .toList()
+            assertTrue(missing.isEmpty(), "$name names classes that do not exist: $missing")
+        }
+    }
+
+    /**
      * What is built on the SM test runner is registered only by the descriptor that loads when the
      * runner does, so a product without it loses the test configuration rather than failing to
      * load classes that need it.

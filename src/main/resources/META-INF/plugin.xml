@@ -20,6 +20,8 @@
     <depends optional="true" config-file="basedpython-copyright.xml">com.intellij.copyright</depends>
     <!-- Grammar checking in comments and docstrings; see basedpython-grazie.xml. -->
     <depends optional="true" config-file="basedpython-grazie.xml">tanvd.grazi</depends>
+    <!-- Run with Coverage; see basedpython-coverage.xml. -->
+    <depends optional="true" config-file="basedpython-coverage.xml">com.intellij.modules.coverage</depends>
 
     <!-- The platform's Debug Adapter Protocol client, which `.by` debugging is built on. A platform
          module rather than a plugin, so it is declared the v2 way; the legacy <depends> entries

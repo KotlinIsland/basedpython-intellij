@@ -129,6 +129,32 @@ And in IDEA, one of the two ways to add a log point is missing.
 `supportsInterLinePlacement` (and the placement enum with it) to be made public. Everything else
 about `.by` log points already works without it.
 
+### Coverage in the editor is drawn by this plugin, not by the platform's coverage annotator
+
+**What it should be.** *Run with Coverage* on a `.by` configuration showing its report the way
+every other language's does: the platform's gutter marks, with their click-through popup (hits,
+previous and next uncovered line, *Edit Coverage Colors*), the optional full-line highlighting, and
+marks that follow the file's local history after it is edited.
+
+**What it is.** The report loads into the platform's own coverage machinery — suite, Coverage tool
+window, *Hide Coverage* — but the gutter stripes and the Project view and tool window percentages are
+`run.coverage.ByCoverageAnnotator`'s. Its stripes use the scheme's own coverage colours and move
+with their lines; a file changed since the run is left unmarked rather than mapped through local
+history.
+
+**Why.** A `CoverageEngine` tells the platform which report entries belong to a file through
+`getCorrespondingOutputPaths` and `getQualifiedName(Path, PsiFile)`, and which files count towards a
+directory's figures through `coverageProjectViewStatisticsApplicableTo` — all three
+`@ApiStatus.Internal`, and overriding one is internal API use. Without them the platform's editor
+annotator finds no data for any file (`CoverageEditorAnnotatorImpl.collectLinesInFile`, 263.5153)
+and `SimpleCoverageAnnotator` counts no file. `getQualifiedNames`, the public one, is only
+consulted when `getCorrespondingOutputPaths` comes back empty, which its default never does for a
+file on disk.
+
+**How to get it back.** An IJPL issue asking for those three engine methods to be made public — they
+are the documented way for an engine to describe its report. With them the plugin's annotator and
+stripes go, and the platform's take over.
+
 ## Resolved
 
 Nothing internal ships any more. What each one became, for when the platform changes underneath it:
