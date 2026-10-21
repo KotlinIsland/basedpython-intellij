@@ -202,6 +202,12 @@
         <lang.elementManipulator
             forClass="dev.basedpython.pycharm.lang.BasedPythonStringLiteral"
             implementationClass="dev.basedpython.pycharm.lang.BasedPythonStringManipulator"/>
+        <!-- A language the user injects (Alt+Enter, Inject language or reference) goes on the text
+             the string holds, as `by/syntaxOutline` reports it, not on everything between its
+             quotes. -->
+        <languageInjectionPerformer
+            language="basedpython"
+            implementationClass="dev.basedpython.pycharm.lsp.inject.ByLanguageInjectionPerformer"/>
 
         <!-- ===== Stream I: formatting ===== -->
         <actionOnSaveInfoProvider

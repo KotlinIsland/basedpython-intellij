@@ -504,6 +504,12 @@ data class ByOutlineString(
     val interpolations: List<Range> = emptyList(),
     /** The escape sequences in the literal text. */
     val escapes: List<Range> = emptyList(),
+    /**
+     * Where the literal's text is written: the runs whose text, joined, is what the literal holds —
+     * what survives the stripped indentation, without the interpolations. Absent for an empty
+     * literal, and from a `by` that predates it.
+     */
+    val text: List<Range> = emptyList(),
 )
 
 /**

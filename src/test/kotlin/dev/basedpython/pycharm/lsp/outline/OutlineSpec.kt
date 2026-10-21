@@ -43,7 +43,8 @@ class OutlineSpec private constructor(private val text: CharSequence) {
             strippedIndent: Int? = null,
             interpolations: List<String> = emptyList(),
             escapes: List<String> = emptyList(),
-        ) = this@OutlineSpec.string(literal, strippedIndent, interpolations, escapes)
+            text: List<String> = emptyList(),
+        ) = this@OutlineSpec.string(literal, strippedIndent, interpolations, escapes, runs = text)
 
         /** A simple statement spelled [text]. */
         fun simple(text: String) {
@@ -114,14 +115,15 @@ class OutlineSpec private constructor(private val text: CharSequence) {
 
     /**
      * A string literal part spelled [literal], stripped by [strippedIndent], with the given
-     * [interpolations] and [escapes] spelled as they appear inside it, in order. Found from the start
-     * of the text, independently of the statements.
+     * [interpolations], [escapes] and text [runs] spelled as they appear inside it, in order. Found
+     * from the start of the text, independently of the statements.
      */
     private fun string(
         literal: String,
         strippedIndent: Int? = null,
         interpolations: List<String> = emptyList(),
         escapes: List<String> = emptyList(),
+        runs: List<String> = emptyList(),
     ) {
         val range = run {
             val start = text.indexOf(literal, strings.lastOrNull()?.range?.endOffset ?: 0)
@@ -137,7 +139,7 @@ class OutlineSpec private constructor(private val text: CharSequence) {
                 TextRange.from(start, part.length)
             }
         }
-        strings += ByOutline.StringPart(range, strippedIndent, parts(interpolations), parts(escapes))
+        strings += ByOutline.StringPart(range, strippedIndent, parts(interpolations), parts(escapes), parts(runs))
     }
 
     companion object {

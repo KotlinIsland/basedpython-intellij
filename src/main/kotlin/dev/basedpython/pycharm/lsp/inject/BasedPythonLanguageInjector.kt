@@ -91,7 +91,7 @@ class BasedPythonLanguageInjector : MultiHostInjector {
         anchor: BasedPythonStringLiteral,
         file: PsiFile,
     ): List<Place>? {
-        val shift = shiftFrom(anchor, host) ?: return null
+        val shift = CopyShift.from(anchor, host) ?: return null
         val places = ArrayList<Place>(injection.ranges.size)
         // Nearly always the same literal as the part before, so it is worth trying before walking
         // the file again — a fragment in a fifty-line string is fifty parts of one literal.
@@ -106,57 +106,6 @@ class BasedPythonLanguageInjector : MultiHostInjector {
             last = part
         }
         return places.takeIf { it.isNotEmpty() }
-    }
-
-    /**
-     * How an offset in the file `by` answered about lands in the file being injected into.
-     *
-     * The two are the same file except during completion, where the platform works on a copy with a
-     * dummy identifier typed in at the caret — so a fragment reported at the end of the file is a
-     * dummy identifier further along in the copy. Null when the two differ by more than that one
-     * insertion, which is not a state this understands and so not one to guess at.
-     */
-    private fun shiftFrom(anchor: BasedPythonStringLiteral, host: BasedPythonStringLiteral): Shift? {
-        if (anchor === host) return Shift.NONE
-        val original = anchor.containingFile?.text ?: return null
-        val copy = host.containingFile?.text ?: return null
-        return Shift.between(original, copy)
-    }
-
-    /** An insertion made in a copy of a file, as a map from the original's offsets to the copy's. */
-    private class Shift(private val at: Int, private val inserted: Int) {
-
-        fun map(range: TextRange): TextRange =
-            TextRange(map(range.startOffset), map(range.endOffset))
-
-        /**
-         * An offset at the insertion point moves only if the text there moved, and the text *at* it
-         * did not — which is what puts the caret's own dummy identifier inside the fragment being
-         * completed in rather than after it.
-         */
-        private fun map(offset: Int): Int = if (offset >= at) offset + inserted else offset
-
-        companion object {
-            val NONE = Shift(Int.MAX_VALUE, 0)
-
-            /** The single insertion that turns [original] into [copy], or null when it is not one. */
-            fun between(original: CharSequence, copy: CharSequence): Shift? {
-                val inserted = copy.length - original.length
-                if (inserted <= 0) return null
-                var prefix = 0
-                while (prefix < original.length && original[prefix] == copy[prefix]) prefix++
-                var suffix = 0
-                while (
-                    suffix < original.length - prefix &&
-                    original[original.length - 1 - suffix] == copy[copy.length - 1 - suffix]
-                ) {
-                    suffix++
-                }
-                // Everything outside the insertion has to match, or this is not one insertion.
-                if (prefix + suffix != original.length) return null
-                return Shift(prefix, inserted)
-            }
-        }
     }
 
     /** The literal whose content holds [range], or null when nothing there is one. */

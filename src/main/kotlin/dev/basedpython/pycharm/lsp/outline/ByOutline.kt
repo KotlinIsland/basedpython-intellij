@@ -72,6 +72,12 @@ class ByOutline(
         val strippedIndent: Int? = null,
         val interpolations: List<TextRange> = emptyList(),
         val escapes: List<TextRange> = emptyList(),
+        /**
+         * The runs whose text, joined, is what the literal holds: what survives [strippedIndent],
+         * without the [interpolations]. Empty for an empty literal, and from a `by` that does not
+         * report it.
+         */
+        val text: List<TextRange> = emptyList(),
     )
 
     /** The string parts that overlap [range], in source order. */
@@ -163,6 +169,7 @@ object ByOutlineReplies {
             strippedIndent = string.strippedIndent,
             interpolations = string.interpolations.map(::range),
             escapes = string.escapes.map(::range),
+            text = string.text.map(::range),
         )
     }
 }
