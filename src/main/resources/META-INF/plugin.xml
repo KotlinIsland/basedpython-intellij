@@ -415,6 +415,11 @@
         <editor.backspaceModeOverride
             language="basedpython"
             implementationClass="dev.basedpython.pycharm.editor.smart.BasedPythonBackspaceModeOverride"/>
+        <!-- Complete Current Statement (Ctrl+Shift+Enter): the statement and the line after it are
+             `by/completeStatement`'s answer. -->
+        <lang.smartEnterProcessor
+            language="basedpython"
+            implementationClass="dev.basedpython.pycharm.editor.smart.BySmartEnterProcessor"/>
         <!-- Strip trailing spaces on save leaves string literals alone: the spaces are part of the
              string. Which lines are inside one is `by`'s outline; see the class. -->
         <stripTrailingSpacesFilterFactory

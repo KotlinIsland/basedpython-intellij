@@ -1,6 +1,7 @@
 package dev.basedpython.pycharm.lsp.ext
 
 import org.eclipse.lsp4j.DocumentSymbolParams
+import org.eclipse.lsp4j.FormattingOptions
 import org.eclipse.lsp4j.ImplementationParams
 import org.eclipse.lsp4j.Position
 import org.eclipse.lsp4j.Range
@@ -322,6 +323,24 @@ interface ByServerExtensions {
      */
     @JsonRequest("by/subjectTests")
     fun subjectTests(args: ByTestLinksParams): CompletableFuture<BySubjectTests?>
+
+    /**
+     * The statement at a position completed, and the line after it started — Complete Current
+     * Statement; see [dev.basedpython.pycharm.editor.smart.BySmartEnterProcessor].
+     *
+     * **Why the server.** What is missing is the parser's to say: which brackets are open (not the
+     * ones in a string or a comment), whether the line is a clause header (`match = 1` is not), where
+     * a statement spread over several lines ends, and which statement an `else` continues.
+     *
+     * **Why not the standard requests.** The answer is edits *and* where the caret goes once they are
+     * made, a place in the edited text; a code action's workspace edit has no caret, and
+     * `textDocument/onTypeFormatting` answers for a character typed, not a statement to finish.
+     *
+     * A `null` answer means the server declined — language services are off, or the document is a
+     * notebook or a template. A `by` from before the request answers `MethodNotFound`.
+     */
+    @JsonRequest("by/completeStatement")
+    fun completeStatement(args: ByCompleteStatementParams): CompletableFuture<ByCompletedStatement?>
 }
 
 /** The file or directory to name. */
@@ -373,6 +392,29 @@ data class ByNewTest(
     val testName: String? = null,
     /** For a test module that exists, the edits that import [import] into it. */
     val importEdits: List<TextEdit> = emptyList(),
+)
+
+/**
+ * Where the statement to complete is: [position] is the caret, in the text [textHash] names (see
+ * [dev.basedpython.pycharm.lsp.ByTextHash]). [options] say how the file indents, as
+ * `textDocument/onTypeFormatting` carries them: one level is `tabSize` spaces, or a tab.
+ *
+ * Field names are the wire format and must match `ty_server`'s `CompleteStatementParams`, which is
+ * `deny_unknown_fields`; `textHash` is taken out by the server's dispatcher before that.
+ */
+data class ByCompleteStatementParams(
+    val textDocument: TextDocumentIdentifier,
+    val position: Position,
+    val options: FormattingOptions,
+    val textHash: String,
+)
+
+/** The statement completed. */
+data class ByCompletedStatement(
+    /** Against the text asked about, none overlapping another. */
+    val edits: List<TextEdit> = emptyList(),
+    /** Where the caret goes, in the text as [edits] leave it. */
+    val caret: Position? = null,
 )
 
 /**
