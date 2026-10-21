@@ -1,6 +1,7 @@
 package dev.basedpython.pycharm.lsp.ext
 
 import org.eclipse.lsp4j.DocumentSymbolParams
+import org.eclipse.lsp4j.ImplementationParams
 import org.eclipse.lsp4j.Position
 import org.eclipse.lsp4j.Range
 import org.eclipse.lsp4j.SemanticTokensParams
@@ -626,6 +627,10 @@ class ByNamedSemanticTokensParams(textDocument: TextDocumentIdentifier, val text
 /** `textDocument/documentSymbol` about one text of the document, as [ByNamedSemanticTokensParams]. */
 class ByNamedDocumentSymbolParams(textDocument: TextDocumentIdentifier, val textHash: String) :
     DocumentSymbolParams(textDocument)
+
+/** `textDocument/implementation` at a position in one text of the document, as [ByNamedSemanticTokensParams]. */
+class ByNamedImplementationParams(textDocument: TextDocumentIdentifier, position: Position, val textHash: String) :
+    ImplementationParams(textDocument, position)
 
 /** `textDocument/prepareTypeHierarchy` at a position in one text of the document, as [ByNamedSemanticTokensParams]. */
 class ByNamedTypeHierarchyPrepareParams(textDocument: TextDocumentIdentifier, position: Position, val textHash: String) :

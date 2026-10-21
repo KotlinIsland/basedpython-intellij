@@ -394,6 +394,10 @@
         <codeInsight.lineMarkerProvider
             language="basedpython"
             implementationClass="dev.basedpython.pycharm.lsp.supers.ByOverridingMarkers"/>
+        <!-- Method Hierarchy (Ctrl+Shift+H): `by/superMembers` up, `textDocument/implementation` down. -->
+        <methodHierarchyProvider
+            language="basedpython"
+            implementationClass="dev.basedpython.pycharm.lsp.supers.ByMethodHierarchyProvider"/>
 
         <!-- ===== Stream V: smart editing ===== -->
         <enterHandlerDelegate
