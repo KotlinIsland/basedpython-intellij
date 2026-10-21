@@ -420,6 +420,9 @@
         <lang.smartEnterProcessor
             language="basedpython"
             implementationClass="dev.basedpython.pycharm.editor.smart.BySmartEnterProcessor"/>
+        <!-- `{` gets its `}` inside an f-string or t-string, where the lexer sees one string token. -->
+        <typedHandler
+            implementation="dev.basedpython.pycharm.editor.smart.ByFStringBraceTypedHandler"/>
         <!-- Join Lines (Ctrl+Shift+J) that knows backslashes, brackets, strings and statements, from
              `by`'s outline. -->
         <joinLinesHandler order="first"
