@@ -295,6 +295,14 @@
             implementationClass="dev.basedpython.pycharm.project.PyprojectCompletionContributor"/>
         <directoryIndexExcludePolicy
             implementation="dev.basedpython.pycharm.project.BuildDirectoryExcludePolicy"/>
+        <!-- What `by build` wrote: generated to the platform, named back to its source, and read-only
+             until the user says otherwise. -->
+        <generatedSourcesFilter
+            implementation="dev.basedpython.pycharm.lsp.build.ByGeneratedSourcesFilter"/>
+        <editorNotificationProvider
+            implementation="dev.basedpython.pycharm.lsp.build.ByGeneratedFileBanner"/>
+        <writingAccessProvider
+            implementation="dev.basedpython.pycharm.lsp.build.ByGeneratedWritingAccessProvider"/>
         <!-- The TOML icon with the Python logo on it, for `pyproject.toml`. `fileIconProvider`
              covers both the VirtualFile path (editor tabs, Search Everywhere) and the PSI path
              (project view); the two other icon EPs, `iconProvider` and `iconLayerProvider`, are

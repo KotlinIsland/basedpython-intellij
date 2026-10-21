@@ -21,6 +21,7 @@ import com.intellij.openapi.vfs.newvfs.events.VFileEvent
 import com.intellij.platform.lsp.api.LspClient
 import com.intellij.platform.lsp.api.LspClientManager
 import com.intellij.platform.lsp.api.LspServerState
+import com.intellij.ui.EditorNotifications
 import com.intellij.util.concurrency.AppExecutorUtil
 import dev.basedpython.pycharm.lang.BasedPythonFileType
 import dev.basedpython.pycharm.lsp.ByLspLifecycleListener
@@ -138,11 +139,18 @@ internal class ByBuildOutputs(private val project: Project) :
         answers[file.path] = answer
     }
 
-    /** Asks about [file] in the background, if it is a `.by` file, so [cached] has an answer. */
+    /**
+     * Asks about [file] in the background, if it is a `.by` file or one the build wrote, so [cached]
+     * has an answer.
+     */
     fun warm(file: VirtualFile) {
-        if (file.fileType != BasedPythonFileType.INSTANCE || runningServer() == null) return
+        val generated = ByGeneratedFiles.getInstance(project).isGenerated(file)
+        if ((file.fileType != BasedPythonFileType.INSTANCE && !generated) || runningServer() == null) return
         AppExecutorUtil.getAppExecutorService().execute {
-            if (!project.isDisposed && file.isValid) of(file)
+            if (project.isDisposed || !file.isValid) return@execute
+            of(file)
+            // A generated file's banner names its source, which it only has from this answer.
+            if (generated) EditorNotifications.getInstance(project).updateNotifications(file)
         }
     }
 
