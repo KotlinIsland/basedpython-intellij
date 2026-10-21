@@ -16,6 +16,9 @@ import com.intellij.util.xmlb.XmlSerializerUtil
  * resolution logic lives in [BasedPythonDefaults], which falls back to these
  * values whenever a project value is unset (null / blank).
  *
+ * Also the IDE-wide options that have no project-level value at all, the way the platform keeps
+ * its own auto-import options: [addUnambiguousImportsOnTheFly].
+ *
  * Persisted to the application config directory's `basedpython.xml` (distinct
  * from the per-project `.idea/basedpython.xml`).
  */
@@ -34,6 +37,7 @@ class BasedPythonAppSettings : PersistentStateComponent<BasedPythonAppSettings.S
     var defaultBuffEnabled: Boolean = true,
     var defaultByExtraArgs: String = "",
     var defaultBuffExtraArgs: String = "",
+    var addUnambiguousImportsOnTheFly: Boolean = false,
   )
 
   private var state = State()
@@ -66,6 +70,16 @@ class BasedPythonAppSettings : PersistentStateComponent<BasedPythonAppSettings.S
   var defaultBuffExtraArgs: String
     get() = state.defaultBuffExtraArgs
     set(value) { state.defaultBuffExtraArgs = value }
+
+  /**
+   * Whether an import `by` says is the only one that resolves an unresolved name is added as the
+   * code is typed — *Settings | Editor | General | Auto Import*, see
+   * [dev.basedpython.pycharm.lsp.imports.ByReferenceImporter]. IDE-wide, as every language's
+   * auto-import options are, and off until switched on, as Java's and Kotlin's are.
+   */
+  var addUnambiguousImportsOnTheFly: Boolean
+    get() = state.addUnambiguousImportsOnTheFly
+    set(value) { state.addUnambiguousImportsOnTheFly = value }
 
   companion object {
     @JvmStatic

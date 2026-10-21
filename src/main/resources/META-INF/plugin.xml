@@ -433,6 +433,17 @@
         <vcs.codeVisionLanguageContext
             language="basedpython"
             implementationClass="dev.basedpython.pycharm.lsp.vision.ByVcsCodeVisionContext"/>
+        <!-- Imports `by` decides: the one import that resolves an unresolved name, added as the code is
+             typed, and the imports pasted code needs. Both switched under Settings | Editor | General |
+             Auto Import, where the options are listed after any other language's (see
+             ByAutoImportOptions for why last). -->
+        <referenceImporter
+            implementation="dev.basedpython.pycharm.lsp.imports.ByReferenceImporter"/>
+        <copyPastePostProcessor
+            implementation="dev.basedpython.pycharm.lsp.imports.ByPasteImports"/>
+        <autoImportOptionsProvider
+            instance="dev.basedpython.pycharm.lsp.imports.ByAutoImportOptions"
+            order="last"/>
 
         <!-- ===== Stream V: smart editing ===== -->
         <enterHandlerDelegate

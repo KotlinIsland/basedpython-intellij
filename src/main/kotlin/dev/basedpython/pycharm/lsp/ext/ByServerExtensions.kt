@@ -1,5 +1,8 @@
 package dev.basedpython.pycharm.lsp.ext
 
+import org.eclipse.lsp4j.CodeActionContext
+import org.eclipse.lsp4j.CodeActionParams
+import org.eclipse.lsp4j.DocumentDiagnosticParams
 import org.eclipse.lsp4j.DocumentSymbolParams
 import org.eclipse.lsp4j.FormattingOptions
 import org.eclipse.lsp4j.ImplementationParams
@@ -385,6 +388,40 @@ interface ByServerExtensions {
      */
     @JsonRequest("by/unwrap")
     fun unwrap(params: ByUnwrapParams): CompletableFuture<ByUnwrapResponse?>
+
+    /**
+     * The imports some code copied out of a document depends on: each name the copied text uses that
+     * the document's global scope binds where the text was copied from, with the import that binds it
+     * again in another module — see [dev.basedpython.pycharm.lsp.imports.ByPasteImports], which asks
+     * it once the text has been pasted.
+     *
+     * **Why the text, not a range.** A cut takes the text out of the document, and what its names
+     * meant is what the scope at the place it was cut from binds, which the cut leaves where it was.
+     * So the request carries the copied text and that place, and is answered about the document as
+     * it is when asked (`textHash`); the answer describes each import — a module and a member —
+     * rather than pointing into the document.
+     *
+     * A `null` answer means the server declined — language services are off, or the document is a
+     * notebook or a template. An **empty** list is code that needs no import. A `by` from before the
+     * request answers `MethodNotFound`.
+     */
+    @JsonRequest("by/copiedImports")
+    fun copiedImports(params: ByCopiedImportsParams): CompletableFuture<List<ByCopiedImport>?>
+
+    /**
+     * Which of the imports `by/copiedImports` answered the code pasted at a range is missing, and the
+     * edits that add all of them.
+     *
+     * An import is missing when its name is not bound in the scope the paste landed in. The edits of
+     * a subset of the imports are not a subset of the edits — two imports from one module can go into
+     * one statement — so a choice among them is asked again with only the ones chosen.
+     *
+     * A `null` answer means the server declined: language services are off, the document is a
+     * notebook or a template, or the range is not in it. A `by` from before the request answers
+     * `MethodNotFound`.
+     */
+    @JsonRequest("by/pastedImports")
+    fun pastedImports(params: ByPastedImportsParams): CompletableFuture<ByPastedImports?>
 }
 
 /** The file or directory to name. */
@@ -489,6 +526,42 @@ data class ByUnwrapOption(
     /** The edits, many small ones; absent when the option cannot be applied, and [refused] says why. */
     val edits: List<TextEdit>? = null,
     val refused: String? = null,
+)
+
+/**
+ * What was copied out of a document: each piece of text with the position it was copied from, in the
+ * document's text that `textHash` names ([ByTextHash][dev.basedpython.pycharm.lsp.ByTextHash]). Field
+ * names are `ty_server`'s `CopiedImportsParams`, which is `deny_unknown_fields`; the dispatcher takes
+ * `textHash` out first.
+ */
+data class ByCopiedImportsParams(val textDocument: TextDocumentIdentifier, val copies: List<ByCopiedText>, val textHash: String)
+
+/** A piece of copied text, and where its first character was in the document it was copied from. */
+data class ByCopiedText(val text: String, val position: Position)
+
+/**
+ * A name copied code uses, and the import that binds it: `from <module> import <member> [as <name>]`,
+ * or `import <module> [as <name>]` when [member] is absent. Sent back to `by/pastedImports` exactly as
+ * `by/copiedImports` answered it.
+ */
+data class ByCopiedImport(
+    val name: String,
+    val module: String,
+    val member: String? = null,
+)
+
+/** The pasted text: where it landed, and the imports it was copied with. As [ByCopiedImportsParams]. */
+data class ByPastedImportsParams(
+    val textDocument: TextDocumentIdentifier,
+    val range: Range,
+    val imports: List<ByCopiedImport>,
+    val textHash: String,
+)
+
+/** The imports the paste is missing, and edits to its document that add all of them. */
+data class ByPastedImports(
+    val imports: List<ByCopiedImport> = emptyList(),
+    val edits: List<TextEdit> = emptyList(),
 )
 
 /**
@@ -871,6 +944,14 @@ class ByNamedTypeHierarchyPrepareParams(textDocument: TextDocumentIdentifier, po
 /** `textDocument/rename` at a position in one text of the document, as [ByNamedSemanticTokensParams]. */
 class ByNamedRenameParams(textDocument: TextDocumentIdentifier, position: Position, newName: String, val textHash: String) :
     RenameParams(textDocument, position, newName)
+
+/** `textDocument/diagnostic` about one text of the document, as [ByNamedSemanticTokensParams]. */
+class ByNamedDocumentDiagnosticParams(textDocument: TextDocumentIdentifier, val textHash: String) :
+    DocumentDiagnosticParams(textDocument)
+
+/** `textDocument/codeAction` for a range of one text of the document, as [ByNamedSemanticTokensParams]. */
+class ByNamedCodeActionParams(textDocument: TextDocumentIdentifier, range: Range, context: CodeActionContext, val textHash: String) :
+    CodeActionParams(textDocument, range, context)
 
 /** Every fragment in the document, in source order. */
 data class ByInjectionsResponse(val injections: List<ByInjectionFragment> = emptyList())

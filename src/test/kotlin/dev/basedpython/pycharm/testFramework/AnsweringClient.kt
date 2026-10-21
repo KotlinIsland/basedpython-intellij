@@ -17,9 +17,12 @@ import org.eclipse.lsp4j.TextDocumentIdentifier
 import org.eclipse.lsp4j.jsonrpc.ResponseErrorException
 import org.eclipse.lsp4j.jsonrpc.messages.ResponseError
 import org.eclipse.lsp4j.jsonrpc.messages.ResponseErrorCode
+import org.eclipse.lsp4j.jsonrpc.services.JsonNotification
 import org.eclipse.lsp4j.jsonrpc.services.JsonRequest
 import org.eclipse.lsp4j.services.LanguageServer
+import org.eclipse.lsp4j.services.TextDocumentService
 import java.lang.reflect.Proxy
+import java.util.Collections
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.TimeUnit
@@ -27,8 +30,9 @@ import java.util.concurrent.TimeoutException
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
- * A `by` or `buff` that answers each custom request (`by/…`, `buff/…`) with what [answer] returns for
- * its method name, and waits for it the way the platform's own client does.
+ * A `by` or `buff` that answers each custom request (`by/…`, `buff/…`), and each `textDocument/…`
+ * request, with what [answer] returns for its method name, and waits for it the way the platform's
+ * own client does.
  *
  * That is the point of it. `LspRequestExecutorBase.sendRequestSync` returns `null` for an error
  * answer (after logging it), for a timeout, and for a request it never sent because the server is
@@ -48,12 +52,27 @@ class AnsweringClient(
     /** How many requests were sent, of any method. */
     val requests = AtomicInteger()
 
+    /** The params of every request sent, in the order sent. */
+    val sentParams: MutableList<Any?> = Collections.synchronizedList(mutableListOf())
+
+    /** `textDocument/…` requests, answered by [answer] under their full method name; notifications go nowhere. */
+    private val documents = Proxy.newProxyInstance(javaClass.classLoader, arrayOf(TextDocumentService::class.java)) { _, method, args ->
+        if (method.isAnnotationPresent(JsonNotification::class.java)) return@newProxyInstance null
+        val request = method.getAnnotation(JsonRequest::class.java) ?: error("unexpected ${method.name}")
+        requests.incrementAndGet()
+        sentParams += args?.firstOrNull()
+        // lsp4j names a standard request after its method unless the annotation says otherwise
+        answer("textDocument/${request.value.ifEmpty { method.name }}")
+    } as TextDocumentService
+
     private val server = Proxy.newProxyInstance(
         javaClass.classLoader,
         arrayOf(ByDataFlowServer::class.java, BuffServerExtensions::class.java),
-    ) { _, method, _ ->
+    ) { _, method, args ->
+        if (method.name == "getTextDocumentService") return@newProxyInstance documents
         val request = method.getAnnotation(JsonRequest::class.java) ?: error("unexpected ${method.name}")
         requests.incrementAndGet()
+        sentParams += args?.firstOrNull()
         answer(request.value)
     } as LanguageServer
 
