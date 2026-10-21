@@ -37,7 +37,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.attribute.PosixFilePermissions
 import java.util.concurrent.CopyOnWriteArrayList
-import java.util.concurrent.TimeUnit
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * Build | Build Project in a basedpython project runs `by build` and reports it in the Build tool
@@ -90,11 +90,11 @@ class ByProjectTaskRunnerTest {
     private fun buildProject(): ProjectTaskRunner.Result {
         val task = ProjectTaskManager.getInstance(project).createAllModulesBuildTask(true, project)
         val promise = ByProjectTaskRunner().run(project, ProjectTaskContext(), task)
-        return PlatformTestUtil.waitForPromise(promise, TimeUnit.SECONDS.toMillis(60))!!
+        return PlatformTestUtil.waitForPromise(promise, BUILD_WAIT.inWholeMilliseconds)!!
     }
 
     @Test
-    fun `it builds the module that holds a basedpython project, and nothing else`() = onEdt {
+    fun `it builds the module that holds a basedpython project, and nothing else`() = onEdt(BUILD_TIMEOUT) {
         val runner = ByProjectTaskRunner()
         val task = ProjectTaskManager.getInstance(project).createModulesBuildTask(fixture.module, true, false, false)
 
@@ -111,7 +111,7 @@ class ByProjectTaskRunnerTest {
     }
 
     @Test
-    fun `a failed build shows its diagnostics at their places and its output as text`() = onEdt {
+    fun `a failed build shows its diagnostics at their places and its output as text`() = onEdt(BUILD_TIMEOUT) {
         fakeBy(
             """
             echo "${'$'}PWD/src/main.by -> ${'$'}PWD/build/main.py" >&2
@@ -141,7 +141,7 @@ class ByProjectTaskRunnerTest {
     }
 
     @Test
-    fun `a build that succeeds says so`() = onEdt {
+    fun `a build that succeeds says so`() = onEdt(BUILD_TIMEOUT) {
         fakeBy("echo 'build complete (1 files)' >&2")
 
         assertEquals(Ended(aborted = false, errors = false), Ended.of(buildProject()))
@@ -150,7 +150,7 @@ class ByProjectTaskRunnerTest {
     }
 
     @Test
-    fun `stop in the window ends the build and the process`() = onEdt {
+    fun `stop in the window ends the build and the process`() = onEdt(BUILD_TIMEOUT) {
         val pid = dir.resolve("pid")
         fakeBy("echo $$ > '$pid'; exec sleep 600")
 
@@ -162,7 +162,7 @@ class ByProjectTaskRunnerTest {
 
         stop.destroyProcess()
 
-        assertEquals(Ended(aborted = true, errors = false), Ended.of(PlatformTestUtil.waitForPromise(promise, TimeUnit.SECONDS.toMillis(60))))
+        assertEquals(Ended(aborted = true, errors = false), Ended.of(PlatformTestUtil.waitForPromise(promise, BUILD_WAIT.inWholeMilliseconds)))
         assertFalse(process.map { it.isAlive }.orElse(false))
         assertTrue(stop.isProcessTerminated)
     }
@@ -181,3 +181,9 @@ private data class Ended(val aborted: Boolean, val errors: Boolean) {
         fun of(result: ProjectTaskRunner.Result?): Ended? = result?.let { Ended(it.isAborted, it.hasErrors()) }
     }
 }
+
+/** How long a test waits on the `by build` it starts, a real process whose time is the machine's load. */
+private val BUILD_WAIT = 60.seconds
+
+/** A test that builds is bounded above its wait for the build, so the wait is what decides. */
+private val BUILD_TIMEOUT = BUILD_WAIT + 30.seconds
