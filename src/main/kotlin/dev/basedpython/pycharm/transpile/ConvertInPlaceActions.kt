@@ -7,7 +7,7 @@ import com.intellij.openapi.actionSystem.CommonDataKeys
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.fileEditor.FileDocumentManager
-import com.intellij.openapi.fileEditor.FileEditorManager
+import com.intellij.openapi.fileEditor.OpenFileDescriptor
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.Task
@@ -148,7 +148,7 @@ private fun writeConvertedAndOpen(project: Project, path: Path, content: String,
             .yesText(BasedPythonBundle.message("convert.overwrite.button"))
             .ask(project)
     } ?: return
-    FileEditorManager.getInstance(project).openFile(written, true)
+    OpenFileDescriptor(project, written).navigate(true)
 }
 
 /**

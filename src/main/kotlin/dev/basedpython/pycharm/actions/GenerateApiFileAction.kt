@@ -4,7 +4,7 @@ import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.application.ApplicationManager
-import com.intellij.openapi.fileEditor.FileEditorManager
+import com.intellij.openapi.fileEditor.OpenFileDescriptor
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.Task
@@ -50,7 +50,7 @@ class GenerateApiFileAction : AnAction() {
 
                 if (refreshed != null) {
                     ApplicationManager.getApplication().invokeLater {
-                        FileEditorManager.getInstance(project).openFile(refreshed, true)
+                        OpenFileDescriptor(project, refreshed).navigate(true)
                     }
                 }
             }

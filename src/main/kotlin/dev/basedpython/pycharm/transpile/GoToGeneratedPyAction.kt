@@ -5,7 +5,7 @@ import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
 import com.intellij.openapi.application.ApplicationManager
-import com.intellij.openapi.fileEditor.FileEditorManager
+import com.intellij.openapi.fileEditor.OpenFileDescriptor
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.Task
@@ -104,7 +104,7 @@ class GoToGeneratedPyAction : AnAction() {
     }
 
     private fun openFile(project: Project, file: VirtualFile) {
-        FileEditorManager.getInstance(project).openFile(file, true)
+        OpenFileDescriptor(project, file).navigate(true)
     }
 
     private fun isByFile(file: VirtualFile): Boolean =
