@@ -270,6 +270,7 @@ lexical colour only. Don't reintroduce guessed semantic colour; fix the LSP path
 - [x] TODO/FIXME comment scanning → TODO tool window
 - [x] Add return annotation — a `by` code action (`refactor.rewrite.returnAnnotation`) in Alt+Enter: the type ty infers, spelled as the file writes types, with the imports it needs
 - [x] Convert to / from `data class` — `by` code actions (`refactor.rewrite.toDataClass` / `fromDataClass`), refused for enums, protocols, existing data classes and classes whose instances would not fit in slots
+- [x] Put arguments / parameters / elements on separate lines, or on one line — `by` code actions (`refactor.rewrite.splitList` / `joinList`) in Alt+Enter, through the platform's LSP intentions; nothing of the plugin's own. A split list gets a trailing comma, a joined one loses it; a list with a comment in it is refused. Not the `listSplitJoinContext` EP: that one is PSI-driven, and a `.by` file's tree has no lists
 - [x] `?.` null-safety — the quick fix `by` attaches to an attribute read that only `None` lacks
 - [x] Mutable default args — nothing to flag: basedpython re-evaluates non-scalar defaults per call, and buff's `B006` is off for `.by` for the same reason
 - [x] Intention: anonymous tuple → NamedTuple expand preview
