@@ -213,6 +213,8 @@
              ordering guarantee across separately registered handlers. -->
         <checkinHandlerFactory
             implementation="dev.basedpython.pycharm.vcs.ByCleanupCheckinHandlerFactory"/>
+        <!-- Git hooks run with the project's `by` and `buff` on PATH. -->
+        <vcs.envCustomizer implementation="dev.basedpython.pycharm.vcs.ByVcsEnvCustomizer"/>
         <lang.importOptimizer
             language="basedpython"
             implementationClass="dev.basedpython.pycharm.format.BuffImportOptimizer"/>

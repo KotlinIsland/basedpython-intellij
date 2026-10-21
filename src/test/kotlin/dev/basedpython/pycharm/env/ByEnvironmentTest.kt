@@ -118,6 +118,47 @@ class ByEnvironmentTest {
         assertEquals(ByEnvironments.venvBinDir(root).toString(), env["PATH"])
     }
 
+    // --- hookEnvironment ----------------------------------------------------
+
+    private fun venvLaunch(root: Path, binary: String) = ByLaunch(
+        ByEnvironments.venvBinary(root, binary), emptyList(), ByEnvironments.activationEnv(root), root, ByEnvironmentKind.VENV,
+    )
+
+    @Test
+    fun `hookEnvironment activates the venv the toolchain resolved from, onto the hook's PATH`() {
+        val root = Path.of("/w/.venv")
+        val env = ByEnvironments.hookEnvironment(listOf(venvLaunch(root, "by"), venvLaunch(root, "buff")), "/usr/bin")
+        assertEquals(root.toString(), env["VIRTUAL_ENV"])
+        assertEquals("${ByEnvironments.venvBinDir(root)}${File.pathSeparator}/usr/bin", env["PATH"])
+        assertEquals("", env["PYTHONHOME"])
+    }
+
+    @Test
+    fun `hookEnvironment puts a binary from outside a venv ahead of PATH`() {
+        val bundled = ByLaunch(Path.of("/plugin/bin/by"), emptyList(), emptyMap(), null, ByEnvironmentKind.BUNDLED)
+        val env = ByEnvironments.hookEnvironment(listOf(bundled), "/usr/bin")
+        assertEquals(mapOf("PATH" to "/plugin/bin${File.pathSeparator}/usr/bin"), env)
+    }
+
+    @Test
+    fun `hookEnvironment adds the directory of a second binary that is not in the venv`() {
+        val root = Path.of("/w/.venv")
+        val buff = ByLaunch(Path.of("/opt/buff/buff"), emptyList(), emptyMap(), null, ByEnvironmentKind.DOWNLOADED)
+        val env = ByEnvironments.hookEnvironment(listOf(venvLaunch(root, "by"), buff), "/usr/bin")
+        assertEquals(
+            listOf("/opt/buff", ByEnvironments.venvBinDir(root).toString(), "/usr/bin").joinToString(File.pathSeparator),
+            env["PATH"],
+        )
+    }
+
+    @Test
+    fun `hookEnvironment adds nothing for binaries already on PATH or behind uv run`() {
+        val onPath = ByLaunch(Path.of("/usr/local/bin/by"), emptyList(), emptyMap(), null, ByEnvironmentKind.PATH)
+        val uv = ByLaunch(Path.of("/usr/local/bin/uv"), listOf("run", "--project", "/w", "buff"), emptyMap(), null, ByEnvironmentKind.UV)
+        assertTrue(ByEnvironments.hookEnvironment(listOf(onPath, uv), "/usr/bin").isEmpty())
+        assertTrue(ByEnvironments.hookEnvironment(emptyList(), "/usr/bin").isEmpty())
+    }
+
     // --- findVenvWithBinary (real files on a real filesystem) ---------------
 
     /** Creates an executable `<venvRoot>/bin/<name>`. */

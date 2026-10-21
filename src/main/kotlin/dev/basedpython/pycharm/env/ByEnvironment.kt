@@ -170,6 +170,34 @@ object ByEnvironments {
         )
     }
 
+    /**
+     * The environment a process this plugin does not start — a git hook — needs to find the same
+     * toolchain the plugin runs: [launches] as resolved for the project, onto [parentPath].
+     *
+     * The first venv-backed launch is activated the way [activationEnv] activates it for every
+     * process the plugin starts itself. A binary that does not come from a venv — downloaded,
+     * bundled, or a configured path — has its directory put ahead of the rest of `PATH`, so a hook
+     * that runs `by` runs that one. Nothing is added for a binary found on `PATH`, which is there
+     * already, nor for a launch that goes through `uv run`, which names no directory a hook could
+     * look in.
+     *
+     * Empty when there is nothing to add, so the caller's environment is left exactly as it was.
+     */
+    fun hookEnvironment(launches: List<ByLaunch>, parentPath: String?): Map<String, String> {
+        val venv = launches.firstNotNullOfOrNull { it.venvRoot }
+        val env = venv?.let { activationEnv(it, parentPath) }?.let(::LinkedHashMap) ?: LinkedHashMap()
+        val path = env["PATH"] ?: parentPath
+        val onPath = path.orEmpty().split(File.pathSeparator).filter { it.isNotEmpty() }.toSet()
+        val dirs = launches
+            .filter { it.prependArgs.isEmpty() && it.kind != ByEnvironmentKind.PATH }
+            .mapNotNull { it.exe.parent?.toString() }
+            .distinct()
+            .filter { it !in onPath }
+        if (dirs.isEmpty()) return env
+        env["PATH"] = (dirs + listOfNotNull(path?.takeIf { it.isNotEmpty() })).joinToString(File.pathSeparator)
+        return env
+    }
+
     // --- Sources ------------------------------------------------------------
 
     /**
