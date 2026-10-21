@@ -15,4 +15,4 @@ def f(x):
     text = """
             eight
         """
-    return text
+    return text, x

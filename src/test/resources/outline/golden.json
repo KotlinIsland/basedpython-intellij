@@ -1,4 +1,30 @@
 {
+ "lists": [
+  {
+   "elements": [
+    {
+     "end": {
+      "character": 15,
+      "line": 17
+     },
+     "start": {
+      "character": 11,
+      "line": 17
+     }
+    },
+    {
+     "end": {
+      "character": 18,
+      "line": 17
+     },
+     "start": {
+      "character": 17,
+      "line": 17
+     }
+    }
+   ]
+  }
+ ],
  "statements": [
   {
    "range": {
@@ -218,7 +244,7 @@
       {
        "range": {
         "end": {
-         "character": 15,
+         "character": 18,
          "line": 17
         },
         "start": {
@@ -250,7 +276,7 @@
      },
      "range": {
       "end": {
-       "character": 15,
+       "character": 18,
        "line": 17
       },
       "start": {
@@ -260,9 +286,31 @@
      }
     }
    ],
+   "name": {
+    "end": {
+     "character": 5,
+     "line": 3
+    },
+    "start": {
+     "character": 4,
+     "line": 3
+    }
+   },
+   "parameters": [
+    {
+     "end": {
+      "character": 7,
+      "line": 3
+     },
+     "start": {
+      "character": 6,
+      "line": 3
+     }
+    }
+   ],
    "range": {
     "end": {
-     "character": 15,
+     "character": 18,
      "line": 17
     },
     "start": {

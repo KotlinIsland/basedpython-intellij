@@ -649,6 +649,8 @@ data class BySyntaxOutlineResponse(
     val statements: List<ByOutlineStatement> = emptyList(),
     /** Every string literal part, in source order. */
     val strings: List<ByOutlineString> = emptyList(),
+    /** Every comma-separated list of two elements or more, in the order the lists start. */
+    val lists: List<ByOutlineList> = emptyList(),
 )
 
 /** One statement. */
@@ -676,6 +678,12 @@ data class ByOutlineClause(
 
 /** A basedpython modifier keyword, e.g. `frozen data`, and what the parser read it as. */
 data class ByOutlineModifier(val range: Range? = null, val name: String? = null)
+
+/** A comma-separated list: a call's arguments, a definition's parameters, a display's elements. */
+data class ByOutlineList(
+    /** Each element from its first token to its last, a `*` or `**` before it included. */
+    val elements: List<Range> = emptyList(),
+)
 
 /** A call made as a statement of its own. */
 data class ByOutlineCall(

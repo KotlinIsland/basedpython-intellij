@@ -25,6 +25,12 @@ class ByOutline(
     /** Every string literal part, in source order. */
     val strings: List<StringPart>,
     /**
+     * Every comma-separated list of two elements or more — a call's arguments, a definition's
+     * parameters, a display's elements, an import's names — each as its elements, in the order the
+     * lists start. A list nested in an element of another comes after it.
+     */
+    val lists: List<List<TextRange>> = emptyList(),
+    /**
      * Whether `by` declined to outline the document (it does when language services are off), in
      * which case [statements] and [strings] are empty because nothing was said, not because the
      * file has none. A feature that falls back to the platform's behaviour on an empty outline
@@ -93,6 +99,15 @@ class ByOutline(
         return found
     }
 
+    /**
+     * The innermost list whose span — from its first element to its last — holds [offset], ends
+     * included.
+     */
+    fun listAt(offset: Int): List<TextRange>? =
+        lists
+            .filter { it.first().startOffset <= offset && offset <= it.last().endOffset }
+            .minByOrNull { it.last().endOffset - it.first().startOffset }
+
     /** Every statement, depth first in source order, with the clause it is a body statement of. */
     fun walk(visit: (statement: Statement, parent: Clause?) -> Unit) {
         fun walk(statements: List<Statement>, parent: Clause?) {
@@ -125,6 +140,7 @@ object ByOutlineReplies {
                 stamp = document.modificationStamp,
                 statements = response.statements.map(reader::statement),
                 strings = response.strings.map(reader::string),
+                lists = response.lists.map { list -> list.elements.map(reader::range) },
             )
         } catch (_: Unfitting) {
             null

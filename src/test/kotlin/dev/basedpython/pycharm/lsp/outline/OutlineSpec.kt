@@ -26,6 +26,7 @@ class OutlineSpec private constructor(private val text: CharSequence) {
 
     private var cursor = 0
     private val strings = mutableListOf<ByOutline.StringPart>()
+    private val lists = mutableListOf<List<TextRange>>()
 
     private fun find(snippet: String): TextRange {
         val start = text.indexOf(snippet, cursor)
@@ -45,6 +46,9 @@ class OutlineSpec private constructor(private val text: CharSequence) {
             escapes: List<String> = emptyList(),
             text: List<String> = emptyList(),
         ) = this@OutlineSpec.string(literal, strippedIndent, interpolations, escapes, runs = text)
+
+        /** See [OutlineSpec.list]. */
+        fun list(vararg elements: String) = this@OutlineSpec.list(elements.toList())
 
         /** A simple statement spelled [text]. */
         fun simple(text: String) {
@@ -142,13 +146,27 @@ class OutlineSpec private constructor(private val text: CharSequence) {
         strings += ByOutline.StringPart(range, strippedIndent, parts(interpolations), parts(escapes), parts(runs))
     }
 
+    /**
+     * A comma-separated list of [elements], each spelled as it appears, in order. Found from the
+     * start of the text, independently of the statements.
+     */
+    private fun list(elements: List<String>) {
+        var from = 0
+        lists += elements.map { element ->
+            val start = text.indexOf(element, from)
+            require(start >= 0) { "`$element` is not in the text after offset $from" }
+            from = start + element.length
+            TextRange.from(start, element.length)
+        }
+    }
+
     companion object {
 
         /** The outline of [document] as it is now, as [spec] describes it. */
         fun outline(document: Document, spec: Suite.() -> Unit): ByOutline {
             val outline = OutlineSpec(document.immutableCharSequence)
             val suite = outline.Suite().apply(spec)
-            return ByOutline(document.modificationStamp, suite.statements, outline.strings)
+            return ByOutline(document.modificationStamp, suite.statements, outline.strings, outline.lists)
         }
 
         /** [outline], put in as though `by` had just answered it for [document]. */

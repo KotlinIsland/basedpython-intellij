@@ -63,6 +63,9 @@ class ByOutlineRepliesTest {
         assertEquals(listOf("{x!r}"), strings[1].interpolations.map { it.text() })
         assertNull(strings[2].strippedIndent)
         assertEquals(12, strings[3].strippedIndent)
+
+        // the one list: `return text, x`
+        assertEquals(listOf(listOf("text", "x")), outline.lists.map { list -> list.map { it.text() } })
     }
 
     @Test
