@@ -341,6 +341,11 @@
              contributors only ever produced a second copy of every result. -->
         <gotoRelatedProvider
             implementation="dev.basedpython.pycharm.navigation.BasedPythonRelatedProvider"/>
+        <!-- Copy Reference on a `.by` module or a package: its dotted name, `by/moduleName`. First, so
+             a package in a basedpython project is named from by's search paths rather than Python's. -->
+        <qualifiedNameProvider
+            order="first"
+            implementation="dev.basedpython.pycharm.navigation.ByQualifiedNameProvider"/>
 
         <!-- ===== Stream S: run line markers + test config ===== -->
         <runLineMarkerContributor

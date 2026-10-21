@@ -259,7 +259,25 @@ interface ByServerExtensions {
      */
     @JsonRequest("by/checkWorkspace")
     fun checkWorkspace(params: WorkspaceDiagnosticParams): CompletableFuture<WorkspaceDiagnosticReport?>
+
+    /**
+     * The dotted name a file or a directory is imported by — see
+     * [dev.basedpython.pycharm.navigation.ByQualifiedNameProvider].
+     *
+     * **Why the server.** The name is the module resolver's: which search path the file is under, a
+     * src layout's `src/` included, and whether resolution reaches the file at all. A name worked out
+     * here from the path relative to some root agrees with it only until a project has two roots.
+     *
+     * A `null` answer is a path nothing is imported from. A `by` from before the request answers
+     * `MethodNotFound`.
+     */
+    @JsonRequest("by/moduleName")
+    fun moduleName(args: ByModuleNameParams): CompletableFuture<String?>
 }
+
+/** The file or directory to name. */
+data class ByModuleNameParams(val uri: String)
+
 
 /**
  * The member to ask about: a position on the name it is declared with — a `def`'s, or a name a class
