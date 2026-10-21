@@ -5,6 +5,7 @@ import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.execution.process.CapturingProcessAdapter
 import com.intellij.execution.process.KillableProcessHandler
 import com.intellij.execution.process.ProcessEvent
+import com.intellij.execution.process.ProcessListener
 import com.intellij.execution.process.ProcessOutput
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
@@ -18,8 +19,10 @@ import dev.basedpython.pycharm.util.Debounced
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -53,7 +56,7 @@ internal class ByBuildService(private val project: Project, private val scope: C
         // straight after a save should stop the build that save asked for.
         if (!WatchModeState.isEnabled(project)) return
         val cmd = try {
-            byCommandLine(project, ByBuildOptions(), byArguments("build", "--min-version", "", emptyList(), ""))
+            projectBuildCommandLine(project)
         } catch (_: ExecutionException) {
             ByCli.notifyBinaryMissing(project, "by")
             return
@@ -64,11 +67,21 @@ internal class ByBuildService(private val project: Project, private val scope: C
 
     /**
      * Runs [cmd] once no other build of this project is running, under a cancellable background
-     * progress named [title].
+     * progress named [title]. [listener], when given, hears the output as it is printed.
      */
-    suspend fun build(cmd: GeneralCommandLine, title: String): ProcessOutput = lock.withLock {
-        withBackgroundProgress(project, title, cancellable = true) { runCapturing(cmd) }
-    }
+    suspend fun build(cmd: GeneralCommandLine, title: String, listener: ProcessListener? = null): ProcessOutput =
+        lock.withLock {
+            withBackgroundProgress(project, title, cancellable = true) { runCapturing(cmd, listener = listener) }
+        }
+
+    /**
+     * Starts [work] — a [build] and whatever reports it — in the service's scope, for a caller that
+     * does not wait for it.
+     *
+     * The service's scope rather than the caller's, for the reason [buildBlocking] gives; cancelling
+     * the returned [Job] is how such a caller stops it.
+     */
+    fun launch(work: suspend CoroutineScope.() -> Unit): Job = scope.launch(block = work)
 
     /**
      * [build], for a caller on a plain background thread that has to wait for the answer.
@@ -100,6 +113,15 @@ internal class ByBuildService(private val project: Project, private val scope: C
 }
 
 /**
+ * `by build` of the whole project with the project's defaults: what watch mode and Build | Build
+ * Project run.
+ *
+ * @throws ExecutionException when no `by` can be found.
+ */
+internal fun projectBuildCommandLine(project: Project): GeneralCommandLine =
+    byCommandLine(project, ByBuildOptions(), byArguments("build", "--min-version", "", emptyList(), ""))
+
+/**
  * Runs [cmd] to completion and returns what it printed, destroying the process — and everything it
  * started — if the calling coroutine is cancelled first.
  *
@@ -108,13 +130,21 @@ internal class ByBuildService(private val project: Project, private val scope: C
  *
  * A [timeout] destroys the process when it elapses and returns what was printed until then, with
  * [ProcessOutput.isTimeout] set.
+ *
+ * A [listener] hears the process as it runs — its output as it is printed, rather than all of it
+ * at the end — and is added before the process starts, so it misses none of it.
  */
-internal suspend fun runCapturing(cmd: GeneralCommandLine, timeout: Duration? = null): ProcessOutput {
+internal suspend fun runCapturing(
+    cmd: GeneralCommandLine,
+    timeout: Duration? = null,
+    listener: ProcessListener? = null,
+): ProcessOutput {
     val handler = KillableProcessHandler(cmd)
     handler.setShouldKillProcessSoftly(false)
     handler.setShouldDestroyProcessRecursively(true)
     val output = ProcessOutput()
     val exited = CompletableDeferred<Unit>()
+    if (listener != null) handler.addProcessListener(listener)
     handler.addProcessListener(object : CapturingProcessAdapter(output) {
         override fun processTerminated(event: ProcessEvent) {
             super.processTerminated(event)

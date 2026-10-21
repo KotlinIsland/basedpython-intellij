@@ -368,6 +368,10 @@
             implementation="dev.basedpython.pycharm.run.ergonomics.ByConsoleFilterProvider"/>
         <stepsBeforeRunProvider
             implementation="dev.basedpython.pycharm.run.ergonomics.BuildBeforeRunTaskProvider"/>
+        <!-- Build | Build Project in a basedpython project is `by build`. Ahead of IDEA's own
+             compiler, which is registered last and takes every module it is offered. -->
+        <projectTaskRunner
+            implementation="dev.basedpython.pycharm.run.build.ByProjectTaskRunner"/>
 
         <!-- ===== Stream Z: move statement ===== -->
         <statementUpDownMover
