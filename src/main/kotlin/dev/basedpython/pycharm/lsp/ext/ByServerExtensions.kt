@@ -249,6 +249,28 @@ interface ByServerExtensions {
     fun evaluatableExpression(args: ByEvaluatableExpressionParams): CompletableFuture<ByEvaluatableExpression?>
 
     /**
+     * Each declaration of a document — its classes and functions, and the methods and properties of
+     * those classes — with how many places use it and how many classes subclass it or members
+     * override it: the code vision above each one, drawn by
+     * [dev.basedpython.pycharm.lsp.vision.ByUsagesCodeVisionProvider] and
+     * [dev.basedpython.pycharm.lsp.vision.ByInheritorsCodeVisionProvider].
+     *
+     * **Why not `textDocument/codeLens`.** The platform asks for a document's lenses again only when
+     * that document changes, so a count would stay as it was while another file gained or lost a
+     * usage; and it draws every lens under the one *LSP Code Lens* setting. These are drawn on every
+     * highlighting pass instead, under the *Usages* and *Inheritors* settings Java, Kotlin and Python
+     * share. Each count is what `textDocument/references` or `textDocument/implementation` answers at
+     * the declaration, from the same code, which is what a click on it asks.
+     *
+     * Only the [ByDocumentUsageCountsParams.counts] named are worked out: each is a search of the
+     * workspace per declaration. A `null` answer means the server declined — language services are
+     * off, or the document is not one it answers for. A `by` from before the request answers
+     * `MethodNotFound`.
+     */
+    @JsonRequest("by/documentUsageCounts")
+    fun documentUsageCounts(args: ByDocumentUsageCountsParams): CompletableFuture<List<ByDeclarationUsages>?>
+
+    /**
      * Every file of the workspace checked, answered as soon as the check is done.
      *
      * The same parameters and report as `workspace/diagnostic`, which `by` long-polls: a request
@@ -409,6 +431,42 @@ data class ByEvaluatableExpressionParams(
 
 /** Where the expression is in the document. */
 data class ByEvaluatableExpression(val range: Range? = null)
+
+/**
+ * The document to count the declarations of, the text of it to count them in, and which counts to
+ * work out: `"references"`, `"implementations"`, or both.
+ *
+ * Field names are the wire format and must match `ty_server`'s `DocumentUsageCountsParams`, which is
+ * `deny_unknown_fields`; `textHash` is taken out by the server's dispatcher before that.
+ */
+data class ByDocumentUsageCountsParams(
+    val textDocument: TextDocumentIdentifier,
+    val textHash: String,
+    val counts: List<String>,
+)
+
+/** A declaration of the document, with the counts asked for. */
+data class ByDeclarationUsages(
+    val name: String? = null,
+    /** `"class"`, `"function"`, or `"method"`, which takes in a class's properties. */
+    val kind: String? = null,
+    /** The whole declaration, its decorators included. */
+    val range: Range? = null,
+    /** Its name, where `textDocument/references` and `textDocument/implementation` answer for it. */
+    val selectionRange: Range? = null,
+    /** How many places use it, the declaration itself not among them. Absent when not asked for. */
+    val references: Int? = null,
+    /**
+     * How many classes subclass a class, directly or not, or how many of their members override a
+     * method. Absent when not asked for, and on a function.
+     */
+    val implementations: Int? = null,
+    /**
+     * The method is abstract — an `@abstractmethod`, or a protocol method with no implementation — so
+     * that what overrides it implements it. Only said of a method with implementations.
+     */
+    val abstract: Boolean = false,
+)
 
 /** A class member of the document that overrides at least one superclass member. */
 data class ByOverridingMember(

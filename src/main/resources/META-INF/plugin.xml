@@ -398,6 +398,12 @@
         <methodHierarchyProvider
             language="basedpython"
             implementationClass="dev.basedpython.pycharm.lsp.supers.ByMethodHierarchyProvider"/>
+        <!-- Code vision: "3 usages" and "2 overrides" above each declaration, counted by
+             `by/documentUsageCounts`, under the Usages and Inheritors switches the other languages share. -->
+        <codeInsight.daemonBoundCodeVisionProvider
+            implementation="dev.basedpython.pycharm.lsp.vision.ByUsagesCodeVisionProvider"/>
+        <codeInsight.daemonBoundCodeVisionProvider
+            implementation="dev.basedpython.pycharm.lsp.vision.ByInheritorsCodeVisionProvider"/>
 
         <!-- ===== Stream V: smart editing ===== -->
         <enterHandlerDelegate
