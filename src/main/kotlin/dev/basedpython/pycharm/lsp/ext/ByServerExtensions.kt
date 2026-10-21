@@ -234,6 +234,18 @@ interface ByServerExtensions {
     fun documentSuperMembers(args: ByDocumentSuperMembersParams): CompletableFuture<List<ByOverridingMember>?>
 
     /**
+     * The expression a debugger evaluates for a position: on `d` in `a.b[c].d`, all of `a.b[c].d` —
+     * see [dev.basedpython.pycharm.debug.ByDapEvaluator], which a stopped session's value tooltip,
+     * *Evaluate Expression* and *Quick Evaluate* start from.
+     *
+     * A `null` answer means there is nothing to evaluate there: a literal, an operator, a keyword, a
+     * comment, or a name a `def`, a class, an import or a keyword argument declares. A `by` from
+     * before the request answers `MethodNotFound`.
+     */
+    @JsonRequest("by/evaluatableExpression")
+    fun evaluatableExpression(args: ByEvaluatableExpressionParams): CompletableFuture<ByEvaluatableExpression?>
+
+    /**
      * Every file of the workspace checked, answered as soon as the check is done.
      *
      * The same parameters and report as `workspace/diagnostic`, which `by` long-polls: a request
@@ -287,6 +299,24 @@ data class BySuperMember(
  * is `deny_unknown_fields`; `textHash` is taken out by the server's dispatcher before that.
  */
 data class ByDocumentSuperMembersParams(val textDocument: TextDocumentIdentifier, val textHash: String)
+
+/**
+ * The position to ask about, in the text [textHash] names, and whether the expression may call
+ * anything: an evaluation the user asked for may, a value tooltip may not — on `f` in `f(x)`, the
+ * difference between `f(x)` and `f`.
+ *
+ * Field names are the wire format and must match `ty_server`'s `EvaluatableExpressionParams`, which
+ * is `deny_unknown_fields`; `textHash` is taken out by the server's dispatcher before that.
+ */
+data class ByEvaluatableExpressionParams(
+    val textDocument: TextDocumentIdentifier,
+    val position: Position,
+    val calls: Boolean,
+    val textHash: String,
+)
+
+/** Where the expression is in the document. */
+data class ByEvaluatableExpression(val range: Range? = null)
 
 /** A class member of the document that overrides at least one superclass member. */
 data class ByOverridingMember(

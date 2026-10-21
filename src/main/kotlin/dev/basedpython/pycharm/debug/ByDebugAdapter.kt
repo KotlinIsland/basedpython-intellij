@@ -21,6 +21,7 @@ import com.intellij.platform.dap.DapExceptionBreakpoint
 import com.intellij.platform.dap.DapExceptionInfo
 import com.intellij.platform.dap.DapExecutionUiContext
 import com.intellij.platform.dap.DapExecutionUiSupport
+import com.intellij.platform.dap.DapPresentationSupport
 import com.intellij.platform.dap.DapStartRequest
 import com.intellij.platform.dap.DebugAdapterDescriptor
 import com.intellij.platform.dap.DebugAdapterId
@@ -109,6 +110,9 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
     override val customization: DapCustomization = object : DapCustomization() {
         override val breakpointsSupport: DapBreakpointsSupport = ByBreakpointsSupport
         override val executionUiSupport: DapExecutionUiSupport = ByOutputSupport { setup?.backend }
+
+        /** Frames whose evaluator asks `by` which expression a position is on: [ByDapEvaluator]. */
+        override val presentationSupport: DapPresentationSupport = ByPresentationSupport
 
         /**
          * bpd's own events, bound to the client's dispatch by name. Nothing else is listened to:
