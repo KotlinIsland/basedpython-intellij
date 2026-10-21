@@ -64,7 +64,9 @@ class ByOutlineRepliesTest {
         assertNull(strings[2].strippedIndent)
         assertEquals(12, strings[3].strippedIndent)
 
-        // the one list: `return text, x`
+        // the name a `def` declares and its parameters', and the one list: `return text, x`
+        assertEquals("f", outline.statements[1].name?.text())
+        assertEquals(listOf("x"), outline.statements[1].parameters.map { it.text() })
         assertEquals(listOf(listOf("text", "x")), outline.lists.map { list -> list.map { it.text() } })
     }
 

@@ -50,6 +50,38 @@ class OutlineSpec private constructor(private val text: CharSequence) {
         /** See [OutlineSpec.list]. */
         fun list(vararg elements: String) = this@OutlineSpec.list(elements.toList())
 
+        /**
+         * A `def` whose header — from `def` to its `:` — is spelled [header], declaring the name
+         * after `def` and the [parameters] spelled in the header, in order.
+         */
+        fun def(header: String, parameters: List<String> = emptyList(), body: Suite.() -> Unit = {}) {
+            val range = find(header)
+            val name = header.removePrefix("def ").takeWhile { it == '_' || it.isLetterOrDigit() }
+            val nameRange = TextRange.from(range.startOffset + header.indexOf(name), name.length)
+            var from = nameRange.endOffset
+            val parameterRanges = parameters.map { parameter ->
+                val start = text.indexOf(parameter, from)
+                require(start in range.startOffset until range.endOffset) { "`$parameter` is not in `$header`" }
+                from = start + parameter.length
+                TextRange.from(start, parameter.length)
+            }
+            val suite = Suite().apply(body)
+            val clauseRange = TextRange(range.startOffset, maxOf(range.endOffset, suite.statements.lastOrNull()?.range?.endOffset ?: 0))
+            statements += ByOutline.Statement(
+                range = clauseRange,
+                clauses = listOf(
+                    ByOutline.Clause(
+                        keyword = TextRange.from(range.startOffset, 3),
+                        colon = TextRange(range.endOffset - 1, range.endOffset),
+                        range = clauseRange,
+                        body = suite.statements,
+                    ),
+                ),
+                name = nameRange,
+                parameters = parameterRanges,
+            )
+        }
+
         /** A simple statement spelled [text]. */
         fun simple(text: String) {
             statements += ByOutline.Statement(find(text))

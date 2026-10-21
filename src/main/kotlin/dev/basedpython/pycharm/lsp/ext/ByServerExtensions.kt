@@ -5,6 +5,7 @@ import org.eclipse.lsp4j.FormattingOptions
 import org.eclipse.lsp4j.ImplementationParams
 import org.eclipse.lsp4j.Position
 import org.eclipse.lsp4j.Range
+import org.eclipse.lsp4j.RenameParams
 import org.eclipse.lsp4j.SemanticTokensParams
 import org.eclipse.lsp4j.SymbolKind
 import org.eclipse.lsp4j.TextDocumentIdentifier
@@ -713,6 +714,10 @@ data class ByOutlineStatement(
     val modifiers: List<ByOutlineModifier> = emptyList(),
     /** On an expression statement that is a call: the call. */
     val call: ByOutlineCall? = null,
+    /** On a `def` or `class`: the name it declares. */
+    val name: Range? = null,
+    /** On a `def`: the names of its parameters, in source order. */
+    val parameters: List<Range> = emptyList(),
 )
 
 /** One clause of a compound statement. */
@@ -793,6 +798,10 @@ class ByNamedImplementationParams(textDocument: TextDocumentIdentifier, position
 /** `textDocument/prepareTypeHierarchy` at a position in one text of the document, as [ByNamedSemanticTokensParams]. */
 class ByNamedTypeHierarchyPrepareParams(textDocument: TextDocumentIdentifier, position: Position, val textHash: String) :
     TypeHierarchyPrepareParams(textDocument, position)
+
+/** `textDocument/rename` at a position in one text of the document, as [ByNamedSemanticTokensParams]. */
+class ByNamedRenameParams(textDocument: TextDocumentIdentifier, position: Position, newName: String, val textHash: String) :
+    RenameParams(textDocument, position, newName)
 
 /** Every fragment in the document, in source order. */
 data class ByInjectionsResponse(val injections: List<ByInjectionFragment> = emptyList())

@@ -22,8 +22,9 @@ import org.eclipse.lsp4j.WorkspaceEdit
 import java.nio.file.Path
 
 /**
- * One edit `by` asked for to an `import` that names a module about to move: replace the text in this
- * usage's range with [newText].
+ * One edit `by` asked for to an `import` that names a module about to move, or to a use of a name a
+ * suggested rename renames (see [ByRenamedNameProcessor]): replace the text in this usage's range
+ * with [newText].
  *
  * A usage like any other refactoring's, so that it shows in the platform's usage preview under the
  * file it is in, can be excluded there, and reaches the processor's rename or move with the rest.

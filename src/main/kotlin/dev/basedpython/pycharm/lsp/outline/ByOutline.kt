@@ -46,6 +46,10 @@ class ByOutline(
         val clauses: List<Clause> = emptyList(),
         val modifiers: List<Modifier> = emptyList(),
         val call: Call? = null,
+        /** On a `def` or `class`: the name it declares. */
+        val name: TextRange? = null,
+        /** On a `def`: the names of its parameters, in source order. */
+        val parameters: List<TextRange> = emptyList(),
     )
 
     /** One clause: `if`, `elif`, a `case`, a function's `def`. */
@@ -171,6 +175,8 @@ object ByOutlineReplies {
             call = statement.call?.let {
                 ByOutline.Call(range(it.callee), it.arguments?.let(::range), it.positionalOnly)
             },
+            name = statement.name?.let(::range),
+            parameters = statement.parameters.map(::range),
         )
 
         fun clause(clause: ByOutlineClause): ByOutline.Clause = ByOutline.Clause(

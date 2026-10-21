@@ -305,6 +305,14 @@
         <moveLeftRightHandler
             language="basedpython"
             implementationClass="dev.basedpython.pycharm.editor.mover.ByMoveElementLeftRightHandler"/>
+        <!-- The gutter's R after a declared name is edited in place, renaming its uses through by's
+             textDocument/rename; the processor is the rename it runs. -->
+        <suggestedRefactoringSupport
+            language="basedpython"
+            implementationClass="dev.basedpython.pycharm.lsp.refactor.BySuggestedRefactoringSupport"/>
+        <renamePsiElementProcessor
+            implementation="dev.basedpython.pycharm.lsp.refactor.ByRenamedNameProcessor"
+            order="first"/>
         <!-- Renaming or moving a .by module or package also rewrites the imports that name it, as
              by works them out (workspace/willRenameFiles) before anything moves. Ahead of the
              platform's own file rename and move, which these extend and which keep everything else. -->
