@@ -6,6 +6,7 @@ import com.intellij.execution.filters.OpenFileHyperlinkInfo
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VirtualFile
+import java.nio.file.Path
 import java.nio.file.Paths
 
 /**
@@ -22,8 +23,16 @@ import java.nio.file.Paths
  * and turned into an [OpenFileHyperlinkInfo] pointing at the (0-based) line/column.
  *
  * Registered through [ByConsoleFilterProvider] via the `consoleFilterProvider` extension point.
+ *
+ * A run on a run target adds a second one with [fromTarget], its translation of the target's paths
+ * into the project's: a traceback from a container names `/opt/project/main.by`, which is no file
+ * here. That one links only what [fromTarget] translates, so a relative path, which both would
+ * otherwise resolve, is linked once — by the default filter.
  */
-class ByConsoleFilter(private val project: Project) : Filter {
+class ByConsoleFilter(
+    private val project: Project,
+    private val fromTarget: ((String) -> Path?)? = null,
+) : Filter {
 
     override fun applyFilter(line: String, entireLength: Int): Filter.Result? {
         // offset of the start of this `line` within the whole document
@@ -57,6 +66,7 @@ class ByConsoleFilter(private val project: Project) : Filter {
 
     private fun resolveExact(path: String): VirtualFile? {
         val lfs = LocalFileSystem.getInstance()
+        if (fromTarget != null) return fromTarget(path)?.let(lfs::findFileByNioFile)
         val asPath = runCatching { Paths.get(path) }.getOrNull() ?: return null
         if (asPath.isAbsolute) {
             return lfs.findFileByNioFile(asPath)

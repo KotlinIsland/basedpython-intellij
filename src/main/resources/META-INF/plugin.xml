@@ -79,6 +79,12 @@
         <configurationType implementation="dev.basedpython.pycharm.run.BasedPythonRunConfigurationType"/>
         <runConfigurationProducer implementation="dev.basedpython.pycharm.run.ByRunFromFileProducer"/>
         <runConfigurationProducer implementation="dev.basedpython.pycharm.run.ByCheckFromFileProducer"/>
+        <!-- Run targets: basedpython as a language a Docker / SSH / WSL target can carry, and the
+             runner that prepares the target a `by run` configuration names. The target types are
+             the IDE's own; see run/target. -->
+        <executionTargetLanguageRuntimeType
+            implementation="dev.basedpython.pycharm.run.target.ByLanguageRuntimeType"/>
+        <programRunner implementation="dev.basedpython.pycharm.run.target.ByTargetProgramRunner"/>
         <!-- The pytest producer is in basedpython-testrunner.xml: its configuration is built on the
              SM test runner. -->
 

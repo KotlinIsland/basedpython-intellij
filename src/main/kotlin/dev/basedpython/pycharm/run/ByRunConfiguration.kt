@@ -6,25 +6,51 @@ import dev.basedpython.pycharm.run.main.ByMissingArgumentsHint
 import dev.basedpython.pycharm.run.main.promptForArguments
 import dev.basedpython.pycharm.run.model.ByProgramModel
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.execution.CantRunException
 import com.intellij.execution.Executor
+import com.intellij.execution.executors.DefaultRunExecutor
 import com.intellij.execution.configurations.ConfigurationFactory
+import com.intellij.execution.configurations.RuntimeConfigurationError
 import com.intellij.execution.configurations.RuntimeConfigurationException
 import com.intellij.execution.configurations.RunConfigurationBase
 import com.intellij.execution.configurations.RunProfileState
 import com.intellij.execution.process.ProcessHandler
 import com.intellij.execution.runners.ExecutionEnvironment
+import com.intellij.execution.target.LanguageRuntimeType
+import com.intellij.execution.target.TargetEnvironmentAwareRunProfile
+import com.intellij.execution.target.TargetEnvironmentConfiguration
+import com.intellij.execution.target.getEffectiveConfiguration
+import com.intellij.execution.target.getEffectiveTargetName
 import com.intellij.execution.ui.ConsoleView
 import com.intellij.openapi.options.SettingsEditor
 import com.intellij.openapi.project.Project
 import com.intellij.util.execution.ParametersListUtil
+import dev.basedpython.pycharm.run.target.ByLanguageRuntimeType
+import dev.basedpython.pycharm.util.BasedPythonBundle
 
 class ByRunConfiguration(project: Project, factory: ConfigurationFactory, name: String) :
-    RunConfigurationBase<ByRunOptions>(project, factory, name), ByConfiguration {
+    RunConfigurationBase<ByRunOptions>(project, factory, name), ByConfiguration, TargetEnvironmentAwareRunProfile {
 
     public override fun getOptions(): ByRunOptions = super.getOptions() as ByRunOptions
 
     override fun getConfigurationEditor(): SettingsEditor<out RunConfigurationBase<ByRunOptions>> =
         ByRunSettingsEditor(project)
+
+    /**
+     * A target this configuration can run on: one with a basedpython runtime, which says where its
+     * `by` is. The "Run on" box offers only these, and its "new target" wizard adds the runtime.
+     */
+    override fun canRunOn(target: TargetEnvironmentConfiguration): Boolean =
+        ByLanguageRuntimeType.runtimeOf(target) != null
+
+    override fun getDefaultLanguageRuntimeType(): LanguageRuntimeType<*> = ByLanguageRuntimeType.getInstance()
+
+    /** Stored where the platform's own configurations keep it, `<target name="…"/>`. */
+    override fun getDefaultTargetName(): String? = options.remoteTarget
+
+    override fun setDefaultTargetName(targetName: String?) {
+        options.remoteTarget = targetName
+    }
 
     /**
      * A blank module is `by run` with no module, which runs the project's configured `run.main`.
@@ -48,8 +74,26 @@ class ByRunConfiguration(project: Project, factory: ConfigurationFactory, name: 
                 )
             }
         }
-        if (!BasedPythonBinaries.isByAvailable(project)) {
+        if (getEffectiveTargetName(project) != null) {
+            checkTarget()
+        } else if (!BasedPythonBinaries.isByAvailable(project)) {
             throw RuntimeConfigurationException("by binary not found — set path in Settings | basedpython")
+        }
+    }
+
+    /**
+     * On a run target the `by` that matters is the target's, so whether one is installed here says
+     * nothing: what has to hold is that the target exists, is valid, and says where its `by` is.
+     *
+     * The platform's validation checks each runtime the target has (so a basedpython runtime with no
+     * `by` path is caught there) but not that it has *this* one: a target set up for Java alone
+     * passes it.
+     */
+    private fun checkTarget() {
+        validateRunTarget(project)
+        val target = getEffectiveConfiguration(this, project) ?: return
+        if (ByLanguageRuntimeType.runtimeOf(target) == null) {
+            throw RuntimeConfigurationError(BasedPythonBundle.message("target.error.noRuntime", target.displayName))
         }
     }
 
@@ -59,6 +103,13 @@ class ByRunConfiguration(project: Project, factory: ConfigurationFactory, name: 
      * should do.
      */
     override fun getState(executor: Executor, environment: ExecutionEnvironment): RunProfileState? {
+        // Debugging needs the debuggee to reach a port and files on this machine; on a target it
+        // could reach neither (see ByCommandLineState.startOnTarget), so it is refused here, before
+        // the debugger has started a session to wait for it.
+        val target = getEffectiveTargetName(project)
+        if (target != null && executor.id != DefaultRunExecutor.EXECUTOR_ID) {
+            throw CantRunException(BasedPythonBundle.message("target.error.executor", executor.actionName, target))
+        }
         if (!askForArguments(executor)) return null
         val opts = options
         val hint = ByMissingArgumentsHint(this, environment)

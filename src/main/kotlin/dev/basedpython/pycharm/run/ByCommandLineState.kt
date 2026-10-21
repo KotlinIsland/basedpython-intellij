@@ -4,33 +4,57 @@ import dev.basedpython.pycharm.env.ByEnvironmentKind
 import dev.basedpython.pycharm.env.ByEnvironments
 import dev.basedpython.pycharm.env.ByLaunch
 import dev.basedpython.pycharm.lsp.BasedPythonBinaries
+import dev.basedpython.pycharm.run.ergonomics.ByConsoleFilter
+import dev.basedpython.pycharm.run.target.ByTargetLaunch
+import dev.basedpython.pycharm.run.target.ByTargetPaths
+import dev.basedpython.pycharm.run.target.byTargetCommandLine
+import dev.basedpython.pycharm.util.BasedPythonBundle
 import com.intellij.execution.ExecutionException
 import com.intellij.execution.configurations.CommandLineState
 import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.execution.process.KillableColoredProcessHandler
+import com.intellij.execution.process.ProcessEvent
 import com.intellij.execution.process.ProcessHandler
 import com.intellij.execution.process.ProcessListener
 import com.intellij.execution.process.ProcessTerminatedListener
 import com.intellij.execution.runners.ExecutionEnvironment
+import com.intellij.execution.target.TargetEnvironment
+import com.intellij.execution.target.TargetEnvironmentAwareRunProfile
+import com.intellij.execution.target.TargetEnvironmentAwareRunProfileState
+import com.intellij.execution.target.TargetEnvironmentRequest
+import com.intellij.execution.target.TargetProgressIndicator
+import com.intellij.execution.target.getEffectiveTargetName
+import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.diagnostic.Logger
+import com.intellij.openapi.progress.EmptyProgressIndicator
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.io.FileUtil
 import com.intellij.util.EnvironmentUtil
 import com.intellij.util.execution.ParametersListUtil
 import java.io.File
+import java.nio.file.Path
 
 private const val PYTHONPATH = "PYTHONPATH"
 private const val PYTHONUNBUFFERED = "PYTHONUNBUFFERED"
+
+private val LOG = Logger.getInstance(ByCommandLineState::class.java)
 
 /**
  * Shared `CommandLineState` for all `by` configurations. Subclasses name the [subcommand] and
  * provide its positional args via [buildSubcommandArgs]; the base handles binary resolution, the
  * Python-version flag, working dir, env vars, and process listener wiring.
+ *
+ * It also runs the command on a run target, when the configuration is one that can be given a
+ * target (a [TargetEnvironmentAwareRunProfile]) and has been: the platform hands the request for the
+ * target to [prepareTargetEnvironmentRequest] and the target it made to
+ * [handleCreatedTargetEnvironment], and [startProcess] then starts the same `by` arguments there
+ * instead of here. What drives those steps is [dev.basedpython.pycharm.run.target.ByTargetProgramRunner].
  */
 abstract class ByCommandLineState(
     protected val project: Project,
     protected val options: ByCommonOptions,
     environment: ExecutionEnvironment,
-) : CommandLineState(environment) {
+) : CommandLineState(environment), TargetEnvironmentAwareRunProfileState {
 
     /** The `by` subcommand this configuration runs, e.g. `run`. */
     protected abstract val subcommand: String
@@ -100,7 +124,35 @@ abstract class ByCommandLineState(
      */
     protected open val startsProgram: Boolean get() = subcommandStartsProgram(subcommand)
 
+    /** Set while a target is being prepared for this run; see [prepareTargetEnvironmentRequest]. */
+    private var targetLaunch: ByTargetLaunch? = null
+
+    /** Where the project landed on the run target once it exists; see [handleCreatedTargetEnvironment]. */
+    private var targetPaths: ByTargetPaths? = null
+
+    /**
+     * Whether the configuration asked for a run target rather than this machine.
+     *
+     * Read from the configuration rather than from whether a target was prepared, so a launch path
+     * that never prepared one fails in [startProcess] instead of quietly running here what the user
+     * said to run elsewhere.
+     */
+    private val runsOnTarget: Boolean
+        get() = (environment.runProfile as? TargetEnvironmentAwareRunProfile)?.getEffectiveTargetName(project) != null
+
+    override fun prepareTargetEnvironmentRequest(request: TargetEnvironmentRequest, targetProgressIndicator: TargetProgressIndicator) {
+        // a local request has no configuration: nothing to upload and nothing to map
+        val target = request.configuration ?: return
+        val root = project.basePath ?: throw ExecutionException(BasedPythonBundle.message("target.error.noProjectDir"))
+        targetLaunch = ByTargetLaunch(target, Path.of(root)).also { it.prepare(request) }
+    }
+
+    override fun handleCreatedTargetEnvironment(targetEnvironment: TargetEnvironment, targetProgressIndicator: TargetProgressIndicator) {
+        targetPaths = targetLaunch?.created(targetEnvironment, targetProgressIndicator)
+    }
+
     override fun startProcess(): ProcessHandler {
+        if (runsOnTarget) return startOnTarget()
         val cmd = byCommandLine(
             project = project,
             options = options,
@@ -122,6 +174,55 @@ abstract class ByCommandLineState(
         return handler
     }
 
+    /**
+     * Starts `by` on the run target [handleCreatedTargetEnvironment] was given, with the arguments a
+     * local run would have, in the working directory's counterpart there.
+     *
+     * The debugger's additions are refused rather than carried over: [infrastructureEnv],
+     * [infrastructureArgs] and [pythonPathPrefix] name files and ports on this machine — a bootstrap
+     * directory, a wrapper script, a port only `localhost` listens on — none of which exist on the
+     * target, so a program started with them would wait for a debugger that can never reach it.
+     */
+    private fun startOnTarget(): ProcessHandler {
+        if (infrastructureEnv.isNotEmpty() || infrastructureArgs.isNotEmpty() || pythonPathPrefix.isNotEmpty()) {
+            throw ExecutionException(BasedPythonBundle.message("target.error.onlyRun"))
+        }
+        val launch = targetLaunch
+        val paths = targetPaths
+        if (launch == null || paths == null) throw ExecutionException(BasedPythonBundle.message("target.error.notPrepared"))
+        val target = environment.getPreparedTargetEnvironment(this, TargetProgressIndicator.EMPTY)
+
+        val localWorkDir = Path.of(options.workingDir.ifBlank { paths.localRoot.toString() })
+        val workDir = paths.toTarget(localWorkDir) ?: throw ExecutionException(
+            BasedPythonBundle.message("target.error.workingDirOutsideProject", localWorkDir, paths.localRoot),
+        )
+        val commandLine = byTargetCommandLine(
+            request = target.request,
+            byPath = launch.byPath,
+            arguments = buildCommand(),
+            workDirectory = workDir,
+            environment = byTargetEnvironment(options, workDir, startsProgram, paths.platform.pathSeparator),
+        )
+        val process = target.createProcess(commandLine, EmptyProgressIndicator())
+        val handler = KillableColoredProcessHandler(process, commandLine.getCommandPresentation(target), commandLine.charset)
+        // the process is the target's, not a tree on this machine, so there is no soft signal to send
+        // first or local tree to walk: destroying it is the target's own stop
+        handler.setShouldKillProcessSoftly(false)
+        handler.addProcessListener(object : ProcessListener {
+            override fun processTerminated(event: ProcessEvent) {
+                // what the target set up for this run goes with it
+                ApplicationManager.getApplication().executeOnPooledThread {
+                    runCatching { target.shutdown() }.onFailure { LOG.info("could not shut the run target down", it) }
+                }
+            }
+        })
+        infrastructureListeners.forEach(handler::addProcessListener)
+        ProcessTerminatedListener.attach(handler)
+        // what the program prints names the target's files; this links them to the project's
+        addConsoleFilters(ByConsoleFilter(project, paths::toLocal))
+        return handler
+    }
+
     /** Everything after the executable, as [byArguments] assembles it. */
     internal fun buildCommand(): List<String> = byArguments(
         subcommand = subcommand,
@@ -132,6 +233,28 @@ abstract class ByCommandLineState(
         infrastructureArgs = infrastructureArgs,
         extraArgsForProgram = extraArgsForProgram,
     )
+}
+
+/**
+ * The environment `by` gets on a run target: the user's variables, unbuffered output, and — when it
+ * starts a program — the working directory on `PYTHONPATH`, for the reasons [byCommandLine] gives.
+ *
+ * No venv activation: the venv [byCommandLine] activates is one on this machine, and `by run` on the
+ * target chooses the target's interpreter itself, as it does here when nothing is activated. The
+ * user's `PYTHONPATH` is taken as written, in the target's terms, and joined with the target's
+ * [separator].
+ */
+internal fun byTargetEnvironment(
+    options: ByCommonOptions,
+    workDirectory: String,
+    startsProgram: Boolean,
+    separator: Char,
+): Map<String, String> = buildMap {
+    put(PYTHONUNBUFFERED, "1")
+    putAll(options.envVars)
+    if (startsProgram) {
+        put(PYTHONPATH, composePythonPath(listOf(workDirectory), options.envVars[PYTHONPATH], separator))
+    }
 }
 
 /**
@@ -252,12 +375,19 @@ internal fun subcommandStartsProgram(subcommand: String): Boolean = subcommand =
  * interpreter, and a project that sets `PYTHONPATH` to reach its own sources would stop importing
  * if the debugger's bootstrap directory overwrote it. A blank or absent [existing] contributes
  * nothing rather than a trailing separator, which CPython would read as "the current directory".
+ *
+ * [separator] is the separator of the machine the program runs on, which for a run target is not
+ * necessarily the IDE's.
  */
-internal fun composePythonPath(prefixes: List<String>, existing: String?): String =
-    (prefixes + (existing?.split(File.pathSeparatorChar) ?: emptyList()))
+internal fun composePythonPath(
+    prefixes: List<String>,
+    existing: String?,
+    separator: Char = File.pathSeparatorChar,
+): String =
+    (prefixes + (existing?.split(separator) ?: emptyList()))
         .filter { it.isNotBlank() }
         .distinct()
-        .joinToString(File.pathSeparator)
+        .joinToString(separator.toString())
 
 /**
  * The `by` argument list for one subcommand: the subcommand, its own flags, then its positionals.
