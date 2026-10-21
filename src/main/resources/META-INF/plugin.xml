@@ -165,6 +165,9 @@
 
         <!-- ===== Stream F: colors + templates ===== -->
         <colorSettingsPage implementation="dev.basedpython.pycharm.editor.colors.BasedPythonColorSettingsPage"/>
+        <!-- Rainbow parameters and locals, the ones `by` marks functionScope, when semantic
+             highlighting is on. -->
+        <highlightVisitor implementation="dev.basedpython.pycharm.lsp.semantic.BasedPythonRainbowVisitor"/>
         <defaultLiveTemplates file="liveTemplates/BasedPython"/>
         <liveTemplateContext
             contextId="BASED_PYTHON"
