@@ -296,6 +296,10 @@
             language="basedpython"
             implementationClass="dev.basedpython.pycharm.lsp.refactor.ByRefactoringSupportProvider"/>
         <inlineActionHandler implementation="dev.basedpython.pycharm.lsp.refactor.ByInlineActionHandler"/>
+        <!-- Code | Unwrap/Remove (Ctrl+Shift+Delete): the options and their edits are by/unwrap's. -->
+        <lang.unwrapDescriptor
+            language="basedpython"
+            implementationClass="dev.basedpython.pycharm.editor.unwrap.ByUnwrapDescriptor"/>
         <!-- Move Element Left/Right (Ctrl+Alt+Shift+Left/Right) among the elements of the lists in
              by's syntax outline. -->
         <moveLeftRightHandler

@@ -341,6 +341,26 @@ interface ByServerExtensions {
      */
     @JsonRequest("by/completeStatement")
     fun completeStatement(args: ByCompleteStatementParams): CompletableFuture<ByCompletedStatement?>
+
+    /**
+     * What Code | Unwrap/Remove offers around a range: each statement around it that unwraps into
+     * one of its suites, and each clause that can be removed, innermost first — see
+     * [dev.basedpython.pycharm.editor.unwrap.ByUnwrapDescriptor].
+     *
+     * **Why the server.** Which suite a caret is in, which `else` is whose, and which lines of a
+     * suite are its indentation rather than the inside of a string literal are the parser's to say;
+     * whether a `break` would leave a different loop once its loop is gone, and whether a `try`
+     * can do without its last `except`, are the language's.
+     *
+     * **Why not `textDocument/codeAction`.** The platform lists the options in a popup and, while
+     * one is selected, marks what it deletes apart from what it keeps. A code action carries no
+     * ranges to draw that with.
+     *
+     * A `null` answer means the server declined — language services are off, or the document is a
+     * notebook or a template. A `by` from before the request answers `MethodNotFound`.
+     */
+    @JsonRequest("by/unwrap")
+    fun unwrap(params: ByUnwrapParams): CompletableFuture<ByUnwrapResponse?>
 }
 
 /** The file or directory to name. */
@@ -415,6 +435,36 @@ data class ByCompletedStatement(
     val edits: List<TextEdit> = emptyList(),
     /** Where the caret goes, in the text as [edits] leave it. */
     val caret: Position? = null,
+)
+
+/**
+ * Where to unwrap: the caret or the selection, in the text [textHash] names (see
+ * [dev.basedpython.pycharm.lsp.ByTextHash]).
+ *
+ * Field names are the wire format and must match `ty_server`'s `UnwrapParams`, which is
+ * `deny_unknown_fields`; `textHash` is taken out by the server's dispatcher before that.
+ */
+data class ByUnwrapParams(val textDocument: TextDocumentIdentifier, val range: Range, val textHash: String)
+
+/** The options around a range. */
+data class ByUnwrapResponse(
+    /** Innermost first; empty when nothing around the range unwraps. */
+    val options: List<ByUnwrapOption> = emptyList(),
+    /** Why there are no options at all, when it is not for want of a statement: the file does not parse. */
+    val refused: String? = null,
+)
+
+/** One way to unwrap or remove. */
+data class ByUnwrapOption(
+    /** `Unwrap 'if...'`, `Remove 'else...'`. */
+    val title: String? = null,
+    /** What it rewrites: the whole statement for an unwrap, the clause for a removal. */
+    val range: Range? = null,
+    /** The parts of [range] that stay; empty for a removal. */
+    val kept: List<Range> = emptyList(),
+    /** The edits, many small ones; absent when the option cannot be applied, and [refused] says why. */
+    val edits: List<TextEdit>? = null,
+    val refused: String? = null,
 )
 
 /**
