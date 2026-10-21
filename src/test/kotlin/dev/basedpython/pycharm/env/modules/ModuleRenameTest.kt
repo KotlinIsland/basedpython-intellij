@@ -115,7 +115,6 @@ class ModuleRenameTest {
                 when (op) {
                     is EnvOp.Remove -> text.replace("\"${op.packages.single()}\"", "")
                     is EnvOp.Add -> text.replace("${op.target.key} = [", "${op.target.key} = [\"${op.requirements.single()}\"")
-                    else -> text
                 },
             )
             return true
