@@ -134,9 +134,8 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
     /**
      * The line and exception breakpoint types.
      *
-     * On the descriptor rather than on [ByBreakpointsSupport], because the descriptor is where both
-     * ends of the supported range read it: 263.5701 declares it here and nowhere else, and 263.5153,
-     * which also offers it on the support, reads the descriptor's when the support has none.
+     * On the descriptor rather than on [ByBreakpointsSupport], because 263.5701 declares it here and
+     * nowhere else.
      */
     @Suppress("OVERRIDE_DEPRECATION")
     override val breakpointsDescription: DapBreakpointsDescription = object : DapBreakpointsDescription(

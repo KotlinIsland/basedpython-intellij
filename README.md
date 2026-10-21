@@ -316,9 +316,9 @@ support, run configurations, CLI actions, and editor tooling.
   guard, async def, match/case, enum, and pytest fixture.
 
 ## Requirements
-- IntelliJ Platform 2026.3, build 263.5153 or newer (IntelliJ IDEA Ultimate or PyCharm
-  Professional) — the build whose rewritten Debug Adapter Protocol client `.by` debugging is built
-  on. Not the Community editions: `com.intellij.modules.lsp` is a paid-IDE module, which is why
+- IntelliJ Platform 2026.3, build 263.5701 or newer (IntelliJ IDEA Ultimate or PyCharm
+  Professional). `.by` debugging is built on the Debug Adapter Protocol client 263.5153 rewrote,
+  and the 263.5153 builds themselves are EAPs that have expired. Not the Community editions: `com.intellij.modules.lsp` is a paid-IDE module, which is why
   Marketplace lists IntelliJ IDEA Community and PyCharm Community as unsupported products.
 - A project with basedpython installed (`uv add --dev basedpython`), exposing `by` and
   `buff` in `.venv/` or on `PATH`.

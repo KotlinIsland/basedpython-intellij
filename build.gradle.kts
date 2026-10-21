@@ -18,7 +18,7 @@ plugins {
 // follow the platform, and it did — out from under everyone at once: 263.5701.9 landing in the
 // snapshot repository took `intellij.platform.vcs` out of the core classloader, and every checkout
 // stopped compiling with nothing changed here and nothing to bisect. Compiling against the floor is
-// also what holds the floor honest: an API newer than 263.5153 is a compile error here, where
+// also what holds the floor honest: an API newer than 263.5701 is a compile error here, where
 // against the newest snapshot it compiled clean and nothing checked the oldest build `sinceBuild`
 // lets install the plugin.
 //
@@ -26,8 +26,10 @@ plugins {
 // snapshot as well as this build (see `ides { }`), and `-PplatformVersion=263.+` — or any build —
 // compiles and tests against the top, which catches what the verifier cannot.
 //
-// 263.5153.20 because it is the build the floor was measured on (see `sinceBuild`).
-val platformVersion: String = providers.gradleProperty("platformVersion").getOrElse("263.5153.20-EAP-CANDIDATE")
+// 263.5701.42 because it is the build the floor moved to when the 263.5153 EAPs expired (see
+// `sinceBuild`). It is a build of the floor's branch rather than its first: 263.5701.9 and
+// 263.5701.37 are older, and `sinceBuild` admits them.
+val platformVersion: String = providers.gradleProperty("platformVersion").getOrElse("263.5701.42-EAP-CANDIDATE")
 
 dependencies {
   testImplementation(platform("org.junit:junit-bom:5.14.2"))
@@ -73,10 +75,9 @@ dependencies {
     bundledModule("intellij.platform.dap.protocol")
     bundledModule("intellij.libraries.kotlinx.serialization.json")
     // The commit workflow's API (CheckinHandlerFactory, CommitCheck, CheckinProjectPanel), which
-    // the before-commit cleanup is built on. Through 263.5153 the module is embedded in the core
+    // the before-commit cleanup is built on. Through 263.5153 the module was embedded in the core
     // classloader and so on the compile classpath unasked; 263.5701 made it a module of its own,
-    // on the classpath only when named. Naming it on the floor as well means that move is not
-    // one to rediscover the next time the compile target moves. Declared in plugin.xml too.
+    // on the classpath only when named. Declared in plugin.xml too.
     bundledModule("intellij.platform.vcs")
     // The Problems view (ProblemsCollector, FileProblem, the Project Errors tab), which `by`'s
     // whole-project diagnostics are listed in. Content modules of the bundled Problems View plugin;
@@ -377,7 +378,12 @@ intellijPlatform {
       // classes. None of the old classes survive and none of the new ones exist on 262, so no
       // build of the debugger links against both: against 263.5153 the 262-compiled plugin had 70
       // unresolved references. The floor went where the platform is going, 2026.3.
-      sinceBuild = "263.5153"
+      //
+      // 263.5701, not 263.5153, since the 263.5153 builds can no longer run: IU 263.5153.20 and
+      // PyCharm 263.5153.49 are EAPs that stop at "EAP Build Expired" on start (measured
+      // 2026-10-22), so the floor admitted only IDEs that do not start, and nothing compiled or
+      // verified against it any more.
+      sinceBuild = "263.5701"
       untilBuild = "263.*"
     }
 

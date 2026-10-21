@@ -1,5 +1,11 @@
 ## [Unreleased]
 
+### Changed
+
+- **The minimum IDE is build 263.5701**, where it was 263.5153. The 263.5153 builds were EAPs and
+  have expired: they stop at "EAP Build Expired" on start, so the old minimum admitted only IDEs that
+  cannot run. The plugin now compiles and tests against IU-263.5701.42.
+
 ## [0.0.4]
 
 ### Added
