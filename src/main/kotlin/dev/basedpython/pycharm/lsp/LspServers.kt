@@ -36,6 +36,7 @@ import com.intellij.platform.lsp.api.customization.LspGoToTypeDefinitionDisabled
 import com.intellij.platform.lsp.api.customization.LspInheritanceMarkersCustomizer
 import com.intellij.platform.lsp.api.customization.LspInheritanceMarkersSupport
 import com.intellij.platform.lsp.api.customization.LspInlayHintDisabled
+import com.intellij.platform.lsp.api.customization.LspOnTypeFormattingSupport
 import com.intellij.platform.lsp.api.customization.LspRenameDisabled
 import com.intellij.platform.lsp.api.customization.LspRenameSupport
 import com.intellij.platform.lsp.api.customization.LspSelectionRangeDisabled
@@ -307,6 +308,21 @@ internal class ByLspServerDescriptor(
      * the provider sends.
      */
     override val inlayHintCustomizer = LspInlayHintDisabled
+
+    /**
+     * `by`'s `textDocument/onTypeFormatting`, which the platform leaves off unless a customization
+     * turns it on: typing the `:` that ends an `else`, `elif`, `except`, `finally` or a further
+     * `case` header moves the clause out to the statement it continues, which is where Enter left
+     * it one level too deep. Which statement that is, and whether the `:` ends the header at all, is
+     * `by`'s parse.
+     *
+     * `by` triggers on `:` alone. The platform also runs on-type formatting from Enter when a server
+     * lists `\n`, which `by` does not, so [dev.basedpython.pycharm.editor.smart.BasedPythonEnterHandler]
+     * stays the only thing that indents a new line. The request goes out after the key's own
+     * handling and its edit is applied only if nothing has been typed since, so a quick next key
+     * leaves the clause where it is.
+     */
+    override val onTypeFormattingCustomizer = LspOnTypeFormattingSupport()
   }
 
   private object ByDocumentHighlights : LspDocumentHighlightsSupport() {

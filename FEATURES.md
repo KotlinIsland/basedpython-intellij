@@ -239,7 +239,8 @@ lexical colour only. Don't reintroduce guessed semantic colour; fix the LSP path
 - [x] Breadcrumbs — LSP document symbols (`LspFileBreadcrumbsCollector`)
 - [x] Code folding — LSP folding ranges (`LspFoldingBuilder`). Folding collects builders via `allForLanguageOrAny`, so the plugin's own builder ran *alongside* the LSP one and doubled up the regions
 - [x] Surround-with (try/except, if, while, brackets)
-- [x] Smart enter / smart backspace (dedent)
+- [x] Enter after a header's `:` starts the suite one level deeper (editor.smart.BasedPythonEnterHandler, from `by/syntaxOutline`); Backspace in leading indentation goes back to the previous indent stop
+- [x] A clause moved out when its `:` is typed — `else`, `elif`, `except`, `finally` and a further `case`, typed in the body Enter left them in, line up with the statement they continue as the `:` goes in. `by`'s `textDocument/onTypeFormatting` (`ty_ide::on_type_formatting`), triggered by `:` alone and switched on for `by` with the platform's `LspOnTypeFormattingSupport`. Which statement an `else` continues is read off a parse of the text above the line — the innermost one still open that can take the clause and is not deeper than the line already is — so `for … if … else:` goes to the `if`, an `else:` already at the loop's column stays with the loop, an `if` that has its `else` is passed over, and a clause is only ever moved out. A `:` that does not end the header (a slice, a dict, a lambda's) and `case: int = 1` move nothing. The edit is applied only if nothing has been typed since the `:`, and Enter is not a trigger, so it never meets the Enter handler's indent
 - [x] Move statement up/down (indentation-block aware)
 - [x] Extend/shrink selection (LSP selection range — enabled on `by`)
 - [x] Parameter info popup (LSP signature help — enabled on `by`)

@@ -14,6 +14,7 @@ import com.intellij.platform.lsp.api.customization.LspGoToDefinitionDisabled
 import com.intellij.platform.lsp.api.customization.LspGoToTypeDefinitionDisabled
 import com.intellij.platform.lsp.api.customization.LspInheritanceMarkersSupport
 import com.intellij.platform.lsp.api.customization.LspInlayHintDisabled
+import com.intellij.platform.lsp.api.customization.LspOnTypeFormattingSupport
 import com.intellij.platform.lsp.api.customization.LspRenameDisabled
 import com.intellij.platform.lsp.api.customization.LspRenameSupport
 import com.intellij.platform.lsp.api.customization.LspSelectionRangeDisabled
@@ -201,6 +202,13 @@ class LspServerDescriptorTest {
   fun `by leaves renaming a plain text file to whoever else renames it`() = onEdt {
     val c = byDescriptor().lspCustomization.renameCustomizer as LspRenameSupport
     assertFalse(c.shouldRunRename(fixture.configureByText("notes.txt", "x\n")))
+  }
+
+  @Test
+  fun `by's on-type formatting is turned on`() = onEdt {
+    // Off in the platform unless a customization turns it on: without it, typing the `:` of an
+    // `else` in the body it closes sends nothing, and the `else` stays a level too deep.
+    assertTrue(byDescriptor().lspCustomization.onTypeFormattingCustomizer is LspOnTypeFormattingSupport)
   }
 
   @Test
