@@ -420,6 +420,10 @@
         <lang.smartEnterProcessor
             language="basedpython"
             implementationClass="dev.basedpython.pycharm.editor.smart.BySmartEnterProcessor"/>
+        <!-- Join Lines (Ctrl+Shift+J) that knows backslashes, brackets, strings and statements, from
+             `by`'s outline. -->
+        <joinLinesHandler order="first"
+            implementation="dev.basedpython.pycharm.editor.smart.BasedPythonJoinLinesHandler"/>
         <!-- Strip trailing spaces on save leaves string literals alone: the spaces are part of the
              string. Which lines are inside one is `by`'s outline; see the class. -->
         <stripTrailingSpacesFilterFactory
