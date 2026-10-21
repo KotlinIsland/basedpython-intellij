@@ -37,6 +37,7 @@ import org.jetbrains.concurrency.Promise
 import java.io.OutputStream
 import java.nio.file.Path
 import java.nio.file.Paths
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Build | Build Project, Build Module and Rebuild Project in a basedpython project: `by build`,
@@ -88,7 +89,8 @@ internal class ByBuildView(private val project: Project) {
     fun start(finished: (ProjectTaskRunner.Result) -> Unit) {
         val stop = Stop(title)
         val descriptor = DefaultBuildDescriptor(Any(), title, project.basePath.orEmpty(), System.currentTimeMillis())
-            .withProcessHandler(stop, null)
+            // The console it is shown in is what closes with the plugin; see ByBuildWindow.
+            .withProcessHandler(stop) { console -> ByBuildWindow.getInstance(project).shown(console, stop) }
             // `by` names its sources relative to where it was started, which is the project base.
             .withExecutionFilter(
                 RegexpFilter(project, "${RegexpFilter.FILE_PATH_MACROS}:${RegexpFilter.LINE_MACROS}:${RegexpFilter.COLUMN_MACROS}"),
@@ -99,13 +101,15 @@ internal class ByBuildView(private val project: Project) {
                 override fun getBuildDescriptor(): DefaultBuildDescriptor = descriptor
             },
         )
+        stop.progress = progress
         stop.startNotify()
         val cmd = try {
             projectBuildCommandLine(project).withEnvironment(ByBuildDiagnostics.FORMAT_VARIABLE, ByBuildDiagnostics.FORMAT)
         } catch (e: ExecutionException) {
-            progress.output("${e.message}\n", ProcessOutputType.STDERR)
-            progress.fail()
-            stop.ended(-1)
+            stop.ended(-1) {
+                progress.output("${e.message}\n", ProcessOutputType.STDERR)
+                progress.fail()
+            }
             finished(ByBuildResult.FAILURE)
             return
         }
@@ -113,26 +117,27 @@ internal class ByBuildView(private val project: Project) {
         stop.build = service.launch {
             val result = try {
                 val output = service.build(cmd, title, Output(progress))
-                if (output.exitCode == 0) {
-                    progress.finish()
-                } else {
-                    // Said even when `by` said why, because a `by` killed by a signal says nothing.
-                    progress.output(BasedPythonBundle.message("build.view.exited", output.exitCode) + "\n", ProcessOutputType.STDERR)
-                    progress.fail()
+                stop.ended(output.exitCode) {
+                    if (output.exitCode == 0) {
+                        progress.finish()
+                    } else {
+                        // Said even when `by` said why, because a `by` killed by a signal says nothing.
+                        progress.output(BasedPythonBundle.message("build.view.exited", output.exitCode) + "\n", ProcessOutputType.STDERR)
+                        progress.fail()
+                    }
                 }
-                stop.ended(output.exitCode)
                 if (output.exitCode == 0) ByBuildResult.SUCCESS else ByBuildResult.FAILURE
             } catch (e: CancellationException) {
                 // Stopped — from the window, the progress, or by the project or plugin going away,
                 // when there is no window left to tell.
-                if (!project.isDisposed) progress.cancel()
-                stop.ended(-1)
+                stop.ended(-1) { if (!project.isDisposed) progress.cancel() }
                 finished(ByBuildResult.ABORTED)
                 throw e
             } catch (e: ExecutionException) {
-                progress.output("${e.message}\n", ProcessOutputType.STDERR)
-                progress.fail()
-                stop.ended(-1)
+                stop.ended(-1) {
+                    progress.output("${e.message}\n", ProcessOutputType.STDERR)
+                    progress.fail()
+                }
                 ByBuildResult.FAILURE
             }
             withContext(Dispatchers.IO) { refreshBuildDirectories() }
@@ -204,9 +209,14 @@ internal class ByBuildView(private val project: Project) {
      *
      * Lets go of the build once it is over, since the window keeps this for as long as it shows it.
      */
-    private class Stop(private val name: String) : BuildProcessHandler() {
+    class Stop(private val name: String) : BuildProcessHandler() {
         @Volatile
         var build: Job? = null
+
+        /** The build's place in the window, which [ended] reports the end to. */
+        lateinit var progress: BuildProgress<BuildProgressDescriptor>
+
+        private val over = AtomicBoolean()
 
         override fun getExecutionName(): String = name
 
@@ -222,9 +232,24 @@ internal class ByBuildView(private val project: Project) {
 
         override fun getProcessInput(): OutputStream? = null
 
-        fun ended(exitCode: Int) {
+        /**
+         * Reports the build over — [report] tells the window how — once: whichever of the build and
+         * [abandon] gets here first.
+         */
+        fun ended(exitCode: Int, report: () -> Unit) {
+            if (!over.compareAndSet(false, true)) return
+            report()
             build = null
             notifyProcessTerminated(exitCode)
+        }
+
+        /**
+         * Cancels the build and reports it cancelled at once, rather than when its cancellation is
+         * done, so that a tab closed straight after has no running build to ask the user about.
+         */
+        fun abandon() {
+            build?.cancel()
+            ended(-1) { progress.cancel() }
         }
     }
 }
