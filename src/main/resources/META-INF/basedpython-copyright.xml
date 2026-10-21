@@ -1,0 +1,11 @@
+<!--
+  Loaded only when the Copyright plugin is present: it writes and updates the notice at the top of a
+  `.by` file (editor.copyright.ByUpdateCopyrightsProvider). Optional because a required dependency
+  would stop basedpython loading in an IDE without the plugin, or with it switched off.
+-->
+<idea-plugin>
+    <extensions defaultExtensionNs="com.intellij.copyright">
+        <updater filetype="basedpython"
+                 implementationClass="dev.basedpython.pycharm.editor.copyright.ByUpdateCopyrightsProvider"/>
+    </extensions>
+</idea-plugin>

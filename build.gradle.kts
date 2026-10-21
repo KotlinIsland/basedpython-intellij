@@ -57,6 +57,9 @@ dependencies {
     // The IDE's MCP server, which `by`'s answers are offered to agents through. An optional
     // dependency in plugin.xml (basedpython-mcp.xml).
     bundledPlugin("com.intellij.mcpServer")
+    // The Copyright plugin, which writes the notice at the top of a `.by` file through an updater
+    // registered here. An optional dependency in plugin.xml (basedpython-copyright.xml).
+    bundledPlugin("com.intellij.copyright")
     // Spellchecker ships as a platform module, not a bundled plugin.
     bundledModule("intellij.spellchecker")
     // The platform's Debug Adapter Protocol client (DebugAdapterSupportProvider, DapProcessStarter,

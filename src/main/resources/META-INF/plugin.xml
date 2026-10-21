@@ -16,6 +16,8 @@
     <depends optional="true" config-file="basedpython-testrunner.xml">intellij.testRunner.plugin</depends>
     <!-- What `by` knows, offered to agents through the IDE's MCP server; see basedpython-mcp.xml. -->
     <depends optional="true" config-file="basedpython-mcp.xml">com.intellij.mcpServer</depends>
+    <!-- The copyright notice at the top of a `.by` file; see basedpython-copyright.xml. -->
+    <depends optional="true" config-file="basedpython-copyright.xml">com.intellij.copyright</depends>
 
     <!-- The platform's Debug Adapter Protocol client, which `.by` debugging is built on. A platform
          module rather than a plugin, so it is declared the v2 way; the legacy <depends> entries

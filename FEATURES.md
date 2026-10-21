@@ -250,6 +250,7 @@ lexical colour only. Don't reintroduce guessed semantic colour; fix the LSP path
 - [x] Trailing whitespace / final newline handling (platform On-Save options apply)
 - [x] Indent detector for `.by` (editor.indent.BasedPythonFileIndentOptionsProvider)
 - [x] Wrap-on-typing, continuation indents (CONTINUATION_INDENT_SIZE via indent provider; wrap-on-typing platform default)
+- [x] **Copyright notices** (`editor.copyright.ByUpdateCopyrightsProvider`, `copyright.updater`, in `basedpython-copyright.xml` under an optional dependency on `com.intellij.copyright`) — *Update Copyright*, the commit option and the on-save action write, replace and remove the notice at the top of a `.by` file in `#` lines, above a module docstring and below a `#!` line. The plugin skipped `.by` files before (no updater for the type; measured live, the file came back untouched) and now writes the profile's notice. Lexical: the header is the run of comment and whitespace leaves the file starts with
 
 ## 10. Inspections / intentions (local, no LSP)
 - [x] Spellchecking in strings/comments/identifiers
