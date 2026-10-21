@@ -431,6 +431,9 @@
              string. Which lines are inside one is `by`'s outline; see the class. -->
         <stripTrailingSpacesFilterFactory
             implementation="dev.basedpython.pycharm.editor.ByStripTrailingSpacesFilterFactory"/>
+        <!-- Text pasted inside a string literal is escaped so the literal holds it. -->
+        <copyPastePreProcessor
+            implementation="dev.basedpython.pycharm.editor.BasedPythonStringPasteProcessor"/>
 
         <!-- ===== Stream W: environment UX ===== -->
         <editorNotificationProvider
