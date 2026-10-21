@@ -168,6 +168,10 @@
         <!-- Rainbow parameters and locals, the ones `by` marks functionScope, when semantic
              highlighting is on. -->
         <highlightVisitor implementation="dev.basedpython.pycharm.lsp.semantic.BasedPythonRainbowVisitor"/>
+        <!-- Focus mode: the definitions in `by`'s document symbols are the zones. -->
+        <focusModeProvider
+            language="basedpython"
+            implementationClass="dev.basedpython.pycharm.lsp.outline.ByFocusModeProvider"/>
         <defaultLiveTemplates file="liveTemplates/BasedPython"/>
         <liveTemplateContext
             contextId="BASED_PYTHON"

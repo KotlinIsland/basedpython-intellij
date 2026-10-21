@@ -232,6 +232,7 @@ lexical colour only. Don't reintroduce guessed semantic colour; fix the LSP path
 
 ## 8. Code intelligence (beyond LSP)
 - [x] Structure view — LSP document symbols. The platform's `LspStructureViewFactory` is registered for every language; the plugin's own factory shadowed it
+- [x] **Focus mode** (`lsp.outline.ByFocusModeProvider`, `focusModeProvider`) — *View | Appearance | Focus Mode* dims all but the definition the caret is in. The zones are the definitions in `by`'s `textDocument/documentSymbol`, as Kotlin's are its declarations: each top-level class and function, and each function of a class, decorators included. Verified live against `by` main: `class Greeter`, its `greet`, and `compute` came back as zones, a module-level `let` did not. The platform caches zones against the PSI, so a file asked about while `by` could not answer (whole file in focus) is re-parsed when the server comes up (`ByFocusZones`)
 - [x] Breadcrumbs — LSP document symbols (`LspFileBreadcrumbsCollector`)
 - [x] Code folding — LSP folding ranges (`LspFoldingBuilder`). Folding collects builders via `allForLanguageOrAny`, so the plugin's own builder ran *alongside* the LSP one and doubled up the regions
 - [x] Surround-with (try/except, if, while, brackets)
