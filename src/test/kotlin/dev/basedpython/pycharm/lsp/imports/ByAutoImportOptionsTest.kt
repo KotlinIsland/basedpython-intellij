@@ -71,7 +71,7 @@ class ByAutoImportOptionsTest {
     fun `a paste setting changed here is written`() = onEdt {
         settings.ADD_IMPORTS_ON_PASTE = CodeInsightSettings.YES
         val options = ByAutoImportOptions().also { created += it }
-        val component = options.createComponent()!!
+        val component = options.createComponent()
         options.reset()
 
         val combo = UIUtil.findComponentOfType(component, ComboBox::class.java)!!
@@ -87,7 +87,7 @@ class ByAutoImportOptionsTest {
     fun `unambiguous imports on the fly are off until switched on`() = onEdt {
         BasedPythonAppSettings.getInstance().addUnambiguousImportsOnTheFly = false
         val options = ByAutoImportOptions().also { created += it }
-        val component = options.createComponent()!!
+        val component = options.createComponent()
         options.reset()
 
         val box = UIUtil.findComponentOfType(component, JBCheckBox::class.java)!!

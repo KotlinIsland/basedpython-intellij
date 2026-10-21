@@ -52,8 +52,8 @@ internal sealed interface ByWorkspaceCheck {
                 ByAnswer.None -> Not(BasedPythonBundle.message("inspection.by.noAnswer"))
                 ByAnswer.Failed -> Not(
                     when {
-                        refusal != null && isMethodNotFound(refusal!!) -> BasedPythonBundle.message("inspection.by.unsupported")
-                        refusal != null -> BasedPythonBundle.message("inspection.by.refused", refusal!!.message.orEmpty())
+                        refusal != null && isMethodNotFound(refusal) -> BasedPythonBundle.message("inspection.by.unsupported")
+                        refusal != null -> BasedPythonBundle.message("inspection.by.refused", refusal.message.orEmpty())
                         else -> BasedPythonBundle.message("inspection.by.noAnswer")
                     },
                 )

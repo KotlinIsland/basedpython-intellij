@@ -155,7 +155,7 @@ class ByBpdConnection private constructor(
                 // read after the process was seen to have ended, so this read saw everything the
                 // wrapper will ever write
                 if (ended) {
-                    throw ExecutionException(exited(debuggee?.exitCode, said?.text().orEmpty(), last))
+                    throw ExecutionException(exited(debuggee.exitCode, said?.text().orEmpty(), last))
                 }
                 if (waited >= timeout) {
                     throw ExecutionException(

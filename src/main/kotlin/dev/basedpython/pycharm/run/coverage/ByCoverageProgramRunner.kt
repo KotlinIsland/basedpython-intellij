@@ -48,7 +48,7 @@ class ByCoverageProgramRunner : GenericProgramRunner<RunnerSettings>() {
         Files.deleteIfExists(Path.of(report))
         byState.infrastructureArgs += listOf(COVERAGE_FLAG, report)
         FileDocumentManager.getInstance().saveAllDocuments()
-        val result = state.execute(environment.executor, this) ?: return null
+        val result = state.execute(environment.executor, this)
         CoverageHelper.attachToProcess(configuration, result.processHandler, environment.runnerSettings)
         return showRunContent(result, environment)
     }

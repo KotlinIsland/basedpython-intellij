@@ -29,7 +29,7 @@ internal class Debounced(
         scope.launch {
             for (request in requests) {
                 // Every request that arrives inside the window restarts it.
-                while (withTimeoutOrNull(quiet) { requests.receive() } != null) Unit
+                while (withTimeoutOrNull(quiet) { requests.receive() } != null) {}
                 try {
                     action()
                 } catch (e: CancellationException) {
