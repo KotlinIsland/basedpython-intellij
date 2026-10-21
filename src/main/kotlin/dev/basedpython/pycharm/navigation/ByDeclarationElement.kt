@@ -4,6 +4,7 @@ import com.intellij.lang.Language
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.fileEditor.OpenFileDescriptor
 import com.intellij.platform.lsp.api.LspClient
+import com.intellij.platform.lsp.api.customization.LspSymbolKindCustomizer
 import com.intellij.platform.lsp.util.getOffsetInDocument
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
@@ -63,6 +64,12 @@ internal class ByDeclarationElement(
 
     companion object {
         /**
+         * The icons `by`'s descriptor shows symbol kinds with: it keeps the platform's default
+         * customizer, and a descriptor's customizer is only for the platform to call.
+         */
+        private val SYMBOL_KINDS = LspSymbolKindCustomizer()
+
+        /**
          * The declaration whose name starts at [position] in the file [uri] names, as [client] maps
          * URIs, or null when that file is not there. Inside a read action.
          */
@@ -78,7 +85,7 @@ internal class ByDeclarationElement(
             val file = PsiManager.getInstance(client.project).findFile(virtualFile) ?: return null
             val document = FileDocumentManager.getInstance().getDocument(virtualFile) ?: return null
             val offset = getOffsetInDocument(document, position) ?: return null
-            val icon = kind?.let { client.descriptor.lspCustomization.symbolKindCustomizer.getIcon(it) }
+            val icon = kind?.let { SYMBOL_KINDS.getIcon(it) }
             return ByDeclarationElement(file, offset, name, location, icon)
         }
     }
