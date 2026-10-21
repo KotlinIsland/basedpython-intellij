@@ -3,7 +3,6 @@ package dev.basedpython.pycharm.lsp.vision
 import com.intellij.codeInsight.codeVision.CodeVisionAnchorKind
 import com.intellij.codeInsight.codeVision.CodeVisionEntry
 import com.intellij.codeInsight.codeVision.CodeVisionRelativeOrdering
-import com.intellij.codeInsight.codeVision.codeVisionEntryMouseEventKey
 import com.intellij.codeInsight.codeVision.settings.PlatformCodeVisionIds
 import com.intellij.codeInsight.codeVision.ui.model.TextCodeVisionEntry
 import com.intellij.codeInsight.daemon.impl.analysis.HighlightingLevelManager
@@ -44,6 +43,11 @@ import org.eclipse.lsp4j.ReferenceContext
 import org.eclipse.lsp4j.ReferenceParams
 import org.eclipse.lsp4j.TextDocumentIdentifier
 import org.jetbrains.annotations.Nls
+import java.awt.GraphicsEnvironment
+import java.awt.MouseInfo
+import java.awt.Point
+import java.awt.event.MouseEvent
+import javax.swing.SwingUtilities
 
 /**
  * The code vision above each declaration of a `.by` file — *3 usages*, *2 overrides* — as Java,
@@ -124,7 +128,7 @@ internal sealed class ByCountsCodeVisionProvider(private val count: ByUsageCount
         val kind = entry.getUserData(DECLARATION_KIND)
         val file = FileDocumentManager.getInstance().getFile(editor.document) ?: return
         val server = byServerFor(project, file) ?: return
-        val mouseEvent = entry.getUserData(codeVisionEntryMouseEventKey)
+        val mouseEvent = clickAt(editor)
         val title = chooserTitle(name, kind)
         project.service<ByCodeVisionScope>().scope.launch {
             val places = withBackgroundProgress(project, BasedPythonBundle.message("code.vision.progress", name)) {
@@ -151,6 +155,20 @@ internal sealed class ByCountsCodeVisionProvider(private val count: ByUsageCount
 
     private fun hint(editor: Editor, text: @Nls String) {
         HintManager.getInstance().showInformationHint(editor, text)
+    }
+
+    /**
+     * The click on a count, for the chooser to open where it was rather than at the caret. The
+     * platform hands its own providers the click's event under an internal key; read while the click
+     * is being handled, the pointer is where it was clicked. `null` with no pointer to read, which
+     * leaves the chooser at the caret.
+     */
+    private fun clickAt(editor: Editor): MouseEvent? {
+        if (GraphicsEnvironment.isHeadless()) return null
+        val screen = MouseInfo.getPointerInfo()?.location ?: return null
+        val component = editor.contentComponent
+        val at = Point(screen).also { SwingUtilities.convertPointFromScreen(it, component) }
+        return MouseEvent(component, MouseEvent.MOUSE_CLICKED, System.currentTimeMillis(), 0, at.x, at.y, 1, false)
     }
 
     companion object {
