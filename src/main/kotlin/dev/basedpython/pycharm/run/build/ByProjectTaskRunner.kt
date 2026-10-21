@@ -23,7 +23,6 @@ import com.intellij.task.ModuleBuildTask
 import com.intellij.task.ProjectTask
 import com.intellij.task.ProjectTaskContext
 import com.intellij.task.ProjectTaskRunner
-import com.intellij.task.TaskRunnerResults
 import dev.basedpython.pycharm.lang.dialect.BasedPythonProjectDetector
 import dev.basedpython.pycharm.lsp.build.ByBuildOutputs
 import dev.basedpython.pycharm.run.ByBuildService
@@ -107,7 +106,7 @@ internal class ByBuildView(private val project: Project) {
             progress.output("${e.message}\n", ProcessOutputType.STDERR)
             progress.fail()
             stop.ended(-1)
-            finished(TaskRunnerResults.FAILURE)
+            finished(ByBuildResult.FAILURE)
             return
         }
         val service = ByBuildService.getInstance(project)
@@ -122,19 +121,19 @@ internal class ByBuildView(private val project: Project) {
                     progress.fail()
                 }
                 stop.ended(output.exitCode)
-                if (output.exitCode == 0) TaskRunnerResults.SUCCESS else TaskRunnerResults.FAILURE
+                if (output.exitCode == 0) ByBuildResult.SUCCESS else ByBuildResult.FAILURE
             } catch (e: CancellationException) {
                 // Stopped — from the window, the progress, or by the project or plugin going away,
                 // when there is no window left to tell.
                 if (!project.isDisposed) progress.cancel()
                 stop.ended(-1)
-                finished(TaskRunnerResults.ABORTED)
+                finished(ByBuildResult.ABORTED)
                 throw e
             } catch (e: ExecutionException) {
                 progress.output("${e.message}\n", ProcessOutputType.STDERR)
                 progress.fail()
                 stop.ended(-1)
-                TaskRunnerResults.FAILURE
+                ByBuildResult.FAILURE
             }
             withContext(Dispatchers.IO) { refreshBuildDirectories() }
             finished(result)
@@ -228,4 +227,19 @@ internal class ByBuildView(private val project: Project) {
             notifyProcessTerminated(exitCode)
         }
     }
+}
+
+/**
+ * How a build ended, as the platform's task runner reads it. The platform's own `TaskRunnerResults`
+ * is experimental API.
+ */
+private enum class ByBuildResult(private val aborted: Boolean, private val errors: Boolean) : ProjectTaskRunner.Result {
+    SUCCESS(aborted = false, errors = false),
+    FAILURE(aborted = false, errors = true),
+    ABORTED(aborted = true, errors = false),
+    ;
+
+    override fun isAborted(): Boolean = aborted
+
+    override fun hasErrors(): Boolean = errors
 }

@@ -18,7 +18,6 @@ import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.task.ProjectTaskContext
 import com.intellij.task.ProjectTaskManager
 import com.intellij.task.ProjectTaskRunner
-import com.intellij.task.TaskRunnerResults
 import com.intellij.testFramework.PlatformTestUtil
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import com.intellij.testFramework.replaceService
@@ -122,7 +121,7 @@ class ByProjectTaskRunnerTest {
             """.trimIndent(),
         )
 
-        assertEquals(TaskRunnerResults.FAILURE, buildProject())
+        assertEquals(Ended(aborted = false, errors = true), Ended.of(buildProject()))
 
         assertTrue(events.first() is StartBuildEvent)
         val message = events.filterIsInstance<FileMessageEvent>().single()
@@ -145,7 +144,7 @@ class ByProjectTaskRunnerTest {
     fun `a build that succeeds says so`() = onEdt {
         fakeBy("echo 'build complete (1 files)' >&2")
 
-        assertEquals(TaskRunnerResults.SUCCESS, buildProject())
+        assertEquals(Ended(aborted = false, errors = false), Ended.of(buildProject()))
 
         assertTrue((events.last() as FinishBuildEvent).result is SuccessResult)
     }
@@ -163,7 +162,7 @@ class ByProjectTaskRunnerTest {
 
         stop.destroyProcess()
 
-        assertEquals(TaskRunnerResults.ABORTED, PlatformTestUtil.waitForPromise(promise, TimeUnit.SECONDS.toMillis(60)))
+        assertEquals(Ended(aborted = true, errors = false), Ended.of(PlatformTestUtil.waitForPromise(promise, TimeUnit.SECONDS.toMillis(60))))
         assertFalse(process.map { it.isAlive }.orElse(false))
         assertTrue(stop.isProcessTerminated)
     }
@@ -173,5 +172,12 @@ class ByProjectTaskRunnerTest {
 private class Recording(project: Project, private val events: MutableList<BuildEvent>) : BuildViewManager(project) {
     override fun onEvent(buildId: Any, event: BuildEvent) {
         events.add(event)
+    }
+}
+
+/** What a build's result says, which is all the platform reads of it. */
+private data class Ended(val aborted: Boolean, val errors: Boolean) {
+    companion object {
+        fun of(result: ProjectTaskRunner.Result?): Ended? = result?.let { Ended(it.isAborted, it.hasErrors()) }
     }
 }
