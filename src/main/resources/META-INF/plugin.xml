@@ -404,6 +404,10 @@
             implementation="dev.basedpython.pycharm.lsp.vision.ByUsagesCodeVisionProvider"/>
         <codeInsight.daemonBoundCodeVisionProvider
             implementation="dev.basedpython.pycharm.lsp.vision.ByInheritorsCodeVisionProvider"/>
+        <!-- Code vision: the code author above each declaration `by`'s outline names. -->
+        <vcs.codeVisionLanguageContext
+            language="basedpython"
+            implementationClass="dev.basedpython.pycharm.lsp.vision.ByVcsCodeVisionContext"/>
 
         <!-- ===== Stream V: smart editing ===== -->
         <enterHandlerDelegate
