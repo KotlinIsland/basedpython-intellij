@@ -406,6 +406,14 @@
         <codeInsight.gotoSuper
             language="basedpython"
             implementationClass="dev.basedpython.pycharm.lsp.supers.ByGotoSuperHandler"/>
+        <!-- Override / Implement Methods (Ctrl+O / Ctrl+I): the members from `by/overridableMembers`,
+             the declarations from `by/overrideMembers`. -->
+        <codeInsight.overrideMethod
+            language="basedpython"
+            implementationClass="dev.basedpython.pycharm.lsp.supers.ByOverrideMethodsHandler"/>
+        <codeInsight.implementMethod
+            language="basedpython"
+            implementationClass="dev.basedpython.pycharm.lsp.supers.ByImplementMethodsHandler"/>
         <!-- The gutter's "overrides" / "implements" icons, from `by/documentSuperMembers`. The "is
              overridden" ones are the platform's LSP provider, switched on by the server descriptor. -->
         <codeInsight.lineMarkerProvider

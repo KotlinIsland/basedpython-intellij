@@ -239,6 +239,29 @@ interface ByServerExtensions {
     fun documentSuperMembers(args: ByDocumentSuperMembersParams): CompletableFuture<List<ByOverridingMember>?>
 
     /**
+     * The methods the class at a position inherits and could override, the abstract ones — those it
+     * has to implement — marked, each with the declaration `by/overrideMembers` writes for it — see
+     * [dev.basedpython.pycharm.lsp.supers.ByOverrideMembers], behind Override Methods (Ctrl+O) and
+     * Implement Methods (Ctrl+I).
+     *
+     * **Why not a code action.** A code action's edit is worked out before anything is picked, and
+     * here the edit is what the user picks from this list.
+     *
+     * A `null` answer means there is no class at the position, or the server declined. A `by` from
+     * before the request answers `MethodNotFound`.
+     */
+    @JsonRequest("by/overridableMembers")
+    fun overridableMembers(args: ByOverridableMembersParams): CompletableFuture<ByOverridableMembers?>
+
+    /**
+     * The declarations overriding the members picked from `by/overridableMembers`, written the way
+     * basedpython writes them, as edits — with the imports they need — and the first one's body,
+     * where the caret goes. `null` when none of them is a member the class could override.
+     */
+    @JsonRequest("by/overrideMembers")
+    fun overrideMembers(args: ByOverrideMembersParams): CompletableFuture<ByOverrideMembers?>
+
+    /**
      * The expression a debugger evaluates for a position: on `d` in `a.b[c].d`, all of `a.b[c].d` —
      * see [dev.basedpython.pycharm.debug.ByDapEvaluator], which a stopped session's value tooltip,
      * *Evaluate Expression* and *Quick Evaluate* start from.
@@ -572,6 +595,52 @@ data class ByOverridingMember(
     val abstract: Boolean = false,
     /** What it overrides directly, in MRO order, as `by/superMembers` answers it. */
     val superMembers: List<BySuperMember> = emptyList(),
+)
+
+/**
+ * Field names are the wire format of `ty_server`'s `OverridableMembersParams`, which is
+ * `deny_unknown_fields`; `textHash` is taken out by the server's dispatcher before that.
+ */
+data class ByOverridableMembersParams(val textDocument: TextDocumentIdentifier, val position: Position, val textHash: String)
+
+/** The class at the position, and the methods it could override. */
+data class ByOverridableMembers(
+    val className: String? = null,
+    /** In MRO order of the superclass each is inherited from. */
+    val members: List<ByOverridableMember> = emptyList(),
+)
+
+/** A method the class inherits and does not define. */
+data class ByOverridableMember(
+    /** What `by/overrideMembers` is asked to write it by. */
+    val name: String? = null,
+    /** The superclass it is inherited from. */
+    val containerName: String? = null,
+    /** The module that declares the superclass. */
+    val containerModule: String? = null,
+    /** It is abstract where it is inherited from, so the class has to implement it. */
+    val abstract: Boolean = false,
+    /** `method`, `classMethod` or `staticMethod`. */
+    val kind: String? = null,
+    /** The declaration `by/overrideMembers` writes, from its name on: `greet(self, name: str) -> str`. */
+    val signature: String? = null,
+)
+
+/** Field names are the wire format of `ty_server`'s `OverrideMembersParams`, as [ByOverridableMembersParams]. */
+data class ByOverrideMembersParams(
+    val textDocument: TextDocumentIdentifier,
+    val position: Position,
+    /** The [ByOverridableMember.name]s to write. */
+    val members: List<String>,
+    val textHash: String,
+)
+
+/** The declarations, as edits to the document. */
+data class ByOverrideMembers(
+    /** The declarations and the imports they need; none overlap. */
+    val edits: List<TextEdit> = emptyList(),
+    /** The first declaration's body, in the document as [edits] leave it. */
+    val selection: Range? = null,
 )
 
 /** Field names are the wire format of `ty_server`'s `EntryPointParams`, which is `deny_unknown_fields`. */
