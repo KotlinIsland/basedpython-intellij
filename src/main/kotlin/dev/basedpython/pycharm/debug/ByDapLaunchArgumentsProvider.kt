@@ -58,11 +58,13 @@ class ByDapLaunchArgumentsProvider : DapLaunchArgumentsProvider {
             // `by run`. The wrapper records them, and the descriptor completes these arguments from
             // that record before the request is sent (ByDebugAdapterDescriptor.startArguments).
             //
-            // Every key here is one `bpd_dap::Configuration` reads
+            // Every key here is one `bpd_dap::Configuration` reads, and so is every key of the
+            // debugger settings page's (ByDebuggerSettings), read now so that a change applies from
+            // the next session
             ByDebugBackend.BPD -> LaunchRequestArguments(
                 adapterId = ByDebugAdapter,
                 request = DapStartRequest.Launch,
-                arguments = mapOf(
+                arguments = ByDebuggerSettings.getInstance().launchArguments() + mapOf(
                     // The IDE stops on its own breakpoints. Holding at the first statement of a
                     // runner shim nobody wrote would be a stop with no question behind it
                     "stopOnEntry" to false,

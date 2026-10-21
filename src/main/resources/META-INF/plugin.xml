@@ -97,6 +97,9 @@
             implementation="dev.basedpython.pycharm.debug.ByDebugAdapterSupportProvider"/>
         <platform.dap.launchArgumentsProvider
             implementation="dev.basedpython.pycharm.debug.ByDapLaunchArgumentsProvider"/>
+        <!-- Settings | Build, Execution, Deployment | Debugger, for bpd: what its launch reads that
+             DAP has no request for. See ByDebuggerSettings for what is left out and why. -->
+        <xdebugger.settings implementation="dev.basedpython.pycharm.debug.ByDebuggerSettings"/>
         <xdebugger.breakpointType
             implementation="dev.basedpython.pycharm.debug.ByLineBreakpointType"/>
         <xdebugger.breakpointType
