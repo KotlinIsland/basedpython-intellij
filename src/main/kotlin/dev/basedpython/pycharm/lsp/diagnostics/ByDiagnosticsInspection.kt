@@ -15,20 +15,9 @@ import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.runBlockingCancellable
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.TextRange
-import com.intellij.platform.lsp.api.LspClient
 import com.intellij.psi.PsiManager
-import dev.basedpython.pycharm.lsp.ByAnswer
-import dev.basedpython.pycharm.lsp.ByServerStart
-import dev.basedpython.pycharm.lsp.awaitByServer
-import dev.basedpython.pycharm.util.BasedPythonBundle
-import dev.basedpython.pycharm.lsp.awaitingAgain
-import dev.basedpython.pycharm.lsp.isMethodNotFound
-import dev.basedpython.pycharm.lsp.ext.ByServerExtensions
-import java.util.concurrent.CancellationException
 import org.eclipse.lsp4j.Diagnostic
 import org.eclipse.lsp4j.Position
-import org.eclipse.lsp4j.WorkspaceDiagnosticParams
-import org.eclipse.lsp4j.WorkspaceDiagnosticReport
 
 /**
  * `by`'s diagnostics for every file in an inspection's scope: what *Code | Inspect Code* lists, and
@@ -41,7 +30,7 @@ import org.eclipse.lsp4j.WorkspaceDiagnosticReport
  *
  * `by/checkWorkspace` rather than `workspace/diagnostic`: the long poll answers only once something
  * changes, and a run over a project with nothing wrong in it would wait on it forever. See
- * [ByServerExtensions.checkWorkspace].
+ * [dev.basedpython.pycharm.lsp.ext.ByServerExtensions.checkWorkspace].
  *
  * In a batch run nothing has opened a file, so nothing has started `by`; the run starts it.
  */
@@ -59,11 +48,11 @@ internal class ByDiagnosticsInspection : GlobalInspectionTool() {
         processor: ProblemDescriptionsProcessor,
     ) {
         val project = globalContext.project
-        val (client, report) = when (val checked = runBlockingCancellable { check(project) }) {
-            is Checked.Report -> checked.client to checked.report
+        val (client, report) = when (val checked = runBlockingCancellable { ByWorkspaceCheck.check(project) }) {
+            is ByWorkspaceCheck.Report -> checked.client to checked.report
             // Said in the results, where the run's reader looks for `by`'s findings: an empty
             // list would read as a project with nothing wrong in it.
-            is Checked.Not -> {
+            is ByWorkspaceCheck.Not -> {
                 processor.addProblemElement(
                     globalContext.refManager.refProject,
                     manager.createProblemDescriptor(checked.why),
@@ -97,43 +86,6 @@ internal class ByDiagnosticsInspection : GlobalInspectionTool() {
                     *descriptors.toTypedArray<CommonProblemDescriptor>(),
                 )
             }
-        }
-    }
-
-    /** What asking `by` to check the workspace came to. */
-    private sealed interface Checked {
-        class Report(val client: LspClient, val report: WorkspaceDiagnosticReport) : Checked
-        class Not(val why: String) : Checked
-    }
-
-    /** The running `by`'s check of the workspace, or why there is none. */
-    private suspend fun check(project: Project): Checked {
-        val client = when (val start = awaitByServer(project)) {
-            is ByServerStart.Running -> start.client
-            is ByServerStart.Unavailable -> return Checked.Not(BasedPythonBundle.message("inspection.by.noServer", start.why))
-        }
-        val params = WorkspaceDiagnosticParams(emptyList())
-        var refusal: Throwable? = null
-        // No timeout: a whole-project check takes as long as the project takes, and the run can be
-        // cancelled. Asked again on `ContentModified`; `by` restarts a check an edit cancels itself.
-        val answer = awaitingAgain<WorkspaceDiagnosticReport>("by/checkWorkspace", Long.MAX_VALUE) { sent ->
-            try {
-                client.sendRequest { (it as ByServerExtensions).checkWorkspace(params).also(sent) }
-            } catch (e: Exception) {
-                if (e !is CancellationException) refusal = e
-                throw e
-            }
-        }
-        return when (answer) {
-            is ByAnswer.Answer -> Checked.Report(client, answer.value)
-            ByAnswer.None -> Checked.Not(BasedPythonBundle.message("inspection.by.noAnswer"))
-            ByAnswer.Failed -> Checked.Not(
-                when {
-                    refusal != null && isMethodNotFound(refusal!!) -> BasedPythonBundle.message("inspection.by.unsupported")
-                    refusal != null -> BasedPythonBundle.message("inspection.by.refused", refusal!!.message.orEmpty())
-                    else -> BasedPythonBundle.message("inspection.by.noAnswer")
-                },
-            )
         }
     }
 

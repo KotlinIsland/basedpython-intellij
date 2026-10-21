@@ -14,6 +14,8 @@
     <depends>com.intellij.modules.vcs</depends>
     <!-- The SM test runner is a bundled plugin rather than core platform; see basedpython-testrunner.xml. -->
     <depends optional="true" config-file="basedpython-testrunner.xml">intellij.testRunner.plugin</depends>
+    <!-- What `by` knows, offered to agents through the IDE's MCP server; see basedpython-mcp.xml. -->
+    <depends optional="true" config-file="basedpython-mcp.xml">com.intellij.mcpServer</depends>
 
     <!-- The platform's Debug Adapter Protocol client, which `.by` debugging is built on. A platform
          module rather than a plugin, so it is declared the v2 way; the legacy <depends> entries

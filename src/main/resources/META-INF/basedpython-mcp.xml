@@ -1,0 +1,10 @@
+<!--
+  Loaded only when the MCP Server plugin is present: the IDE's MCP server offers an agent what `by`
+  knows about the project (mcp.ByMcpToolset). Optional because the plugin is bundled with some IDEs
+  and not others, and a required dependency would stop basedpython loading in the rest.
+-->
+<idea-plugin>
+    <extensions defaultExtensionNs="com.intellij.mcpServer">
+        <mcpToolset implementation="dev.basedpython.pycharm.mcp.ByMcpToolset"/>
+    </extensions>
+</idea-plugin>

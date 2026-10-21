@@ -54,6 +54,9 @@ dependencies {
     // The SM test runner (SMTRunnerConsoleProperties, TestConsoleProperties, …) left the core
     // platform in 2026.2 and now ships as this bundled plugin.
     bundledPlugin("intellij.testRunner.plugin")
+    // The IDE's MCP server, which `by`'s answers are offered to agents through. An optional
+    // dependency in plugin.xml (basedpython-mcp.xml).
+    bundledPlugin("com.intellij.mcpServer")
     // Spellchecker ships as a platform module, not a bundled plugin.
     bundledModule("intellij.spellchecker")
     // The platform's Debug Adapter Protocol client (DebugAdapterSupportProvider, DapProcessStarter,

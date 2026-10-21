@@ -716,6 +716,12 @@ data class ByTranspileParams(
      * — the fragment is transpiled on its own, which is all a fragment can be.
      */
     val source: String? = null,
+    /**
+     * The text of the document the answer is about — see [dev.basedpython.pycharm.lsp.ByTextHash].
+     * Taken out by the server's dispatcher before the params are read. With it, a `by` that
+     * transpiles a document no editor holds answers from the file on disk.
+     */
+    val textHash: String? = null,
 )
 
 /** What came out, or why nothing did. Exactly one of the two is set. */

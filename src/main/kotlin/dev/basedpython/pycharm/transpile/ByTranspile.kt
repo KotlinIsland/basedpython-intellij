@@ -1,12 +1,15 @@
 package dev.basedpython.pycharm.transpile
 
+import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.diagnostic.Logger
+import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.platform.lsp.api.LspClient
 import com.intellij.platform.lsp.api.LspClientManager
 import dev.basedpython.pycharm.actions.ByCli
 import dev.basedpython.pycharm.lsp.ByLspServerSupportProvider
+import dev.basedpython.pycharm.lsp.ByTextHash
 import dev.basedpython.pycharm.lsp.askBy
 import dev.basedpython.pycharm.lsp.ext.ByServerExtensions
 import dev.basedpython.pycharm.lsp.ext.ByTranspileParams
@@ -114,7 +117,12 @@ object ByTranspile {
                 BasedPythonBundle.message("transpile.serverNotRunning"),
             )
 
-        val params = ByTranspileParams(server.getDocumentIdentifier(file), reverse, snippet)
+        // The text it is about, so that a file no editor holds — one an agent asks about through
+        // the IDE's MCP server — is answered from disk rather than refused as not open.
+        val text = ReadAction.computeBlocking<CharSequence?, RuntimeException> {
+            FileDocumentManager.getInstance().getDocument(file)?.immutableCharSequence
+        }
+        val params = ByTranspileParams(server.getDocumentIdentifier(file), reverse, snippet, text?.let(ByTextHash::of))
         // through `askBy`, so an edit landing while `by` transpiles is asked again rather than
         // reported: `by` answers that with `ContentModified`, which `sendRequestSync` alone drops as
         // though nothing had answered
