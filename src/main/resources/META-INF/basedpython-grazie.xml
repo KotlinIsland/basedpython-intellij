@@ -1,0 +1,16 @@
+<!--
+  Loaded only when Grazie, the grammar checker, is present: the prose of a `.by` file — its comments,
+  and the docstrings `by` says it has — is checked like any other language's
+  (inspections.grazie.BasedPythonTextExtractor). Optional because the plugin can be switched off,
+  and a required dependency would take basedpython down with it.
+-->
+<idea-plugin>
+    <extensions defaultExtensionNs="com.intellij.grazie">
+        <textExtractor language="basedpython"
+                       implementationClass="dev.basedpython.pycharm.inspections.grazie.BasedPythonTextExtractor"/>
+        <problemFilter language="basedpython"
+                       implementationClass="dev.basedpython.pycharm.inspections.grazie.BasedPythonProblemFilter"/>
+        <textContentModificationTrackerProvider language="basedpython"
+                       implementationClass="dev.basedpython.pycharm.inspections.grazie.ByTextContentModificationTrackerProvider"/>
+    </extensions>
+</idea-plugin>

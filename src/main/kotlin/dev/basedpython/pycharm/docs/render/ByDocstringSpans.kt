@@ -2,9 +2,12 @@ package dev.basedpython.pycharm.docs.render
 
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
+import com.intellij.openapi.project.Project
+import com.intellij.openapi.util.CompositeModificationTracker
 import com.intellij.openapi.util.TextRange
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiFile
+import com.intellij.psi.util.PsiModificationTracker
 import dev.basedpython.pycharm.lsp.ByServerDocuments
 import dev.basedpython.pycharm.lsp.ByTextHash
 import dev.basedpython.pycharm.lsp.askBy
@@ -83,7 +86,7 @@ internal object ByDocstringSpans {
 
         // A failure is never stored: it means the server could not answer, and the next pass asks
         // again — `ByRenderedDocsRefresher` runs one when a server starts.
-        val spans = query(file) ?: return emptyList()
+        val spans = query(file) ?: return emptyList<ByDocstring>().also { cache.servedNothing(virtualFile) }
         cache.remember(virtualFile, stamp, spans)
         return spans
     }
@@ -196,12 +199,29 @@ internal object ByDocstringSpans {
  * fully"*. A service is disposed with the plugin.
  */
 @Service(Service.Level.PROJECT)
-internal class ByDocstringSpanCache {
+internal class ByDocstringSpanCache(project: Project) {
 
     private class Cached(val stamp: Long, val spans: List<ByDocstring>)
 
     private val byFile: MutableMap<VirtualFile, Cached> =
         Collections.synchronizedMap(WeakHashMap())
+
+    /** Files [ByDocstringSpans.of] answered with nothing because the server could not be asked. */
+    private val servedNothing: MutableSet<VirtualFile> =
+        Collections.synchronizedSet(Collections.newSetFromMap(WeakHashMap()))
+
+    /**
+     * Moves whenever what this says about a file's docstrings may have changed under a reader that
+     * caches on the PSI: on every PSI change, as the PSI's own tracker does, and also when an answer
+     * arrives for a file that was served nothing in its place, or every answer is dropped.
+     *
+     * For grammar checking (`inspections.grazie`), which caches the texts it extracts against a
+     * tracker of the language's choosing — the PSI's, unless told otherwise. A docstring `by` had
+     * not answered for yet was extracted as nothing, and stayed nothing until the file was edited.
+     * A platform class, so the caches on the PSI that hold it hold nothing of this plugin's.
+     */
+    val modificationTracker: CompositeModificationTracker =
+        CompositeModificationTracker(PsiModificationTracker.getInstance(project))
 
     /** What was worked out for [file], if it was worked out at [stamp]. */
     fun spans(file: VirtualFile, stamp: Long): List<ByDocstring>? =
@@ -209,10 +229,17 @@ internal class ByDocstringSpanCache {
 
     fun remember(file: VirtualFile, stamp: Long, spans: List<ByDocstring>) {
         byFile[file] = Cached(stamp, spans)
+        if (servedNothing.remove(file)) modificationTracker.incModificationCount()
+    }
+
+    /** Notes that a reader of [file] was given no docstrings because the server could not answer. */
+    fun servedNothing(file: VirtualFile) {
+        servedNothing.add(file)
     }
 
     /** Forgets every answer, for when the server that gave them has been replaced. */
     fun clear() {
         byFile.clear()
+        modificationTracker.incModificationCount()
     }
 }

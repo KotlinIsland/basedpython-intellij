@@ -18,6 +18,8 @@
     <depends optional="true" config-file="basedpython-mcp.xml">com.intellij.mcpServer</depends>
     <!-- The copyright notice at the top of a `.by` file; see basedpython-copyright.xml. -->
     <depends optional="true" config-file="basedpython-copyright.xml">com.intellij.copyright</depends>
+    <!-- Grammar checking in comments and docstrings; see basedpython-grazie.xml. -->
+    <depends optional="true" config-file="basedpython-grazie.xml">tanvd.grazi</depends>
 
     <!-- The platform's Debug Adapter Protocol client, which `.by` debugging is built on. A platform
          module rather than a plugin, so it is declared the v2 way; the legacy <depends> entries

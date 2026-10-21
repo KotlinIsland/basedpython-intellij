@@ -60,6 +60,9 @@ dependencies {
     // The Copyright plugin, which writes the notice at the top of a `.by` file through an updater
     // registered here. An optional dependency in plugin.xml (basedpython-copyright.xml).
     bundledPlugin("com.intellij.copyright")
+    // Grazie, the grammar checker, which reads a `.by` file's comments and docstrings through the
+    // extractor registered here. An optional dependency in plugin.xml (basedpython-grazie.xml).
+    bundledPlugin("tanvd.grazi")
     // Spellchecker ships as a platform module, not a bundled plugin.
     bundledModule("intellij.spellchecker")
     // The platform's Debug Adapter Protocol client (DebugAdapterSupportProvider, DapProcessStarter,
