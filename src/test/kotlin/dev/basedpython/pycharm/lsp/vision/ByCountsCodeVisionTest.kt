@@ -140,7 +140,8 @@ class ByCountsCodeVisionTest {
         val client = AnsweringClient(fixture.project) { method -> asked += method; answer(method) }
         val file = file()
         val document = PsiDocumentManager.getInstance(fixture.project).getDocument(file)!!
-        return runBlocking { ByUsageCounts.ask(client, file.virtualFile, document, count) } to asked
+        val params = ByUsageCounts.params(client, file.virtualFile, document, setOf(count))
+        return runBlocking { ByUsageCounts.ask(client, params) } to asked
     }
 
     @Test
@@ -149,6 +150,21 @@ class ByCountsCodeVisionTest {
         val (answer, asked) = ask(ByUsageCounts.Count.REFERENCES) { answered(declarations) }
         assertEquals(ByUsageCounts.Asked.Answered(declarations), answer)
         assertEquals(listOf("by/documentUsageCounts"), asked)
+    }
+
+    /** Both providers draw from one answer, so the one request asks for both counts. */
+    @Test
+    fun `one request asks for every count drawn`() = onEdt {
+        val client = AnsweringClient(fixture.project) { answered(emptyList<ByDeclarationUsages>()) }
+        val file = file()
+        val document = PsiDocumentManager.getInstance(fixture.project).getDocument(file)!!
+        val params = ByUsageCounts.params(
+            client,
+            file.virtualFile,
+            document,
+            setOf(ByUsageCounts.Count.IMPLEMENTATIONS, ByUsageCounts.Count.REFERENCES),
+        )
+        assertEquals(listOf("references", "implementations"), params.counts)
     }
 
     @Test
