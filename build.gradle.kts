@@ -299,11 +299,11 @@ intellijPlatform {
     // issue and an entry in docs/internal-api.md, not quietly relaxing this.
     //
     // Deprecated usages fail the build too, but not through this list: DEPRECATED_API_USAGES fails
-    // on any, and some are forced — `breakpointsDescription` is deprecated at the floor and abstract
-    // at the top, so overriding it is a deprecated usage at one end or a missing one at the other —
-    // and `-ignored-problems` does not filter deprecated usages (measured on 263.5153.20: still 4
-    // with a pattern matching one). The check after `verifyPlugin` below fails on any the report
-    // lists that `allowedDeprecatedUsages` does not explain. Experimental usages stay informational:
+    // on any, including one with no replacement on every build in the range, which the verifier
+    // reports against the newest build's deprecations — and `-ignored-problems` does not filter
+    // deprecated usages (measured on 263.5153.20: still 4 with a pattern matching one). The check
+    // after `verifyPlugin` below fails on any the report lists that `allowedDeprecatedUsages` does
+    // not explain. Experimental usages stay informational:
     // the DAP client and the Problems view have no non-experimental API to use instead.
     //
     // MISSING_DEPENDENCIES is deliberately *not* here, though the optional dependency that used to
@@ -586,7 +586,7 @@ val PYCHARM_VERSION = "263.+"
 // in IDEA exercises neither the code this plugin ships for PyCharm nor the arbitration between them.
 //
 // `-PpycharmPath=/Applications/PyCharm.app` launches a PyCharm already installed — a nightly, say —
-// instead of downloading one. `-PpycharmVersion=263.5153.2-EAP-CANDIDATE` picks a particular snapshot.
+// instead of downloading one. `-PpycharmVersion=263.5701.32-EAP-CANDIDATE` picks a particular snapshot.
 intellijPlatformTesting.runIde.register("runPyCharm") {
   val installed = providers.gradleProperty("pycharmPath")
   if (installed.isPresent) {

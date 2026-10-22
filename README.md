@@ -349,7 +349,7 @@ them.
 ```bash
 ./gradlew runPyCharm
 ./gradlew runPyCharm -PpycharmPath=/Applications/PyCharm.app   # a PyCharm you already have
-./gradlew runPyCharm -PpycharmVersion=263.5153.2-EAP-CANDIDATE # a particular snapshot
+./gradlew runPyCharm -PpycharmVersion=263.5701.32-EAP-CANDIDATE # a particular snapshot
 ```
 
 Both are also **Run IDE** and **Run PyCharm** in the IDE's own run-configuration dropdown.

@@ -36,8 +36,9 @@ import javax.swing.Icon
  * overrides a superclass member, as Java, Kotlin and Python draw them, going to what it overrides.
  *
  * The other direction — *is overridden*, *is implemented*, *is subclassed* (↓) — is the platform's
- * own LSP provider, switched on for `.by` files by `ByInheritanceMarkers` in `LspServers.kt`; in
- * 263.5153 it draws nothing upward. This draws only the upward icons, so a member that both
+ * own LSP provider, switched on for `.by` files by `ByInheritanceMarkers` in `LspServers.kt`; it
+ * draws nothing upward (measured in 263.5153, and again in PyCharm 263.5701.32, where a `B.f`
+ * overriding `A.f` carried this plugin's *Overrides A.f* and nothing else). This draws only the upward icons, so a member that both
  * overrides and is overridden carries one of each, side by side on the right as the platform and
  * Python place theirs.
  *
