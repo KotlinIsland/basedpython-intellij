@@ -1,11 +1,17 @@
 package dev.basedpython.pycharm.debug
 
+import com.intellij.openapi.editor.Document
 import com.intellij.openapi.fileTypes.FileType
 import com.intellij.openapi.project.Project
+import com.intellij.platform.dap.DapExpressionSupport
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
 import com.intellij.psi.PsiFileFactory
 import com.intellij.util.LocalTimeCounter
+import com.intellij.xdebugger.XDebugSession
+import com.intellij.xdebugger.XExpression
+import com.intellij.xdebugger.evaluation.EvaluationMode
+import com.intellij.xdebugger.evaluation.XDebuggerEditorsProvider
 import com.intellij.xdebugger.evaluation.XDebuggerEditorsProviderBase
 import dev.basedpython.pycharm.lang.BasedPythonFileType
 
@@ -34,8 +40,46 @@ import dev.basedpython.pycharm.lang.BasedPythonFileType
  * basedpython has no composite PSI here — the parser produces the file node and one leaf per token
  * (`BasedPythonParserDefinition`) — so there is no expression-shaped tree to build, and a file is
  * exactly as much structure as the highlighter and the lexer-driven features want.
+ *
+ * This one serves the breakpoints, which belong to no session. A running session's fields are
+ * [BySessionEditorsProvider]'s.
  */
-object ByDebuggerEditorsProvider : XDebuggerEditorsProviderBase() {
+object ByDebuggerEditorsProvider : ByExpressionEditorsProvider()
+
+/**
+ * The editors of one `.by` debug session: the *Evaluate Expression* field, the Variables view's
+ * *Evaluate expression or add a watch* field, and the value tree *Quick Evaluate* shows. The
+ * debugger takes all of them from the session's process, and the DAP client's process from what
+ * [DapExpressionSupport.createEditorsProvider] answers for the session.
+ *
+ * The same `.by` fragments as the breakpoints' fields, so the expression is highlighted as the code
+ * it is. Left to itself the client answers with its own provider, whose fragments are plain text.
+ *
+ * Each document is marked with the session it was made for ([FIELD_SESSION]), which is how
+ * [ByDapCompletionContributor] finds the frame to ask the adapter's `completions` in — what the
+ * client does for its own plain-text fields, which it marks with keys of its own that a plugin
+ * cannot use.
+ */
+internal class BySessionEditorsProvider(private val session: XDebugSession) : ByExpressionEditorsProvider() {
+
+    override fun createDocument(
+        project: Project,
+        expression: XExpression,
+        context: PsiElement?,
+        mode: EvaluationMode,
+    ): Document = super.createDocument(project, expression, context, mode).also(::mark)
+
+    private fun mark(document: Document) = document.putUserData(FIELD_SESSION, session)
+}
+
+/** The [DapExpressionSupport] of a `.by` session: its fields are [BySessionEditorsProvider]'s. */
+internal object ByExpressionSupport : DapExpressionSupport() {
+    override fun createEditorsProvider(session: XDebugSession): XDebuggerEditorsProvider =
+        BySessionEditorsProvider(session)
+}
+
+/** A `.by` fragment for whatever expression text a field holds. See [ByDebuggerEditorsProvider]. */
+abstract class ByExpressionEditorsProvider : XDebuggerEditorsProviderBase() {
 
     override fun getFileType(): FileType = BasedPythonFileType.INSTANCE
 
@@ -52,5 +96,7 @@ object ByDebuggerEditorsProvider : XDebuggerEditorsProviderBase() {
         isPhysical,
     )
 
-    private const val FRAGMENT_NAME = "basedpython-expression.by"
+    private companion object {
+        const val FRAGMENT_NAME = "basedpython-expression.by"
+    }
 }

@@ -112,6 +112,11 @@
             implementation="dev.basedpython.pycharm.debug.ByLineBreakpointType"/>
         <xdebugger.breakpointType
             implementation="dev.basedpython.pycharm.debug.ByExceptionBreakpointType"/>
+        <!-- Completion in a `.by` session's expression fields from the adapter's `completions`, as
+             the DAP client offers in its own plain-text fields; see ByDapCompletionContributor. -->
+        <completion.contributor
+            language="basedpython"
+            implementationClass="dev.basedpython.pycharm.debug.ByDapCompletionContributor"/>
         <!-- Where undoing and redoing a log point lands. The undo step itself is the platform's
              (ModUpdateSystemOptions), so nothing of this plugin's sits in UndoManager and pins its
              classloader after an unload; see ByLogpointUndo. -->

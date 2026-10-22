@@ -1,5 +1,12 @@
 ## [Unreleased]
 
+### Added
+
+- In a `.by` debug session, *Evaluate Expression* and the Variables view's evaluate-or-watch field
+  are basedpython editors, highlighted as code where they were plain text, and complete from the
+  debugger where it offers completion (debugpy does; bpd does not yet). Picking a completion after
+  a dot keeps the dot: `sys.vers` completed to `sysversion_info` in the plain-text field.
+
 ### Changed
 
 - **The minimum IDE is build 263.5701**, where it was 263.5153. The 263.5153 builds were EAPs and
