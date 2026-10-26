@@ -41,9 +41,25 @@ class ByMethodReceiverTypedHandlerTest {
     }
 
     @Test
-    fun `__new__, which by reports static, is passed its class and gets cls, as in py`() = paren(
+    fun `__new__, a static method by says is passed its class, gets cls, as in py`() = paren(
         "class C:\n    def __new__<caret>\n",
         "class C:\n    def __new__(cls<caret>):\n",
+    ) {
+        compound { clause("class C:") { def("def __new__", method = "static", receiver = "class") } }
+    }
+
+    @Test
+    fun `the receiver by gives decides, whatever the method is called`() = paren(
+        "class C:\n    def make<caret>\n",
+        "class C:\n    def make(cls<caret>):\n",
+    ) {
+        compound { clause("class C:") { def("def make", method = "static", receiver = "class") } }
+    }
+
+    @Test
+    fun `a by that says no receiver for __new__ is read by its method`() = paren(
+        "class C:\n    def __new__<caret>\n",
+        "class C:\n    def __new__(<caret>):\n",
     ) {
         compound { clause("class C:") { def("def __new__", method = "static") } }
     }

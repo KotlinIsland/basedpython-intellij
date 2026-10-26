@@ -1068,6 +1068,12 @@ data class ByOutlineStatement(
      */
     val method: String? = null,
     /**
+     * On a method: what its first parameter is, the `self` or `cls` an editor writes — `instance` or
+     * `class`, `class` for `__new__` too. Absent on any other static method, on a function, and from
+     * a `by` that does not report it.
+     */
+    val receiver: String? = null,
+    /**
      * On a simple statement: the expression Enter may break by wrapping it in parentheses — an
      * assignment's value, a `return`'s. Absent where none can be, and from a `by` that does not
      * report it.

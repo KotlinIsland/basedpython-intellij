@@ -58,6 +58,7 @@ class OutlineSpec private constructor(private val text: CharSequence) {
             header: String,
             parameters: List<String> = emptyList(),
             method: String? = null,
+            receiver: String? = null,
             body: Suite.() -> Unit = {},
         ) {
             val range = find(header)
@@ -85,6 +86,7 @@ class OutlineSpec private constructor(private val text: CharSequence) {
                 name = nameRange,
                 parameters = parameterRanges,
                 method = method,
+                receiver = receiver,
             )
         }
 

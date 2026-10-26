@@ -52,6 +52,8 @@ class ByOutline(
         val parameters: List<TextRange> = emptyList(),
         /** On a `def` a class body owns: `instance`, `class` or `static`; null on a function or from an older `by`. */
         val method: String? = null,
+        /** On a method: `instance` or `class`, what its first parameter is; null on another static method, a function, or from an older `by`. */
+        val receiver: String? = null,
         /** On a simple statement: the expression a line break inside it may wrap in parentheses. */
         val wrap: TextRange? = null,
     )
@@ -208,6 +210,7 @@ object ByOutlineReplies {
             name = statement.name?.let(::range),
             parameters = statement.parameters.map(::range),
             method = statement.method,
+            receiver = statement.receiver,
             wrap = statement.wrap?.let(::range),
         )
 
