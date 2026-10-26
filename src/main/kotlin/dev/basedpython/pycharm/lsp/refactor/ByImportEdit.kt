@@ -22,9 +22,10 @@ import org.eclipse.lsp4j.WorkspaceEdit
 import java.nio.file.Path
 
 /**
- * One edit `by` asked for to an `import` that names a module about to move, or to a use of a name a
- * suggested rename renames (see [ByRenamedNameProcessor]): replace the text in this usage's range
- * with [newText].
+ * One edit `by` asked for to an `import` that names a module about to move, to a use of a name a
+ * suggested rename renames (see [ByRenamedNameProcessor]), or to any file one of `by`'s project-wide
+ * refactorings changes (see [ByProjectEditProcessor]): replace the text in this usage's range with
+ * [newText].
  *
  * A usage like any other refactoring's, so that it shows in the platform's usage preview under the
  * file it is in, can be excluded there, and reaches the processor's rename or move with the rest.
@@ -38,7 +39,18 @@ class ByImportEdit(
     range: TextRange,
     referencedElement: PsiElement,
     val newText: String,
+    /**
+     * Where the edit stands among its file's edits as `by` listed them. Two inserts at one position
+     * are written in that order, as LSP orders them, so it is what [apply] breaks a tie with — and
+     * what keeps them two usages rather than one, since a usage is otherwise only its range.
+     */
+    val ordinal: Int = 0,
 ) : MoveRenameUsageInfo(file, null, range.startOffset, range.endOffset, referencedElement, false) {
+
+    override fun equals(other: Any?): Boolean =
+        super.equals(other) && other is ByImportEdit && other.newText == newText && other.ordinal == ordinal
+
+    override fun hashCode(): Int = 31 * (31 * super.hashCode() + newText.hashCode()) + ordinal
 
     companion object {
 
@@ -62,34 +74,36 @@ class ByImportEdit(
                 val file = fileOf(uri) ?: return@flatMap emptyList()
                 val psiFile = psiManager.findFile(file) ?: return@flatMap emptyList()
                 val document = documents.getDocument(file) ?: return@flatMap emptyList()
-                ByCleanup.editsFor(edit, uri).edits.mapNotNull { text ->
+                ByCleanup.editsFor(edit, uri).edits.withIndex().mapNotNull { (ordinal, text) ->
                     val range = getRangeInDocument(document, text.range) ?: return@mapNotNull null
-                    ByImportEdit(psiFile, range, moved, text.newText)
+                    ByImportEdit(psiFile, range, moved, text.newText, ordinal)
                 }
             }
         }
 
         /**
          * Applies [edits] to their documents, last in each document first so that each range still
-         * means the text it was found at, and commits them, so that whatever the refactoring does
-         * next with the PSI of those files sees the new text.
+         * means the text it was found at — and of two at one position, the one listed later first, so
+         * that the text each inserts stands in the order they were listed — and commits them, so that
+         * whatever the refactoring does next with the PSI of those files sees the new text.
          *
          * Must run inside the refactoring's command and write action, which is what makes the edits
          * and the move one step to undo.
          */
         @RequiresWriteLock
         fun apply(project: Project, edits: List<ByImportEdit>) {
-            val byDocument = LinkedHashMap<Document, MutableList<Pair<TextRange, String>>>()
+            val byDocument = LinkedHashMap<Document, MutableList<Pair<TextRange, ByImportEdit>>>()
             for (edit in edits) {
                 val file = edit.virtualFile ?: continue
                 val document = FileDocumentManager.getInstance().getDocument(file) ?: continue
                 val segment = edit.segment ?: continue
-                byDocument.getOrPut(document) { ArrayList() } += TextRange.create(segment) to edit.newText
+                byDocument.getOrPut(document) { ArrayList() } += TextRange.create(segment) to edit
             }
             val psiDocuments = PsiDocumentManager.getInstance(project)
+            val lastFirst = compareByDescending<Pair<TextRange, ByImportEdit>> { it.first.startOffset }.thenByDescending { it.second.ordinal }
             for ((document, replacements) in byDocument) {
-                for ((range, text) in replacements.sortedByDescending { it.first.startOffset }) {
-                    document.replaceString(range.startOffset, range.endOffset, text)
+                for ((range, edit) in replacements.sortedWith(lastFirst)) {
+                    document.replaceString(range.startOffset, range.endOffset, edit.newText)
                 }
                 psiDocuments.commitDocument(document)
             }

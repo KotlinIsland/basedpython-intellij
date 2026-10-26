@@ -375,6 +375,12 @@
         <refactoring.moveHandler
             implementation="dev.basedpython.pycharm.lsp.refactor.ByModuleMoveHandler"
             order="first"/>
+        <!-- F6 on a top-level function, class or variable of a .by file, in its name or a reference
+             to it: the definition moves to another module through by/prepareMoveSymbol and
+             by/moveSymbol. Anywhere else F6 goes on to the handlers above, which move the file. -->
+        <refactoring.moveHandler
+            implementation="dev.basedpython.pycharm.lsp.refactor.ByMoveSymbolHandler"
+            order="first"/>
 
         <!-- ===== Stream O: project scaffolding + config awareness ===== -->
         <!-- basedpython among IntelliJ IDEA's New Project languages. Not also a

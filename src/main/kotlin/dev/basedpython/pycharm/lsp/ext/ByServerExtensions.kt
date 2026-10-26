@@ -465,6 +465,26 @@ interface ByServerExtensions {
      */
     @JsonRequest("by/pastedImports")
     fun pastedImports(params: ByPastedImportsParams): CompletableFuture<ByPastedImports?>
+
+    /**
+     * The top-level function, class or variable that F6 at a position would move: in its name or in
+     * a reference to it — see [dev.basedpython.pycharm.lsp.refactor.ByMoveSymbolHandler].
+     *
+     * **Why not a code action.** The user picks where it goes, and a code action's edit is worked
+     * out before anything is picked.
+     *
+     * A `null` answer is a position with nothing to move. A `by` from before the request answers
+     * `MethodNotFound`.
+     */
+    @JsonRequest("by/prepareMoveSymbol")
+    fun prepareMoveSymbol(params: ByPositionParams): CompletableFuture<ByMovableSymbol?>
+
+    /**
+     * The edits that move what [prepareMoveSymbol] named into the module [ByMoveSymbolParams.target],
+     * an existing file, with every reference in the project following it — or why it is not moved.
+     */
+    @JsonRequest("by/moveSymbol")
+    fun moveSymbol(params: ByMoveSymbolParams): CompletableFuture<ByProjectEditAnswer?>
 }
 
 /** The file or directory to name. */
