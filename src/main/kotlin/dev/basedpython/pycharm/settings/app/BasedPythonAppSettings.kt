@@ -40,6 +40,7 @@ class BasedPythonAppSettings : PersistentStateComponent<BasedPythonAppSettings.S
     var defaultBuffExtraArgs: String = "",
     var addUnambiguousImportsOnTheFly: Boolean = false,
     var suggestImportableNames: Boolean = true,
+    var offerPostfixTemplates: Boolean = true,
   )
 
   private var state = State()
@@ -92,6 +93,15 @@ class BasedPythonAppSettings : PersistentStateComponent<BasedPythonAppSettings.S
   var suggestImportableNames: Boolean
     get() = state.suggestImportableNames
     set(value) { state.suggestImportableNames = value }
+
+  /**
+   * Whether completion lists `by`'s postfix templates, `xs.for` and the rest — *Settings | Editor |
+   * General | Code Completion*, see [dev.basedpython.pycharm.lsp.completion.ByPostfixCompletion]. On,
+   * as postfix completion is for every language until switched off.
+   */
+  var offerPostfixTemplates: Boolean
+    get() = state.offerPostfixTemplates
+    set(value) { state.offerPostfixTemplates = value }
 
   companion object {
     @JvmStatic

@@ -1,6 +1,6 @@
 package dev.basedpython.pycharm.lsp.completion
 
-import com.intellij.codeInsight.template.postfix.settings.PostfixTemplatesSettings
+import dev.basedpython.pycharm.settings.app.BasedPythonAppSettings
 import com.intellij.codeInsight.template.postfix.templates.LanguagePostfixTemplate
 import com.intellij.testFramework.junit5.TestApplication
 import dev.basedpython.pycharm.lang.BasedPythonLanguage
@@ -12,7 +12,7 @@ import org.junit.jupiter.api.Test
 
 /**
  * basedpython's postfix templates are `by`'s completions, `for` with the detail `postfix` replacing all
- * of `xs.for`, offered as the platform's *Postfix Completion* settings offer a language's own.
+ * of `xs.for`, listed unless basedpython's own switch says not.
  */
 @TestApplication
 class ByPostfixCompletionTest {
@@ -30,12 +30,10 @@ class ByPostfixCompletionTest {
     }
 
     @Test
-    fun `offered when postfix completion is`() {
-        val settings = PostfixTemplatesSettings()
+    fun `listed unless basedpython's postfix templates are switched off`() {
+        val settings = BasedPythonAppSettings()
         assertTrue(ByPostfixCompletion.offered(settings))
-        settings.isTemplatesCompletionEnabled = false
-        assertTrue(ByPostfixCompletion.offered(settings), "PyCharm's own are still listed")
-        settings.isPostfixTemplatesEnabled = false
+        settings.offerPostfixTemplates = false
         assertFalse(ByPostfixCompletion.offered(settings))
     }
 }

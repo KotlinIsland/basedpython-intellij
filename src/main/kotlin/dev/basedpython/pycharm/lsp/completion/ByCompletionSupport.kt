@@ -2,8 +2,8 @@ package dev.basedpython.pycharm.lsp.completion
 
 import com.intellij.codeInsight.completion.CompletionParameters
 import com.intellij.codeInsight.lookup.LookupElement
-import com.intellij.codeInsight.template.postfix.settings.PostfixTemplatesSettings
 import com.intellij.platform.lsp.api.customization.LspCompletionSupport
+import dev.basedpython.pycharm.settings.app.BasedPythonAppSettings
 import org.eclipse.lsp4j.CompletionItem
 
 /**
@@ -23,9 +23,8 @@ internal object ByCompletionSupport : LspCompletionSupport() {
 
     /**
      * `by` owns basedpython's postfix templates: `xs.for` completes to a `for` loop over `xs`, an item
-     * labelled `for` whose detail is `postfix` and whose edit replaces all of `xs.for`. They are
-     * offered when *Settings | Editor | General | Postfix Completion* would offer a language's own in
-     * completion, as [ByPostfixCompletion.offered] reads it.
+     * labelled `for` whose detail is `postfix` and whose edit replaces all of `xs.for`. They are listed
+     * unless *Postfix templates* is switched off ([ByPostfixCompletion.offered]).
      */
     override fun createLookupElement(parameters: CompletionParameters, item: CompletionItem): LookupElement? {
         if (ByPostfixCompletion.isPostfix(item) && !ByPostfixCompletion.offered()) return null
@@ -33,7 +32,7 @@ internal object ByCompletionSupport : LspCompletionSupport() {
     }
 }
 
-/** What makes one of `by`'s completions a postfix template, and when the platform's settings offer one. */
+/** What makes one of `by`'s completions a postfix template, and whether they are listed. */
 internal object ByPostfixCompletion {
 
     /** The detail `by` gives every postfix template's completion, and no other. */
@@ -42,10 +41,10 @@ internal object ByPostfixCompletion {
     fun isPostfix(item: CompletionItem): Boolean = item.detail == DETAIL
 
     /**
-     * Whether postfix templates are offered: *Enable postfix completion*. Measured in PyCharm 263.7528,
-     * a `.py`'s completion lists the platform's `.for` and `.fore` on `xs.fo` exactly when it is on,
-     * asked for or popped up alike, whatever *Show postfix templates in completion autopopup* says.
+     * Whether `by`'s postfix templates are listed: basedpython's own *Postfix templates* under *Settings
+     * | Editor | General | Code Completion*. The platform's *Enable postfix completion*, which switches
+     * PyCharm's own off, is not public API (`PostfixTemplatesSettings` is `@ApiStatus.Internal`), so a
+     * `.by` file cannot follow it.
      */
-    fun offered(settings: PostfixTemplatesSettings = PostfixTemplatesSettings.getInstance()): Boolean =
-        settings.isPostfixTemplatesEnabled
+    fun offered(settings: BasedPythonAppSettings = BasedPythonAppSettings.getInstance()): Boolean = settings.offerPostfixTemplates
 }
