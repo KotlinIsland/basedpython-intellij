@@ -5,12 +5,18 @@ import com.intellij.spellchecker.tokenizer.SpellcheckingStrategy
 import com.intellij.spellchecker.tokenizer.Tokenizer
 import dev.basedpython.pycharm.lang.BasedPythonFile
 import dev.basedpython.pycharm.lang.BasedPythonTokenTypes
+import dev.basedpython.pycharm.lsp.semantic.BySemanticTokens
 
 /**
- * Runtime spellchecking strategy for basedpython. Spell-checks comments, string
- * literals, and identifiers; the platform's word splitter already handles
- * camelCase / snake_case boundaries (see [IdentifierSplitter] for the standalone
- * version used in tests).
+ * Runtime spellchecking strategy for basedpython. Spell-checks comments, string literals, and the
+ * identifiers that *declare* a name; the platform's word splitter already handles camelCase /
+ * snake_case boundaries (see [IdentifierSplitter] for the standalone version used in tests).
+ *
+ * Only declarations, as Python's own strategy does: a misspelt name is one mistake, made where it
+ * is declared and fixed by renaming it there, and reporting every use of it repeats that one
+ * finding — `itemz` used four times was five typos. Which identifier declares a name is `by`'s to
+ * say, through its semantic tokens' `definition` modifier ([BySemanticTokens]); until it has said,
+ * for the file as it is now, no identifier is checked.
  */
 class BasedPythonSpellcheckingStrategy : SpellcheckingStrategy() {
     override fun isMyContext(element: PsiElement): Boolean =
@@ -19,10 +25,16 @@ class BasedPythonSpellcheckingStrategy : SpellcheckingStrategy() {
     override fun getTokenizer(element: PsiElement): Tokenizer<*> =
         when (element.node?.elementType) {
             BasedPythonTokenTypes.COMMENT,
-            BasedPythonTokenTypes.STRING,
-            BasedPythonTokenTypes.IDENTIFIER -> TEXT_TOKENIZER
+            BasedPythonTokenTypes.STRING -> TEXT_TOKENIZER
+            BasedPythonTokenTypes.IDENTIFIER -> if (declares(element)) TEXT_TOKENIZER else EMPTY_TOKENIZER
             else -> EMPTY_TOKENIZER
         }
+
+    private fun declares(identifier: PsiElement): Boolean {
+        val file = identifier.containingFile ?: return false
+        return BySemanticTokens.getInstance(file.project)
+            .isDefinitionAt(file, identifier.textRange.startOffset) == true
+    }
 }
 
 /**

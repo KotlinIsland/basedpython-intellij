@@ -7,6 +7,7 @@ import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.lang.BasedPythonLanguage
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
 import dev.basedpython.pycharm.testFramework.onEdt
+import org.eclipse.lsp4j.SemanticTokensLegend
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 
@@ -31,7 +32,11 @@ class BasedPythonRainbowVisitorTest {
             0, 4, 1, 1, 8, //  a, the parameter again
             1, 11, 1, 0, 0, // c, a global
         )
-        val names = ByLocalNames.read(text, data, variableType = 0, parameterType = 1, functionScopeBit = 3)
+        val legend = SemanticTokensLegend(
+            listOf("variable", "parameter", "function"),
+            listOf("definition", "readonly", "async", "functionScope"),
+        )
+        val names = ByLocalNames.read(BySemanticTokens.decode(text, data, legend))
         assertEquals(
             listOf("a" to true, "b" to false, "a" to true),
             names.map { it.range.substring(text) to it.isParameter },

@@ -7,13 +7,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.TextRange
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiFile
-import dev.basedpython.pycharm.docs.render.ByDocstringTokens
 import dev.basedpython.pycharm.lsp.ByLspLifecycleListener
-import dev.basedpython.pycharm.lsp.ByServerDocuments
-import dev.basedpython.pycharm.lsp.ByTextHash
-import dev.basedpython.pycharm.lsp.askBy
-import dev.basedpython.pycharm.lsp.ext.ByNamedSemanticTokensParams
-import dev.basedpython.pycharm.lsp.runningByServer
 import org.jetbrains.annotations.TestOnly
 import java.util.Collections
 import java.util.WeakHashMap
@@ -33,9 +27,9 @@ internal data class ByLocalName(val range: TextRange, val isParameter: Boolean)
  * A `by` whose legend has no `functionScope` (one from before the modifier) has no answer here,
  * and nothing is coloured: telling a local from a global is the whole of what is being asked.
  *
- * Asked once per document revision, from the daemon's background pass, and kept against the
- * modification stamp like [dev.basedpython.pycharm.docs.render.ByDocstringSpans]; on the EDT
- * nothing is asked. A failure is never kept.
+ * Read off the file's tokens as [BySemanticTokens] keeps them — one request per document revision,
+ * from the daemon's background pass, shared with the other readers — and kept against the
+ * modification stamp; on the EDT nothing is asked. A failure is never kept.
  */
 @Service(Service.Level.PROJECT)
 internal class ByLocalNames(project: Project) : Disposable {
@@ -63,7 +57,7 @@ internal class ByLocalNames(project: Project) : Disposable {
         val virtualFile = file.originalFile.virtualFile ?: return emptyList()
         val stamp = document.modificationStamp
         byFile[virtualFile]?.takeIf { it.stamp == stamp }?.let { return it.names }
-        val names = query(file, virtualFile) ?: return emptyList()
+        val names = query(file) ?: return emptyList()
         byFile[virtualFile] = Cached(stamp, names)
         return names
     }
@@ -75,64 +69,23 @@ internal class ByLocalNames(project: Project) : Disposable {
         byFile[file.originalFile.virtualFile ?: return] = Cached(document.modificationStamp, names)
     }
 
-    private fun query(file: PsiFile, virtualFile: VirtualFile): List<ByLocalName>? {
-        val server = runningByServer(file.project, virtualFile) ?: return null
-        ByServerDocuments.ensureOpen(server, file.project, virtualFile)
-
-        val legend = server.initializeResult?.capabilities?.semanticTokensProvider?.legend ?: return null
-        val variable = legend.tokenTypes.indexOf(BasedPythonSemanticTokensMapping.TYPE_VARIABLE)
-        val parameter = legend.tokenTypes.indexOf(BasedPythonSemanticTokensMapping.TYPE_PARAMETER)
-        val functionScope = legend.tokenModifiers.indexOf(FUNCTION_SCOPE)
-        if (functionScope < 0) return emptyList()
-
-        val text = file.text
-        val params = ByNamedSemanticTokensParams(server.getDocumentIdentifier(virtualFile), ByTextHash.of(text))
-        val tokens = server.askBy("textDocument/semanticTokens/full", TIMEOUT_MS) {
-            it.textDocumentService.semanticTokensFull(params)
-        }.value ?: return null
-        return read(text, tokens.data.orEmpty(), variable, parameter, functionScope)
-    }
+    /** Read off the file's tokens ([BySemanticTokens]), which every reader shares. */
+    private fun query(file: PsiFile): List<ByLocalName>? = BySemanticTokens.getInstance(file.project).of(file)?.let(::read)
 
     companion object {
         /** The modifier `by` puts on a name bound in a function's, a lambda's or a comprehension's scope. */
         const val FUNCTION_SCOPE = "functionScope"
 
-        /** Five ints per token: line delta, start delta, length, type, modifier bits. */
-        private const val STRIDE = 5
-
-        /** Bounds the wait on a server that is busy, as the docstring spans' does. */
-        private const val TIMEOUT_MS = 3_000
-
         fun getInstance(project: Project): ByLocalNames = project.service()
 
-        /**
-         * The tokens of [data], relative-encoded as the protocol has it, that are [variableType] or
-         * [parameterType] and carry the [functionScopeBit] modifier, as ranges of [text].
-         */
-        fun read(text: CharSequence, data: List<Int>, variableType: Int, parameterType: Int, functionScopeBit: Int): List<ByLocalName> {
-            val lineStarts = ByDocstringTokens.lineStarts(text)
-            val mask = 1 shl functionScopeBit
-            val found = mutableListOf<ByLocalName>()
-            var line = 0
-            var char = 0
-            var i = 0
-            while (i + STRIDE <= data.size) {
-                val deltaLine = data[i]
-                val deltaChar = data[i + 1]
-                val length = data[i + 2]
-                val type = data[i + 3]
-                val modifiers = data[i + 4]
-                i += STRIDE
-
-                line += deltaLine
-                char = if (deltaLine == 0) char + deltaChar else deltaChar
-                if (modifiers and mask == 0) continue
-                if (type != variableType && type != parameterType) continue
-                val start = lineStarts.getOrNull(line)?.plus(char) ?: continue
-                val end = start + length
-                if (end <= text.length) found += ByLocalName(TextRange(start, end), isParameter = type == parameterType)
+        /** The `variable` and `parameter` tokens among [tokens] that carry `functionScope`. */
+        fun read(tokens: List<ByToken>): List<ByLocalName> = tokens.mapNotNull { token ->
+            if (FUNCTION_SCOPE !in token.modifiers) return@mapNotNull null
+            when (token.type) {
+                BasedPythonSemanticTokensMapping.TYPE_PARAMETER -> ByLocalName(token.range, isParameter = true)
+                BasedPythonSemanticTokensMapping.TYPE_VARIABLE -> ByLocalName(token.range, isParameter = false)
+                else -> null
             }
-            return found
         }
     }
 }
