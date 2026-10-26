@@ -310,6 +310,13 @@
         <moveLeftRightHandler
             language="basedpython"
             implementationClass="dev.basedpython.pycharm.editor.mover.ByMoveElementLeftRightHandler"/>
+        <!-- Find Usages and Show Usages on a name in a .by file: by's references without the
+             declaration, named by the name. First, so it is the search target the actions take
+             rather than the platform's LSP one, which counts the declaration as a usage and is
+             named by file and position. See lsp.usages.ByFindUsages. -->
+        <uiDataRule order="first" implementation="dev.basedpython.pycharm.lsp.usages.BySearchTargetsRule"/>
+        <searcher forClass="com.intellij.find.usages.api.UsageSearchParameters"
+                  implementationClass="dev.basedpython.pycharm.lsp.usages.ByUsageSearcher"/>
         <!-- The gutter's R after a declared name is edited in place, renaming its uses through by's
              textDocument/rename; the processor is the rename it runs. -->
         <suggestedRefactoringSupport
