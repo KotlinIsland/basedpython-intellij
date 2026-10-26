@@ -28,6 +28,7 @@ import dev.basedpython.pycharm.env.ByLaunch
 import dev.basedpython.pycharm.lsp.inlay.ByHintKind
 import dev.basedpython.pycharm.lsp.inlay.ByHintMode
 import dev.basedpython.pycharm.settings.BasedPythonSettings
+import dev.basedpython.pycharm.settings.app.BasedPythonAppSettings
 import dev.basedpython.pycharm.settings.ByImportStyle
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
 import dev.basedpython.pycharm.testFramework.onEdt
@@ -331,6 +332,24 @@ class LspServerDescriptorTest {
     assertEquals("module", sent())
     settings.importStyle = ByImportStyle.FROM
     assertEquals("from", sent())
+  }
+
+  @Test
+  fun `by offers importable names in completion as the code completion setting says, on by default`() = onEdt {
+    val settings = BasedPythonAppSettings.getInstance()
+    fun sent(): Any? {
+      @Suppress("UNCHECKED_CAST")
+      val completions = (byDescriptor().createInitializationOptions() as Map<String, Any>)["completions"] as Map<String, Any>
+      // the name is by's `completions.autoImport`
+      return completions["autoImport"]
+    }
+    try {
+      assertEquals(true, sent())
+      settings.suggestImportableNames = false
+      assertEquals(false, sent())
+    } finally {
+      settings.suggestImportableNames = true
+    }
   }
 
   @Test

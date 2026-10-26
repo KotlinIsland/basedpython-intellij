@@ -17,7 +17,8 @@ import com.intellij.util.xmlb.XmlSerializerUtil
  * values whenever a project value is unset (null / blank).
  *
  * Also the IDE-wide options that have no project-level value at all, the way the platform keeps
- * its own auto-import options: [addUnambiguousImportsOnTheFly].
+ * its own auto-import and completion options: [addUnambiguousImportsOnTheFly],
+ * [suggestImportableNames].
  *
  * Persisted to the application config directory's `basedpython.xml` (distinct
  * from the per-project `.idea/basedpython.xml`).
@@ -38,6 +39,7 @@ class BasedPythonAppSettings : PersistentStateComponent<BasedPythonAppSettings.S
     var defaultByExtraArgs: String = "",
     var defaultBuffExtraArgs: String = "",
     var addUnambiguousImportsOnTheFly: Boolean = false,
+    var suggestImportableNames: Boolean = true,
   )
 
   private var state = State()
@@ -80,6 +82,16 @@ class BasedPythonAppSettings : PersistentStateComponent<BasedPythonAppSettings.S
   var addUnambiguousImportsOnTheFly: Boolean
     get() = state.addUnambiguousImportsOnTheFly
     set(value) { state.addUnambiguousImportsOnTheFly = value }
+
+  /**
+   * Whether completion offers the names of modules a file does not import yet, with the import —
+   * *Settings | Editor | General | Code Completion*, see
+   * [dev.basedpython.pycharm.lsp.completion.ByCodeCompletionOptions], sent as `by`'s
+   * `completions.autoImport`. On, as `by`'s own default and `.py`'s *Suggest importable names*.
+   */
+  var suggestImportableNames: Boolean
+    get() = state.suggestImportableNames
+    set(value) { state.suggestImportableNames = value }
 
   companion object {
     @JvmStatic

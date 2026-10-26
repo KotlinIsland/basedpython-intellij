@@ -601,6 +601,9 @@
         <autoImportOptionsProvider
             instance="dev.basedpython.pycharm.lsp.imports.ByAutoImportOptions"
             order="last"/>
+        <!-- Whether by's completion offers names the file does not import yet: Settings | Editor |
+             General | Code Completion, as Python's Suggest importable names is. -->
+        <codeCompletionConfigurable instance="dev.basedpython.pycharm.lsp.completion.ByCodeCompletionOptions"/>
 
         <!-- ===== Stream V: smart editing ===== -->
         <!-- Where a line goes, from by's outline (ByIndents): Enter's new line, through the platform's

@@ -54,6 +54,7 @@ import dev.basedpython.pycharm.lang.BasedPythonFileType
 import dev.basedpython.pycharm.lang.dialect.BasedPythonProjectDetector
 import dev.basedpython.pycharm.lsp.diagnostics.ByDiagnosticsSupport
 import dev.basedpython.pycharm.settings.BasedPythonSettings
+import dev.basedpython.pycharm.settings.app.BasedPythonAppSettings
 import dev.basedpython.pycharm.ui.log.BasedPythonLog
 import dev.basedpython.pycharm.util.BasedPythonBundle
 import org.eclipse.lsp4j.ClientCapabilities
@@ -256,7 +257,11 @@ internal class ByLspServerDescriptor(
       // *Settings | basedpython | Auto-import*: how a name is imported from a module the file
       // imports nothing from yet, `from m import name` or `import m`. Read at start too; the
       // settings page restarts the servers when it is applied.
+      // *Settings | Editor | General | Code Completion | basedpython | Suggest importable names*:
+      // whether completion offers names the file does not import yet, with the import. Read at
+      // start; ByCodeCompletionOptions restarts the servers when it changes.
       "completions" to mapOf(
+        "autoImport" to BasedPythonAppSettings.getInstance().suggestImportableNames,
         "completeFunctionParentheses" to EditorSettingsExternalizable.getInstance().isInsertParenthesesAutomatically,
         "importStyle" to BasedPythonSettings.getInstance(project).importStyle.id,
       ),
