@@ -257,7 +257,7 @@ lexical colour only. Don't reintroduce guessed semantic colour; fix the LSP path
 - [x] Postfix completion templates (`.if`, `.for`, `.not`, `.return`)
 
 ## 9. Formatting & style
-- [x] Code style settings page (delegate to buff config)
+- [x] Code style settings page (`format.BuffCodeStyleSettingsProvider`): *Editor | Code Style | basedpython | buff* says where buff's options live — `[tool.ruff]` / `[tool.ruff.format]` in `pyproject.toml`, or `ruff.toml` — and edits nothing. It used to offer a line length and a quote style that nothing read, so Reformat ignored them. Sending them to buff instead would be wrong for it: its server lets editor settings override the project's files (`configurationPreference` defaults to `editorFirst`), so the IDE would format differently from `buff format` on the command line and in CI. Showing the values buff resolved for a file, and making the editor's right margin buff's `line-length`, wait on buff reporting them; until then the margin is buff's default, 88
 - [x] EditorConfig support (platform editorconfig applies to `.by` automatically)
 - [x] Trailing whitespace / final newline handling (platform On-Save options apply)
 - [x] Indent detector for `.by` (editor.indent.BasedPythonFileIndentOptionsProvider)

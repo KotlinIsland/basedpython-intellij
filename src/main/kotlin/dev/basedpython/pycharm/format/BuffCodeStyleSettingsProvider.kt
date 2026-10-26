@@ -9,18 +9,14 @@ import com.intellij.openapi.fileTypes.FileType
 import com.intellij.psi.codeStyle.CodeStyleConfigurable
 import com.intellij.psi.codeStyle.CodeStyleSettings
 import com.intellij.psi.codeStyle.CodeStyleSettingsProvider
-import com.intellij.psi.codeStyle.CustomCodeStyleSettings
 import com.intellij.psi.codeStyle.LanguageCodeStyleSettingsProvider
 import dev.basedpython.pycharm.lang.BasedPythonFileType
 import dev.basedpython.pycharm.lang.BasedPythonLanguage
-import javax.swing.JComboBox
-import javax.swing.JLabel
 import javax.swing.JPanel
-import javax.swing.JSpinner
-import javax.swing.SpinnerNumberModel
-import java.awt.GridBagConstraints
-import java.awt.GridBagLayout
-import java.awt.Insets
+import java.awt.BorderLayout
+import com.intellij.ui.components.JBLabel
+import com.intellij.util.ui.JBUI
+import dev.basedpython.pycharm.util.BasedPythonBundle
 
 // ---------------------------------------------------------------------------
 // CodeStyleSettingsProvider — registers the top-level "basedpython" entry
@@ -41,9 +37,6 @@ class BuffCodeStyleSettingsProvider : CodeStyleSettingsProvider() {
         }
 
     override fun getConfigurableDisplayName(): String = "basedpython"
-
-    override fun createCustomSettings(settings: CodeStyleSettings): CustomCodeStyleSettings =
-        BuffCodeStyleSettings(settings)
 }
 
 // ---------------------------------------------------------------------------
@@ -61,7 +54,7 @@ class BuffLanguageCodeStyleSettingsProvider : LanguageCodeStyleSettingsProvider(
         commonSettings: com.intellij.psi.codeStyle.CommonCodeStyleSettings,
         indentOptions: com.intellij.psi.codeStyle.CommonCodeStyleSettings.IndentOptions,
     ) {
-        commonSettings.RIGHT_MARGIN = BuffCodeStyleSettings.DEFAULT_LINE_LENGTH
+        commonSettings.RIGHT_MARGIN = BUFF_DEFAULT_LINE_LENGTH
         // `# total = 1`, as Python writes it; see BasedPythonCommenter for why not a `"# "` prefix.
         commonSettings.LINE_COMMENT_ADD_SPACE = true
         indentOptions.INDENT_SIZE = 4
@@ -89,8 +82,11 @@ class BuffLanguageCodeStyleSettingsProvider : LanguageCodeStyleSettingsProvider(
     }
 }
 
+/** buff's own default `line-length`: the right margin until the project's configuration is read. */
+private const val BUFF_DEFAULT_LINE_LENGTH = 88
+
 // ---------------------------------------------------------------------------
-// Main tabbed panel — wraps the buff-specific settings tab.
+// Main tabbed panel — wraps the buff tab.
 // ---------------------------------------------------------------------------
 
 private class BuffCodeStyleMainPanel(
@@ -103,72 +99,40 @@ private class BuffCodeStyleMainPanel(
     }
 }
 
-// ---------------------------------------------------------------------------
-// Buff-specific options tab: line length + quote style.
-// ---------------------------------------------------------------------------
-
+/**
+ * The buff tab: where buff's formatting options are, and nothing to edit here.
+ *
+ * It used to offer a line length and a quote style that nothing in the plugin read, so Reformat
+ * went on wrapping at buff's 88 with its double quotes: buff, like ruff, reads them from the
+ * project's configuration files, which is what `buff format` applies on the command line and in CI.
+ * Sending the IDE's values instead would be wrong for buff: its server lets editor settings
+ * override the files (`configurationPreference` defaults to `editorFirst`), so the IDE would format
+ * differently from everything else that runs buff. Showing the values buff resolved for a file is
+ * what belongs here, and waits on buff reporting them.
+ */
 private class BuffOptionsTab(settings: CodeStyleSettings) :
     CodeStyleAbstractPanel(BasedPythonLanguage, null, settings) {
 
-    private val lineLengthSpinner = JSpinner(SpinnerNumberModel(88, 40, 320, 1))
-    private val quoteStyleCombo = JComboBox(BuffCodeStyleSettings.QUOTE_OPTIONS)
-
-    private val rootPanel: JPanel = buildPanel()
-
-    private fun buildPanel(): JPanel {
-        val p = JPanel(GridBagLayout())
-        val gbc = GridBagConstraints().apply {
-            fill = GridBagConstraints.HORIZONTAL
-            insets = Insets(4, 8, 4, 8)
-        }
-
-        gbc.gridy = 0; gbc.gridx = 0; gbc.weightx = 0.0
-        p.add(JLabel("Line length:"), gbc)
-        gbc.gridx = 1; gbc.weightx = 1.0
-        p.add(lineLengthSpinner, gbc)
-
-        gbc.gridy = 1; gbc.gridx = 0; gbc.weightx = 0.0
-        p.add(JLabel("Quote style:"), gbc)
-        gbc.gridx = 1; gbc.weightx = 1.0
-        p.add(quoteStyleCombo, gbc)
-
-        // Push widgets to the top.
-        gbc.gridy = 2; gbc.gridx = 0; gbc.gridwidth = 2
-        gbc.weighty = 1.0; gbc.fill = GridBagConstraints.BOTH
-        p.add(JPanel(), gbc)
-
-        return p
+    private val rootPanel: JPanel = JPanel(BorderLayout()).apply {
+        border = JBUI.Borders.empty(8)
+        add(JBLabel(BasedPythonBundle.message("codeStyle.buff.fromConfiguration")).apply { setAllowAutoWrapping(true) }, BorderLayout.NORTH)
     }
-
-    // --- CodeStyleAbstractPanel contract ------------------------------------
 
     override fun getTabTitle(): String = "buff"
 
     override fun getPanel(): JPanel = rootPanel
 
-    override fun resetImpl(settings: CodeStyleSettings) {
-        val custom = settings.getCustomSettings(BuffCodeStyleSettings::class.java)
-        lineLengthSpinner.value = custom.lineLength
-        quoteStyleCombo.selectedIndex = custom.quoteStyle
-    }
+    override fun resetImpl(settings: CodeStyleSettings) = Unit
 
-    override fun apply(settings: CodeStyleSettings) {
-        val custom = settings.getCustomSettings(BuffCodeStyleSettings::class.java)
-        custom.lineLength = lineLengthSpinner.value as Int
-        custom.quoteStyle = quoteStyleCombo.selectedIndex
-    }
+    override fun apply(settings: CodeStyleSettings) = Unit
 
-    override fun isModified(settings: CodeStyleSettings): Boolean {
-        val custom = settings.getCustomSettings(BuffCodeStyleSettings::class.java)
-        return custom.lineLength != lineLengthSpinner.value as Int ||
-            custom.quoteStyle != quoteStyleCombo.selectedIndex
-    }
+    override fun isModified(settings: CodeStyleSettings): Boolean = false
 
     // --- Preview panel (not used — no PSI for basedpython yet) -------------
 
     override fun getPreviewText(): String? = null
 
-    override fun getRightMargin(): Int = BuffCodeStyleSettings.DEFAULT_LINE_LENGTH
+    override fun getRightMargin(): Int = BUFF_DEFAULT_LINE_LENGTH
 
     override fun createHighlighter(scheme: EditorColorsScheme): EditorHighlighter? = null
 
