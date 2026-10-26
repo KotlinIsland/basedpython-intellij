@@ -24,6 +24,7 @@ import com.intellij.refactoring.IntroduceTargetChooser
 import com.intellij.refactoring.RefactoringBundle
 import com.intellij.refactoring.introduce.IntroduceTarget
 import com.intellij.refactoring.RefactoringActionHandler
+import com.intellij.refactoring.changeSignature.ChangeSignatureHandler
 import com.intellij.refactoring.util.CommonRefactoringUtil
 import dev.basedpython.pycharm.format.ByCleanup
 import dev.basedpython.pycharm.lang.BasedPythonLanguage
@@ -54,6 +55,7 @@ internal class ByRefactoringSupportProvider : RefactoringSupportProvider() {
     override fun getPullUpHandler(): RefactoringActionHandler = ByPullUpHandler()
     override fun getPushDownHandler(): RefactoringActionHandler = ByPushDownHandler()
     override fun getExtractSuperClassHandler(): RefactoringActionHandler = ByExtractSuperclassHandler()
+    override fun getChangeSignatureHandler(): ChangeSignatureHandler = ByChangeSignatureHandler()
 }
 
 /**

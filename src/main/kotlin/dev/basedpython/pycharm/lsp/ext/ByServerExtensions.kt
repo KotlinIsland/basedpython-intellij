@@ -508,6 +508,22 @@ interface ByServerExtensions {
      */
     @JsonRequest("by/extractSuperclass")
     fun extractSuperclass(params: ByExtractSuperclassParams): CompletableFuture<ByProjectEditAnswer?>
+
+    /**
+     * The function at a position — in its name or parameters, or in a name referring to it — and its
+     * parameters as the source writes them, without a method's `self` or `cls`: Change Signature's
+     * starting point, see [dev.basedpython.pycharm.lsp.refactor.ByChangeSignature]. `null` where
+     * there is no function.
+     */
+    @JsonRequest("by/prepareChangeSignature")
+    fun prepareChangeSignature(params: ByPositionParams): CompletableFuture<BySignature?>
+
+    /**
+     * The edits that give the function at a position the parameter list named, every call in the
+     * project rebound to it as python binds it — or why not.
+     */
+    @JsonRequest("by/changeSignature")
+    fun changeSignature(params: ByChangeSignatureParams): CompletableFuture<ByProjectEditAnswer?>
 }
 
 /** The file or directory to name. */

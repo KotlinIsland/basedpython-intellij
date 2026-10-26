@@ -98,3 +98,57 @@ data class ByExtractSuperclassParams(
     /** The new class's name. */
     val name: String,
 )
+
+/** A function and its parameters, from `by/prepareChangeSignature`. */
+data class BySignature(
+    val name: String? = null,
+    val uri: String? = null,
+    /** Its name, in [uri]. */
+    val range: Range? = null,
+    val parameters: List<BySignatureParameter>? = null,
+)
+
+/** One parameter as the source writes it. */
+data class BySignatureParameter(
+    val name: String? = null,
+    /** One of [ByParameterKind]'s ids. */
+    val kind: String? = null,
+    val default: String? = null,
+    val annotation: String? = null,
+)
+
+/** The whole new parameter list `by/changeSignature` gives a function, in order. */
+data class ByChangeSignatureParams(
+    val textDocument: TextDocumentIdentifier,
+    val position: Position,
+    val parameters: List<ByChangedParameter>,
+)
+
+/** One parameter of the new list. */
+data class ByChangedParameter(
+    val name: String,
+    /** The parameter it was; `null`, and so not sent, for a new one. */
+    val oldName: String? = null,
+    /** One of [ByParameterKind]'s ids. */
+    val kind: String,
+    /** Its default, written as source; `null` for none. */
+    val default: String? = null,
+    /** What each call passes a new parameter, written as source; `null` leaves it to its default. */
+    val value: String? = null,
+)
+
+/** How a parameter is passed, by the id `by` names it with. */
+enum class ByParameterKind(val id: String) {
+    PositionalOnly("positionalOnly"),
+    PositionalOrKeyword("positionalOrKeyword"),
+    /** `*args` */
+    Variadic("variadic"),
+    KeywordOnly("keywordOnly"),
+    /** `**kwargs` */
+    VariadicKeyword("variadicKeyword"),
+    ;
+
+    companion object {
+        fun of(id: String?): ByParameterKind? = entries.firstOrNull { it.id == id }
+    }
+}
