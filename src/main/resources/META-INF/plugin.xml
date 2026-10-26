@@ -431,11 +431,16 @@
         <codeInsight.implementMethod
             language="basedpython"
             implementationClass="dev.basedpython.pycharm.lsp.supers.ByImplementMethodsHandler"/>
-        <!-- The gutter's "overrides" / "implements" icons, from `by/documentSuperMembers`. The "is
-             overridden" ones are the platform's LSP provider, switched on by the server descriptor. -->
+        <!-- The gutter's "overrides" / "implements" icons, from `by/documentSuperMembers`. -->
         <codeInsight.lineMarkerProvider
             language="basedpython"
             implementationClass="dev.basedpython.pycharm.lsp.supers.ByOverridingMarkers"/>
+        <!-- The gutter's "is subclassed" / "is overridden" / "is implemented" icons, from the
+             implementations count of by/documentUsageCounts, which the Inheritors code vision
+             shares. The platform's LSP provider, which asked a request per declaration, is off. -->
+        <codeInsight.lineMarkerProvider
+            language="basedpython"
+            implementationClass="dev.basedpython.pycharm.lsp.supers.ByInheritorMarkers"/>
         <!-- Method Hierarchy (Ctrl+Shift+H): `by/superMembers` up, `textDocument/implementation` down. -->
         <methodHierarchyProvider
             language="basedpython"

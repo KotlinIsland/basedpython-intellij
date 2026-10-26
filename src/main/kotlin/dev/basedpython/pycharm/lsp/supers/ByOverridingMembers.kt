@@ -35,7 +35,7 @@ import java.util.Collections
  *
  * One `by/documentSuperMembers` per revision of a document, whatever it holds: the icons are drawn
  * on every highlighting pass, and a request per member per pass is what the platform's own
- * *overridden* icons cost (see `ByInheritanceMarkers` in `LspServers.kt`).
+ * *overridden* icons cost, which is why those are off (see [ByInheritorMarkers]).
  *
  * ## Revisions
  *

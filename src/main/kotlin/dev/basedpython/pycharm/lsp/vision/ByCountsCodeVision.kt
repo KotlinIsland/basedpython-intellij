@@ -247,21 +247,7 @@ internal class ByInheritorsCodeVisionProvider : ByCountsCodeVisionProvider(ByUsa
         file: VirtualFile,
         document: TextDocumentIdentifier,
         position: Position,
-    ): List<Location>? {
-        val params = ImplementationParams(document, position)
-        val found = when (
-            val answer = server.awaitBy("textDocument/implementation") { it.textDocumentService.implementation(params) }
-        ) {
-            is ByAnswer.Answer -> answer.value.map(
-                { locations -> locations.filterNotNull() },
-                { links -> links.filterNotNull().map { Location(it.targetUri, it.targetSelectionRange) } },
-            )
-            ByAnswer.None -> emptyList()
-            ByAnswer.Failed -> return null
-        }
-        // the declaration is its own first implementation, and is not counted
-        return found.filterNot { it.range.start == position && server.descriptor.findFileByUri(it.uri) == file }
-    }
+    ): List<Location>? = implementationsOf(server, file, document, position)
 
     override fun chooserTitle(name: String, kind: String?): String =
         BasedPythonBundle.message(if (kind == CLASS) "code.vision.inheritors.chooser" else "code.vision.overrides.chooser", name)
@@ -274,6 +260,32 @@ internal class ByInheritorsCodeVisionProvider : ByCountsCodeVisionProvider(ByUsa
         /** [ByDeclarationUsages.kind] of a class. */
         private const val CLASS = "class"
     }
+}
+
+/**
+ * What subclasses the class, or overrides the method, whose name starts at [position] in [file]:
+ * `textDocument/implementation` less the declaration itself — the search an implementations count
+ * is. `null` when [server] did not answer.
+ */
+internal suspend fun implementationsOf(
+    server: LspClient,
+    file: VirtualFile,
+    document: TextDocumentIdentifier,
+    position: Position,
+): List<Location>? {
+    val params = ImplementationParams(document, position)
+    val found = when (
+        val answer = server.awaitBy("textDocument/implementation") { it.textDocumentService.implementation(params) }
+    ) {
+        is ByAnswer.Answer -> answer.value.map(
+            { locations -> locations.filterNotNull() },
+            { links -> links.filterNotNull().map { Location(it.targetUri, it.targetSelectionRange) } },
+        )
+        ByAnswer.None -> emptyList()
+        ByAnswer.Failed -> return null
+    }
+    // the declaration is its own first implementation, and is not counted
+    return found.filterNot { it.range.start == position && server.descriptor.findFileByUri(it.uri) == file }
 }
 
 /** Where a click's asking runs: cancelled with the project, and with the plugin when it unloads. */

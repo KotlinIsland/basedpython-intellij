@@ -3,6 +3,7 @@ package dev.basedpython.pycharm.lsp.vision
 import com.intellij.codeInsight.codeVision.settings.CodeVisionSettings
 import com.intellij.codeInsight.codeVision.settings.PlatformCodeVisionIds
 import com.intellij.codeInsight.daemon.DaemonCodeAnalyzer
+import com.intellij.codeInsight.daemon.LineMarkerSettings
 import com.intellij.codeInsight.hints.codeVision.ModificationStampUtil
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ApplicationManager
@@ -29,6 +30,7 @@ import dev.basedpython.pycharm.lsp.ext.ByDocumentUsageCountsParams
 import dev.basedpython.pycharm.lsp.ext.ByServerExtensions
 import dev.basedpython.pycharm.lsp.isMethodNotFound
 import dev.basedpython.pycharm.lsp.runningByServer
+import dev.basedpython.pycharm.lsp.supers.ByInheritorMarkers
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.async
@@ -38,7 +40,8 @@ import java.util.Collections
 /**
  * What `by/documentUsageCounts` says about a `.by` document now: its declarations with their counts
  * — what the code vision above each is drawn from ([ByUsagesCodeVisionProvider],
- * [ByInheritorsCodeVisionProvider]).
+ * [ByInheritorsCodeVisionProvider]), and the gutter's *is overridden* icons
+ * ([dev.basedpython.pycharm.lsp.supers.ByInheritorMarkers]).
  *
  * ## Asked once per pass, for both counts
  *
@@ -207,13 +210,18 @@ internal class ByUsageCounts(private val project: Project, private val scope: Co
 
         fun getInstance(project: Project): ByUsageCounts = project.service()
 
-        /** [count], and the other count when its provider is switched on: what one pass draws. */
+        /**
+         * [count], and the other count when something drawing from it is switched on — its code
+         * vision, or for implementations the gutter's *is overridden* icons ([ByInheritorMarkers]):
+         * what one pass draws, so the passes ask the same and share the answer.
+         */
         private fun countsDrawn(count: Count): Set<Count> {
             val settings = CodeVisionSettings.getInstance()
             return buildSet {
                 add(count)
                 if (settings.isProviderEnabled(PlatformCodeVisionIds.USAGES.key)) add(Count.REFERENCES)
                 if (settings.isProviderEnabled(PlatformCodeVisionIds.INHERITORS.key)) add(Count.IMPLEMENTATIONS)
+                if (LineMarkerSettings.getSettings().isEnabled(ByInheritorMarkers())) add(Count.IMPLEMENTATIONS)
             }
         }
 

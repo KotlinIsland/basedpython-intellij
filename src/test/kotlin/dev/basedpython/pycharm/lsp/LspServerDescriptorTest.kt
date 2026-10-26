@@ -12,7 +12,7 @@ import com.intellij.platform.lsp.api.customization.LspFindReferencesDisabled
 import com.intellij.platform.lsp.api.customization.LspFoldingRangeDisabled
 import com.intellij.platform.lsp.api.customization.LspGoToDefinitionDisabled
 import com.intellij.platform.lsp.api.customization.LspGoToTypeDefinitionDisabled
-import com.intellij.platform.lsp.api.customization.LspInheritanceMarkersSupport
+import com.intellij.platform.lsp.api.customization.LspInheritanceMarkersDisabled
 import com.intellij.platform.lsp.api.customization.LspInlayHintDisabled
 import com.intellij.platform.lsp.api.customization.LspOnTypeFormattingSupport
 import com.intellij.platform.lsp.api.customization.LspRenameDisabled
@@ -218,17 +218,10 @@ class LspServerDescriptorTest {
   }
 
   @Test
-  fun `by draws inheritance markers in by files`() = onEdt {
-    // Off in the platform unless a customization turns them on.
-    val c = byDescriptor().lspCustomization.inheritanceMarkersCustomizer
-    assertTrue(c is LspInheritanceMarkersSupport, "inheritance markers must be on for by: $c")
-    assertTrue((c as LspInheritanceMarkersSupport).shouldAskServerForMarkers(fixture.configureByText("a.by", "").virtualFile))
-  }
-
-  @Test
-  fun `by draws no inheritance markers where another language already does`() = onEdt {
-    val c = byDescriptor().lspCustomization.inheritanceMarkersCustomizer as LspInheritanceMarkersSupport
-    assertFalse(c.shouldAskServerForMarkers(makeFile("readme.txt")))
+  fun `the platform's inheritance markers are off for by, which draws its own from the usage counts`() = onEdt {
+    // They asked `implementation` and `typeHierarchy/subtypes` per declaration on every quiet edit;
+    // lsp.supers.ByInheritorMarkers draws the same icons from the count the code vision asks for.
+    assertSame(LspInheritanceMarkersDisabled, byDescriptor().lspCustomization.inheritanceMarkersCustomizer)
   }
 
   @Test
