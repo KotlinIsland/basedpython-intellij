@@ -54,6 +54,7 @@ import dev.basedpython.pycharm.lang.BasedPythonFileType
 import dev.basedpython.pycharm.lang.dialect.BasedPythonProjectDetector
 import dev.basedpython.pycharm.lsp.diagnostics.ByDiagnosticsSupport
 import dev.basedpython.pycharm.settings.BasedPythonSettings
+import dev.basedpython.pycharm.inspections.rules.ByRuleConfiguration
 import dev.basedpython.pycharm.settings.app.BasedPythonAppSettings
 import dev.basedpython.pycharm.ui.log.BasedPythonLog
 import dev.basedpython.pycharm.util.BasedPythonBundle
@@ -265,6 +266,10 @@ internal class ByLspServerDescriptor(
         "completeFunctionParentheses" to EditorSettingsExternalizable.getInstance().isInsertParenthesesAutomatically,
         "importStyle" to BasedPythonSettings.getInstance(project).importStyle.id,
       ),
+      // The rules the inspection profile changes from their defaults, a rule switched off as
+      // `ignore`, above the project's own configuration; ByRuleConfiguration restarts the servers
+      // when a profile change changes them.
+      "configuration" to mapOf("rules" to ByRuleConfiguration.getInstance(project).current()),
     )
 
   // `by` advertises: completion, hover, goto-def/decl/type-def, references, rename,

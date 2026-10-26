@@ -543,6 +543,8 @@
 
         <!-- Rendered docstrings are the server's answer, and the pass that asks runs before the
              client has told `by` the file exists. This asks again once it has. -->
+        <!-- The rules' inspections the last by named, in a project's profiles before by starts. -->
+        <postStartupActivity implementation="dev.basedpython.pycharm.inspections.rules.ByRuleInstall"/>
         <postStartupActivity
             implementation="dev.basedpython.pycharm.docs.render.ByRenderedDocsRefresher$Activity"/>
 
@@ -829,6 +831,10 @@
              reports for itself. -->
         <listener
             class="dev.basedpython.pycharm.lsp.version.ByVersionCheck"
+            topic="dev.basedpython.pycharm.lsp.ByLspLifecycleListener"/>
+        <!-- Each rule by checks as an inspection, named by by/rules when by starts. -->
+        <listener
+            class="dev.basedpython.pycharm.inspections.rules.ByRuleRefresh"
             topic="dev.basedpython.pycharm.lsp.ByLspLifecycleListener"/>
     </projectListeners>
 

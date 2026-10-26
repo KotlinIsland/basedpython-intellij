@@ -364,6 +364,13 @@ interface ByServerExtensions {
     @JsonRequest("by/smartCompletion")
     fun smartCompletion(params: org.eclipse.lsp4j.CompletionParams): CompletableFuture<org.eclipse.lsp4j.CompletionList?>
 
+    /**
+     * Every rule `by` reports diagnostics under, by name, with its summary, default level and status.
+     * A `by` from before the request answers `MethodNotFound`.
+     */
+    @JsonRequest("by/rules")
+    fun rules(): CompletableFuture<List<ByRule>?>
+
     @JsonRequest("by/references")
     fun references(args: ReferenceParams): CompletableFuture<List<ByReference>?>
 
@@ -1452,4 +1459,15 @@ data class ByInheritedMember(
     val uri: String? = null,
     val range: Range? = null,
     val selectionRange: Range? = null,
+)
+
+/** A rule `by` reports diagnostics under: the `code` of each of them. */
+data class ByRule(
+    val name: String = "",
+    /** One line. */
+    val summary: String? = null,
+    /** `ignore`, `warn` or `error`: its level where the configuration names none. */
+    val defaultLevel: String? = null,
+    /** `stable`, `preview` or `deprecated`. */
+    val status: String? = null,
 )

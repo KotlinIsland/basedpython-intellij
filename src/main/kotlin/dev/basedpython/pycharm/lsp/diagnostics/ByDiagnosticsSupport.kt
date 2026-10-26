@@ -1,5 +1,10 @@
 package dev.basedpython.pycharm.lsp.diagnostics
 
+import com.intellij.codeInsight.daemon.HighlightDisplayKey
+import com.intellij.psi.PsiDocumentManager
+import dev.basedpython.pycharm.inspections.rules.ByRuleInspection
+import dev.basedpython.pycharm.inspections.rules.ByRuleLevels
+
 import com.intellij.codeInsight.intention.IntentionAction
 import com.intellij.lang.annotation.AnnotationHolder
 import com.intellij.openapi.util.TextRange
@@ -29,7 +34,13 @@ import org.eclipse.lsp4j.Diagnostic
 internal class ByDiagnosticsSupport : LspDiagnosticsSupport() {
     override fun getTooltip(diagnostic: Diagnostic): String = ByCodeSpans.toHtml(getMessage(diagnostic))
 
-    /** Every diagnostic that names its rule offers to explain it; see [ExplainRuleFix]. */
+    /**
+     * Every diagnostic that names its rule offers to explain it; see [ExplainRuleFix]. And it is drawn
+     * as its rule's inspection says ([ByRuleLevels]): not at all where the profile switches the rule
+     * off for the file, at the profile's severity where it gives one, and as `by` reported it where
+     * the profile leaves the rule as it comes. The explanation carries the inspection's key, so
+     * Alt+Enter offers its settings and switching it off beside it.
+     */
     override fun createAnnotation(
         holder: AnnotationHolder,
         diagnostic: Diagnostic,
@@ -37,6 +48,23 @@ internal class ByDiagnosticsSupport : LspDiagnosticsSupport() {
         quickFixes: List<IntentionAction>,
     ) {
         val code = ExplainRuleFix.codeOf(diagnostic)
-        super.createAnnotation(holder, diagnostic, textRange, if (code == null) quickFixes else quickFixes + ExplainRuleFix(code))
+            ?: return super.createAnnotation(holder, diagnostic, textRange, quickFixes)
+        val file = holder.currentAnnotationSession.file
+        val drawn = ByRuleLevels.forDiagnostic(file.project, code, file)
+        if (drawn == ByRuleLevels.Drawn.Hidden) return
+        val severity = (drawn as? ByRuleLevels.Drawn.At)?.severity ?: getHighlightSeverity(diagnostic) ?: return
+        val key = (drawn as? ByRuleLevels.Drawn.At)?.key ?: HighlightDisplayKey.find(ByRuleInspection.shortName(code))
+        var builder = holder.newAnnotation(severity, getMessage(diagnostic)).tooltip(getTooltip(diagnostic)).range(textRange)
+        if (textRange.isEmpty) {
+            val document = PsiDocumentManager.getInstance(file.project).getDocument(file)
+            if (document != null && textRange.startOffset == document.getLineEndOffset(document.getLineNumber(textRange.startOffset))) {
+                builder = builder.afterEndOfLine()
+            }
+        }
+        getSpecialHighlightType(diagnostic)?.let { builder = builder.highlightType(it) }
+        for (fix in quickFixes) builder = builder.withFix(fix)
+        val explain = builder.newFix(ExplainRuleFix(code))
+        builder = (if (key != null) explain.key(key) else explain).registerFix()
+        builder.create()
     }
 }
