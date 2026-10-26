@@ -50,6 +50,8 @@ class ByOutline(
         val name: TextRange? = null,
         /** On a `def`: the names of its parameters, in source order. */
         val parameters: List<TextRange> = emptyList(),
+        /** On a `def` a class body owns: `instance`, `class` or `static`; null on a function or from an older `by`. */
+        val method: String? = null,
     )
 
     /** One clause: `if`, `elif`, a `case`, a function's `def`. */
@@ -201,6 +203,7 @@ object ByOutlineReplies {
             },
             name = statement.name?.let(::range),
             parameters = statement.parameters.map(::range),
+            method = statement.method,
         )
 
         fun clause(clause: ByOutlineClause): ByOutline.Clause = ByOutline.Clause(

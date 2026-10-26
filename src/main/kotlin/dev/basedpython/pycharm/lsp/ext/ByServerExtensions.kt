@@ -860,6 +860,13 @@ data class ByOutlineStatement(
     val name: Range? = null,
     /** On a `def`: the names of its parameters, in source order. */
     val parameters: List<Range> = emptyList(),
+    /**
+     * On a `def` a class body owns: how the class dispatches it — `instance`, `class` or `static` —
+     * which says whether its first parameter is `self`, `cls` or neither, from its decorators,
+     * its modifiers and the methods Python makes implicitly static or class methods. Absent on a
+     * function, and from a `by` that does not report it.
+     */
+    val method: String? = null,
 )
 
 /** One clause of a compound statement. */

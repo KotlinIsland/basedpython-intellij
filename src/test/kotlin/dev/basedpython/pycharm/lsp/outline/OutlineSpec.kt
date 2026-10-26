@@ -54,7 +54,12 @@ class OutlineSpec private constructor(private val text: CharSequence) {
          * A `def` whose header — from `def` to its `:` — is spelled [header], declaring the name
          * after `def` and the [parameters] spelled in the header, in order.
          */
-        fun def(header: String, parameters: List<String> = emptyList(), body: Suite.() -> Unit = {}) {
+        fun def(
+            header: String,
+            parameters: List<String> = emptyList(),
+            method: String? = null,
+            body: Suite.() -> Unit = {},
+        ) {
             val range = find(header)
             val name = header.removePrefix("def ").takeWhile { it == '_' || it.isLetterOrDigit() }
             val nameRange = TextRange.from(range.startOffset + header.indexOf(name), name.length)
@@ -72,13 +77,14 @@ class OutlineSpec private constructor(private val text: CharSequence) {
                 clauses = listOf(
                     ByOutline.Clause(
                         keyword = TextRange.from(range.startOffset, 3),
-                        colon = TextRange(range.endOffset - 1, range.endOffset),
+                        colon = if (header.endsWith(":")) TextRange(range.endOffset - 1, range.endOffset) else null,
                         range = clauseRange,
                         body = suite.statements,
                     ),
                 ),
                 name = nameRange,
                 parameters = parameterRanges,
+                method = method,
             )
         }
 

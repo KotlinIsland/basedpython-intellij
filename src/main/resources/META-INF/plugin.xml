@@ -490,6 +490,9 @@
         <!-- `{` gets its `}` inside an f-string or t-string, where the lexer sees one string token. -->
         <typedHandler
             implementation="dev.basedpython.pycharm.editor.smart.ByFStringBraceTypedHandler"/>
+        <!-- `(` after a method's name writes `self` or `cls`, as Python's Insert 'self' does. -->
+        <typedHandler
+            implementation="dev.basedpython.pycharm.editor.smart.ByMethodReceiverTypedHandler"/>
         <!-- Join Lines (Ctrl+Shift+J) that knows backslashes, brackets, strings and statements, from
              `by`'s outline. -->
         <joinLinesHandler order="first"
