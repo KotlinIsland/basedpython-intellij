@@ -26,6 +26,8 @@ import dev.basedpython.pycharm.lsp.ext.ByPositionParams
 import dev.basedpython.pycharm.lsp.ext.ByProjectEditAnswer
 import dev.basedpython.pycharm.lsp.ext.ByServerExtensions
 import dev.basedpython.pycharm.lsp.isMethodNotFound
+import org.eclipse.lsp4j.jsonrpc.ResponseErrorException
+import org.eclipse.lsp4j.jsonrpc.messages.ResponseErrorCode
 import dev.basedpython.pycharm.util.BasedPythonBundle
 import org.eclipse.lsp4j.Position
 import org.eclipse.lsp4j.TextDocumentIdentifier
@@ -44,6 +46,12 @@ internal sealed interface ByAsked<out R : Any> {
     /** The server answered `MethodNotFound`: a `by` from before the request. */
     data object Unsupported : ByAsked<Nothing>
 
+    /**
+     * The server refused the request's params, `InvalidParams`, with [message]: a field a `by` from
+     * before it does not know, as Change Signature's new name is to one.
+     */
+    data class Rejected(val message: String) : ByAsked<Nothing>
+
     /** The request failed, timed out, or was never sent. */
     data object Failed : ByAsked<Nothing>
 }
@@ -58,20 +66,31 @@ internal suspend fun <R : Any> LspClient.awaitByExtension(
     request: (ByServerExtensions) -> CompletableFuture<R?>,
 ): ByAsked<R> {
     var unknownRequest = false
+    var rejected: String? = null
     val answer = awaitingAgain<R>(what, timeoutMs) { sent ->
         try {
             sendRequest { (it as ByServerExtensions).let(request).also(sent) }
         } catch (e: Exception) {
             if (isMethodNotFound(e)) unknownRequest = true
+            rejected = invalidParams(e)
             throw e
         }
     }
     return when (answer) {
         is ByAnswer.Answer -> ByAsked.Answer(answer.value)
         ByAnswer.None -> ByAsked.None
-        ByAnswer.Failed -> if (unknownRequest) ByAsked.Unsupported else ByAsked.Failed
+        ByAnswer.Failed -> when {
+            unknownRequest -> ByAsked.Unsupported
+            rejected != null -> ByAsked.Rejected(rejected!!)
+            else -> ByAsked.Failed
+        }
     }
 }
+
+/** The message of [error], when it is the server refusing a request's params; `null` otherwise. */
+private fun invalidParams(error: Throwable): String? =
+    generateSequence(error) { it.cause }.filterIsInstance<ResponseErrorException>()
+        .firstOrNull { it.responseError.code == ResponseErrorCode.InvalidParams.value }?.responseError?.message
 
 /** What `by` said to a refactoring that edits the project. */
 internal sealed interface ByProjectEdit {
@@ -99,6 +118,7 @@ internal sealed interface ByProjectEdit {
             }
             ByAsked.None -> Failed(BasedPythonBundle.message("refactoring.by.project.declined", what))
             ByAsked.Unsupported -> Failed(BasedPythonBundle.message("refactoring.by.project.unsupported", what))
+            is ByAsked.Rejected -> Failed(BasedPythonBundle.message("refactoring.by.project.rejected", what, asked.message))
             ByAsked.Failed -> Failed(BasedPythonBundle.message("refactoring.by.project.failed", what))
         }
     }
@@ -181,6 +201,7 @@ internal object ByProjectRefactorings {
         is ByAsked.Answer -> null
         ByAsked.None -> notHere
         ByAsked.Unsupported -> BasedPythonBundle.message("refactoring.by.project.unsupported", what)
+        is ByAsked.Rejected -> BasedPythonBundle.message("refactoring.by.project.rejected", what, asked.message)
         ByAsked.Failed -> BasedPythonBundle.message("refactoring.by.project.failed", what)
     }
 

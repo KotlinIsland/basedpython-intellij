@@ -71,8 +71,8 @@ class ByMoveSymbolHandler : MoveHandlerDelegate() {
             is ByAsked.Answer -> asked.value
             // nothing here to move: the platform's handlers go on to the file
             ByAsked.None, ByAsked.Unsupported -> return false
-            ByAsked.Failed -> {
-                ByProjectRefactorings.error(project, editor, title, BasedPythonBundle.message("refactoring.by.project.failed", "by/prepareMoveSymbol"))
+            ByAsked.Failed, is ByAsked.Rejected -> {
+                ByProjectRefactorings.error(project, editor, title, ByProjectRefactorings.unanswered(asked, "by/prepareMoveSymbol", "")!!)
                 return true
             }
         }

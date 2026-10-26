@@ -1,5 +1,7 @@
 package dev.basedpython.pycharm.lsp.refactor
 
+import dev.basedpython.pycharm.lsp.ext.ByAnnotationEdit
+import dev.basedpython.pycharm.lsp.ext.ByChangeSignatureParams
 import dev.basedpython.pycharm.lsp.ext.ByChangedParameter
 import dev.basedpython.pycharm.lsp.ext.ByParameterKind
 import dev.basedpython.pycharm.lsp.ext.BySignature
@@ -49,7 +51,7 @@ class ByChangeSignatureTest {
 
     @Test
     fun `the signature is written as a def writes it, with the markers its kinds need`() {
-        assertEquals("scale(width, height=1, *, factor=1.0)", signaturePreview("scale", ByParameterRow.of(scale)))
+        assertEquals("scale(width: float, height: float = 1, *, factor: float = 1.0)", signaturePreview("scale", ByParameterRow.of(scale)))
 
         fun row(name: String, kind: ByParameterKind, default: String = "") = ByParameterRow(name, name, kind, default, "", null)
         assertEquals(
@@ -65,5 +67,39 @@ class ByChangeSignatureTest {
                 ),
             ),
         )
+    }
+
+    /** What [params] is on the wire, as lsp4j writes a request's params. */
+    private fun wire(params: Any): String = com.google.gson.JsonParser.parseString(
+        org.eclipse.lsp4j.jsonrpc.json.MessageJsonHandler(emptyMap()).serialize(
+            org.eclipse.lsp4j.jsonrpc.messages.RequestMessage().apply { id = "1"; method = "by/changeSignature"; this.params = params },
+        ),
+    ).asJsonObject.get("params").toString()
+
+    @Test
+    fun `a name, a return annotation and an annotation are sent only where they change, a removal as null`() {
+        val document = org.eclipse.lsp4j.TextDocumentIdentifier("file:///s.by")
+        val position = org.eclipse.lsp4j.Position(0, 4)
+        val kept = ByParameterRow("width", "width", ByParameterKind.PositionalOrKeyword, "", "", "int")
+        val typed = ByParameterRow("height", "height", ByParameterKind.PositionalOrKeyword, "", "", "int").apply { annotation = "float" }
+        val untyped = ByParameterRow("depth", "depth", ByParameterKind.PositionalOrKeyword, "", "", "int").apply { annotation = " " }
+
+        assertEquals(
+            """{"textDocument":{"uri":"file:///s.by"},"position":{"line":0,"character":4},"parameters":[{"name":"width","oldName":"width","kind":"positionalOrKeyword"}]}""",
+            wire(ByChangeSignatureParams(document, position, listOf(kept.changed()))),
+            "nothing changed but the list: what an older by takes",
+        )
+        assertEquals(
+            """{"textDocument":{"uri":"file:///s.by"},"position":{"line":0,"character":4},"parameters":[""" +
+                """{"name":"height","oldName":"height","kind":"positionalOrKeyword","annotation":"float"},""" +
+                """{"name":"depth","oldName":"depth","kind":"positionalOrKeyword","annotation":null}],"name":"volume","returns":null}""",
+            wire(ByChangeSignatureParams(document, position, listOf(typed.changed(), untyped.changed()), "volume", ByAnnotationEdit.of("float", ""))),
+        )
+    }
+
+    @Test
+    fun `the preview writes annotations and the return type`() {
+        val row = ByParameterRow("width", "width", ByParameterKind.PositionalOrKeyword, "1", "", "int")
+        assertEquals("area(width: int = 1) -> float", signaturePreview("area", listOf(row), "float"))
     }
 }

@@ -65,7 +65,8 @@ internal object ByMoveMembers {
         if (members.members.isNullOrEmpty()) {
             return ByProjectRefactorings.error(project, editor, title, BasedPythonBundle.message("refactoring.by.members.none", owner))
         }
-        val infos = memberInfos(project, members, site, editor.caretModel.offset)
+        // a base moves only up, into the superclass's bases
+        val infos = memberInfos(project, members, site, editor.caretModel.offset, bases = direction == Direction.Up)
         when (direction) {
             Direction.Up -> ByPullUpDialog(project, site, file, owner, targets, infos)
             Direction.Down -> ByPushDownDialog(project, site, file, owner, infos)
@@ -74,10 +75,11 @@ internal object ByMoveMembers {
 
     /**
      * [members]'s members as the table's rows, the one whose name holds [caret] checked — what the
-     * user asked from, as `.py` checks the member at the caret.
+     * user asked from, as `.py` checks the member at the caret. The class's bases are rows only where
+     * [bases] says they can move, as Pull Members Up moves one into the superclass's bases.
      */
-    fun memberInfos(project: Project, members: ByMovableMembers, site: ByRefactoringSite, caret: Int): List<ByMemberInfo> =
-        members.members.orEmpty().filter { it.name != null }.map { member ->
+    fun memberInfos(project: Project, members: ByMovableMembers, site: ByRefactoringSite, caret: Int, bases: Boolean): List<ByMemberInfo> =
+        members.members.orEmpty().filter { it.name != null && (bases || !it.isBase) }.map { member ->
             ByMemberInfo(ByMemberElement(project, member)).apply {
                 val at = member.range?.let { getRangeInDocument(site.document, it) }
                 isChecked = at != null && at.startOffset <= caret && caret <= at.endOffset
@@ -128,6 +130,7 @@ internal class ByMemberElement(private val project: Project, val member: ByMembe
     override fun getName(): String? = member.name
     override fun getPresentableText(): String? = member.name
     override fun getIcon(open: Boolean): Icon = when (member.kind) {
+        ByMemberItem.BASE -> AllIcons.Nodes.Class
         "attribute" -> AllIcons.Nodes.Field
         "property" -> AllIcons.Nodes.Property
         "classmethod", "staticmethod" -> AllIcons.Nodes.Static
@@ -138,7 +141,8 @@ internal class ByMemberElement(private val project: Project, val member: ByMembe
 /** A row of the member table: the member and whether it is checked. */
 internal class ByMemberInfo(member: ByMemberElement) : MemberInfoBase<ByMemberElement>(member) {
     init {
-        displayName = member.name
+        // as `by` writes it in a list: a method's parameters, `fetch(self, key: str)`
+        displayName = member.member.detail ?: member.name
         isStatic = member.member.kind == "staticmethod" || member.member.kind == "classmethod"
     }
 

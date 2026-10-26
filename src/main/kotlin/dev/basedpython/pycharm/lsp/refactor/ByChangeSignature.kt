@@ -1,5 +1,7 @@
 package dev.basedpython.pycharm.lsp.refactor
 
+import com.intellij.ui.components.JBTextField
+import dev.basedpython.pycharm.lsp.ext.ByAnnotationEdit
 import com.intellij.openapi.actionSystem.CommonDataKeys
 import com.intellij.openapi.actionSystem.DataContext
 import com.intellij.openapi.editor.Editor
@@ -32,15 +34,16 @@ import javax.swing.table.TableCellEditor
 
 /**
  * Change Signature (Ctrl+F6) in a `.by` file: the function at the caret — in its name or
- * parameters, or in a name referring to it — and its parameters as `by/prepareChangeSignature`
- * lists them, in a table the user adds to, removes from, reorders and edits, each with its name, how
- * it is passed, its default and, for a new one, what each call passes it. `by/changeSignature`
- * rewrites the function and every call of it in the project as python binds the call, or refuses —
- * with the file and line of a call that cannot be rewritten to mean what it meant — and the dialog
- * stays open on a refusal for another try.
+ * parameters, or in a name referring to it — its name, its return annotation, and its parameters as
+ * `by/prepareChangeSignature` lists them, in a table the user adds to, removes from, reorders and
+ * edits, each with its name, how it is passed, its default, its annotation and, for a new one, what
+ * each call passes it. `by/changeSignature` rewrites the function and every call of it in the
+ * project as python binds the call, renaming the function wherever the project refers to it, or
+ * refuses — with the file and line of a call that cannot be rewritten to mean what it meant — and the
+ * dialog stays open on a refusal for another try.
  *
- * Only the parameter list changes: `by`'s request takes no new name for the function (Rename does
- * that) and no annotations, so a parameter keeps the one the source gives it.
+ * A new name and an annotation are sent only where they change: a `by` that predates them refuses
+ * the request with them in it, and its error is what the dialog says.
  */
 internal class ByChangeSignatureHandler : ChangeSignatureHandler {
 
@@ -89,9 +92,12 @@ internal class ByParameterRow(
     var default: String,
     /** What each call passes a new parameter, as source; blank leaves it to its default. */
     var value: String,
-    /** Its annotation as the source writes it, which the change keeps. */
-    val annotation: String?,
+    /** Its annotation as the source writes it; null for none. */
+    val oldAnnotation: String?,
 ) {
+    /** Its annotation as the user leaves it; blank for none. */
+    var annotation: String = oldAnnotation.orEmpty()
+
     /** The parameter as `by/changeSignature` is sent it. */
     fun changed(): ByChangedParameter = ByChangedParameter(
         name = name.trim(),
@@ -99,6 +105,7 @@ internal class ByParameterRow(
         kind = kind.id,
         default = default.trim().ifEmpty { null },
         value = value.trim().takeIf { oldName == null && it.isNotEmpty() },
+        annotation = ByAnnotationEdit.of(oldAnnotation, annotation),
     )
 
     companion object {
@@ -116,7 +123,7 @@ internal class ByParameterRow(
  * — for the dialog to show what the change makes of the signature. Only a picture of the user's
  * choices: whether it is a valid list is `by`'s to say when it is sent.
  */
-internal fun signaturePreview(name: String, rows: List<ByParameterRow>): String {
+internal fun signaturePreview(name: String, rows: List<ByParameterRow>, returns: String = ""): String {
     val parts = mutableListOf<String>()
     var keywordOnlyMarked = false
     rows.forEachIndexed { index, row ->
@@ -124,16 +131,19 @@ internal fun signaturePreview(name: String, rows: List<ByParameterRow>): String 
             parts += "*"
             keywordOnlyMarked = true
         }
-        val default = row.default.trim().takeIf { it.isNotEmpty() }?.let { "=$it" }.orEmpty()
+        val annotation = row.annotation.trim().takeIf { it.isNotEmpty() }
+        val default = row.default.trim().takeIf { it.isNotEmpty() }?.let { if (annotation != null) " = $it" else "=$it" }.orEmpty()
+        val annotated = annotation?.let { "${row.name}: $it" } ?: row.name
         parts += when (row.kind) {
-            ByParameterKind.Variadic -> "*${row.name}"
-            ByParameterKind.VariadicKeyword -> "**${row.name}"
-            else -> "${row.name}$default"
+            ByParameterKind.Variadic -> "*$annotated"
+            ByParameterKind.VariadicKeyword -> "**$annotated"
+            else -> "$annotated$default"
         }
         val next = rows.getOrNull(index + 1)
         if (row.kind == ByParameterKind.PositionalOnly && next?.kind != ByParameterKind.PositionalOnly) parts += "/"
     }
-    return "$name(${parts.joinToString(", ")})"
+    val arrow = returns.takeIf { it.isNotBlank() }?.let { " -> $it" }.orEmpty()
+    return "$name(${parts.joinToString(", ")})$arrow"
 }
 
 /** Change Signature's dialog: the parameter table, and the signature it makes. */
@@ -145,6 +155,18 @@ internal class ByChangeSignatureDialog(
 ) : RefactoringDialog(project, true) {
 
     private val functionName = signature.name.orEmpty()
+
+    private val nameField = JBTextField(functionName).apply {
+        document.addDocumentListener(object : com.intellij.ui.DocumentAdapter() {
+            override fun textChanged(e: javax.swing.event.DocumentEvent) = updatePreview()
+        })
+    }
+
+    private val returnsField = JBTextField(signature.returns.orEmpty()).apply {
+        document.addDocumentListener(object : com.intellij.ui.DocumentAdapter() {
+            override fun textChanged(e: javax.swing.event.DocumentEvent) = updatePreview()
+        })
+    }
 
     private val model = ListTableModel<ByParameterRow>(
         arrayOf(NameColumn(), KindColumn(), DefaultColumn(), ValueColumn(), AnnotationColumn()),
@@ -163,7 +185,7 @@ internal class ByChangeSignatureDialog(
     }
 
     private fun updatePreview() {
-        preview.text = signaturePreview(functionName, model.items)
+        preview.text = signaturePreview(nameField.text.trim(), model.items, returnsField.text.trim())
         validateButtons()
     }
 
@@ -178,7 +200,8 @@ internal class ByChangeSignatureDialog(
             }
             .createPanel()
         return panel {
-            row(BasedPythonBundle.message("refactoring.by.signature.function")) { label(functionName) }
+            row(BasedPythonBundle.message("refactoring.by.signature.function")) { cell(nameField).align(AlignX.FILL) }
+            row(BasedPythonBundle.message("refactoring.by.signature.returns")) { cell(returnsField).align(AlignX.FILL) }
             row { cell(decorated).align(Align.FILL) }.resizableRow()
             row(BasedPythonBundle.message("refactoring.by.signature.preview")) { cell(preview).align(AlignX.FILL) }
         }
@@ -188,13 +211,15 @@ internal class ByChangeSignatureDialog(
 
     override fun hasHelpAction(): Boolean = false
 
-    override fun areButtonsValid(): Boolean = model.items.all { it.name.isNotBlank() }
+    override fun areButtonsValid(): Boolean = nameField.text.isNotBlank() && model.items.all { it.name.isNotBlank() }
 
     override fun doAction() {
         table.stopEditing()
         val parameters = model.items.map { it.changed() }
+        val name = nameField.text.trim().takeIf { it != functionName }
+        val returns = ByAnnotationEdit.of(signature.returns, returnsField.text)
         val edited = ByProjectRefactorings.askEdit(site, title, "by/changeSignature") {
-            it.changeSignature(ByChangeSignatureParams(site.identifier, site.position, parameters))
+            it.changeSignature(ByChangeSignatureParams(site.identifier, site.position, parameters, name, returns))
         }
         ByProjectRefactorings.processor(project, title, subject, edited)?.let(::invokeRefactoring)
     }
@@ -244,7 +269,11 @@ internal class ByChangeSignatureDialog(
     }
 
     private class AnnotationColumn : ColumnInfo<ByParameterRow, String>(BasedPythonBundle.message("refactoring.by.signature.column.annotation")) {
-        override fun valueOf(item: ByParameterRow): String = item.annotation.orEmpty()
+        override fun valueOf(item: ByParameterRow): String = item.annotation
+        override fun isCellEditable(item: ByParameterRow): Boolean = true
+        override fun setValue(item: ByParameterRow, value: String) {
+            item.annotation = value
+        }
     }
 
     companion object {

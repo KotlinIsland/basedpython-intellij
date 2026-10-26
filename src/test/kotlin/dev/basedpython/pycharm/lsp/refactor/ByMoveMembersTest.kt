@@ -24,8 +24,9 @@ class ByMoveMembersTest {
         val file = fixture.configureByText("dogs.by", text)
         val members = ByMovableMembers(
             members = listOf(
-                ByMemberItem("sound", "attribute", Range(Position(1, 4), Position(1, 9))),
-                ByMemberItem("fetch", "method", Range(Position(3, 8), Position(3, 13))),
+                ByMemberItem("Animal", "base", "Animal", Range(Position(0, 10), Position(0, 16))),
+                ByMemberItem("sound", "attribute", "sound", Range(Position(1, 4), Position(1, 9))),
+                ByMemberItem("fetch", "method", "fetch(self) -> str", Range(Position(3, 8), Position(3, 13))),
             ),
         )
         val site = ByRefactoringSite(
@@ -37,10 +38,14 @@ class ByMoveMembersTest {
             Position(3, 10),
         )
 
-        val rows = ByMoveMembers.memberInfos(fixture.project, members, site, fixture.caretOffset)
+        val rows = ByMoveMembers.memberInfos(fixture.project, members, site, fixture.caretOffset, bases = false)
 
         assertEquals(listOf("sound" to false, "fetch" to true), rows.map { it.name to it.isChecked })
+        assertEquals(listOf("sound", "fetch(self) -> str"), rows.map { it.displayName }, "each as by writes it in a list")
         assertEquals(listOf("fetch"), checkedNames(rows))
         assertEquals(listOf(false, false), rows.map { it.isStatic })
+
+        val up = ByMoveMembers.memberInfos(fixture.project, members, site, fixture.caretOffset, bases = true)
+        assertEquals(listOf("Animal", "sound", "fetch"), up.map { it.name }, "a base moves only up, into the superclass's bases")
     }
 }

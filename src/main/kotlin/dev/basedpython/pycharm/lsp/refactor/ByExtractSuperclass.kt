@@ -37,7 +37,8 @@ internal class ByExtractSuperclassHandler : RefactoringActionHandler {
             ?.let { return ByProjectRefactorings.error(project, editor, title, it) }
         val members = (asked as ByAsked.Answer).value
         val owner = members.owner?.name ?: return
-        val infos = ByMoveMembers.memberInfos(project, members, site, editor.caretModel.offset)
+        // a base is not a member to extract: the new class takes all of them
+        val infos = ByMoveMembers.memberInfos(project, members, site, editor.caretModel.offset, bases = false)
         ByExtractSuperclassDialog(project, site, file, owner, infos).show()
     }
 
