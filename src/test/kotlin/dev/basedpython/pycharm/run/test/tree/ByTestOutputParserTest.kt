@@ -287,4 +287,21 @@ class ByTestOutputParserTest {
         val events = parser().parseAll(blob)
         assertEquals(2, events.count { it is ByTestEvent.TestPassed })
     }
+
+    @Test
+    fun `a test file's suite takes the name it is given, its location and its finish staying consistent`() {
+        val parser = ByTestOutputParser { staged -> if (staged == "tests/test_math.py") "tests/test_math.by" else staged }
+        val events = parser.parseLine("tests/test_math.py::TestGroup::test_add PASSED") + parser.finish()
+
+        assertEquals(
+            ByTestEvent.TestSuiteStarted("tests/test_math.by", "by_test://tests/test_math.py"),
+            events.first(),
+        )
+        // the class keeps pytest's name, and each suite finishes under the name it started with
+        assertTrue(events.contains(ByTestEvent.TestSuiteStarted("TestGroup", "by_test://tests/test_math.py::TestGroup")))
+        assertEquals(
+            listOf(ByTestEvent.SuiteFinished("TestGroup"), ByTestEvent.SuiteFinished("tests/test_math.by")),
+            events.filterIsInstance<ByTestEvent.SuiteFinished>(),
+        )
+    }
 }

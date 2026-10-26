@@ -4,6 +4,9 @@ import com.intellij.execution.testframework.TestConsoleProperties
 import com.intellij.execution.testframework.sm.ServiceMessageBuilder
 import com.intellij.execution.testframework.sm.runner.OutputToGeneralTestEventsConverter
 import com.intellij.openapi.util.Key
+import com.intellij.openapi.vfs.LocalFileSystem
+import com.intellij.openapi.vfs.VfsUtilCore
+import dev.basedpython.pycharm.run.model.ByProgramModel
 
 /**
  * Bridges `by run pytest` output into the SMTRunner test tree.
@@ -22,7 +25,17 @@ class ByTestEventsConverter(
     consoleProperties: TestConsoleProperties,
 ) : OutputToGeneralTestEventsConverter(testFrameworkName, consoleProperties) {
 
-    private val parser = ByTestOutputParser()
+    /**
+     * A test file's suite is named after the `.by` file `by` staged it from ([ByProgramModel.stagedFile],
+     * `by`'s answer), relative to the project, as the `.py` it ran as means nothing in a `.by` project;
+     * a file `by` has not placed — a plain `.py` test, or before the answer — keeps pytest's path.
+     */
+    private val parser = ByTestOutputParser { staged ->
+        val project = consoleProperties.project
+        val source = ByProgramModel.getInstance(project).stagedFile(staged)
+        val base = project.basePath?.let { LocalFileSystem.getInstance().findFileByPath(it) }
+        source?.let { file -> base?.let { VfsUtilCore.getRelativePath(file, it) } } ?: staged
+    }
     private var finished = false
 
     override fun processConsistentText(text: String, outputType: Key<*>) {

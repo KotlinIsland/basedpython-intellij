@@ -19,7 +19,14 @@ package dev.basedpython.pycharm.run.test.tree
  *  - a pytest one-char progress/summary line such as `....F..s` (fallback count only;
  *    exposed via [parseSummaryDots], not emitted as tree events to avoid duplicate nodes).
  */
-class ByTestOutputParser {
+class ByTestOutputParser(
+    /**
+     * What a test file's suite is called in the tree, given the path pytest names it by — in the
+     * staged tree of `by run`, a `.py`. The path itself unless the caller knows the source it came
+     * from; either way the suite's location stays the node id pytest reported.
+     */
+    private val fileSuiteName: (String) -> String = { it },
+) {
 
     /**
      * The suites currently open, outermost first — `["tests/test_math.py", "TestGroup"]`.
@@ -30,6 +37,9 @@ class ByTestOutputParser {
      * entirely.
      */
     private val openSuites = ArrayList<String>()
+
+    /** What each of [openSuites] was named in the tree, which its finish has to repeat. */
+    private val openNames = ArrayList<String>()
 
     /** Per-test outcome tally derived from emitted events (diagnostic / fallback). */
     var passed: Int = 0; private set
@@ -169,8 +179,10 @@ class ByTestOutputParser {
         }
         val events = ArrayList<ByTestEvent>(closeSuitesBelow(shared))
         for (depth in shared until suites.size) {
-            events.add(ByTestEvent.TestSuiteStarted(suites[depth], hintAt(depth)))
+            val name = if (depth == 0) fileSuiteName(suites[depth]) else suites[depth]
+            events.add(ByTestEvent.TestSuiteStarted(name, hintAt(depth)))
             openSuites.add(suites[depth])
+            openNames.add(name)
         }
         return events
     }
@@ -179,7 +191,8 @@ class ByTestOutputParser {
     private fun closeSuitesBelow(depth: Int): List<ByTestEvent> {
         val events = ArrayList<ByTestEvent>()
         while (openSuites.size > depth) {
-            events.add(ByTestEvent.SuiteFinished(openSuites.removeAt(openSuites.size - 1)))
+            openSuites.removeAt(openSuites.size - 1)
+            events.add(ByTestEvent.SuiteFinished(openNames.removeAt(openNames.size - 1)))
         }
         return events
     }
