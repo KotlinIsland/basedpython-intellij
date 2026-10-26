@@ -1,6 +1,18 @@
 package dev.basedpython.pycharm.format
 
 import com.intellij.application.options.CodeStyleAbstractConfigurable
+import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.application.ModalityState
+import com.intellij.openapi.fileEditor.FileEditorManager
+import com.intellij.openapi.project.Project
+import com.intellij.openapi.project.guessProjectDir
+import com.intellij.openapi.util.text.StringUtil
+import com.intellij.openapi.vfs.VfsUtilCore
+import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.ide.DataManager
+import com.intellij.openapi.actionSystem.CommonDataKeys
+import com.intellij.psi.codeStyle.CodeStyleSettingsListener
+import dev.basedpython.pycharm.lsp.ext.BuffFormatSettings
 import com.intellij.application.options.CodeStyleAbstractPanel
 import com.intellij.application.options.TabbedLanguageCodeStylePanel
 import com.intellij.openapi.editor.colors.EditorColorsScheme
@@ -100,22 +112,53 @@ private class BuffCodeStyleMainPanel(
 }
 
 /**
- * The buff tab: where buff's formatting options are, and nothing to edit here.
+ * The buff tab: what buff formats basedpython with, and where that is set.
  *
- * It used to offer a line length and a quote style that nothing in the plugin read, so Reformat
- * went on wrapping at buff's 88 with its double quotes: buff, like ruff, reads them from the
- * project's configuration files, which is what `buff format` applies on the command line and in CI.
- * Sending the IDE's values instead would be wrong for buff: its server lets editor settings
- * override the files (`configurationPreference` defaults to `editorFirst`), so the IDE would format
- * differently from everything else that runs buff. Showing the values buff resolved for a file is
- * what belongs here, and waits on buff reporting them.
+ * buff, like ruff, reads its options from the project's configuration files, which is what
+ * `buff format` applies on the command line and in CI; there is nothing to edit here, since sending
+ * the IDE's values instead would let them override the files (`configurationPreference` defaults to
+ * `editorFirst`), and the IDE would format differently from everything else that runs buff. What it
+ * shows is what `buff/formatSettings` resolved for the `.by` file in the editor — line length, indent,
+ * quote style, line ending and the file they were read from — the same values the editor's right
+ * margin and indent follow ([BuffCodeStyleSettingsModifier]). Refreshed when they change.
  */
 private class BuffOptionsTab(settings: CodeStyleSettings) :
     CodeStyleAbstractPanel(BasedPythonLanguage, null, settings) {
 
-    private val rootPanel: JPanel = JPanel(BorderLayout()).apply {
+    private val resolved = JBLabel().apply { setAllowAutoWrapping(true) }
+
+    /** Shown in the settings dialog of [project], once it is known; the listener goes with the tab. */
+    private var project: Project? = null
+
+    private val rootPanel: JPanel = object : JPanel(BorderLayout(0, JBUI.scale(12))) {
+        override fun addNotify() {
+            super.addNotify()
+            if (project == null) {
+                // the settings dialog says whose settings these are
+                project = CommonDataKeys.PROJECT.getData(DataManager.getInstance().getDataContext(this))
+                    ?.takeIf { !it.isDefault && !it.isDisposed }
+                project?.messageBus?.connect(this@BuffOptionsTab)?.subscribe(
+                    CodeStyleSettingsListener.TOPIC,
+                    CodeStyleSettingsListener { ApplicationManager.getApplication().invokeLater({ showResolved() }, ModalityState.any()) },
+                )
+            }
+            showResolved()
+        }
+    }.apply {
         border = JBUI.Borders.empty(8)
-        add(JBLabel(BasedPythonBundle.message("codeStyle.buff.fromConfiguration")).apply { setAllowAutoWrapping(true) }, BorderLayout.NORTH)
+        add(resolved, BorderLayout.NORTH)
+        add(JBLabel(BasedPythonBundle.message("codeStyle.buff.fromConfiguration")).apply { setAllowAutoWrapping(true) }, BorderLayout.CENTER)
+    }
+
+    private fun showResolved() {
+        val project = project
+        val file = project?.let { BuffResolvedSettings.fileShown(it) }
+        resolved.text = when {
+            project == null || file == null -> BasedPythonBundle.message("codeStyle.buff.noFile")
+            else -> BuffFormatSettingsService.getInstance(project).current(file)
+                ?.let { BuffResolvedSettings.describe(project, file, it) }
+                ?: BasedPythonBundle.message("codeStyle.buff.notYet", file.name)
+        }
     }
 
     override fun getTabTitle(): String = "buff"
@@ -137,4 +180,36 @@ private class BuffOptionsTab(settings: CodeStyleSettings) :
     override fun createHighlighter(scheme: EditorColorsScheme): EditorHighlighter? = null
 
     override fun getFileType(): FileType = BasedPythonFileType.INSTANCE
+}
+
+/** What the buff tab says about the values `buff` resolved. */
+internal object BuffResolvedSettings {
+
+    /** The `.by` file the tab describes: the one in the selected editor, or else any open one. */
+    fun fileShown(project: Project): VirtualFile? {
+        val editors = FileEditorManager.getInstance(project)
+        return (editors.selectedFiles.asSequence() + editors.openFiles.asSequence())
+            .firstOrNull { it.fileType == BasedPythonFileType.INSTANCE }
+    }
+
+    fun describe(project: Project, file: VirtualFile, buff: BuffFormatSettings): String {
+        val unknown = BasedPythonBundle.message("codeStyle.buff.unknown")
+        val indent = when (buff.indentStyle) {
+            "tab" -> BasedPythonBundle.message("codeStyle.buff.indent.tab", buff.indentWidth ?: unknown)
+            else -> BasedPythonBundle.message("codeStyle.buff.indent.space", buff.indentWidth ?: unknown)
+        }
+        val source = BuffFormatSettingsService.getInstance(project).configurationFile(buff)
+            ?.let { configuration -> VfsUtilCore.getRelativePath(configuration, project.guessProjectDir() ?: configuration) ?: configuration.path }
+            ?.let { BasedPythonBundle.message("codeStyle.buff.from", StringUtil.escapeXmlEntities(it)) }
+            ?: BasedPythonBundle.message("codeStyle.buff.fromDefaults")
+        return BasedPythonBundle.message(
+            "codeStyle.buff.resolved",
+            StringUtil.escapeXmlEntities(file.name),
+            buff.lineLength?.toString() ?: unknown,
+            indent,
+            buff.quoteStyle ?: unknown,
+            buff.lineEnding ?: unknown,
+            source,
+        )
+    }
 }

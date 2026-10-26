@@ -252,6 +252,10 @@
             implementationClass="dev.basedpython.pycharm.format.BuffImportOptimizer"/>
         <codeStyleSettingsProvider
             implementation="dev.basedpython.pycharm.format.BuffCodeStyleSettingsProvider"/>
+        <!-- A .by file's right margin and indent follow buff/formatSettings: where Reformat wraps.
+             See format.BuffFormatSettings. -->
+        <codeStyleSettingsModifier
+            implementation="dev.basedpython.pycharm.format.BuffCodeStyleSettingsModifier"/>
         <langCodeStyleSettingsProvider
             implementation="dev.basedpython.pycharm.format.BuffLanguageCodeStyleSettingsProvider"/>
 

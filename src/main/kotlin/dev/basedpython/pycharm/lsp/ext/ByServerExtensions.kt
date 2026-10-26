@@ -1219,7 +1219,32 @@ interface BuffServerExtensions {
     /** What one of the linter's rules means, or `null` if this server does not own it. */
     @JsonRequest("buff/explainRule")
     fun explainRule(args: BuffExplainRuleParams): CompletableFuture<ByRuleExplanation?>
+
+    /**
+     * The settings `buff` formats a document with, resolved from the configuration that governs it,
+     * spelled as the configuration spells them. `null` for a document the editor has not opened; a
+     * `buff` from before the request answers `MethodNotFound`.
+     */
+    @JsonRequest("buff/formatSettings")
+    fun formatSettings(args: BuffFormatSettingsParams): CompletableFuture<BuffFormatSettings?>
 }
+
+/** The document to ask about. */
+data class BuffFormatSettingsParams(val textDocument: TextDocumentIdentifier)
+
+/** What `buff/formatSettings` answers. */
+data class BuffFormatSettings(
+    val lineLength: Int? = null,
+    val indentWidth: Int? = null,
+    /** `space` or `tab`. */
+    val indentStyle: String? = null,
+    /** `double`, `single` or `preserve`. */
+    val quoteStyle: String? = null,
+    /** `auto`, `lf`, `cr-lf` or `native`. */
+    val lineEnding: String? = null,
+    /** The URI of the file the settings were read from; `null` when no file configures the document. */
+    val configurationFile: String? = null,
+)
 
 /** The rule to look up, by either of the two names it has: a code (`F401`) or a name. */
 data class BuffExplainRuleParams(val code: String)
