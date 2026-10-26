@@ -371,6 +371,13 @@ interface ByServerExtensions {
     @JsonRequest("by/rules")
     fun rules(): CompletableFuture<List<ByRule>?>
 
+    /**
+     * Every HTTP route the session's projects serve, FastAPI's and django's, ordered by path and
+     * method. Takes `{}`. A `by` from before the request answers `MethodNotFound`.
+     */
+    @JsonRequest("by/endpoints")
+    fun endpoints(params: Map<String, Any>): CompletableFuture<List<ByEndpoint>?>
+
     @JsonRequest("by/references")
     fun references(args: ReferenceParams): CompletableFuture<List<ByReference>?>
 
@@ -1482,4 +1489,28 @@ data class ByRule(
     val defaultLevel: String? = null,
     /** `stable`, `preview` or `deprecated`. */
     val status: String? = null,
+)
+
+/** An HTTP route `by/endpoints` names. */
+data class ByEndpoint(
+    /** `fastapi` or `django`. */
+    val framework: String? = null,
+    /** Upper case; empty for a route serving every method, as each of django's does. */
+    val methods: List<String> = emptyList(),
+    /** The whole path, every prefix it is mounted under included, its parameters as the route writes them. */
+    val path: String? = null,
+    /** The function, or for a django class-based view the class, that answers it. */
+    val handler: ByEndpointSymbol? = null,
+    /** Where the route is declared: the decorator, the `add_api_route(...)` or the `path(...)`. */
+    val declaration: ByEndpointSymbol? = null,
+    /** The FastAPI application serving it, or the urlconf django starts at; absent for a router no application includes. */
+    val application: ByEndpointSymbol? = null,
+)
+
+/** A declaration by its qualified [name], where it is, and its name's range as [selectionRange]. */
+data class ByEndpointSymbol(
+    val name: String? = null,
+    val uri: String? = null,
+    val range: Range? = null,
+    val selectionRange: Range? = null,
 )

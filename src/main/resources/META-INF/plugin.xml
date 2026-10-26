@@ -429,6 +429,10 @@
         <!-- A fragment's syntax errors left to by where by reports them, e.g. invalid-regex in an
              re pattern; see ByInjectedErrorFilter. -->
         <highlightErrorFilter implementation="dev.basedpython.pycharm.lsp.inject.ByInjectedErrorFilter"/>
+        <!-- The Endpoints tool window's FastAPI and django routes in a basedpython project, from
+             by/endpoints; see navigation.endpoints.ByEndpointsProvider. -->
+        <microservices.endpointsProvider implementation="dev.basedpython.pycharm.navigation.endpoints.ByFastApiEndpointsProvider"/>
+        <microservices.endpointsProvider implementation="dev.basedpython.pycharm.navigation.endpoints.ByDjangoEndpointsProvider"/>
         <lang.refactoringSupport
             language="basedpython"
             implementationClass="dev.basedpython.pycharm.lsp.refactor.ByRefactoringSupportProvider"/>
