@@ -112,6 +112,30 @@ class ByOutline(
             .filter { it.first().startOffset <= offset && offset <= it.last().endOffset }
             .minByOrNull { it.last().endOffset - it.first().startOffset }
 
+    /**
+     * Whether [offset] is in a class — its header or its body, at any depth — reading the clause
+     * keywords off [text], the text this outline describes.
+     *
+     * A class is a statement with a [Statement.name] whose clause keyword is not `def`: `by` names
+     * only a `def` or a class, and a `def`'s keyword is always `def`, where a class's may be `class`
+     * or a basedpython introducer (`protocol`, `enum`).
+     */
+    fun isInClass(offset: Int, text: CharSequence): Boolean {
+        fun search(statements: List<Statement>): Boolean {
+            for (statement in statements) {
+                if (offset < statement.range.startOffset || offset > statement.range.endOffset) continue
+                for (clause in statement.clauses) {
+                    if (offset < clause.range.startOffset || offset > clause.range.endOffset) continue
+                    val keyword = clause.keyword?.let { text.subSequence(it.startOffset, it.endOffset).toString() }
+                    if (statement.name != null && keyword != null && keyword != "def") return true
+                    if (search(clause.body)) return true
+                }
+            }
+            return false
+        }
+        return search(statements)
+    }
+
     /** Every statement, depth first in source order, with the clause it is a body statement of. */
     fun walk(visit: (statement: Statement, parent: Clause?) -> Unit) {
         fun walk(statements: List<Statement>, parent: Clause?) {

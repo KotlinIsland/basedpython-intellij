@@ -104,11 +104,13 @@ class OutlineSpec private constructor(private val text: CharSequence) {
 
         /**
          * A compound statement, with [decorators] (the text of every line above its first clause)
-         * and [modifiers] (each modifier's text to the name `by` gives it) before its clauses.
+         * and [modifiers] (each modifier's text to the name `by` gives it) before its clauses, and
+         * for a class the [name] it declares, spelled in its first clause's header.
          */
         fun compound(
             decorators: String? = null,
             modifiers: List<Pair<String, String>> = emptyList(),
+            name: String? = null,
             clauses: Compound.() -> Unit,
         ) {
             val start = decorators?.let { find(it).startOffset }
@@ -122,6 +124,7 @@ class OutlineSpec private constructor(private val text: CharSequence) {
                 ),
                 clauses = compound.clauses,
                 modifiers = modifierParts,
+                name = name?.let { TextRange.from(text.indexOf(it, first.startOffset), it.length) },
             )
         }
     }

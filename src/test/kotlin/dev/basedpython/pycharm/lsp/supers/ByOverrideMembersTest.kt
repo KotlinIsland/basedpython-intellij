@@ -10,6 +10,7 @@ import dev.basedpython.pycharm.lang.BasedPythonLanguage
 import dev.basedpython.pycharm.lsp.ext.ByOverridableMember
 import dev.basedpython.pycharm.lsp.ext.ByOverridableMembers
 import dev.basedpython.pycharm.lsp.ext.ByOverrideMembers as ByOverrideEdit
+import dev.basedpython.pycharm.lsp.outline.OutlineSpec
 import dev.basedpython.pycharm.testFramework.AnsweringClient
 import dev.basedpython.pycharm.testFramework.AnsweringClient.Companion.answered
 import dev.basedpython.pycharm.testFramework.AnsweringClient.Companion.failed
@@ -26,6 +27,7 @@ import org.eclipse.lsp4j.TextDocumentIdentifier
 import org.eclipse.lsp4j.TextEdit
 import org.eclipse.lsp4j.jsonrpc.messages.ResponseErrorCode
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertInstanceOf
 import org.junit.jupiter.api.Assertions.assertNotSame
 import org.junit.jupiter.api.Assertions.assertSame
@@ -56,11 +58,43 @@ class ByOverrideMembersTest {
         assertInstanceOf(ByImplementMethodsHandler::class.java, CodeInsightActions.IMPLEMENT_METHOD.forLanguage(BasedPythonLanguage))
     }
 
-    @Test
-    fun `the actions are enabled anywhere in a by file, since only by can say whether the caret is in a class`() = onEdt {
-        fixture.configureByText("shapes.by", "x = 1\n")
+    private fun validAt(text: String, outline: (OutlineSpec.Suite.() -> Unit)?): Boolean {
+        fixture.configureByText("shapes.by", text)
+        if (outline != null) OutlineSpec.remember(fixture.project, fixture.editor.document, outline)
         val handler = CodeInsightActions.OVERRIDE_METHOD.forLanguage(BasedPythonLanguage) as LanguageCodeInsightActionHandler
-        assertTrue(handler.isValidFor(fixture.editor, fixture.file))
+        return handler.isValidFor(fixture.editor, fixture.file)
+    }
+
+    @Test
+    fun `the actions are enabled in a class, a method of it included`() = onEdt {
+        val outline: OutlineSpec.Suite.() -> Unit = {
+            compound(name = "Circle") {
+                clause("class Circle(Shape):") {
+                    def("def area(self) -> float:") { simple("return 1.0") }
+                }
+            }
+            simple("x = 1")
+        }
+        val text = "class Circle(Shape):\n    def area(self) -> float:\n        return 1.0\n\n\nx = 1\n"
+        assertTrue(validAt(text.replace("return", "<caret>return"), outline), "in a method of the class")
+        assertTrue(validAt(text.replace("class Circle", "class <caret>Circle"), outline), "on the class's header")
+        assertFalse(validAt(text.replace("x = 1", "<caret>x = 1"), outline), "at module level, as Python's are")
+    }
+
+    @Test
+    fun `a basedpython class introducer is a class too`() = onEdt {
+        assertTrue(
+            validAt("protocol Sized:\n    def size(self) -> int: <caret>...\n") {
+                compound(name = "Sized") {
+                    clause("protocol Sized:", keyword = "protocol") { def("def size(self) -> int:") { simple("...") } }
+                }
+            },
+        )
+    }
+
+    @Test
+    fun `before by has outlined the text the actions stay enabled, and by says whether there is a class`() = onEdt {
+        assertTrue(validAt("x = <caret>1\n", outline = null))
     }
 
     private fun find(answer: (String) -> CompletableFuture<*>): Pair<ByMembersAnswer, List<String>> {

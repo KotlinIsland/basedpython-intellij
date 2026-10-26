@@ -27,6 +27,7 @@ import com.intellij.psi.PsiFile
 import com.intellij.ui.SimpleColoredComponent
 import com.intellij.ui.SimpleTextAttributes
 import dev.basedpython.pycharm.lang.BasedPythonLanguage
+import dev.basedpython.pycharm.lsp.outline.ByOutlines
 import dev.basedpython.pycharm.lsp.ByAnswer
 import dev.basedpython.pycharm.lsp.ByServerDocuments
 import dev.basedpython.pycharm.lsp.ByTextHash
@@ -231,9 +232,12 @@ internal class ByMemberChoice(val name: String, val member: ByOverridableMember,
  * [ByOverrideMembers].
  *
  * Without one the actions are not even enabled in a `.by` file. Whether the caret is in a class is
- * `by`'s to say, and asking it cannot happen in [isValidFor], which the platform calls on the EDT
- * to update the action: so the actions are enabled in every `.by` file, and outside a class `by`
- * answers that there is none, which is said in a hint and nothing is written.
+ * `by`'s to say. [isValidFor], which the platform calls on the EDT to update the action, cannot ask,
+ * so it reads `by`'s outline of the text on screen ([ByOutlines]), which is kept current in the
+ * background: the actions are enabled with the caret in a class — its header or its body, a method
+ * of it included — and disabled elsewhere, as Python's are. Before `by` has outlined the text on
+ * screen they stay enabled, and outside a class `by` answers that there is none, which is said in a
+ * hint and nothing is written.
  *
  * `by` is asked under a background progress rather than a modal one, for the reason Go to Super is
  * (see [ByGotoSuperHandler]): the platform's `didOpen`, which `by` may be waiting for, goes out from
@@ -242,7 +246,11 @@ internal class ByMemberChoice(val name: String, val member: ByOverridableMember,
  */
 internal abstract class ByMembersHandler(private val action: ByMembersAction) : LanguageCodeInsightActionHandler {
 
-    override fun isValidFor(editor: Editor, psiFile: PsiFile): Boolean = psiFile.language.isKindOf(BasedPythonLanguage)
+    override fun isValidFor(editor: Editor, psiFile: PsiFile): Boolean {
+        if (!psiFile.language.isKindOf(BasedPythonLanguage)) return false
+        val outline = ByOutlines.getInstance(psiFile.project).current(editor.document) ?: return true
+        return outline.isInClass(editor.caretModel.offset, editor.document.immutableCharSequence)
+    }
 
     /** Nothing is written until `by` has answered twice; the platform must not hold a write lock meanwhile. */
     override fun startInWriteAction(): Boolean = false
