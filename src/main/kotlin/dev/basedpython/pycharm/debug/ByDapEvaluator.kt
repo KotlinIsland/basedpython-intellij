@@ -13,6 +13,7 @@ import com.intellij.platform.dap.DapPresentationSupport
 import com.intellij.platform.dap.DapSessionExecutor
 import com.intellij.platform.dap.DapStackFrame
 import com.intellij.platform.dap.DapThread
+import com.intellij.platform.dap.DapVariable
 import com.intellij.platform.dap.xdebugger.DapXDebuggerPresentationFactory
 import com.intellij.platform.dap.xdebugger.DefaultDapXDebuggerPresentationFactory
 import com.intellij.platform.dap.xdebugger.DefaultDapXStackFrame
@@ -25,7 +26,9 @@ import com.intellij.xdebugger.XSourcePosition
 import com.intellij.xdebugger.evaluation.EvaluationMode
 import com.intellij.xdebugger.evaluation.ExpressionInfo
 import com.intellij.xdebugger.evaluation.XDebuggerEvaluator
+import com.intellij.xdebugger.frame.XNamedValue
 import com.intellij.xdebugger.frame.XStackFrame
+import dev.basedpython.pycharm.debug.bpd.ByDebugBackend
 import dev.basedpython.pycharm.lsp.ByAnswer
 import dev.basedpython.pycharm.lsp.ByServerDocuments
 import dev.basedpython.pycharm.lsp.ByTextHash
@@ -39,6 +42,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import org.jetbrains.concurrency.AsyncPromise
 import org.jetbrains.concurrency.Promise
+import javax.swing.Icon
 
 /**
  * The frames of a `.by` session, each with an evaluator that asks `by` which expression a position
@@ -50,17 +54,32 @@ import org.jetbrains.concurrency.Promise
  * `DefaultDapXDebuggerEvaluator` rather than asking the customization's `DapExpressionSupport`,
  * which only supplies the evaluator for a session with no frame. So this is the platform's own
  * factory, making the platform's own frames, with the evaluator wrapped: everything that recognises
- * a DAP frame still does.
+ * a DAP frame still does. The variables are the platform's too, with *Jump to Type Source* added
+ * for a bpd session's ([ByDapXValue]).
  */
-internal object ByPresentationSupport : DapPresentationSupport() {
+internal class ByPresentationSupport(
+    private val project: Project,
+    /** The session's backend, once it is set up. */
+    private val backend: () -> ByDebugBackend?,
+) : DapPresentationSupport() {
     override fun createPresentationFactory(inlineValueLocator: DapInlineValueLocator?): DapXDebuggerPresentationFactory =
-        ByPresentationFactory(inlineValueLocator)
+        ByPresentationFactory(inlineValueLocator, project, backend)
 }
 
-private class ByPresentationFactory(inlineValueLocator: DapInlineValueLocator?) :
-    DefaultDapXDebuggerPresentationFactory(inlineValueLocator) {
+/**
+ * Also the variables: a bpd session's go to their type's class with *Jump to Type Source*
+ * ([ByDapXValue]).
+ */
+private class ByPresentationFactory(
+    inlineValueLocator: DapInlineValueLocator?,
+    private val project: Project,
+    private val backend: () -> ByDebugBackend?,
+) : DefaultDapXDebuggerPresentationFactory(inlineValueLocator) {
     override fun createStackFrame(executor: DapSessionExecutor, thread: DapThread, frame: DapStackFrame): XStackFrame =
         ByStackFrame(this, executor, thread, frame)
+
+    override fun createValue(executor: DapSessionExecutor, variable: DapVariable, icon: Icon?): XNamedValue =
+        ByDapXValue(this, executor, variable, icon, ByTypeSource(project).takeIf { backend() == ByDebugBackend.BPD })
 }
 
 private class ByStackFrame(

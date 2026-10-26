@@ -345,6 +345,21 @@ interface ByServerExtensions {
     fun declaration(args: ByDeclarationParams): CompletableFuture<ByDeclaration?>
 
     /**
+     * The class a dotted type name names, `pkgx.model.Box.Meta`, described as [declaration] describes
+     * one — for a debugger's *Jump to Type Source*, which knows a value's type only by its module and
+     * qualified name and has no position in a document to ask [declaration] about.
+     *
+     * **Why the server.** The name is resolved as an import of it would be, through submodules and
+     * re-exports to the class's source, or its stub where it has none: `builtins.int` answers
+     * `builtins.byi`. That is the module resolver's work.
+     *
+     * A `null` answer is a name that reaches no class, `make.<locals>.Local` among them. A `by` from
+     * before the request answers `MethodNotFound`.
+     */
+    @JsonRequest("by/typeDeclaration")
+    fun typeDeclaration(args: ByTypeDeclarationParams): CompletableFuture<ByDeclaration?>
+
+    /**
      * `textDocument/references` with what each reference does with the name: the same references in
      * the same order, each with its [ByReference.kind]. `null` where `textDocument/references` is. A
      * `by` from before the request answers `MethodNotFound`.
@@ -592,6 +607,9 @@ data class ByModuleNameParams(val uri: String)
 
 /** The name to ask about: where it is declared or anywhere it is used. */
 data class ByDeclarationParams(val textDocument: TextDocumentIdentifier, val position: Position)
+
+/** A type by its module and qualified name, dot-separated: `pkgx.model.Box.Meta`, `builtins.int`. */
+data class ByTypeDeclarationParams(val typeName: String)
 
 /** What a name declares or refers to, and where, from `by/declaration`. */
 data class ByDeclaration(

@@ -115,8 +115,11 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
         /** *Evaluate Expression*, Watches and *Quick Evaluate* edit `.by`: [BySessionEditorsProvider]. */
         override val expressionSupport: DapExpressionSupport = ByExpressionSupport
 
-        /** Frames whose evaluator asks `by` which expression a position is on: [ByDapEvaluator]. */
-        override val presentationSupport: DapPresentationSupport = ByPresentationSupport
+        /**
+         * Frames whose evaluator asks `by` which expression a position is on, [ByDapEvaluator], and
+         * variables that ask it where their type is declared, [ByDapXValue].
+         */
+        override val presentationSupport: DapPresentationSupport = ByPresentationSupport(project) { setup?.backend }
 
         /**
          * bpd's own events, bound to the client's dispatch by name. Nothing else is listened to:
