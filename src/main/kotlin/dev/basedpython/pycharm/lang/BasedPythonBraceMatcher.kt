@@ -11,6 +11,9 @@ class BasedPythonBraceMatcher : PairedBraceMatcher {
         BracePair(BasedPythonTokenTypes.LPAREN, BasedPythonTokenTypes.RPAREN, false),
         BracePair(BasedPythonTokenTypes.LBRACKET, BasedPythonTokenTypes.RBRACKET, false),
         BracePair(BasedPythonTokenTypes.LBRACE, BasedPythonTokenTypes.RBRACE, false),
+        // An f-string field's braces, as the highlighting lexer reads them: structural, as Python's
+        // are, so a field spanning lines shows its scope under Highlight on Caret Movement.
+        BracePair(BasedPythonTokenTypes.FSTRING_LBRACE, BasedPythonTokenTypes.FSTRING_RBRACE, true),
     )
 
     override fun getPairs(): Array<BracePair> = pairs

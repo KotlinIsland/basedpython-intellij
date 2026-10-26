@@ -11,15 +11,14 @@ import dev.basedpython.pycharm.lang.BasedPythonTokenTypes
 import dev.basedpython.pycharm.lsp.outline.ByOutlines
 
 /**
- * Colours what is inside a string literal: its escape sequences, and an f-string's or t-string's
- * `{...}` interpolations.
+ * Colours a string literal's escape sequences.
  *
- * Semantic tokens cannot say it. A token covers a whole literal, and an interpolation is a span with
- * tokens of its own inside it, which tokens are not allowed to overlap. So the parts come from `by`'s
- * syntax outline ([ByOutlines]), which reads them off the parse: which prefix makes a literal raw,
- * which `\N{...}` is an escape in a `str` and not in `bytes`, where a nested quote or a `{{` leaves
- * an interpolation. The plugin's own lexer decides none of it; it only says which leaves are
- * strings, and every part inside one of them is coloured.
+ * Semantic tokens cannot say it: a token covers a whole literal. So the escapes come from `by`'s
+ * syntax outline ([ByOutlines]), which reads them off the parse — which prefix makes a literal raw,
+ * which `\N{...}` is an escape in a `str` and not in `bytes`. The plugin's own lexer decides none of
+ * it; it only says which leaves are strings. An f-string's fields, braces and conversions are the
+ * highlighting lexer's ([dev.basedpython.pycharm.lang.BasedPythonHighlightingLexer]), whose tokens
+ * are coloured as they are and as `by`'s semantic tokens colour a field's names.
  *
  * Runs in the daemon's background pass, where waiting on the server is what the pass is for.
  */
@@ -32,9 +31,6 @@ class StringPartsAnnotator : Annotator {
 
         val leaf = element.textRange
         for (part in outline.stringsIn(leaf)) {
-            for (interpolation in part.interpolations) {
-                annotate(holder, leaf, interpolation, BasedPythonHighlightKeys.FSTRING_INTERP)
-            }
             for (escape in part.escapes) {
                 annotate(holder, leaf, escape, BasedPythonHighlightKeys.STRING_ESCAPE)
             }

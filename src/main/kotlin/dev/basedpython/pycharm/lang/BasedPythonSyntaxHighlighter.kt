@@ -9,13 +9,22 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.TokenType
 import com.intellij.psi.tree.IElementType
+import dev.basedpython.pycharm.highlight.BasedPythonHighlightKeys
 
 class BasedPythonSyntaxHighlighter : SyntaxHighlighterBase() {
-    override fun getHighlightingLexer(): Lexer = BasedPythonLexer()
+    override fun getHighlightingLexer(): Lexer = BasedPythonHighlightingLexer()
 
     override fun getTokenHighlights(tokenType: IElementType): Array<TextAttributesKey> = when (tokenType) {
         BasedPythonTokenTypes.KEYWORD     -> pack(BasedPythonColors.KEYWORD)
-        BasedPythonTokenTypes.STRING      -> pack(BasedPythonColors.STRING)
+        BasedPythonTokenTypes.STRING,
+        BasedPythonTokenTypes.FSTRING_START,
+        BasedPythonTokenTypes.FSTRING_TEXT,
+        BasedPythonTokenTypes.FSTRING_END -> pack(BasedPythonColors.STRING)
+        BasedPythonTokenTypes.FSTRING_ESCAPED_BRACE -> pack(BasedPythonColors.STRING, BasedPythonHighlightKeys.STRING_ESCAPE)
+        BasedPythonTokenTypes.FSTRING_LBRACE,
+        BasedPythonTokenTypes.FSTRING_RBRACE -> pack(BasedPythonHighlightKeys.FSTRING_BRACES)
+        BasedPythonTokenTypes.FSTRING_CONVERSION -> pack(BasedPythonHighlightKeys.FSTRING_CONVERSION)
+        BasedPythonTokenTypes.FSTRING_FORMAT_START -> pack(BasedPythonHighlightKeys.FSTRING_FORMAT_START)
         BasedPythonTokenTypes.NUMBER      -> pack(BasedPythonColors.NUMBER)
         BasedPythonTokenTypes.COMMENT     -> pack(BasedPythonColors.COMMENT)
         BasedPythonTokenTypes.OPERATOR    -> pack(BasedPythonColors.OPERATOR)

@@ -158,9 +158,24 @@ object BasedPythonHighlightKeys {
         DefaultLanguageHighlighterColors.VALID_STRING_ESCAPE
     )
 
+    /** The `{` and `}` of an f-string's field, read off the highlighting lexer; Python's `{` is a keyword's colour. */
     @JvmField
-    val FSTRING_INTERP: TextAttributesKey = TextAttributesKey.createTextAttributesKey(
-        "BASEDPYTHON_FSTRING_INTERP",
-        DefaultLanguageHighlighterColors.IDENTIFIER
+    val FSTRING_BRACES: TextAttributesKey = TextAttributesKey.createTextAttributesKey(
+        "BASEDPYTHON_FSTRING_BRACES",
+        DefaultLanguageHighlighterColors.KEYWORD
+    )
+
+    /** An f-string field's `!r`, `!s` or `!a`. */
+    @JvmField
+    val FSTRING_CONVERSION: TextAttributesKey = TextAttributesKey.createTextAttributesKey(
+        "BASEDPYTHON_FSTRING_CONVERSION",
+        DefaultLanguageHighlighterColors.KEYWORD
+    )
+
+    /** The `:` an f-string field's format spec starts with. */
+    @JvmField
+    val FSTRING_FORMAT_START: TextAttributesKey = TextAttributesKey.createTextAttributesKey(
+        "BASEDPYTHON_FSTRING_FORMAT_START",
+        DefaultLanguageHighlighterColors.KEYWORD
     )
 }

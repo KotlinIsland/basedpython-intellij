@@ -129,7 +129,17 @@
         <option name="FONT_TYPE" value="1" />
       </value>
     </option>
-    <option name="BASEDPYTHON_FSTRING_INTERP">
+    <option name="BASEDPYTHON_FSTRING_BRACES">
+      <value>
+        <option name="FOREGROUND" value="b58900" />
+      </value>
+    </option>
+    <option name="BASEDPYTHON_FSTRING_CONVERSION">
+      <value>
+        <option name="FOREGROUND" value="b58900" />
+      </value>
+    </option>
+    <option name="BASEDPYTHON_FSTRING_FORMAT_START">
       <value>
         <option name="FOREGROUND" value="b58900" />
       </value>

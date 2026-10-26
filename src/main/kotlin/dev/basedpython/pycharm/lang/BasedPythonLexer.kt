@@ -7,8 +7,9 @@ import com.intellij.psi.tree.IElementType
  * Hand-written DFA lexer for basedpython.
  *
  * Recognizes a Python 3.10+ superset: identifiers, numeric literals (int/float/hex/oct/bin
- * with underscores, exponents), single- and triple-quoted strings (including raw/byte/f
- * prefixes), `#` line comments, and operators including basedpython extras `?.` and `??`.
+ * with underscores, exponents), single- and triple-quoted strings (including raw/byte/f/t
+ * prefixes, an f- or t-string read to its end as [FStrings] reads it), `#` line comments, and
+ * operators including basedpython extras `?.` and `??`.
  * Keywords are reclassified after identifier scan.
  *
  * No semantic logic — just token boundaries. Heavy lifting (parsing, type info) lives in the LSP,
@@ -96,8 +97,7 @@ class BasedPythonLexer : LexerBase() {
         return BasedPythonTokenTypes.COMMENT
     }
 
-    private fun isStringPrefix(c: Char): Boolean =
-        c == 'r' || c == 'R' || c == 'b' || c == 'B' || c == 'f' || c == 'F' || c == 'u' || c == 'U'
+    private fun isStringPrefix(c: Char): Boolean = Companion.isStringPrefix(c)
 
     /** Look ahead past up to two prefix chars to see if a quote follows. */
     private fun isQuoteAfterPrefix(start: Int): Boolean {
@@ -117,6 +117,11 @@ class BasedPythonLexer : LexerBase() {
     }
 
     private fun scanString(quoteStart: Int): IElementType {
+        if (FStrings.isInterpolated(buffer, tokenStart, quoteStart)) {
+            // an f-string or t-string ends where its fields let it, which a quote inside one does not
+            tokenEnd = FStrings.scan(buffer, tokenStart, endOffset)
+            return BasedPythonTokenTypes.STRING
+        }
         val q = buffer[quoteStart]
         // triple?
         val triple = quoteStart + 2 < endOffset && buffer[quoteStart + 1] == q && buffer[quoteStart + 2] == q
@@ -274,4 +279,10 @@ class BasedPythonLexer : LexerBase() {
     private fun isHexDigit(c: Char): Boolean = c in '0'..'9' || c in 'a'..'f' || c in 'A'..'F'
     private fun isIdentStart(c: Char): Boolean = c == '_' || c in 'a'..'z' || c in 'A'..'Z' || c.code > 127
     private fun isIdentPart(c: Char): Boolean = isIdentStart(c) || isDigit(c)
+
+    companion object {
+        /** A string prefix letter: raw, bytes, unicode, f-string, t-string. */
+        fun isStringPrefix(c: Char): Boolean =
+            c == 'r' || c == 'R' || c == 'b' || c == 'B' || c == 'f' || c == 'F' || c == 'u' || c == 'U' || c == 't' || c == 'T'
+    }
 }

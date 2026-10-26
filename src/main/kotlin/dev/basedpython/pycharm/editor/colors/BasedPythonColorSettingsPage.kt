@@ -57,7 +57,9 @@ class BasedPythonColorSettingsPage : RainbowColorSettingsPage {
             AttributesDescriptor("Strings//String", BasedPythonColors.STRING),
             AttributesDescriptor("Strings//Docstring", BasedPythonHighlightKeys.DOCSTRING),
             AttributesDescriptor("Strings//Escape sequence", BasedPythonHighlightKeys.STRING_ESCAPE),
-            AttributesDescriptor("Strings//F-string interpolation", BasedPythonHighlightKeys.FSTRING_INTERP),
+            AttributesDescriptor("Strings//F-string braces", BasedPythonHighlightKeys.FSTRING_BRACES),
+            AttributesDescriptor("Strings//F-string conversion", BasedPythonHighlightKeys.FSTRING_CONVERSION),
+            AttributesDescriptor("Strings//F-string format spec start", BasedPythonHighlightKeys.FSTRING_FORMAT_START),
             AttributesDescriptor("Braces and Operators//Operator", BasedPythonColors.OPERATOR),
             AttributesDescriptor("Braces and Operators//Parentheses", BasedPythonColors.PARENTHESES),
             AttributesDescriptor("Braces and Operators//Brackets", BasedPythonColors.BRACKETS),
@@ -167,7 +169,7 @@ class BasedPythonColorSettingsPage : RainbowColorSettingsPage {
                     def <nestedFuncDef>shout</nestedFuncDef>(<param>text</param>: <builtin>str</builtin>) -> <builtin>str</builtin>:
                         return <param>text</param>.<mcall>upper</mcall>()
 
-                    <localVar>greeting</localVar> = f"Hello, {<self>self</self>.<property>_name</property>}!"
+                    <localVar>greeting</localVar> = f"Hello, {<self>self</self>.<property>_name</property>!r:>10}!"
                     <call>print</call>(<self>self</self>.<predefinedUsage>__class__</predefinedUsage>, <module>math</module>.pi)
                     return <call>shout</call>(<localVar>greeting</localVar>)
 

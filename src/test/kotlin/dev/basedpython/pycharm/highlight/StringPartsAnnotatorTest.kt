@@ -25,7 +25,7 @@ class StringPartsAnnotatorTest {
     }
 
     @Test
-    fun `escapes and interpolations are coloured where by puts them`() = onEdt {
+    fun `escapes are coloured where by puts them`() = onEdt {
         fixture.configureByText("a.by", "x = f\"a\\n{b!r:>{w}}{{c}}\"\ny = b\"\\x41\\u00e9\"\nz = r\"\\n\"\n")
         OutlineSpec.remember(fixture.project, fixture.editor.document) {
             string("f\"a\\n{b!r:>{w}}{{c}}\"", interpolations = listOf("{b!r:>{w}}"), escapes = listOf("\\n"))
@@ -33,7 +33,6 @@ class StringPartsAnnotatorTest {
             string("r\"\\n\"")
         }
 
-        assertEquals(listOf("{b!r:>{w}}"), coloured(BasedPythonHighlightKeys.FSTRING_INTERP))
         assertEquals(listOf("\\n", "\\x41", "\\u"), coloured(BasedPythonHighlightKeys.STRING_ESCAPE))
     }
 
@@ -41,7 +40,6 @@ class StringPartsAnnotatorTest {
     fun `without an answer from by nothing inside a string is coloured`() = onEdt {
         fixture.configureByText("b.by", "x = f\"a\\n{b}\"\n")
 
-        assertEquals(emptyList<String>(), coloured(BasedPythonHighlightKeys.FSTRING_INTERP))
         assertEquals(emptyList<String>(), coloured(BasedPythonHighlightKeys.STRING_ESCAPE))
     }
 }

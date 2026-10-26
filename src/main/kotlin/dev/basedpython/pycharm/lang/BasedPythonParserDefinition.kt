@@ -43,7 +43,12 @@ class BasedPythonParserDefinition : ParserDefinition {
         val FILE: IFileElementType = IFileElementType(BasedPythonLanguage)
 
         val COMMENTS: TokenSet = TokenSet.create(BasedPythonTokenTypes.COMMENT)
-        val STRINGS: TokenSet = TokenSet.create(BasedPythonTokenTypes.STRING)
+        /**
+         * The literal, and the parts of an f-string the highlighting lexer reads that are its text:
+         * the tree only ever holds the first, but Find's *In string literals* reads the editor's
+         * tokens against this set, and a field's expression is code there, as it is for `.py`.
+         */
+        val STRINGS: TokenSet = TokenSet.orSet(TokenSet.create(BasedPythonTokenTypes.STRING), BasedPythonTokenTypes.FSTRING_TEXT_PARTS)
         val WHITESPACE: TokenSet = TokenSet.create(TokenType.WHITE_SPACE)
     }
 

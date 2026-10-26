@@ -2,6 +2,7 @@ package dev.basedpython.pycharm.lang
 
 import com.intellij.psi.TokenType
 import com.intellij.psi.tree.IElementType
+import com.intellij.psi.tree.TokenSet
 
 class BasedPythonTokenType(debugName: String) : IElementType(debugName, BasedPythonLanguage)
 
@@ -31,6 +32,29 @@ object BasedPythonTokenTypes {
     @JvmField val SEMICOLON: IElementType = BasedPythonTokenType("BY_SEMICOLON")
     @JvmField val DOT: IElementType = BasedPythonTokenType("BY_DOT")
     @JvmField val NEWLINE: IElementType = BasedPythonTokenType("BY_NEWLINE")
+
+    // The parts of an f-string or t-string, as the HIGHLIGHTING lexer reads one
+    // (BasedPythonHighlightingLexer, by FStrings): never in the tree, which holds the literal as one
+    // STRING, but what the editor's lexer — brace matching, scope and word stops, Find's string
+    // contexts, colours — sees. A field's expression is ordinary tokens between the braces.
+    /** The prefix and opening quotes: `f"`, `rt'''`. */
+    @JvmField val FSTRING_START: IElementType = BasedPythonTokenType("BY_FSTRING_START")
+    /** A run of the literal's text, a format spec's included. */
+    @JvmField val FSTRING_TEXT: IElementType = BasedPythonTokenType("BY_FSTRING_TEXT")
+    /** `{{` or `}}`: a brace written as text. */
+    @JvmField val FSTRING_ESCAPED_BRACE: IElementType = BasedPythonTokenType("BY_FSTRING_ESCAPED_BRACE")
+    /** The `{` and `}` around a replacement field. */
+    @JvmField val FSTRING_LBRACE: IElementType = BasedPythonTokenType("BY_FSTRING_LBRACE")
+    @JvmField val FSTRING_RBRACE: IElementType = BasedPythonTokenType("BY_FSTRING_RBRACE")
+    /** A field's `!r`, `!s` or `!a`. */
+    @JvmField val FSTRING_CONVERSION: IElementType = BasedPythonTokenType("BY_FSTRING_CONVERSION")
+    /** The `:` a field's format spec starts with. */
+    @JvmField val FSTRING_FORMAT_START: IElementType = BasedPythonTokenType("BY_FSTRING_FORMAT_START")
+    /** The closing quotes. */
+    @JvmField val FSTRING_END: IElementType = BasedPythonTokenType("BY_FSTRING_END")
+
+    /** The parts of an f-string that are the literal's text and quotes, not its fields' code. */
+    @JvmField val FSTRING_TEXT_PARTS: TokenSet = TokenSet.create(FSTRING_START, FSTRING_TEXT, FSTRING_ESCAPED_BRACE, FSTRING_END)
 
     /**
      * The one composite node in a `.by` tree: a [STRING] token with a PSI element around it.

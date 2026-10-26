@@ -15,12 +15,13 @@ import dev.basedpython.pycharm.lsp.outline.ByOutlines
  * interpolation over the one already there steps past it — what the platform does for a bracket in
  * code, done for a string's braces too.
  *
- * The platform pairs a brace only where the lexer's token is a brace, and the lexer reads a whole
- * string literal as one token, so a `{` inside one was left unpaired. Where a string's text ends and
- * an interpolation begins is `by`'s parse, which [ByOutlines] holds for the text on screen; without
- * an answer for this text the key is the platform's, and the `{` is typed alone.
+ * Where a string's text ends and an interpolation begins is `by`'s parse, which [ByOutlines] holds
+ * for the text on screen. Without an answer for this text the key is the platform's, which pairs the
+ * brace as well, the editor's lexer reading a field's braces
+ * ([dev.basedpython.pycharm.lang.BasedPythonHighlightingLexer]).
  *
- * `{` typed between a pair it made — `f"{|}"` — makes `{{|}}`, the escaped brace, a pair again.
+ * `{` typed between a pair it made — `f"{|}"` — makes `{{|}}`, the escaped brace, a pair again,
+ * where the platform leaves `{{|}` (measured in PyCharm 263.7528, as it does for `.py`).
  */
 class ByFStringBraceTypedHandler : TypedHandlerDelegate() {
 

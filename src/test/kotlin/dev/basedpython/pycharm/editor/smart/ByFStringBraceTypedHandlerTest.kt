@@ -49,8 +49,11 @@ class ByFStringBraceTypedHandlerTest {
         string("\"\"")
     }
 
-    /** No outline for the text on screen is the platform's typing: the brace alone. */
+    /**
+     * No outline for the text on screen is the platform's typing, which pairs the brace too: the
+     * editor's lexer reads the `{` as a field's ([dev.basedpython.pycharm.lang.BasedPythonHighlightingLexer]).
+     */
     @Test
-    fun `without an answer for this text, the brace is typed alone`() =
-        type('{', "x = f\"<caret>\"\n", "x = f\"{<caret>\"\n", outline = null)
+    fun `without an answer for this text, the platform pairs the brace`() =
+        type('{', "x = f\"<caret>\"\n", "x = f\"{<caret>}\"\n", outline = null)
 }

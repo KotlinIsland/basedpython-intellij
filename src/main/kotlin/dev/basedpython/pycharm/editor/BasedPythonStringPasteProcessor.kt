@@ -9,6 +9,7 @@ import com.intellij.openapi.util.TextRange
 import com.intellij.psi.PsiDocumentManager
 import com.intellij.psi.PsiFile
 import dev.basedpython.pycharm.lang.BasedPythonFile
+import dev.basedpython.pycharm.lang.BasedPythonHighlightingLexer
 import dev.basedpython.pycharm.lang.BasedPythonTokenTypes
 import dev.basedpython.pycharm.lang.StringLiteralShape
 import dev.basedpython.pycharm.lsp.outline.ByOutlines
@@ -70,16 +71,15 @@ class BasedPythonStringPasteProcessor : CopyPastePreProcessor {
     }
 
     /**
-     * The string token [offset] is in or at the end of, from the editor's lexer — which is current
-     * whatever the state of the PSI, and is what draws the literal on screen.
+     * The string literal [offset] is in or at the end of, from the editor's lexer — which is current
+     * whatever the state of the PSI, and is what draws the literal on screen. An f-string is its
+     * parts there ([BasedPythonHighlightingLexer]): at one of its text's, the whole literal.
      */
     private fun stringToken(editor: Editor, offset: Int): TextRange? {
         for (at in listOf(offset, offset - 1)) {
             if (at < 0 || at >= editor.document.textLength) continue
             val iterator = editor.highlighter.createIterator(at)
-            if (!iterator.atEnd() && iterator.tokenType == BasedPythonTokenTypes.STRING) {
-                return TextRange(iterator.start, iterator.end)
-            }
+            if (!iterator.atEnd()) BasedPythonHighlightingLexer.literalAt(iterator)?.let { return it }
         }
         return null
     }

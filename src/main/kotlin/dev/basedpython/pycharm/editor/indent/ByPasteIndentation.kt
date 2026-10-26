@@ -10,7 +10,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiFile
 import com.intellij.psi.codeStyle.CommonCodeStyleSettings
 import dev.basedpython.pycharm.lang.BasedPythonFile
-import dev.basedpython.pycharm.lang.BasedPythonTokenTypes
+import dev.basedpython.pycharm.lang.BasedPythonHighlightingLexer
 
 /**
  * Lines pasted into a `.by` file at the start of a line move as a block: the first goes where the
@@ -52,7 +52,9 @@ class ByPasteIndentation : CopyPastePreProcessor {
     private fun insideString(editor: Editor, offset: Int): Boolean {
         if (offset >= editor.document.textLength) return false
         val iterator = editor.highlighter.createIterator(offset)
-        return !iterator.atEnd() && iterator.tokenType == BasedPythonTokenTypes.STRING && iterator.start < offset
+        if (iterator.atEnd()) return false
+        val literal = BasedPythonHighlightingLexer.literalAt(iterator) ?: return false
+        return literal.startOffset < offset
     }
 
     companion object {
