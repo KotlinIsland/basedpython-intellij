@@ -28,9 +28,13 @@ import dev.basedpython.pycharm.lsp.outline.ByOutlines
  * At either end of its suite a unit has nowhere to go without being re-indented into a different
  * block, and the move is refused rather than made into a different program.
  *
- * Everything else — a blank or comment line, an `else:` line, a selection that cuts a statement,
- * and any press made before the server has answered for the text on screen — is the platform's
- * line mover. This runs on the EDT and does not wait for the server, and does not guess instead.
+ * Two units trade places and nothing else moves: the blank and comment lines between them stay
+ * between them.
+ *
+ * Everything else — a blank or comment line, an `else:` line, a selection that cuts a statement —
+ * is the platform's line mover. This runs on the EDT, inside the move's write action, and does not
+ * wait for the server: [ByOutlineFirstHandler] has already waited for the outline of the text on
+ * screen before the move began, and without one (no `by` answering) this does not guess.
  */
 class BasedPythonStatementMover : StatementUpDownMover() {
 
@@ -54,11 +58,12 @@ class BasedPythonStatementMover : StatementUpDownMover() {
         val target = unit.expand(neighbour, neighbour)
         val targetLines = unit.lines(target.first, target.last)
 
-        info.toMove2 = if (down) {
-            LineRange(moved.last + 1, targetLines.last + 1)
-        } else {
-            LineRange(targetLines.first, moved.first)
-        }
+        // Only the neighbour's own lines: the blank and comment lines between the two stay where
+        // they are, so two methods a blank line apart are still a blank line apart. The platform
+        // swaps two ranges that are not adjacent as well (`MoverWrapper.move`, one `moveText` each
+        // way); taking the lines between into the neighbour's range moved them with it, which left
+        // two swapped methods touching and the blank line after the second.
+        info.toMove2 = LineRange(targetLines.first, targetLines.last + 1)
         // Siblings share an indentation, so nothing is re-indented.
         info.indentTarget = false
         return true

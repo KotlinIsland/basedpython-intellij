@@ -494,6 +494,17 @@
         <statementUpDownMover
             implementation="dev.basedpython.pycharm.editor.mover.BasedPythonStatementMover"
             order="before line"/>
+        <!-- Both movers read by's outline inside the move's write action, where nothing may wait;
+             these wait for the outline of the text on screen first, so a move right after an edit
+             is not made against the last revision's. See ByOutlineFirstHandler. -->
+        <editorActionHandler action="MoveStatementUp"
+                             implementationClass="dev.basedpython.pycharm.editor.mover.ByOutlineFirstHandler"/>
+        <editorActionHandler action="MoveStatementDown"
+                             implementationClass="dev.basedpython.pycharm.editor.mover.ByOutlineFirstHandler"/>
+        <editorActionHandler action="MoveElementLeft"
+                             implementationClass="dev.basedpython.pycharm.editor.mover.ByOutlineFirstHandler"/>
+        <editorActionHandler action="MoveElementRight"
+                             implementationClass="dev.basedpython.pycharm.editor.mover.ByOutlineFirstHandler"/>
 
         <!-- ===== Wave 6: cheap platform wins ===== -->
         <fileIndentOptionsProvider

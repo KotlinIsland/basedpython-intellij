@@ -49,6 +49,35 @@ class BasedPythonStatementMoverTest {
         }
     }
 
+    /**
+     * The lines between two units stay between them. Taking them into the neighbour's range moved
+     * them with it, which left two swapped methods touching and the blank line after the second.
+     */
+    @Test
+    fun `methods a blank line apart are still a blank line apart`() = move(
+        down = false,
+        before = "class A:\n    def f(self):\n        pass\n\n    <caret>def g(self):\n        pass\n",
+        after = "class A:\n    <caret>def g(self):\n        pass\n\n    def f(self):\n        pass\n",
+    ) {
+        compound {
+            clause("class A:") {
+                def("def f(self):") { simple("pass") }
+                def("def g(self):") { simple("pass") }
+            }
+        }
+    }
+
+    @Test
+    fun `classes two blank lines apart are still two blank lines apart`() = move(
+        down = true,
+        before = "<caret>class A:\n    x = 1\n\n\nclass B:\n    y = 2\n\n\nz = 3\n",
+        after = "class B:\n    y = 2\n\n\n<caret>class A:\n    x = 1\n\n\nz = 3\n",
+    ) {
+        compound { clause("class A:") { simple("x = 1") } }
+        compound { clause("class B:") { simple("y = 2") } }
+        simple("z = 3")
+    }
+
     @Test
     fun `a compound statement moves with its whole suite`() = move(
         down = false,

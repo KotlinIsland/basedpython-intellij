@@ -22,8 +22,9 @@ import dev.basedpython.pycharm.lsp.outline.ByOutlines
  * one is meant is the caret's to say — so a selection spanning several tokens, which the platform
  * asks about only through the element holding all of them, moves nothing.
  *
- * Nothing moves while the outline is not for the text on screen, which is between an edit and
- * `by`'s answer for it: this runs on the EDT, and neither waits for the server nor guesses.
+ * This runs on the EDT, inside the move's write action, and neither waits for the server nor
+ * guesses: [ByOutlineFirstHandler] has already waited for the outline of the text on screen before
+ * the move began. Right after an edit there was none yet, and the move silently did nothing.
  */
 class ByMoveElementLeftRightHandler : MoveElementLeftRightHandler() {
 
