@@ -271,8 +271,9 @@ internal class ByLspServerDescriptor(
     /** Not a toggle: `by`'s messages are written in markdown, and a tooltip is HTML. */
     override val diagnosticsCustomizer = ByDiagnosticsSupport()
 
+    /** `by`'s completion, with the prefix inside an f-string's field — see [dev.basedpython.pycharm.lsp.completion.ByCompletionSupport]. */
     override val completionCustomizer
-      get() = if (s.byCompletion) super.completionCustomizer else LspCompletionDisabled
+      get() = if (s.byCompletion) dev.basedpython.pycharm.lsp.completion.ByCompletionSupport else LspCompletionDisabled
     override val goToDefinitionCustomizer
       get() = if (s.byGoToDefinition) super.goToDefinitionCustomizer else LspGoToDefinitionDisabled
     override val goToTypeDefinitionCustomizer
