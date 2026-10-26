@@ -507,6 +507,8 @@
         <!-- first: the platform's brace-pair delegate would otherwise take Enter between brackets -->
         <enterHandlerDelegate order="first"
             implementation="dev.basedpython.pycharm.editor.smart.BasedPythonEnterHandler"/>
+        <!-- """ and Enter at the top of a function: the quotes closed and by/docstringStub's stub written. -->
+        <enterHandlerDelegate implementation="dev.basedpython.pycharm.editor.smart.ByDocstringEnterHandler"/>
         <lineIndentProvider order="first"
             implementation="dev.basedpython.pycharm.editor.indent.BasedPythonLineIndentProvider"/>
         <lang.formatter
