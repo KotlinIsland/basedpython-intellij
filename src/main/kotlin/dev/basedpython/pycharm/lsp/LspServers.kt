@@ -252,8 +252,12 @@ internal class ByLspServerDescriptor(
       // completes a callable as its call — `total()`, the caret after the parentheses when it
       // takes no arguments — only while it is on. Read once, at start; BasedPythonLspReloader
       // restarts the server when it changes.
+      // *Settings | basedpython | Auto-import*: how a name is imported from a module the file
+      // imports nothing from yet, `from m import name` or `import m`. Read at start too; the
+      // settings page restarts the servers when it is applied.
       "completions" to mapOf(
         "completeFunctionParentheses" to EditorSettingsExternalizable.getInstance().isInsertParenthesesAutomatically,
+        "importStyle" to BasedPythonSettings.getInstance(project).importStyle.id,
       ),
     )
 

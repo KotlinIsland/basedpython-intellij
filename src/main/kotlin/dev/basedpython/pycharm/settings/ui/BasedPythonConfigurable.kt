@@ -23,6 +23,7 @@ import dev.basedpython.pycharm.debug.bpd.ByDebugBackend
 import dev.basedpython.pycharm.debug.dfa.ByDataFlowSession
 import dev.basedpython.pycharm.debug.recompose.ByRecompositionSession
 import dev.basedpython.pycharm.settings.BasedPythonSettings
+import dev.basedpython.pycharm.settings.ByImportStyle
 import dev.basedpython.pycharm.settings.BasedPythonSettingsEffects
 import dev.basedpython.pycharm.util.BasedPythonBundle
 import java.awt.BorderLayout
@@ -107,6 +108,10 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
         }
     }
 
+    private val importStyleCombo = ComboBox(ByImportStyle.entries.toTypedArray()).apply {
+        renderer = textListCellRenderer("") { it.display }
+    }
+
     private val debuggerDataFlow = JCheckBox("Show what a stopped program settles about the code below it")
     private val debuggerRecompositions = JCheckBox(BasedPythonBundle.message("settings.debug.recompositions"))
 
@@ -185,6 +190,14 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
                     )
                 row { cell(debuggerRecompositions) }
                     .comment(BasedPythonBundle.message("settings.debug.recompositions.comment"))
+            }
+            group("Auto-import") {
+                row("Import a name with:") { cell(importStyleCombo) }
+                    .comment(
+                        "For a completion, quick fix or paste that names a module the file imports " +
+                            "nothing from yet. A module the file already imports is imported from the " +
+                            "way the file does it.",
+                    )
             }
             group("by server capabilities") {
                 row { cell(byCompletion) }
@@ -283,6 +296,7 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
             indexGeneratedPython.isSelected != s.indexGeneratedPython ||
             pyFileHandlingCombo.selectedItem != s.pyFileHandling ||
             debugBackendCombo.selectedItem != s.debugBackend ||
+            importStyleCombo.selectedItem != s.importStyle ||
             debuggerDataFlow.isSelected != s.debuggerDataFlow ||
             byProjectDiagnostics.isSelected != s.byProjectDiagnostics ||
             debuggerRecompositions.isSelected != s.debuggerRecompositions ||
@@ -327,6 +341,7 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
         s.indexGeneratedPython = indexGeneratedPython.isSelected
         s.pyFileHandling = pyFileHandlingCombo.selectedItem as? PyFileHandling ?: PyFileHandling.AUTO
         s.debugBackend = debugBackendCombo.selectedItem as? ByDebugBackend ?: ByDebugBackend.BPD
+        s.importStyle = importStyleCombo.selectedItem as? ByImportStyle ?: ByImportStyle.FROM
         val dataFlowChanged = debuggerDataFlow.isSelected != s.debuggerDataFlow
         s.debuggerDataFlow = debuggerDataFlow.isSelected
         val recompositionsChanged = debuggerRecompositions.isSelected != s.debuggerRecompositions
@@ -385,6 +400,7 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
         indexGeneratedPython.isSelected = s.indexGeneratedPython
         pyFileHandlingCombo.selectedItem = s.pyFileHandling
         debugBackendCombo.selectedItem = s.debugBackend
+        importStyleCombo.selectedItem = s.importStyle
         debuggerDataFlow.isSelected = s.debuggerDataFlow
         byProjectDiagnostics.isSelected = s.byProjectDiagnostics
         debuggerRecompositions.isSelected = s.debuggerRecompositions

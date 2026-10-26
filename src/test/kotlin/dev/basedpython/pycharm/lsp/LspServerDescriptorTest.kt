@@ -28,6 +28,7 @@ import dev.basedpython.pycharm.env.ByLaunch
 import dev.basedpython.pycharm.lsp.inlay.ByHintKind
 import dev.basedpython.pycharm.lsp.inlay.ByHintMode
 import dev.basedpython.pycharm.settings.BasedPythonSettings
+import dev.basedpython.pycharm.settings.ByImportStyle
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
 import dev.basedpython.pycharm.testFramework.onEdt
 import org.junit.jupiter.api.AfterEach
@@ -307,12 +308,28 @@ class LspServerDescriptorTest {
         editor.isInsertParenthesesAutomatically = on
         @Suppress("UNCHECKED_CAST")
         val completions =
-          (byDescriptor().createInitializationOptions() as Map<String, Any>)["completions"] as Map<String, Boolean>
-        assertEquals(mapOf("completeFunctionParentheses" to on), completions)
+          (byDescriptor().createInitializationOptions() as Map<String, Any>)["completions"] as Map<String, Any>
+        assertEquals(on, completions["completeFunctionParentheses"])
       }
     } finally {
       editor.isInsertParenthesesAutomatically = was
     }
+  }
+
+  @Test
+  fun `by imports a name the way the import style setting says, from by default`() = onEdt {
+    val settings = BasedPythonSettings.getInstance(project)
+    fun sent(): Any? {
+      @Suppress("UNCHECKED_CAST")
+      val completions = (byDescriptor().createInitializationOptions() as Map<String, Any>)["completions"] as Map<String, Any>
+      return completions["importStyle"]
+    }
+    // the spellings are by's `completions.importStyle` values
+    assertEquals("from", sent())
+    settings.importStyle = ByImportStyle.MODULE
+    assertEquals("module", sent())
+    settings.importStyle = ByImportStyle.FROM
+    assertEquals("from", sent())
   }
 
   @Test

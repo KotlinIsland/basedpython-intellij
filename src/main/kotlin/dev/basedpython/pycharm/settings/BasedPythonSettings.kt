@@ -134,6 +134,11 @@ class BasedPythonSettings : PersistentStateComponent<BasedPythonSettings.State> 
      * falling back.
      */
     var debugBackend: String = "bpd",
+    /**
+     * [ByImportStyle.id] of how an auto-import brings in a name, sent as `by`'s
+     * `completions.importStyle`. A `String` for the same reason as [debugBackend].
+     */
+    var importStyle: String = ByImportStyle.FROM.id,
     // `buff` server capabilities:
     var buffFormatting: Boolean = true,
     var buffCodeActions: Boolean = true,
@@ -229,6 +234,11 @@ class BasedPythonSettings : PersistentStateComponent<BasedPythonSettings.State> 
       state.pyFileHandling =
         if (value == dev.basedpython.pycharm.lang.dialect.PyFileHandling.AUTO) "" else value.id
     }
+
+  /** [State.importStyle] as an enum. Not serialised — the string is the persisted form. */
+  var importStyle: ByImportStyle
+    get() = ByImportStyle.fromId(state.importStyle)
+    set(value) { state.importStyle = value.id }
 
   // ---- Per-server capability toggles (§142) ----
 
