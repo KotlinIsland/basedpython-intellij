@@ -8,7 +8,9 @@ import org.eclipse.lsp4j.Position
 import org.eclipse.lsp4j.Range
 import org.eclipse.lsp4j.TextDocumentIdentifier
 import org.eclipse.lsp4j.jsonrpc.messages.Either
+import com.google.gson.JsonParser
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
 
 /**
@@ -51,7 +53,7 @@ class ByRefactoringRequestTest {
 
         val offer = ByRefactoringRequest.offer(listOf(Either.forRight(action)), ByRefactoring.InlineVariable)
 
-        assertEquals(ByRefactoringOffer.Available(action), offer)
+        assertEquals(ByRefactoringOffer.Available(listOf(action)), offer)
     }
 
     @Test
@@ -74,6 +76,45 @@ class ByRefactoringRequestTest {
         )
 
         assertEquals(ByRefactoringOffer.NotOffered, ByRefactoringRequest.offer(reply, ByRefactoring.ExtractFunction))
+    }
+
+    @Test
+    fun `every expression around a caret is offered, innermost first, without the ones by refuses`() {
+        val inner = action("Extract variable `value` from `radius ** 2`", "refactor.extract.variable")
+        val refused = action("Extract variable `value` from `f(radius ** 2)`", "refactor.extract.variable").apply {
+            disabled = CodeActionDisabled("it runs every iteration")
+        }
+        val outer = action("Extract variable `value` from `scale * f(radius ** 2)`", "refactor.extract.variable")
+
+        val offer = ByRefactoringRequest.offer(listOf(inner, refused, outer).map { Either.forRight(it) }, ByRefactoring.ExtractVariable)
+
+        assertEquals(ByRefactoringOffer.Available(listOf(inner, outer)), offer)
+    }
+
+    @Test
+    fun `when by refuses every expression, the innermost refusal is the answer`() {
+        val inner = action("Extract variable `value` from `q.pending()`", "refactor.extract.variable").apply {
+            disabled = CodeActionDisabled("it runs every iteration")
+        }
+        val outer = action("Extract variable `value` from `not q.pending()`", "refactor.extract.variable").apply {
+            disabled = CodeActionDisabled("it is a loop condition")
+        }
+
+        val offer = ByRefactoringRequest.offer(listOf(inner, outer).map { Either.forRight(it) }, ByRefactoring.ExtractVariable)
+
+        assertEquals(ByRefactoringOffer.Refused(inner.title, "it runs every iteration"), offer)
+    }
+
+    @Test
+    fun `the expression an action rewrites is the range in its data`() {
+        val action = action("Extract variable `value` from `radius ** 2`", "refactor.extract.variable").apply {
+            data = JsonParser.parseString(
+                """{"range":{"start":{"line":4,"character":30},"end":{"line":4,"character":41}},"refactor":"extract-variable","version":0}""",
+            )
+        }
+
+        assertEquals(Range(Position(4, 30), Position(4, 41)), ByRefactoringRequest.expressionRange(action))
+        assertNull(ByRefactoringRequest.expressionRange(action("Extract variable `value`", "refactor.extract.variable")))
     }
 
     private fun action(title: String, kind: String) = CodeAction(title).apply { this.kind = kind }
