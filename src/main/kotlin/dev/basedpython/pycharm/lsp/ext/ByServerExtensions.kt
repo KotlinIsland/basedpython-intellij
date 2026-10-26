@@ -1195,6 +1195,12 @@ data class ByInjectionFragment(
     val ranges: List<Range> = emptyList(),
     /** What decided the language: `comment`, `declared` or `propagated`. */
     val origin: String? = null,
+    /**
+     * `by` reports the fragment's syntax errors itself — `invalid-regex` for a regular expression — so
+     * an editor's own parser for the language need not. Absent where `by` does not, and from a `by`
+     * that predates saying it.
+     */
+    val checked: Boolean = false,
 )
 
 /**

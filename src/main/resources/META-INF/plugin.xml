@@ -426,6 +426,9 @@
             implementationClass="dev.basedpython.pycharm.editor.templates.BasedPythonExpressionSurroundDescriptor"/>
         <!-- The platform's own Extract/Introduce and Inline actions (Ctrl+Alt+V, C, P, F, M, N), each one of
              by's refactorings: the edit, and the reason when it refuses, are the server's. -->
+        <!-- A fragment's syntax errors left to by where by reports them, e.g. invalid-regex in an
+             re pattern; see ByInjectedErrorFilter. -->
+        <highlightErrorFilter implementation="dev.basedpython.pycharm.lsp.inject.ByInjectedErrorFilter"/>
         <lang.refactoringSupport
             language="basedpython"
             implementationClass="dev.basedpython.pycharm.lsp.refactor.ByRefactoringSupportProvider"/>

@@ -191,4 +191,29 @@ class LanguageInjectionTest {
     }
 
     // endregion
+
+    // region: a fragment's errors
+
+    /** The parser's error elements in the RegExp fragment of `p = "(ab[c-"`, and what the filter says of each. */
+    private fun regexpErrors(checked: Boolean): List<Boolean> {
+        val file = fixture.configureByText("main.by", "p = \"(ab[c-\"\n")
+        ByInjections.getInstance(fixture.project).remember(
+            file,
+            listOf(ByInjection("RegExp", listOf(contentRange(file, 0)), ByInjectionOrigin.DECLARED, checked = checked)),
+        )
+        val injected = checkNotNull(injectedAt(file, contentRange(file, 0).startOffset + 1)) { "RegExp injected" }
+        val errors = PsiTreeUtil.findChildrenOfType(injected, com.intellij.psi.PsiErrorElement::class.java)
+        assertTrue(errors.isNotEmpty(), "the pattern has a parser error")
+        return errors.map { ByInjectedErrorFilter().shouldHighlightErrorElement(it) }
+    }
+
+    @Test
+    fun `a fragment by checks itself leaves its parser's errors to by`() = onEdt {
+        assertTrue(regexpErrors(checked = true).none { it })
+    }
+
+    @Test
+    fun `a fragment by does not check keeps its parser's errors`() = onEdt {
+        assertTrue(regexpErrors(checked = false).all { it })
+    }
 }

@@ -43,6 +43,8 @@ data class ByInjection(
     val language: String,
     val ranges: List<TextRange>,
     val origin: ByInjectionOrigin,
+    /** `by` reports the fragment's syntax errors itself; see [ByInjectedErrorFilter]. */
+    val checked: Boolean = false,
 )
 
 /**
@@ -78,6 +80,6 @@ object ByInjectionReplies {
             if (start > end) return null
             TextRange(start, end)
         }
-        return ByInjection(language = language, ranges = ranges, origin = origin)
+        return ByInjection(language = language, ranges = ranges, origin = origin, checked = fragment.checked)
     }
 }
