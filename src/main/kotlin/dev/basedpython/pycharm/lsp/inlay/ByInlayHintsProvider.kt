@@ -4,6 +4,7 @@ import com.intellij.codeInsight.hints.ChangeListener
 import com.intellij.codeInsight.hints.ImmediateConfigurable
 import com.intellij.codeInsight.hints.InlayHintsCollector
 import com.intellij.codeInsight.hints.InlayHintsProvider
+import com.intellij.codeInsight.hints.InlayHintsSettings
 import com.intellij.codeInsight.hints.InlayHintsSink
 import com.intellij.codeInsight.hints.NoSettings
 import com.intellij.codeInsight.hints.SettingsKey
@@ -23,6 +24,7 @@ import com.intellij.platform.lsp.util.navigateToLocation
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
 import dev.basedpython.pycharm.lang.BasedPythonFile
+import dev.basedpython.pycharm.lang.BasedPythonLanguage
 import dev.basedpython.pycharm.lsp.ByServerDocuments
 import dev.basedpython.pycharm.lsp.askBy
 import dev.basedpython.pycharm.lsp.byServerFor
@@ -57,11 +59,11 @@ import javax.swing.JPanel
  * What is reimplemented here is small: one request per daemon run, the hints applied through the
  * platform's own inlay pass, which owns the add/remove diffing and the inlay lifecycle.
  *
- * Not shown under `Settings | Editor | Inlay Hints` on purpose ([isVisibleInSettings]). basedpython
- * already has three settings of its own — parameters, types, return types, each never / always /
- * on push — under `Settings | basedpython | Inlay hints`, and those are what this reads. A second
- * checkbox in the platform's page would be a fourth switch on the same feature, storing its state
- * somewhere else.
+ * Not listed under `Settings | Editor | Inlay Hints` itself ([isVisibleInSettings]): basedpython is
+ * listed there by [ByInlaySettingsProvider], whose options are the per-kind modes this reads — each
+ * never / always / on push, under `Settings | basedpython | Inlay hints` — rather than settings of
+ * a provider's own, stored somewhere else. The page's switch for the language is the platform's,
+ * and this reads it too.
  */
 class ByInlayHintsProvider : InlayHintsProvider<NoSettings>, DumbAware {
 
@@ -87,6 +89,8 @@ class ByInlayHintsProvider : InlayHintsProvider<NoSettings>, DumbAware {
         sink: InlayHintsSink,
     ): InlayHintsCollector? {
         if (file !is BasedPythonFile) return null
+        // *Settings | Editor | Inlay Hints*, basedpython's checkbox
+        if (!InlayHintsSettings.instance().hintsEnabled(BasedPythonLanguage)) return null
         val basedPython = BasedPythonSettings.getInstance(file.project)
         val modes = basedPython.inlayModes
         // Nothing switched on: don't ask the server at all, rather than ask and drop every answer.

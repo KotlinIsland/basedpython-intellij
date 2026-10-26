@@ -765,6 +765,9 @@
             language="basedpython"
             isEnabledByDefault="true"
             implementationClass="dev.basedpython.pycharm.lsp.inlay.ByInlayHintsProvider"/>
+        <!-- basedpython on Settings | Editor | Inlay Hints: the language's switch, and a checkbox for each
+             kind of hint by computes, reading and writing the same modes as Settings | basedpython. -->
+        <config.inlaySettingsProvider implementation="dev.basedpython.pycharm.lsp.inlay.ByInlaySettingsProvider"/>
         <applicationConfigurable
             groupId="language"
             id="dev.basedpython.pycharm.settings.app"
