@@ -3,6 +3,7 @@ package dev.basedpython.pycharm.run
 import com.intellij.execution.RunManager
 import com.intellij.execution.RunnerAndConfigurationSettings
 import com.intellij.execution.actions.ConfigurationContext
+import com.intellij.execution.actions.PreferredProducerFind
 import com.intellij.execution.actions.RunConfigurationProducer
 import com.intellij.psi.PsiFile
 import com.intellij.testFramework.junit5.fixture.TestFixtures
@@ -395,5 +396,44 @@ class RunConfigurationProducerTest {
             producer<ByRunFromFileProducer>().shouldReplace(run, test),
             "by run must not replace the pytest producer",
         )
+    }
+
+    @Test
+    fun `inside a test the platform's context run is the test alone, ahead of by run and by check`() = onEdt {
+        val text = "def test_addition():\n    assert 1 + 1 == 2\n"
+        val file = addTestFile("test_context.by", text)
+        model.rememberModuleNames(mapOf(file.virtualFile to "test_context"))
+        val context = ConfigurationContext(file.findElementAt(text.indexOf("assert"))!!)
+
+        // the list Ctrl+Shift+R runs the first of, offering a chooser when it has more than one
+        val configurations = PreferredProducerFind.getConfigurationsFromContext(context.location, context, true, false)
+
+        assertEquals(listOf("pytest test_context.py::test_addition"), configurations?.map { it.configuration.name })
+    }
+
+    @Test
+    fun `the pytest producer is preferred over by check as well as by run`() = onEdt {
+        val file = addTestFile("test_check.by", "def test_addition():\n    assert 1 + 1 == 2\n")
+        val context = contextFor(file)
+        val test = producer<ByTestFromFileProducer>().createConfigurationFromContext(context)!!
+        val check = producer<ByCheckFromFileProducer>().createConfigurationFromContext(context)!!
+        assertTrue(producer<ByTestFromFileProducer>().isPreferredConfiguration(test, check))
+        assertTrue(producer<ByTestFromFileProducer>().shouldReplace(test, check))
+    }
+
+    @Test
+    fun `a directory runs every test file under it, each by the path by stages it at`() = onEdt {
+        val text = "def test_addition():\n    assert 1 + 1 == 2\n"
+        addTestFile("tests/test_a.by", text, staged = "tests/test_a.py")
+        addTestFile("tests/unit/test_b.by", text, staged = "tests_unit/test_b.py")
+        fixture.addFileToProject("tests/helpers.by", "x = 1\n")
+        val directory = checkNotNull(fixture.psiManager.findDirectory(fixture.findFileInTempDir("tests")))
+        val context = ConfigurationContext(directory)
+
+        val test = producer<ByTestFromFileProducer>().createConfigurationFromContext(context)
+        val configuration = test?.configuration as ByTestConfiguration
+
+        assertEquals("tests/test_a.py tests_unit/test_b.py", configuration.options.paths)
+        assertEquals("pytest in tests", configuration.name)
     }
 }
