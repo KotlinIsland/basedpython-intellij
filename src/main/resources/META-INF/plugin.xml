@@ -332,6 +332,9 @@
             language="basedpython"
             implementationClass="dev.basedpython.pycharm.lsp.refactor.ByRefactoringSupportProvider"/>
         <inlineActionHandler implementation="dev.basedpython.pycharm.lsp.refactor.ByInlineActionHandler"/>
+        <!-- Rename (Shift+F6) in a .by file: by's name and occurrences, edited in place or in the
+             Rename dialog as Specify refactoring options says, renamed by by's textDocument/rename. -->
+        <renameHandler implementation="dev.basedpython.pycharm.lsp.refactor.ByRenameHandler"/>
         <!-- Code | Unwrap/Remove (Ctrl+Shift+Delete): the options and their edits are by/unwrap's. -->
         <lang.unwrapDescriptor
             language="basedpython"

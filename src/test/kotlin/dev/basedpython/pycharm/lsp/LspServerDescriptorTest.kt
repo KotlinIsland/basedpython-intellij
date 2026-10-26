@@ -16,7 +16,6 @@ import com.intellij.platform.lsp.api.customization.LspInheritanceMarkersDisabled
 import com.intellij.platform.lsp.api.customization.LspInlayHintDisabled
 import com.intellij.platform.lsp.api.customization.LspOnTypeFormattingSupport
 import com.intellij.platform.lsp.api.customization.LspRenameDisabled
-import com.intellij.platform.lsp.api.customization.LspRenameSupport
 import com.intellij.platform.lsp.api.customization.LspSelectionRangeDisabled
 import com.intellij.platform.lsp.api.customization.LspSemanticTokensDisabled
 import com.intellij.platform.lsp.api.customization.LspSignatureHelpDisabled
@@ -186,23 +185,13 @@ class LspServerDescriptorTest {
     assertNotSame(LspGoToDefinitionDisabled, c.goToDefinitionCustomizer)
     assertNotSame(LspCompletionDisabled, c.completionCustomizer)
     assertNotSame(LspFindReferencesDisabled, c.findReferencesCustomizer)
-    assertNotSame(LspRenameDisabled, c.renameCustomizer)
   }
 
   @Test
-  fun `by renames in a by file`() = onEdt {
-    // The platform's own rename support only runs in plain-text and TextMate files, so without this
-    // Shift+F6 was disabled in every `.by` file however the toggle was set.
-    val c = byDescriptor().lspCustomization.renameCustomizer
-    assertTrue(c is LspRenameSupport, "rename must not be disabled for by: $c")
-    val byFile = fixture.configureByText("a.by", "x = 1\n")
-    assertTrue((c as LspRenameSupport).shouldRunRename(byFile))
-  }
-
-  @Test
-  fun `by leaves renaming a plain text file to whoever else renames it`() = onEdt {
-    val c = byDescriptor().lspCustomization.renameCustomizer as LspRenameSupport
-    assertFalse(c.shouldRunRename(fixture.configureByText("notes.txt", "x\n")))
+  fun `the platform's own LSP rename is off for by, whose files rename through ByRenameHandler`() = onEdt {
+    // The platform's handler edits only the occurrence at the caret and never opens the Rename
+    // dialog; available on the same caret as the plugin's, it would also make Shift+F6 ask which to run.
+    assertSame(LspRenameDisabled, byDescriptor().lspCustomization.renameCustomizer)
   }
 
   @Test
@@ -210,12 +199,6 @@ class LspServerDescriptorTest {
     // Off in the platform unless a customization turns it on: without it, typing the `:` of an
     // `else` in the body it closes sends nothing, and the `else` stays a level too deep.
     assertTrue(byDescriptor().lspCustomization.onTypeFormattingCustomizer is LspOnTypeFormattingSupport)
-  }
-
-  @Test
-  fun `the rename toggle still switches by's rename off`() = onEdt {
-    BasedPythonSettings.getInstance(project).byRename = false
-    assertSame(LspRenameDisabled, byDescriptor().lspCustomization.renameCustomizer)
   }
 
   @Test
