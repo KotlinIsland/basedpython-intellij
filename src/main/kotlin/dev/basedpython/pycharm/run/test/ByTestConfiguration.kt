@@ -17,11 +17,13 @@ import com.intellij.execution.configurations.RuntimeConfigurationException
 import com.intellij.execution.runners.ExecutionEnvironment
 import com.intellij.execution.runners.ProgramRunner
 import com.intellij.execution.testframework.TestConsoleProperties
+import com.intellij.execution.testframework.actions.AbstractRerunFailedTestsAction
 import com.intellij.execution.testframework.sm.SMCustomMessagesParsing
 import com.intellij.execution.testframework.sm.SMTestRunnerConnectionUtil
 import com.intellij.execution.testframework.sm.runner.OutputToGeneralTestEventsConverter
 import com.intellij.execution.testframework.sm.runner.SMTRunnerConsoleProperties
 import com.intellij.execution.testframework.sm.runner.SMTestLocator
+import com.intellij.execution.ui.ConsoleView
 import com.intellij.openapi.options.SettingsEditor
 import com.intellij.openapi.project.Project
 
@@ -96,6 +98,7 @@ class ByTestConfiguration(project: Project, factory: ConfigurationFactory, name:
                     FRAMEWORK_NAME, handler, testConsoleProperties(config, executor),
                 )
                 return DefaultExecutionResult(console, handler, *createActions(console, handler, executor))
+                    .withTestRestartActions(console)
             }
         }
     }
@@ -113,6 +116,9 @@ class ByTestConfiguration(project: Project, factory: ConfigurationFactory, name:
                 ByTestEventsConverter(testFrameworkName, consoleProperties)
 
             override fun getTestLocator(): SMTestLocator = ByTestLocator
+
+            override fun createRerunFailedTestsAction(consoleView: ConsoleView): AbstractRerunFailedTestsAction =
+                ByRerunFailedTestsAction(consoleView, this)
         }
 
     private companion object {

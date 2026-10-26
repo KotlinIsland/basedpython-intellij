@@ -82,6 +82,7 @@ internal class PlainPytestCommandLineState(
         val handler = startProcess()
         val console = attachConsole(handler, executor)
         return DefaultExecutionResult(console, handler, *createActions(console, handler, executor))
+            .withTestRestartActions(console)
     }
 
     private companion object {
