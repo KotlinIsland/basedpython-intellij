@@ -1,0 +1,7 @@
+def report(items: list[int]) -> None:
+    extracted(items)
+
+
+def extracted(items: list[int]) -> None:
+    total = sum(items)
+    print(total)

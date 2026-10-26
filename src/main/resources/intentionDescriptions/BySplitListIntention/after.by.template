@@ -1,0 +1,5 @@
+total = add(
+    first,
+    second,
+    third,
+)

@@ -1,0 +1,3 @@
+def total(price: float, count: int) -> float:
+    <spot>subtotal</spot> = price * count
+    return subtotal + 1.5

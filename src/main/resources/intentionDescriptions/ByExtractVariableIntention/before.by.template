@@ -1,0 +1,2 @@
+def area(radius: float) -> float:
+    return 3.14159 * <spot>radius ** 2</spot>

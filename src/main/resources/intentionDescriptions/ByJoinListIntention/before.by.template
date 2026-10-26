@@ -1,0 +1,5 @@
+total = add(
+    <spot>first</spot>,
+    second,
+    third,
+)

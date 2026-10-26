@@ -1,0 +1,5 @@
+NUMBER = 60 * 60 * 24
+
+
+def timeout() -> int:
+    return NUMBER

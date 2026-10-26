@@ -1,0 +1,2 @@
+def count(items: list[int]) -> int:
+    return len(items) * <spot>2</spot>

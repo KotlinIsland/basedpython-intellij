@@ -35,6 +35,7 @@ import com.intellij.platform.lsp.api.customization.LspFindReferencesDisabled
 import com.intellij.platform.lsp.api.customization.LspFoldingRangeDisabled
 import com.intellij.platform.lsp.api.customization.LspGoToDefinitionDisabled
 import com.intellij.platform.lsp.api.customization.LspGoToTypeDefinitionDisabled
+import com.intellij.platform.lsp.api.customization.LspCodeActionsSupport
 import com.intellij.platform.lsp.api.customization.LspInheritanceMarkersCustomizer
 import com.intellij.platform.lsp.api.customization.LspInheritanceMarkersDisabled
 import com.intellij.platform.lsp.api.customization.LspInlayHintDisabled
@@ -291,6 +292,16 @@ internal class ByLspServerDescriptor(
      * available on the same caret, which would make it ask which of the two to run.
      */
     override val renameCustomizer = LspRenameDisabled
+
+    /**
+     * `by`'s quick fixes as the platform attaches them to the diagnostics they fix, and none of its
+     * other code actions: those are each an intention of the plugin's, named for what it does
+     * ([dev.basedpython.pycharm.lsp.refactor.ByCodeActionIntentions]), where the platform would show
+     * them all under one *LSP* entry of the settings and ask `by` for them a second time.
+     */
+    override val codeActionsCustomizer = object : LspCodeActionsSupport() {
+      override val intentionActionsSupport: Boolean = false
+    }
     override val semanticTokensCustomizer
       get() = if (s.bySemanticTokens) {
         dev.basedpython.pycharm.lsp.semantic.BasedPythonLspSemanticTokensSupport()

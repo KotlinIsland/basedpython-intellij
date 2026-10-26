@@ -1,0 +1,3 @@
+def report(items: list[int]) -> None:
+    <spot>total = sum(items)
+    print(total)</spot>

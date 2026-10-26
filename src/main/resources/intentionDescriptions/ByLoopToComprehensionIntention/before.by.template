@@ -1,0 +1,4 @@
+evens = []
+<spot>for</spot> x in xs:
+    if x % 2 == 0:
+        evens.append(x)

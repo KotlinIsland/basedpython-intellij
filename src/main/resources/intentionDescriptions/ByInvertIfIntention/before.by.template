@@ -1,0 +1,4 @@
+<spot>if</spot> count > 1:
+    print("many")
+else:
+    print("one")

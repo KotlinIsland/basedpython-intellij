@@ -1,0 +1,3 @@
+class Box:
+    def area(self) -> int:
+        return <spot>self.width * self.height</spot>

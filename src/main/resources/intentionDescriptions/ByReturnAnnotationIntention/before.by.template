@@ -1,0 +1,2 @@
+def total(xs: list[int])<spot></spot>:
+    return sum(xs)

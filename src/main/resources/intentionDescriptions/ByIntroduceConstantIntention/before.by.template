@@ -1,0 +1,2 @@
+def timeout() -> int:
+    return <spot>60 * 60 * 24</spot>

@@ -218,13 +218,14 @@ class LspServerDescriptorTest {
   }
 
   @Test
-  fun `by's refactorings reach Alt+Enter as intentions`() = onEdt {
-    // `by`'s refactorings are code actions that are not quick fixes. The platform only asks for
-    // those, and lists them in Alt+Enter, through a code actions customizer that supports
-    // intention actions — the only place Inline Variable, Extract Function and the rest now live.
+  fun `by's quick fixes are the platform's, and its refactorings the plugin's intentions`() = onEdt {
+    // `by`'s quick fixes go on the diagnostics they fix, through the platform. Its refactorings are
+    // code actions that are not quick fixes, which the platform would ask for again and list under
+    // one LSP entry: lsp.refactor.ByCodeActionIntentions asks for them, as intentions named for
+    // what each does.
     val c = byDescriptor().lspCustomization.codeActionsCustomizer
     assertTrue(c is LspCodeActionsSupport, "code actions must not be disabled for by: $c")
-    assertTrue((c as LspCodeActionsSupport).intentionActionsSupport)
+    assertFalse((c as LspCodeActionsSupport).intentionActionsSupport)
     assertTrue(c.quickFixesSupport)
   }
 

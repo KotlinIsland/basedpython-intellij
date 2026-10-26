@@ -1,0 +1,4 @@
+class Box:
+    def area(self) -> int:
+        self.value = self.width * self.height
+        return self.value

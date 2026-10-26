@@ -1,0 +1,3 @@
+def area(radius: float) -> float:
+    value = radius ** 2
+    return 3.14159 * value

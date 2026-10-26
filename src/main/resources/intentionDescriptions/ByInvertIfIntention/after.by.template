@@ -1,0 +1,4 @@
+if count <= 1:
+    print("one")
+else:
+    print("many")

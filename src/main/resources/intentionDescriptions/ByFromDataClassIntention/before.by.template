@@ -1,0 +1,3 @@
+data class <spot>Point</spot>:
+    x: int
+    y: int
