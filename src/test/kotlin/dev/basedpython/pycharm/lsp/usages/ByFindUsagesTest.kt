@@ -6,6 +6,12 @@ import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.lang.BasedPythonFile
 import dev.basedpython.pycharm.testFramework.AnsweringClient
 import dev.basedpython.pycharm.testFramework.AnsweringClient.Companion.answered
+import dev.basedpython.pycharm.testFramework.AnsweringClient.Companion.failed
+import dev.basedpython.pycharm.lsp.ext.ByDeclaration
+import dev.basedpython.pycharm.lsp.ext.ByDeclarationParams
+import com.intellij.platform.lsp.api.customization.LspSymbolKindCustomizer
+import org.eclipse.lsp4j.SymbolKind
+import org.eclipse.lsp4j.jsonrpc.messages.ResponseErrorCode
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
 import dev.basedpython.pycharm.testFramework.onEdt
 import com.intellij.openapi.vfs.VirtualFile
@@ -69,5 +75,36 @@ class ByFindUsagesTest {
         assertFalse(params.context.isIncludeDeclaration, "the declaration is not one of its own usages")
         assertEquals(Position(0, 6), params.position)
         assertEquals(listOf("Circle@" + source.indexOf("Circle()")), found.map { it as PsiUsage }.map { "${it.range.substring(source)}@${it.range.startOffset}" })
+    }
+
+    @Test
+    fun `the target is drawn as what by says it declares, in what declares it`() = onEdt {
+        val psi = fixture.configureByText("shapes.by", source) as BasedPythonFile
+        val target = BySearchTarget.at(psi, psi.virtualFile, source.indexOf("Circle()"))!!
+        val client = AnsweringClient(fixture.project) {
+            answered(ByDeclaration(kind = "class", name = "Circle", qualifiedName = "shapes.Circle"))
+        }
+
+        val declared = withContext(Dispatchers.Default) { target.declared(client, psi.fileDocument) }
+
+        val presentation = declared.presentation()
+        assertEquals("Circle", presentation.presentableText)
+        assertEquals("shapes", presentation.locationText)
+        assertEquals("shapes", presentation.containerText)
+        assertEquals(LspSymbolKindCustomizer().getIcon(SymbolKind.Class), presentation.icon)
+        assertEquals(target, declared, "the same search whatever by said")
+        assertEquals(Position(3, 4), (client.sentParams.single() as ByDeclarationParams).position)
+    }
+
+    @Test
+    fun `a by without by-declaration leaves the target named by its file`() = onEdt {
+        val psi = fixture.configureByText("shapes.by", source) as BasedPythonFile
+        val target = BySearchTarget.at(psi, psi.virtualFile, source.indexOf("Circle()"))!!
+        val client = AnsweringClient(fixture.project) { failed(ResponseErrorCode.MethodNotFound) }
+
+        val declared = withContext(Dispatchers.Default) { target.declared(client, psi.fileDocument) }
+
+        assertEquals("shapes.by", declared.presentation().locationText)
+        assertNull(declared.presentation().containerText)
     }
 }

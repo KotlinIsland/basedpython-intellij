@@ -328,6 +328,10 @@
         <uiDataRule order="first" implementation="dev.basedpython.pycharm.lsp.usages.BySearchTargetsRule"/>
         <searcher forClass="com.intellij.find.usages.api.UsageSearchParameters"
                   implementationClass="dev.basedpython.pycharm.lsp.usages.ByUsageSearcher"/>
+        <!-- Group by File Structure for .by usages: under the classes and functions by's outline
+             says they are written in, as .py's are. See lsp.usages.ByStructureGroupingRule. -->
+        <fileStructureGroupRuleProvider
+            implementation="dev.basedpython.pycharm.lsp.usages.ByStructureGroupRuleProvider"/>
         <!-- The gutter's R after a declared name is edited in place, renaming its uses through by's
              textDocument/rename; the processor is the rename it runs. -->
         <suggestedRefactoringSupport

@@ -19,6 +19,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.platform.backend.presentation.TargetPresentation
 import com.intellij.platform.lsp.api.LspClient
+import com.intellij.platform.lsp.api.customization.LspSymbolKindCustomizer
 import com.intellij.platform.lsp.util.getLsp4jPosition
 import com.intellij.platform.lsp.util.getRangeInDocument
 import com.intellij.psi.PsiDocumentManager
@@ -29,6 +30,8 @@ import com.intellij.util.Query
 import dev.basedpython.pycharm.lang.BasedPythonFile
 import dev.basedpython.pycharm.lang.BasedPythonTokenTypes
 import dev.basedpython.pycharm.lsp.askBy
+import dev.basedpython.pycharm.lsp.ext.ByDeclaration
+import dev.basedpython.pycharm.navigation.ByDeclarations
 import dev.basedpython.pycharm.lsp.byServerFor
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import org.eclipse.lsp4j.ReferenceContext
@@ -45,7 +48,8 @@ import org.eclipse.lsp4j.TextDocumentIdentifier
  * it names what was searched for by the file and position it was searched from, `basedpython: Find
  * References (base.by:28:8)`. Neither is a customization it offers. So this provides the search
  * target ahead of it ([BySearchTargetsRule], registered first) and searches for it ([ByUsageSearcher]),
- * and names it by the name at the caret.
+ * and names it by the name at the caret, drawn as the kind `by/declaration` says it declares and
+ * placed in what declares it.
  *
  * Which name is at the caret is lexical, an identifier token; what it refers to, and so where it is
  * used, is `by`'s. A caret on anything that is not a name has no target here, and the platform's
@@ -57,12 +61,30 @@ internal class BySearchTarget(
     /** Where the name starts. */
     val offset: Int,
     val name: String,
+    /**
+     * What `by/declaration` says the name declares, when it was asked and answered: the kind it is
+     * drawn with and the dotted name it is placed by. Not part of what the target is — two asks at
+     * one name are the same search whatever each was told.
+     */
+    val declaration: ByDeclaration? = null,
 ) : SearchTarget {
 
     override fun createPointer(): Pointer<out SearchTarget> = Pointer.hardPointer(this)
 
-    override fun presentation(): TargetPresentation =
-        TargetPresentation.builder(name).locationText(file.name, file.fileType.icon).presentation()
+    /**
+     * The name, drawn as the kind it declares and placed in what declares it, `area` in
+     * `shapes.base.Circle` — as PyCharm presents a `.py` target, `area (Circle in shapes.base)`.
+     * Without an answer from `by`, the name in its file.
+     */
+    override fun presentation(): TargetPresentation {
+        val kind = ByDeclarations.symbolKind(declaration?.kind)
+        val icon = kind?.let { SYMBOL_KINDS.getIcon(it) } ?: file.fileType.icon
+        val container = ByDeclarations.container(declaration?.qualifiedName, declaration?.name)
+        return TargetPresentation.builder(name)
+            .icon(icon)
+            .let { if (container != null) it.containerText(container).locationText(container) else it.locationText(file.name) }
+            .presentation()
+    }
 
     override val usageHandler: UsageHandler = UsageHandler.createEmptyUsageHandler(name)
 
@@ -71,7 +93,23 @@ internal class BySearchTarget(
 
     override fun hashCode(): Int = 31 * file.hashCode() + offset
 
+    /**
+     * This target with what [server] says its name declares. Asked when an action wants the target,
+     * on a background thread; a `by` without `by/declaration`, or one that does not answer within a
+     * moment, leaves the target named by the name in its file, as before.
+     */
+    fun declared(server: LspClient, document: com.intellij.openapi.editor.Document): BySearchTarget {
+        val declaration = ByDeclarations.at(server, file, document, offset, DECLARATION_TIMEOUT_MS).value ?: return this
+        return BySearchTarget(project, file, offset, name, declaration)
+    }
+
     companion object {
+        /** The icons `by`'s descriptor shows symbol kinds with: the platform's default customizer. */
+        private val SYMBOL_KINDS = LspSymbolKindCustomizer()
+
+        /** A declaration is one lookup; the search goes on without it rather than wait on a busy server. */
+        private const val DECLARATION_TIMEOUT_MS = 1_000
+
         /**
          * The name at [offset] in [psi] as a target, or `null` off a name. A caret just after a name
          * is on it, as it is for every other language's Find Usages.
@@ -103,8 +141,9 @@ internal class BySearchTargetsRule : UiDataRule {
 
     private fun target(project: Project, file: VirtualFile, document: com.intellij.openapi.editor.Document, offset: Int): SearchTarget? {
         val psi = PsiDocumentManager.getInstance(project).getPsiFile(document) as? BasedPythonFile ?: return null
-        if (byServerFor(project, file) == null) return null
-        return BySearchTarget.at(psi, file, offset)
+        val server = byServerFor(project, file) ?: return null
+        val target = BySearchTarget.at(psi, file, offset) ?: return null
+        return target.declared(server, document)
     }
 }
 
