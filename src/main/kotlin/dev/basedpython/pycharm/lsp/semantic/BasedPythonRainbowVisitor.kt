@@ -42,7 +42,7 @@ internal class BasedPythonRainbowVisitor : RainbowVisitor() {
         if (element.node?.elementType != BasedPythonTokenTypes.IDENTIFIER) return
         val range = element.textRange
         val name = names[range.startOffset]?.takeIf { it.range == range } ?: return
-        val key = if (name.isParameter) BasedPythonHighlightKeys.PARAMETER else null
+        val key = if (name.isParameter) BasedPythonHighlightKeys.PARAMETER else BasedPythonHighlightKeys.LOCAL_VARIABLE
         addInfo(getInfo(element.containingFile, element, element.text, key))
     }
 

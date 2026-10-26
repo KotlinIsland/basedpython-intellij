@@ -90,57 +90,99 @@ object BasedPythonSemanticTokensMapping {
         DefaultLanguageHighlighterColors.STATIC_FIELD
     )
 
+    // region: `by`'s own token types and modifiers (docs/basedpython/features/editor.md in `by`)
+    const val TYPE_SELF_PARAMETER = "selfParameter"
+    const val TYPE_CLS_PARAMETER = "clsParameter"
+    const val TYPE_BUILTIN_CONSTANT = "builtinConstant"
+    const val MOD_FUNCTION_SCOPE = "functionScope"
+    const val MOD_ANNOTATION = "annotation"
+    const val MOD_DUNDER = "dunder"
+    const val MOD_KEYWORD_ARGUMENT = "keywordArgument"
+    // endregion
+
     /**
-     * Map an LSP semantic-token [tokenType] (optionally refined by [modifiers]) to the basedpython
+     * Map an LSP semantic-token [tokenType] (refined by [modifiers]) to the basedpython
      * [TextAttributesKey] that should colour it, or `null` to let the platform apply its own default.
      *
-     * Modifier handling (only where it changes the chosen key):
-     *  - `variable` + `readonly`  -> [CONSTANT]
-     *  - `property`/`enumMember` + `static` -> [STATIC_PROPERTY]
-     *  - `function`/`method` + `defaultLibrary` -> [BasedPythonHighlightKeys.BUILTIN_NAME]
+     * Every type and modifier `by` sends has a say, Python's colour page being the model:
+     *  - `string` + `documentation` is a docstring;
+     *  - `definition` tells a declaration from a use: a `def` from a call ([BasedPythonHighlightKeys.FUNCTION_CALL],
+     *    [BasedPythonHighlightKeys.METHOD_CALL]), a `class` from a reference to it — a nested `def`
+     *    (`functionScope`) being a declaration of its own;
+     *  - `dunder` is a special name, defined or used, ahead of the kind of thing it names;
+     *  - `defaultLibrary` is a builtin — `print`, `len`, `str` — wherever it is, an annotation included;
+     *  - `annotation` on a class or type alias is a type annotation;
+     *  - `parameter` + `keywordArgument` is the name a keyword argument is passed by;
+     *  - `selfParameter` and `clsParameter` are `self` and `cls`;
+     *  - `variable` + `functionScope` is a local, `readonly` a constant.
+     *
+     * Without these every call was coloured as a declaration, every builtin class as a class
+     * declaration, `self` not at all, and a docstring as a string.
      *
      * Token-type matching is case-sensitive, matching the LSP spec's exact names.
      */
     @JvmStatic
-    fun keyFor(tokenType: String, modifiers: List<String> = emptyList()): TextAttributesKey? = when (tokenType) {
-        TYPE_NAMESPACE -> BasedPythonHighlightKeys.TYPE_NAME
-        TYPE_CLASS -> BasedPythonHighlightKeys.CLASS_DECLARATION
-        TYPE_ENUM -> BasedPythonHighlightKeys.CLASS_DECLARATION
-        TYPE_INTERFACE -> BasedPythonHighlightKeys.CLASS_DECLARATION
-        TYPE_STRUCT -> BasedPythonHighlightKeys.CLASS_DECLARATION
-        TYPE_TYPE, TYPE_TYPE_PARAMETER -> BasedPythonHighlightKeys.TYPE_NAME
+    fun keyFor(tokenType: String, modifiers: List<String> = emptyList()): TextAttributesKey? {
+        val defined = MOD_DEFINITION in modifiers || MOD_DECLARATION in modifiers
+        if (MOD_DUNDER in modifiers && tokenType in NAMES) {
+            return if (defined) BasedPythonHighlightKeys.DUNDER_DEFINITION else BasedPythonHighlightKeys.DUNDER_USAGE
+        }
+        if (MOD_DEFAULT_LIBRARY in modifiers && tokenType in NAMES) return BasedPythonHighlightKeys.BUILTIN_NAME
+        return when (tokenType) {
+            TYPE_NAMESPACE -> BasedPythonHighlightKeys.NAMESPACE
+            TYPE_CLASS, TYPE_ENUM, TYPE_INTERFACE, TYPE_STRUCT, TYPE_TYPE -> when {
+                defined -> BasedPythonHighlightKeys.CLASS_DECLARATION
+                MOD_ANNOTATION in modifiers -> BasedPythonHighlightKeys.ANNOTATION
+                else -> BasedPythonHighlightKeys.CLASS_REFERENCE
+            }
+            TYPE_TYPE_PARAMETER -> BasedPythonHighlightKeys.TYPE_PARAMETER
 
-        TYPE_PARAMETER -> BasedPythonHighlightKeys.PARAMETER
+            TYPE_PARAMETER ->
+                if (MOD_KEYWORD_ARGUMENT in modifiers) BasedPythonHighlightKeys.KEYWORD_ARGUMENT
+                else BasedPythonHighlightKeys.PARAMETER
+            TYPE_SELF_PARAMETER, TYPE_CLS_PARAMETER -> BasedPythonHighlightKeys.SELF_PARAMETER
 
-        TYPE_VARIABLE ->
-            if (MOD_READONLY in modifiers) CONSTANT else BasedPythonColors.IDENTIFIER
+            TYPE_VARIABLE -> when {
+                MOD_READONLY in modifiers -> CONSTANT
+                MOD_FUNCTION_SCOPE in modifiers -> BasedPythonHighlightKeys.LOCAL_VARIABLE
+                else -> BasedPythonColors.IDENTIFIER
+            }
 
-        TYPE_PROPERTY ->
-            if (MOD_STATIC in modifiers) STATIC_PROPERTY else PROPERTY
+            TYPE_PROPERTY ->
+                if (MOD_STATIC in modifiers) STATIC_PROPERTY else PROPERTY
 
-        TYPE_ENUM_MEMBER -> CONSTANT
+            TYPE_ENUM_MEMBER -> CONSTANT
 
-        TYPE_DECORATOR -> BasedPythonHighlightKeys.DECORATOR
+            TYPE_DECORATOR -> BasedPythonHighlightKeys.DECORATOR
 
-        TYPE_FUNCTION ->
-            if (MOD_DEFAULT_LIBRARY in modifiers) BasedPythonHighlightKeys.BUILTIN_NAME
-            else BasedPythonHighlightKeys.FUNCTION_DECLARATION
+            TYPE_FUNCTION -> when {
+                !defined -> BasedPythonHighlightKeys.FUNCTION_CALL
+                MOD_FUNCTION_SCOPE in modifiers -> BasedPythonHighlightKeys.NESTED_FUNCTION_DECLARATION
+                else -> BasedPythonHighlightKeys.FUNCTION_DECLARATION
+            }
 
-        TYPE_METHOD ->
-            if (MOD_DEFAULT_LIBRARY in modifiers) BasedPythonHighlightKeys.BUILTIN_NAME
-            else BasedPythonHighlightKeys.FUNCTION_DECLARATION
+            TYPE_METHOD ->
+                if (defined) BasedPythonHighlightKeys.FUNCTION_DECLARATION else BasedPythonHighlightKeys.METHOD_CALL
 
-        TYPE_MACRO -> BasedPythonHighlightKeys.DECORATOR
+            TYPE_MACRO -> BasedPythonHighlightKeys.DECORATOR
 
-        TYPE_KEYWORD -> BasedPythonColors.KEYWORD
-        TYPE_MODIFIER -> BasedPythonColors.KEYWORD
+            TYPE_KEYWORD -> BasedPythonColors.KEYWORD
+            TYPE_MODIFIER -> BasedPythonColors.KEYWORD
+            TYPE_BUILTIN_CONSTANT -> BasedPythonHighlightKeys.BUILTIN_CONSTANT
 
-        TYPE_COMMENT -> BasedPythonColors.COMMENT
-        TYPE_STRING -> BasedPythonColors.STRING
-        TYPE_REGEXP -> BasedPythonColors.STRING
-        TYPE_NUMBER -> BasedPythonColors.NUMBER
-        TYPE_OPERATOR -> BasedPythonColors.OPERATOR
+            TYPE_COMMENT -> BasedPythonColors.COMMENT
+            TYPE_STRING ->
+                if (MOD_DOCUMENTATION in modifiers) BasedPythonHighlightKeys.DOCSTRING else BasedPythonColors.STRING
+            TYPE_REGEXP -> BasedPythonColors.STRING
+            TYPE_NUMBER -> BasedPythonColors.NUMBER
+            TYPE_OPERATOR -> BasedPythonColors.OPERATOR
 
-        else -> null
+            else -> null
+        }
     }
+
+    /** The token types that are names, where `dunder` and `defaultLibrary` say what kind. */
+    private val NAMES = setOf(
+        TYPE_CLASS, TYPE_FUNCTION, TYPE_METHOD, TYPE_VARIABLE, TYPE_PROPERTY, TYPE_NAMESPACE, TYPE_TYPE,
+    )
 }

@@ -68,6 +68,90 @@ object BasedPythonHighlightKeys {
         DefaultLanguageHighlighterColors.PARAMETER
     )
 
+    /** A function or method where it is defined inside another function. */
+    @JvmField
+    val NESTED_FUNCTION_DECLARATION: TextAttributesKey = TextAttributesKey.createTextAttributesKey(
+        "BASEDPYTHON_NESTED_FUNCTION_DECLARATION",
+        FUNCTION_DECLARATION
+    )
+
+    /** A function used — called, or passed — rather than defined. */
+    @JvmField
+    val FUNCTION_CALL: TextAttributesKey = TextAttributesKey.createTextAttributesKey(
+        "BASEDPYTHON_FUNCTION_CALL",
+        DefaultLanguageHighlighterColors.FUNCTION_CALL
+    )
+
+    /** A method used rather than defined. */
+    @JvmField
+    val METHOD_CALL: TextAttributesKey = TextAttributesKey.createTextAttributesKey(
+        "BASEDPYTHON_METHOD_CALL",
+        FUNCTION_CALL
+    )
+
+    /** A class used rather than defined. */
+    @JvmField
+    val CLASS_REFERENCE: TextAttributesKey = TextAttributesKey.createTextAttributesKey(
+        "BASEDPYTHON_CLASS_REFERENCE",
+        DefaultLanguageHighlighterColors.CLASS_REFERENCE
+    )
+
+    /** A class or type alias named in a type expression — an annotation, a bound, a `cast`'s type. */
+    @JvmField
+    val ANNOTATION: TextAttributesKey = TextAttributesKey.createTextAttributesKey(
+        "BASEDPYTHON_ANNOTATION",
+        CLASS_REFERENCE
+    )
+
+    /** A type parameter. */
+    @JvmField
+    val TYPE_PARAMETER: TextAttributesKey = TextAttributesKey.createTextAttributesKey(
+        "BASEDPYTHON_TYPE_PARAMETER",
+        TYPE_NAME
+    )
+
+    /** A module. */
+    @JvmField
+    val NAMESPACE: TextAttributesKey = TextAttributesKey.createTextAttributesKey(
+        "BASEDPYTHON_NAMESPACE",
+        DefaultLanguageHighlighterColors.IDENTIFIER
+    )
+
+    /** A parameter or a variable bound in a function's, a lambda's or a comprehension's scope. */
+    @JvmField
+    val LOCAL_VARIABLE: TextAttributesKey = TextAttributesKey.createTextAttributesKey(
+        "BASEDPYTHON_LOCAL_VARIABLE",
+        DefaultLanguageHighlighterColors.LOCAL_VARIABLE
+    )
+
+    /** A dunder where it is defined, `__init__`. */
+    @JvmField
+    val DUNDER_DEFINITION: TextAttributesKey = TextAttributesKey.createTextAttributesKey(
+        "BASEDPYTHON_DUNDER_DEFINITION",
+        DefaultLanguageHighlighterColors.PREDEFINED_SYMBOL
+    )
+
+    /** A dunder used, `__name__`. */
+    @JvmField
+    val DUNDER_USAGE: TextAttributesKey = TextAttributesKey.createTextAttributesKey(
+        "BASEDPYTHON_DUNDER_USAGE",
+        DefaultLanguageHighlighterColors.PREDEFINED_SYMBOL
+    )
+
+    /** `None`, `True`, `False`. */
+    @JvmField
+    val BUILTIN_CONSTANT: TextAttributesKey = TextAttributesKey.createTextAttributesKey(
+        "BASEDPYTHON_BUILTIN_CONSTANT",
+        DefaultLanguageHighlighterColors.KEYWORD
+    )
+
+    /** A docstring. */
+    @JvmField
+    val DOCSTRING: TextAttributesKey = TextAttributesKey.createTextAttributesKey(
+        "BASEDPYTHON_DOCSTRING",
+        DefaultLanguageHighlighterColors.DOC_COMMENT
+    )
+
     @JvmField
     val STRING_ESCAPE: TextAttributesKey = TextAttributesKey.createTextAttributesKey(
         "BASEDPYTHON_STRING_ESCAPE",

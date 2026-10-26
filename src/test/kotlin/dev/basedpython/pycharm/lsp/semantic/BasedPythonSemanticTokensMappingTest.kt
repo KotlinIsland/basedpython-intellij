@@ -22,38 +22,27 @@ class BasedPythonSemanticTokensMappingTest {
     // region: type-name family
 
     @Test
-    fun `namespace maps to TYPE_NAME`() {
-        assertSame(BasedPythonHighlightKeys.TYPE_NAME, key("namespace"))
+    fun `namespace maps to NAMESPACE`() {
+        assertSame(BasedPythonHighlightKeys.NAMESPACE, key("namespace"))
     }
 
     @Test
-    fun `type maps to TYPE_NAME`() {
-        assertSame(BasedPythonHighlightKeys.TYPE_NAME, key("type"))
+    fun `typeParameter maps to TYPE_PARAMETER`() {
+        assertSame(BasedPythonHighlightKeys.TYPE_PARAMETER, key("typeParameter"))
     }
 
     @Test
-    fun `typeParameter maps to TYPE_NAME`() {
-        assertSame(BasedPythonHighlightKeys.TYPE_NAME, key("typeParameter"))
+    fun `a class where it is defined is a class declaration, and anywhere else a reference`() {
+        for (type in listOf("class", "enum", "interface", "struct", "type")) {
+            assertSame(BasedPythonHighlightKeys.CLASS_DECLARATION, key(type, "definition"), type)
+            assertSame(BasedPythonHighlightKeys.CLASS_REFERENCE, key(type), type)
+        }
     }
 
     @Test
-    fun `class maps to CLASS_DECLARATION`() {
-        assertSame(BasedPythonHighlightKeys.CLASS_DECLARATION, key("class"))
-    }
-
-    @Test
-    fun `enum maps to CLASS_DECLARATION`() {
-        assertSame(BasedPythonHighlightKeys.CLASS_DECLARATION, key("enum"))
-    }
-
-    @Test
-    fun `interface maps to CLASS_DECLARATION`() {
-        assertSame(BasedPythonHighlightKeys.CLASS_DECLARATION, key("interface"))
-    }
-
-    @Test
-    fun `struct maps to CLASS_DECLARATION`() {
-        assertSame(BasedPythonHighlightKeys.CLASS_DECLARATION, key("struct"))
+    fun `a class in a type expression is a type annotation, unless it is a builtin`() {
+        assertSame(BasedPythonHighlightKeys.ANNOTATION, key("class", "annotation"))
+        assertSame(BasedPythonHighlightKeys.BUILTIN_NAME, key("class", "annotation", "defaultLibrary"))
     }
 
     // endregion
@@ -63,6 +52,24 @@ class BasedPythonSemanticTokensMappingTest {
     @Test
     fun `parameter maps to PARAMETER`() {
         assertSame(BasedPythonHighlightKeys.PARAMETER, key("parameter"))
+        assertSame(BasedPythonHighlightKeys.PARAMETER, key("parameter", "definition", "functionScope"))
+    }
+
+    @Test
+    fun `the name a keyword argument is passed by is a keyword argument`() {
+        assertSame(BasedPythonHighlightKeys.KEYWORD_ARGUMENT, key("parameter", "keywordArgument"))
+    }
+
+    @Test
+    fun `self and cls are the self parameter`() {
+        assertSame(BasedPythonHighlightKeys.SELF_PARAMETER, key("selfParameter"))
+        assertSame(BasedPythonHighlightKeys.SELF_PARAMETER, key("clsParameter", "functionScope"))
+    }
+
+    @Test
+    fun `a variable bound in a function is a local`() {
+        assertSame(BasedPythonHighlightKeys.LOCAL_VARIABLE, key("variable", "functionScope"))
+        assertSame(BasedPythonHighlightKeys.LOCAL_VARIABLE, key("variable", "definition", "functionScope"))
     }
 
     @Test
@@ -112,28 +119,40 @@ class BasedPythonSemanticTokensMappingTest {
     // region: callables
 
     @Test
-    fun `function without modifiers maps to FUNCTION_DECLARATION`() {
-        assertSame(BasedPythonHighlightKeys.FUNCTION_DECLARATION, key("function"))
+    fun `a function where it is defined is a declaration, and anywhere else a call`() {
+        assertSame(BasedPythonHighlightKeys.FUNCTION_DECLARATION, key("function", "definition"))
+        assertSame(BasedPythonHighlightKeys.FUNCTION_CALL, key("function"))
     }
 
     @Test
-    fun `function with defaultLibrary maps to BUILTIN_NAME`() {
-        assertSame(BasedPythonHighlightKeys.BUILTIN_NAME, key("function", "defaultLibrary"))
+    fun `a function defined inside another is a nested function definition`() {
+        assertSame(BasedPythonHighlightKeys.NESTED_FUNCTION_DECLARATION, key("function", "definition", "functionScope"))
     }
 
     @Test
-    fun `method without modifiers maps to FUNCTION_DECLARATION`() {
-        assertSame(BasedPythonHighlightKeys.FUNCTION_DECLARATION, key("method"))
+    fun `a method where it is defined is a declaration, and anywhere else a method call`() {
+        assertSame(BasedPythonHighlightKeys.FUNCTION_DECLARATION, key("method", "definition"))
+        assertSame(BasedPythonHighlightKeys.FUNCTION_DECLARATION, key("method", "definition", "async"))
+        assertSame(BasedPythonHighlightKeys.METHOD_CALL, key("method"))
     }
 
     @Test
-    fun `method with defaultLibrary maps to BUILTIN_NAME`() {
-        assertSame(BasedPythonHighlightKeys.BUILTIN_NAME, key("method", "defaultLibrary"))
+    fun `a builtin is a builtin name whatever it is`() {
+        for (type in listOf("function", "method", "class", "variable")) {
+            assertSame(BasedPythonHighlightKeys.BUILTIN_NAME, key(type, "defaultLibrary"), type)
+        }
     }
 
     @Test
-    fun `method with async still maps to FUNCTION_DECLARATION`() {
-        assertSame(BasedPythonHighlightKeys.FUNCTION_DECLARATION, key("method", "async"))
+    fun `a dunder is a special name, defined or used, ahead of what it names`() {
+        assertSame(BasedPythonHighlightKeys.DUNDER_DEFINITION, key("method", "definition", "dunder"))
+        assertSame(BasedPythonHighlightKeys.DUNDER_USAGE, key("variable", "dunder"))
+        assertSame(BasedPythonHighlightKeys.DUNDER_USAGE, key("property", "dunder"))
+    }
+
+    @Test
+    fun `None, True and False are builtin constants`() {
+        assertSame(BasedPythonHighlightKeys.BUILTIN_CONSTANT, key("builtinConstant"))
     }
 
     // endregion
@@ -172,6 +191,11 @@ class BasedPythonSemanticTokensMappingTest {
     @Test
     fun `string maps to STRING`() {
         assertSame(BasedPythonColors.STRING, key("string"))
+    }
+
+    @Test
+    fun `a string marked documentation is a docstring`() {
+        assertSame(BasedPythonHighlightKeys.DOCSTRING, key("string", "documentation"))
     }
 
     @Test
@@ -244,7 +268,8 @@ class BasedPythonSemanticTokensMappingTest {
         val listed = listOf(
             "class", "function", "parameter", "variable", "decorator", "namespace", "type",
             "keyword", "string", "number", "comment", "property", "method", "enum",
-            "enumMember", "macro", "typeParameter"
+            "enumMember", "macro", "typeParameter", "selfParameter", "clsParameter", "builtinConstant",
+            "operator", "regexp",
         )
         for (t in listed) {
             assertNotNull(key(t), "expected non-null mapping for token type '$t'")
