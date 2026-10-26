@@ -468,8 +468,17 @@
             order="last"/>
 
         <!-- ===== Stream V: smart editing ===== -->
-        <enterHandlerDelegate
+        <!-- Where a line goes, from by's outline (ByIndents): Enter's new line, through the platform's
+             line indent provider; End on a blank line and Auto-Indent Lines, through a formatting
+             model that only indents. Formatting proper stays buff's. -->
+        <!-- first: the platform's brace-pair delegate would otherwise take Enter between brackets -->
+        <enterHandlerDelegate order="first"
             implementation="dev.basedpython.pycharm.editor.smart.BasedPythonEnterHandler"/>
+        <lineIndentProvider order="first"
+            implementation="dev.basedpython.pycharm.editor.indent.BasedPythonLineIndentProvider"/>
+        <lang.formatter
+            language="basedpython"
+            implementationClass="dev.basedpython.pycharm.editor.indent.ByIndentFormattingModelBuilder"/>
         <editor.backspaceModeOverride
             language="basedpython"
             implementationClass="dev.basedpython.pycharm.editor.smart.BasedPythonBackspaceModeOverride"/>
@@ -492,6 +501,10 @@
         <!-- Text pasted inside a string literal is escaped so the literal holds it. -->
         <copyPastePreProcessor
             implementation="dev.basedpython.pycharm.editor.BasedPythonStringPasteProcessor"/>
+        <!-- Lines pasted at the start of a line move as a block, keeping their relative
+             indentation, under Smart indent pasted lines as Python's do. -->
+        <copyPastePreProcessor
+            implementation="dev.basedpython.pycharm.editor.indent.ByPasteIndentation"/>
 
         <!-- ===== Stream W: environment UX ===== -->
         <editorNotificationProvider

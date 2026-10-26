@@ -9,10 +9,11 @@ import com.intellij.psi.PsiFile
  *
  * The platform does this itself — it is *Unindent: To nearest indent position* — measuring in
  * logical columns, so a tab counts as the columns it spans, and stepping by the file's code-style
- * indent size. Its default, *To proper indent position*, asks the formatter where the line belongs,
- * and `.by` has no formatting model to ask, so under that default Backspace deleted one space.
- * This turns that default into the nearest-stop mode for basedpython only, which is what Shell
- * Script does for the same reason. A user who switched unindenting off keeps it off.
+ * indent size. Its default, *To proper indent position*, asks where the line belongs, which for
+ * `.by` is `by`'s outline of the text and is there only for the revision the server last read, so
+ * Backspace would act one way just after a keystroke and another a moment later. This turns that
+ * default into the nearest-stop mode for basedpython only, which is what Shell Script does for
+ * want of any answer. A user who switched unindenting off keeps it off.
  */
 class BasedPythonBackspaceModeOverride : BackspaceModeOverride() {
 

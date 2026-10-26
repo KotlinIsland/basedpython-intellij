@@ -120,4 +120,158 @@ class BasedPythonEnterHandlerTest {
             }
         }
     }
+
+    // ---- where the new line goes, as PyCharm puts it for .py (measured in 263.7528) ----
+
+    @Test
+    fun `after a return the next line leaves the suite`() = enter(
+        "def f(a):\n    if a:\n        return a<caret>\n    return 0\n",
+        "def f(a):\n    if a:\n        return a\n    <caret>\n    return 0\n",
+    ) {
+        compound {
+            clause("def f(a):") {
+                compound { clause("if a:") { simple("return a") } }
+                simple("return 0")
+            }
+        }
+    }
+
+    @Test
+    fun `after pass and raise too, but not after break`() {
+        enter("class C:\n    def f(self):\n        pass<caret>\n", "class C:\n    def f(self):\n        pass\n    <caret>\n") {
+            compound { clause("class C:") { compound { clause("def f(self):") { simple("pass") } } } }
+        }
+        enter("def f():\n    raise E()<caret>\n", "def f():\n    raise E()\n<caret>\n") {
+            compound { clause("def f():") { simple("raise E()") } }
+        }
+        enter("for i in x:\n    break<caret>\n", "for i in x:\n    break\n    <caret>\n") {
+            compound { clause("for i in x:") { simple("break") } }
+        }
+    }
+
+    @Test
+    fun `a name that starts with return is not a return`() = enter(
+        "def f():\n    return_value = 1<caret>\n",
+        "def f():\n    return_value = 1\n    <caret>\n",
+    ) {
+        compound { clause("def f():") { simple("return_value = 1") } }
+    }
+
+    @Test
+    fun `after a statement spanning lines, the next goes where it started`() = enter(
+        "def f():\n    x = foo(1,\n            2)<caret>\n",
+        "def f():\n    x = foo(1,\n            2)\n    <caret>\n",
+    ) {
+        compound { clause("def f():") { simple("x = foo(1,\n            2)") } }
+    }
+
+    @Test
+    fun `inside brackets a line aligns with what follows the bracket`() = enter(
+        "def f():\n    print(1,<caret>2)\n",
+        "def f():\n    print(1,\n          <caret>2)\n",
+    ) {
+        compound { clause("def f():") { call("print(1,2)") } }
+    }
+
+    @Test
+    fun `with nothing after the bracket the line hangs a level deeper`() = enter(
+        "def f():\n    print(<caret>1, 2)\n",
+        "def f():\n    print(\n        <caret>1, 2)\n",
+    ) {
+        compound { clause("def f():") { call("print(1, 2)") } }
+    }
+
+    @Test
+    fun `between an empty pair the closing bracket gets a line of its own`() = enter(
+        "def f():\n    x = [<caret>]\n",
+        "def f():\n    x = [\n        <caret>\n    ]\n",
+    ) {
+        compound { clause("def f():") { simple("x = []") } }
+    }
+
+    @Test
+    fun `inside a comment the rest goes on as a comment`() = enter(
+        "def f():\n    # hello <caret>world\n    pass\n",
+        "def f():\n    # hello \n    # <caret>world\n    pass\n",
+    ) {
+        compound { clause("def f():") { simple("pass") } }
+    }
+
+    @Test
+    fun `a comment after code goes on at the line's indentation`() = enter(
+        "def f():\n    x = 1  # hello <caret>world\n",
+        "def f():\n    x = 1  # hello \n    # <caret>world\n",
+    ) {
+        compound { clause("def f():") { simple("x = 1") } }
+    }
+
+    @Test
+    fun `at a comment's end the line is code`() = enter(
+        "def f():\n    # hello<caret>\n    pass\n",
+        "def f():\n    # hello\n    <caret>\n    pass\n",
+    ) {
+        compound { clause("def f():") { simple("pass") } }
+    }
+
+    @Test
+    fun `inside a statement a backslash carries it on`() = enter(
+        "def f(a):\n    return<caret> a\n",
+        "def f(a):\n    return\\\n        <caret>a\n",
+    ) {
+        compound { clause("def f(a):") { simple("return a") } }
+    }
+
+    @Test
+    fun `inside a clause header too`() = enter(
+        "if a and<caret> b:\n    pass\n",
+        "if a and\\\n    <caret>b:\n    pass\n",
+    ) {
+        compound { clause("if a and b:") { simple("pass") } }
+    }
+
+    @Test
+    fun `a string is closed, reopened and wrapped so it stays one expression`() = enter(
+        "x = 'a' f'bc<caret>de'\n",
+        "x = ('a' f'bc'\n     f'<caret>de')\n",
+    ) {
+        simple("x = 'a' f'bcde'")
+        string("'a'", text = listOf("a"))
+        string("f'bcde'", text = listOf("bcde"))
+    }
+
+    @Test
+    fun `inside brackets a split string needs no parentheses`() = enter(
+        "print('abc<caret>def')\n",
+        "print('abc'\n      '<caret>def')\n",
+    ) {
+        call("print('abcdef')")
+        string("'abcdef'", text = listOf("abcdef"))
+    }
+
+    @Test
+    fun `an escape is not split`() = enter(
+        "print('ab\\<caret>ncd')\n",
+        "print('ab'\n      '<caret>\\ncd')\n",
+    ) {
+        call("print('ab\\ncd')")
+        string("'ab\\ncd'", escapes = listOf("\\n"), text = listOf("ab", "\\n", "cd"))
+    }
+
+    @Test
+    fun `a triple-quoted string's line break is its own`() = enter(
+        "x = \"\"\"ab<caret>cd\"\"\"\n",
+        "x = \"\"\"ab\n<caret>cd\"\"\"\n",
+    ) {
+        simple("x = \"\"\"abcd\"\"\"")
+        string("\"\"\"abcd\"\"\"", text = listOf("abcd"))
+    }
+
+    @Test
+    fun `in an interpolation the line aligns inside the braces`() = enter(
+        "x = f'{a +<caret> b}'\n",
+        "x = f'{a +\n       <caret>b}'\n",
+    ) {
+        simple("x = f'{a + b}'")
+        string("f'{a + b}'", interpolations = listOf("{a + b}"))
+    }
 }
