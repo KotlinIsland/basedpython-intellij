@@ -1,5 +1,6 @@
 package dev.basedpython.pycharm.debug
 
+import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.xdebugger.breakpoints.XBreakpointProperties
@@ -41,8 +42,17 @@ class ByLineBreakpointType : XLineBreakpointType<ByBreakpointProperties>(
     override fun createBreakpointProperties(file: VirtualFile, line: Int): ByBreakpointProperties =
         ByBreakpointProperties()
 
-    override fun canPutAt(file: VirtualFile, line: Int, project: Project): Boolean =
-        BasedPythonSources.isOwnedSource(file)
+    /**
+     * On a line that holds code — see [ByBreakableLines]. It used to be every line of an owned file,
+     * blank and comment lines included, and a breakpoint on a blank line inside a function was moved
+     * by the debugger to the next line with code, which was the module-level `def` after it: the
+     * breakpoint fired at import time, in `<module>`.
+     */
+    override fun canPutAt(file: VirtualFile, line: Int, project: Project): Boolean {
+        if (!BasedPythonSources.isOwnedSource(file)) return false
+        val document = FileDocumentManager.getInstance().getDocument(file) ?: return false
+        return ByBreakableLines.holdsCode(project, document, line)
+    }
 
     override fun getDisplayText(breakpoint: XLineBreakpoint<ByBreakpointProperties>): String =
         "${breakpoint.shortFilePath}:${breakpoint.line + 1}"
