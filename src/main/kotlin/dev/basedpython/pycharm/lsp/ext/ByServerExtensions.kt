@@ -485,6 +485,22 @@ interface ByServerExtensions {
      */
     @JsonRequest("by/moveSymbol")
     fun moveSymbol(params: ByMoveSymbolParams): CompletableFuture<ByProjectEditAnswer?>
+
+    /**
+     * The class at a position, the members it could move, and the project's classes above and below
+     * it — Pull Members Up and Push Members Down; see
+     * [dev.basedpython.pycharm.lsp.refactor.ByMoveMembers]. `null` outside a class.
+     */
+    @JsonRequest("by/prepareMoveMembers")
+    fun prepareMoveMembers(params: ByPositionParams): CompletableFuture<ByMovableMembers?>
+
+    /** The edits that move members of the class at a position into one of its superclasses, or why not. */
+    @JsonRequest("by/pullMembersUp")
+    fun pullMembersUp(params: ByPullMembersUpParams): CompletableFuture<ByProjectEditAnswer?>
+
+    /** The edits that move members of the class at a position into its subclasses, or why not. */
+    @JsonRequest("by/pushMembersDown")
+    fun pushMembersDown(params: ByPushMembersDownParams): CompletableFuture<ByProjectEditAnswer?>
 }
 
 /** The file or directory to name. */

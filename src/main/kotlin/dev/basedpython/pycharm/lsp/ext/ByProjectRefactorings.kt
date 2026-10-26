@@ -1,5 +1,6 @@
 package dev.basedpython.pycharm.lsp.ext
 
+import com.google.gson.annotations.SerializedName
 import org.eclipse.lsp4j.Position
 import org.eclipse.lsp4j.Range
 import org.eclipse.lsp4j.TextDocumentIdentifier
@@ -46,4 +47,46 @@ data class ByMoveSymbolParams(
     val position: Position,
     /** An existing `.by` or `.py` file of the project, of the same kind as the definition's. */
     val target: String,
+)
+
+/** A class of the project, from `by/prepareMoveMembers`. */
+data class ByClassItem(
+    val name: String? = null,
+    val qualifiedName: String? = null,
+    val uri: String? = null,
+    /** Its name. */
+    val range: Range? = null,
+)
+
+/** A member of the class `by/prepareMoveMembers` answers for. */
+data class ByMemberItem(
+    val name: String? = null,
+    /** `method`, `classmethod`, `staticmethod`, `property` or `attribute`. */
+    val kind: String? = null,
+    /** Its name. */
+    val range: Range? = null,
+)
+
+/** The class at a position, its members and the project's classes above and below it. */
+data class ByMovableMembers(
+    /** The class itself. */
+    @SerializedName("class") val owner: ByClassItem? = null,
+    val members: List<ByMemberItem>? = null,
+    /** Nearest first. */
+    val superclasses: List<ByClassItem>? = null,
+    val subclasses: List<ByClassItem>? = null,
+)
+
+data class ByPullMembersUpParams(
+    val textDocument: TextDocumentIdentifier,
+    val position: Position,
+    val members: List<String>,
+    /** The superclass's `qualifiedName`. */
+    val target: String,
+)
+
+data class ByPushMembersDownParams(
+    val textDocument: TextDocumentIdentifier,
+    val position: Position,
+    val members: List<String>,
 )

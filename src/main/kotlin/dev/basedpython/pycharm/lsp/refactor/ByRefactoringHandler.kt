@@ -40,7 +40,8 @@ import org.eclipse.lsp4j.WorkspaceEdit
  *
  * The platform finds them through this provider: an action is shown for a language only when the
  * language's provider hands it a handler, and without one the shortcuts did nothing at all in a
- * `.by` file. Each handler is one of `by`'s refactorings; the provider offers exactly the ones
+ * `.by` file. Each handler is one of `by`'s refactorings — the code actions here, and the ones that
+ * take a choice first, such as Pull Members Up ([ByMoveMembers]); the provider offers exactly the ones
  * `by` performs and leaves every other slot empty, so no action shows that has nothing behind it.
  * Inline (Ctrl+Alt+N) is found through its own extension point instead, see [ByInlineActionHandler].
  */
@@ -50,6 +51,8 @@ internal class ByRefactoringSupportProvider : RefactoringSupportProvider() {
     override fun getIntroduceParameterHandler(): RefactoringActionHandler = ByRefactoringHandler(ByRefactoring.IntroduceParameter)
     override fun getIntroduceFieldHandler(): RefactoringActionHandler = ByRefactoringHandler(ByRefactoring.IntroduceField)
     override fun getExtractMethodHandler(): RefactoringActionHandler = ByRefactoringHandler(ByRefactoring.ExtractFunction)
+    override fun getPullUpHandler(): RefactoringActionHandler = ByPullUpHandler()
+    override fun getPushDownHandler(): RefactoringActionHandler = ByPushDownHandler()
 }
 
 /**
