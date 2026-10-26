@@ -192,6 +192,12 @@
         <internalFileTemplate name="basedpython Data Class"/>
         <internalFileTemplate name="basedpython Protocol"/>
 
+        <!-- Breadcrumbs and sticky lines from by's outline: classes, functions and control clauses as
+             .py has them, rather than the platform's LSP crumbs of every document symbol, which are
+             off in by's descriptor. Also lists basedpython on the Breadcrumbs and Sticky Lines pages.
+             See editor.ByBreadcrumbsProvider. -->
+        <breadcrumbsInfoProvider implementation="dev.basedpython.pycharm.editor.ByBreadcrumbsProvider"/>
+
         <!-- ===== Stream G: structure view, folding, breadcrumbs =====
              The structure view and breadcrumbs come from the `by` server via the platform's LSP
              integration (LspStructureViewFactory, LspFileBreadcrumbsCollector); registering our own

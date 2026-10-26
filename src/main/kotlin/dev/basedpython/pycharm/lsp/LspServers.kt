@@ -30,6 +30,7 @@ import com.intellij.platform.lsp.api.customization.LspDocumentHighlightsDisabled
 import com.intellij.platform.lsp.api.customization.LspDocumentHighlightsSupport
 import com.intellij.platform.lsp.api.customization.LspDocumentLinkDisabled
 import com.intellij.platform.lsp.api.customization.LspDocumentSymbolDisabled
+import com.intellij.platform.lsp.api.customization.LspDocumentSymbolSupport
 import com.intellij.platform.lsp.api.customization.LspFindReferencesDisabled
 import com.intellij.platform.lsp.api.customization.LspFoldingRangeDisabled
 import com.intellij.platform.lsp.api.customization.LspGoToDefinitionDisabled
@@ -358,6 +359,17 @@ internal class ByLspServerDescriptor(
      * leaves the clause where it is.
      */
     override val onTypeFormattingCustomizer = LspOnTypeFormattingSupport()
+
+    /**
+     * Document symbols for the Structure view and the File Structure popup, but not breadcrumbs:
+     * those, and the sticky lines, diff headers and Recent Locations entries the same switch
+     * controls, are [dev.basedpython.pycharm.editor.ByBreadcrumbsProvider], from `by`'s outline. The
+     * platform's made a crumb and a sticky line of every symbol whatever its kind, so a multi-line
+     * constant and each of a class's fields were pinned to the top of the editor.
+     */
+    override val documentSymbolCustomizer = object : LspDocumentSymbolSupport() {
+      override val breadcrumbsSupport: Boolean = false
+    }
   }
 
   private object ByDocumentHighlights : LspDocumentHighlightsSupport() {
