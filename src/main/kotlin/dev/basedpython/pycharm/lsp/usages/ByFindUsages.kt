@@ -37,6 +37,16 @@ import dev.basedpython.pycharm.settings.BasedPythonSettings
 import org.eclipse.lsp4j.ReferenceContext
 import org.eclipse.lsp4j.ReferenceParams
 import org.eclipse.lsp4j.TextDocumentIdentifier
+import com.intellij.openapi.util.TextRange
+import com.intellij.psi.PsiFile
+import com.intellij.usages.impl.rules.UsageType
+import dev.basedpython.pycharm.lsp.askingAgain
+import dev.basedpython.pycharm.lsp.isMethodNotFound
+import dev.basedpython.pycharm.lsp.ext.ByReference
+import dev.basedpython.pycharm.lsp.ext.ByServerExtensions
+import dev.basedpython.pycharm.util.BasedPythonBundle
+import org.eclipse.lsp4j.Position
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Find Usages (Alt+F7) and Show Usages (Ctrl+Alt+F7) on a name in a `.by` file, from `by`'s
@@ -147,7 +157,17 @@ internal class BySearchTargetsRule : UiDataRule {
     }
 }
 
-/** Searches for a [BySearchTarget]'s usages: `by`'s references to it, its declaration not among them. */
+/**
+ * Searches for a [BySearchTarget]'s usages: `by`'s references to it, its declaration not among them,
+ * each with what it does with the name ([ByUsage]).
+ *
+ * `by/references` is asked with the declaration included, and the one reference it calls the
+ * `declaration` is left out. Asked without it, `by` leaves out more than the name's own declaration:
+ * every place that binds the name, so `from ut import Shape` and `ut.count = 1` were not usages at all
+ * (measured against `by` d69c7f0897a3, where PyCharm lists both for a `.py`). A `by` without the
+ * request is asked `textDocument/references` without the declaration, as before, and its usages have
+ * no type.
+ */
 internal class ByUsageSearcher : UsageSearcher {
 
     override fun collectSearchRequest(parameters: UsageSearchParameters): Query<out Usage>? {
@@ -164,30 +184,88 @@ internal class ByUsageSearcher : UsageSearcher {
 
     /** What [server] answers for [target], each handed to [consumer] while it goes on accepting them. */
     internal fun usages(server: LspClient, target: BySearchTarget, consumer: Processor<in Usage>): Boolean {
-        val params = ReadAction.computeBlocking<ReferenceParams?, RuntimeException> {
+        val position = ReadAction.computeBlocking<Pair<TextDocumentIdentifier, Position>?, RuntimeException> {
             val document = FileDocumentManager.getInstance().getDocument(target.file) ?: return@computeBlocking null
-            ReferenceParams(
-                server.getDocumentIdentifier(target.file).let { TextDocumentIdentifier(it.uri) },
-                getLsp4jPosition(document, target.offset),
-                ReferenceContext(false),
-            )
+            TextDocumentIdentifier(server.getDocumentIdentifier(target.file).uri) to getLsp4jPosition(document, target.offset)
         } ?: return true
-        val locations = server.askBy("textDocument/references", TIMEOUT_MS) {
-            it.textDocumentService.references(params)
-        }.value.orEmpty()
+        val references = references(server, position.first, position.second) ?: return true
         return ReadAction.computeBlocking<Boolean, RuntimeException> {
             val psiManager = PsiManager.getInstance(target.project)
-            locations.all { location ->
-                val file = server.descriptor.findFileByUri(location.uri) ?: return@all true
+            references.all { reference ->
+                val file = reference.uri?.let(server.descriptor::findFileByUri) ?: return@all true
                 val psi = psiManager.findFile(file) ?: return@all true
-                val range = getRangeInDocument(psi.fileDocument, location.range) ?: return@all true
-                consumer.process(PsiUsage.textUsage(psi, range))
+                val range = reference.range?.let { getRangeInDocument(psi.fileDocument, it) } ?: return@all true
+                consumer.process(ByUsage.of(psi, range, ByUsageTypes.of(reference.kind)))
             }
         }
+    }
+
+    /**
+     * The references to the name at [position], the declaration left out: `by/references`, or
+     * `textDocument/references` from a `by` that does not know it. `null` when neither answered.
+     */
+    private fun references(server: LspClient, document: TextDocumentIdentifier, position: Position): List<ByReference>? {
+        val unknown = AtomicBoolean()
+        val classified = askingAgain<List<ByReference>>("by/references") { sent ->
+            server.sendRequestSync(TIMEOUT_MS) { lsp ->
+                (lsp as ByServerExtensions).references(ReferenceParams(document, position, ReferenceContext(true)))
+                    .whenComplete { _, error -> if (error != null && isMethodNotFound(error)) unknown.set(true) }
+                    .also(sent)
+            }
+        }
+        if (!unknown.get()) return classified.value?.filter { it.kind != ByUsageTypes.DECLARATION }
+        val locations = server.askBy("textDocument/references", TIMEOUT_MS) {
+            it.textDocumentService.references(ReferenceParams(document, position, ReferenceContext(false)))
+        }.value ?: return null
+        return locations.map { ByReference(it.uri, it.range) }
     }
 
     private companion object {
         /** As long as the platform's own LSP find usages waits: a whole-workspace search. */
         const val TIMEOUT_MS = 60_000
+    }
+}
+
+/**
+ * A usage of a `.by` name, of the [usageType] `by` says it is, which is what *Group by Usage Type*
+ * files it under — a `PsiUsage` of the platform's, which says none, put every `.by` usage under the
+ * file itself.
+ */
+internal class ByUsage private constructor(private val usage: PsiUsage, override val usageType: UsageType?) : PsiUsage by usage {
+
+    override fun createPointer(): Pointer<out PsiUsage> {
+        val type = usageType
+        return Pointer.delegatingPointer(usage.createPointer()) { ByUsage(it, type) }
+    }
+
+    override fun equals(other: Any?): Boolean = other is ByUsage && other.usage == usage && other.usageType == usageType
+
+    override fun hashCode(): Int = usage.hashCode()
+
+    companion object {
+        fun of(file: PsiFile, range: TextRange, usageType: UsageType?): ByUsage = ByUsage(PsiUsage.textUsage(file, range), usageType)
+    }
+}
+
+/** The usage type each `kind` of `by/references` is filed under, named as PyCharm names a `.py`'s. */
+internal object ByUsageTypes {
+
+    /** The `kind` of the name where it is declared, which is no usage of it. */
+    const val DECLARATION = "declaration"
+
+    val IMPORT = UsageType(BasedPythonBundle.messagePointer("usage.type.import"))
+    val ISINSTANCE = UsageType(BasedPythonBundle.messagePointer("usage.type.isinstance"))
+    val TYPE_HINT = UsageType(BasedPythonBundle.messagePointer("usage.type.typeHint"))
+    val SUPERCLASS = UsageType(BasedPythonBundle.messagePointer("usage.type.superclass"))
+
+    /** What a reference of [kind] is, or `null` for one `by` did not classify, which the view calls *Unclassified*. */
+    fun of(kind: String?): UsageType? = when (kind) {
+        "import" -> IMPORT
+        "isinstance" -> ISINSTANCE
+        "typeHint" -> TYPE_HINT
+        "superclass" -> SUPERCLASS
+        "write" -> UsageType.WRITE
+        "read" -> UsageType.READ
+        else -> null
     }
 }

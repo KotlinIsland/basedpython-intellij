@@ -25,6 +25,9 @@ import org.eclipse.lsp4j.ReferenceParams
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
+import com.intellij.usages.impl.rules.UsageType
+import dev.basedpython.pycharm.lsp.ext.ByReference
 import org.junit.jupiter.api.Test
 
 /**
@@ -54,27 +57,66 @@ class ByFindUsagesTest {
         assertNull(BySearchTarget.at(psi, file, source.indexOf("class")), "a keyword is not a name")
     }
 
-    @Test
-    fun `by is asked for the references without the declaration, and each is a usage`() = onEdt {
-        val psi = fixture.configureByText("shapes.by", source) as BasedPythonFile
-        val file = psi.virtualFile
-        val target = BySearchTarget.at(psi, file, source.indexOf("Circle"))!!
+    /** A client answering [answer] for each method, its files mapped back from [URI]. */
+    private fun client(file: VirtualFile, answer: (String) -> java.util.concurrent.CompletableFuture<*>): AnsweringClient {
         // the light fixture's files are in memory, at a URI the default descriptor does not map back
         val descriptor = object : ProjectWideLspClientDescriptor(fixture.project, "answering") {
             override fun isSupportedFile(file: VirtualFile): Boolean = true
             override fun findFileByUri(fileUri: String): VirtualFile? = file.takeIf { fileUri == URI }
             override fun getFileUri(file: VirtualFile): String = URI
         }
-        val client = AnsweringClient(fixture.project, descriptor = descriptor) {
-            answered(listOf(Location(URI, Range(Position(3, 4), Position(3, 10)))))
+        return AnsweringClient(fixture.project, descriptor = descriptor, answer = answer)
+    }
+
+    private val usesSource = "class Circle:\n    pass\n\nfrom shapes import Circle\nc: Circle = Circle()\n"
+
+    @Test
+    fun `each usage is of the type by says it is, and the declaration by marks is none`() = onEdt {
+        val psi = fixture.configureByText("shapes.by", usesSource) as BasedPythonFile
+        val file = psi.virtualFile
+        val target = BySearchTarget.at(psi, file, usesSource.indexOf("Circle"))!!
+        val client = client(file) {
+            answered(
+                listOf(
+                    ByReference(URI, Range(Position(0, 6), Position(0, 12)), "declaration"),
+                    ByReference(URI, Range(Position(3, 19), Position(3, 25)), "import"),
+                    ByReference(URI, Range(Position(4, 3), Position(4, 9)), "typeHint"),
+                    ByReference(URI, Range(Position(4, 12), Position(4, 18)), "read"),
+                ),
+            )
         }
         val found = mutableListOf<Usage>()
         withContext(Dispatchers.Default) { ByUsageSearcher().usages(client, target) { found += it; true } }
 
         val params = client.sentParams.single() as ReferenceParams
-        assertFalse(params.context.isIncludeDeclaration, "the declaration is not one of its own usages")
+        assertTrue(params.context.isIncludeDeclaration, "without it, by leaves out every place that binds the name, the import among them")
         assertEquals(Position(0, 6), params.position)
-        assertEquals(listOf("Circle@" + source.indexOf("Circle()")), found.map { it as PsiUsage }.map { "${it.range.substring(source)}@${it.range.startOffset}" })
+        assertEquals(
+            listOf(
+                "Circle@" + usesSource.indexOf("Circle\nc") to ByUsageTypes.IMPORT,
+                "Circle@" + usesSource.indexOf("Circle =") to ByUsageTypes.TYPE_HINT,
+                "Circle@" + usesSource.indexOf("Circle()") to UsageType.READ,
+            ),
+            found.map { it as PsiUsage }.map { "${it.range.substring(usesSource)}@${it.range.startOffset}" to it.usageType },
+        )
+        assertEquals(UsageType.READ, (found.last() as PsiUsage).createPointer().dereference()!!.usageType, "a pointer keeps the type")
+    }
+
+    @Test
+    fun `a by without by-references is asked for the references without the declaration, untyped`() = onEdt {
+        val psi = fixture.configureByText("shapes.by", source) as BasedPythonFile
+        val file = psi.virtualFile
+        val target = BySearchTarget.at(psi, file, source.indexOf("Circle"))!!
+        val client = client(file) { method ->
+            if (method == "by/references") failed(ResponseErrorCode.MethodNotFound)
+            else answered(listOf(Location(URI, Range(Position(3, 4), Position(3, 10)))))
+        }
+        val found = mutableListOf<Usage>()
+        withContext(Dispatchers.Default) { ByUsageSearcher().usages(client, target) { found += it; true } }
+
+        val params = client.sentParams.last() as ReferenceParams
+        assertFalse(params.context.isIncludeDeclaration, "the declaration is not one of its own usages")
+        assertEquals(listOf("Circle@" + source.indexOf("Circle()") to null), found.map { it as PsiUsage }.map { "${it.range.substring(source)}@${it.range.startOffset}" to it.usageType })
     }
 
     @Test

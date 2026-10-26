@@ -9,6 +9,7 @@ import org.eclipse.lsp4j.FormattingOptions
 import org.eclipse.lsp4j.ImplementationParams
 import org.eclipse.lsp4j.Position
 import org.eclipse.lsp4j.Range
+import org.eclipse.lsp4j.ReferenceParams
 import org.eclipse.lsp4j.RenameParams
 import org.eclipse.lsp4j.SemanticTokensParams
 import org.eclipse.lsp4j.SymbolKind
@@ -342,6 +343,14 @@ interface ByServerExtensions {
      */
     @JsonRequest("by/declaration")
     fun declaration(args: ByDeclarationParams): CompletableFuture<ByDeclaration?>
+
+    /**
+     * `textDocument/references` with what each reference does with the name: the same references in
+     * the same order, each with its [ByReference.kind]. `null` where `textDocument/references` is. A
+     * `by` from before the request answers `MethodNotFound`.
+     */
+    @JsonRequest("by/references")
+    fun references(args: ReferenceParams): CompletableFuture<List<ByReference>?>
 
     /**
      * Every expression of the statement that contains a range, innermost first, each with its type
@@ -1387,3 +1396,14 @@ data class ByRuleExplanation(
  * one that is both a [org.eclipse.lsp4j.services.LanguageServer] and carries the extension.
  */
 interface BuffLanguageServer : org.eclipse.lsp4j.services.LanguageServer, BuffServerExtensions
+
+/**
+ * A reference `by/references` answers: where it is, and what it does with the name — `import`,
+ * `isinstance`, `typeHint`, `superclass`, `write`, `read`, or `declaration`, the first of them that
+ * holds, from the top.
+ */
+data class ByReference(
+    val uri: String? = null,
+    val range: Range? = null,
+    val kind: String? = null,
+)
