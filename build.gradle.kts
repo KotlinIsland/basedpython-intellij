@@ -577,13 +577,10 @@ val PYCHARM_VERSION = "263.+"
 // `./gradlew runPyCharm` — the same sandbox launch as `runIde`, in PyCharm Professional instead of
 // IntelliJ IDEA, in a sandbox of its own so the two do not share settings.
 //
-// Worth a task rather than a note in the README, because the two IDEs disagree about this plugin in
-// ways only a launch shows, and the disagreements are invisible from the IDEA side. PyCharm ships
-// none of IntelliJ IDEA's logpoints modules — they are bundled with its Java plugin, and
-// `intellij.debugger.logpoints.backend` is built on `intellij.java.debugger.impl` — so the gutter
-// gap, the inline "Log:" field, *Add Log Point* and log point undo are this plugin's own code there
-// and the IDE's own everywhere else. Only one of those two paths runs in any given IDE, so testing
-// in IDEA exercises neither the code this plugin ships for PyCharm nor the arbitration between them.
+// Worth a task rather than a note in the README, because the two IDEs can disagree about this plugin
+// in ways only a launch shows. The IDE's own log points are one: IntelliJ IDEA bundles them with its
+// Java plugin and PyCharm ships them since 263.7355, and in neither do they serve a `.by` breakpoint
+// (see debug.logpoint.ByLogpoints) — which was only visible from the PyCharm side.
 //
 // `-PpycharmPath=/Applications/PyCharm.app` launches a PyCharm already installed — a nightly, say —
 // instead of downloading one. `-PpycharmVersion=263.5701.32-EAP-CANDIDATE` picks a particular snapshot.

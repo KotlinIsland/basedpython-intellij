@@ -48,9 +48,9 @@ class ByLogpointFields(private val project: Project) : XBreakpointListener<XBrea
         if (logpoint == null) return
         val file = logpoint.sourcePosition?.file ?: return
 
-        // Undo first, and in every IDE — unlike the box below, which stands down where the IDE draws
-        // its own. There is no breakpoint undo anywhere in the platform, IntelliJ IDEA's log points
-        // included, so this is the only thing that makes Ctrl+Z take one back there either.
+        // Undo first, whoever draws the box — the registry can hand that to the IDE. There is no
+        // breakpoint undo anywhere in the platform, IntelliJ IDEA's log points included, so this is
+        // the only thing that makes Ctrl+Z take one back there either.
         recordUndo(logpoint, file)
         if (!ByLogpoints.pluginProvidesLogpointUi()) return
 

@@ -107,23 +107,22 @@ before the line below.
 placement at all is `XLineBreakpointType.supportsInterLinePlacement()` — `@ApiStatus.Internal`, one
 line, `override fun supportsInterLinePlacement() = true`. Both ends are shut:
 
-- **In PyCharm**, where this plugin draws the box, `Properties.rendererFactory` can put an icon in
-  the gap (verified, above) but nothing public can take away the one the platform draws on the line,
+- **The plugin draws the box in every IDE**, IntelliJ IDEA and PyCharm 263.7355+ included, which
+  both ship the IDE's own logpoints: their `canBeLogpoint` asks `type.supportsInterLinePlacement()`
+  before anything else (read off the bytecode of 263.5701, 263.7307 and 263.7355), so the IDE's
+  prompt never applies to a `.by` breakpoint. `Properties.rendererFactory` can put an icon in the
+  gap (verified, above) but nothing public can take away the one the platform draws on the line,
   and two icons is worse than one in the wrong place. `XBreakpointUIUtil.calculateIcon` picks
   `type.getSuspendNoneIcon()` for any breakpoint that does not suspend, and that is a property of the
   *type*, not of the breakpoint — blanking it would make every suspend-none `.by` breakpoint
   invisible, including one that is not a log point.
-- **In IntelliJ IDEA**, where the IDE draws the box, `XLogpointPromptObserver.ensureLogpointPlacement`
-  moves a log point into the gap only `if (breakpoint.type.supportsInterLinePlacement())`. Ours says
-  no, so IDEA shows the box (`shouldShowPrompt` asks only `canBeLogpoint`, which `.by` log points
-  satisfy) and leaves the icon on the line. The same switch also gates
-  `XBreakpointUIUtil.supportsPlacement`, which is what filters breakpoint types out of an
-  `INTER_LINE` toggle — so IDEA's own *Add Logpoint* (`Ctrl+Alt+F8`, `ToggleLogpointAction`) cannot
-  make a `.by` log point at all. Every `.by` log point in IDEA arrives by one of this plugin's routes
-  or by *Add Logging Breakpoint…*.
+- The same switch gates `XBreakpointUIUtil.supportsPlacement`, which is what filters breakpoint
+  types out of an `INTER_LINE` toggle — so the IDE's own *Add Logpoint* (`Ctrl+Alt+F8`,
+  `ToggleLogpointAction`) is disabled in a `.by` editor, and this plugin's *Add Log Point* takes the
+  keystroke. It gives way only when the IDE's is enabled for the same event, which it asks the IDE's
+  action rather than assuming.
 
 **What it costs.** The icon reads as belonging to the statement below the box rather than to the box.
-And in IDEA, one of the two ways to add a log point is missing.
 
 **How to get it back.** There is no public equivalent to build; this one is an IJPL issue asking for
 `supportsInterLinePlacement` (and the placement enum with it) to be made public. Everything else

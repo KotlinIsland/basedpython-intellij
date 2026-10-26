@@ -1,8 +1,10 @@
 package dev.basedpython.pycharm.debug.logpoint
 
+import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
+import com.intellij.openapi.actionSystem.ex.ActionUtil
 import com.intellij.openapi.editor.ex.EditorEx
 import com.intellij.openapi.project.DumbAwareAction
 import com.intellij.openapi.project.Project
@@ -18,19 +20,41 @@ import dev.basedpython.pycharm.debug.ByLineBreakpointType
  * Adds a log point above the caret's line, or opens the one already there — the keyboard's way in to
  * the gutter gap.
  *
- * Shares `Ctrl+Alt+F8` with IntelliJ IDEA's own *Add Logpoint*, and gives way to it: where the IDE
- * ships the logpoints feature this action reports itself disabled, and the action system passes the
- * keystroke to the enabled one bound to the same shortcut.
+ * Shares `Ctrl+Alt+F8` with the IDE's own *Add Logpoint* (IntelliJ IDEA's, bundled with PyCharm
+ * since 263.7355), and gives way to it exactly where it would act: this action reports itself
+ * disabled when the IDE's is enabled for the same event, and the action system passes the keystroke
+ * to the enabled one. Asked of the IDE's action itself rather than of whether the IDE ships one —
+ * which is what this used to ask, and which left both disabled in every `.by` editor once PyCharm
+ * shipped it, since the IDE's toggles only breakpoint types that support inter-line placement and
+ * `basedpython-line` cannot say it does (see [ByLogpoints]).
  *
  * "Above the caret's line" and "anchored to the caret's line" are the same statement — an inter-line
  * breakpoint belongs to the line below its gap.
  */
 class ByAddLogpointAction : DumbAwareAction() {
 
-    override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
+    override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
 
     override fun update(e: AnActionEvent) {
-        e.presentation.isEnabledAndVisible = ByLogpoints.pluginProvidesLogpointUi() && target(e) != null
+        e.presentation.isEnabledAndVisible =
+            ByLogpoints.pluginProvidesLogpointUi() && target(e) != null && !ideActionApplies(e)
+    }
+
+    /**
+     * Whether the IDE's own *Add Logpoint* is enabled for [e] — its own update, run on a copy of its
+     * presentation, so nothing on screen changes.
+     */
+    private fun ideActionApplies(e: AnActionEvent): Boolean {
+        val ide = ActionManager.getInstance().getAction(IDE_ACTION_ID) ?: return false
+        val event = AnActionEvent.createEvent(
+            e.dataContext,
+            ide.templatePresentation.clone(),
+            e.place,
+            e.uiKind,
+            e.inputEvent,
+        )
+        ActionUtil.updateAction(ide, event)
+        return event.presentation.isEnabled
     }
 
     override fun actionPerformed(e: AnActionEvent) {
@@ -72,4 +96,9 @@ class ByAddLogpointAction : DumbAwareAction() {
     }
 
     private fun type() = XDebuggerUtil.getInstance().findBreakpointType(ByLineBreakpointType::class.java)!!
+
+    private companion object {
+        /** The IDE's own *Add Logpoint*, from `intellij.debugger.logpoints.frontend`. */
+        const val IDE_ACTION_ID = "AddLogpoint"
+    }
 }

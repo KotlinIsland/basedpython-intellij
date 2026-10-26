@@ -54,8 +54,8 @@ import javax.swing.border.Border
  * click, and one duly did. An empty log point is now visible like any other, so nothing here removes
  * anything; the gutter icon toggles a log point off exactly like a breakpoint.
  *
- * Styled to match IntelliJ IDEA's, since in IDEA this never runs and the two should not look like
- * different features: the same rounded shadow box, the same two colours, the same placeholder, and
+ * Styled to match IntelliJ IDEA's, which the IDE draws for other languages' log points, so the two
+ * should not look like different features: the same rounded shadow box, the same two colours, the same placeholder, and
  * the field taken from `getEditorComponent()` rather than `getComponent()`, which is what the
  * stray expand arrow was.
  */

@@ -340,11 +340,7 @@ port, and it never reaches the built plugin either way.
 ```
 
 `runIde` starts IntelliJ IDEA. **`./gradlew runPyCharm` starts PyCharm Professional**, in a sandbox
-of its own, and some of this plugin only runs there: PyCharm ships none of IDEA's logpoints modules
-— they are bundled with its Java plugin, and `intellij.debugger.logpoints.backend` is built on
-`intellij.java.debugger.impl` — so the gutter-gap log point UI is the IDE's own in IDEA and this
-plugin's in PyCharm, and testing in one exercises neither the other's code nor the choice between
-them.
+of its own, for whatever behaves differently in the IDE the plugin is mostly used in.
 
 ```bash
 ./gradlew runPyCharm

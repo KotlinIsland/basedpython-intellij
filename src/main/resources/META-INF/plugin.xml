@@ -144,7 +144,7 @@
              docs/internal-api.md. -->
         <registryKey key="basedpython.logpoints.provider"
                      defaultValue="[auto*|ide]"
-                     description="Who provides basedpython log points — the inline Log: field and Add Log Point. auto uses the IDE's own where it has one (IntelliJ IDEA, whose logpoints modules are bundled with its Java plugin) and this plugin's where it does not (PyCharm). ide always gives way. There is no setting to force this plugin's on where the IDE has its own, because nothing can switch the IDE's off and the result is two of everything; use ./gradlew runPyCharm to see it."/>
+                     description="Who provides basedpython log points — the inline Log: field and Add Log Point. auto is this plugin, in every IDE: the IDE's own log points (IntelliJ IDEA, and PyCharm since 263.7355) serve only breakpoint types that support inter-line placement, which basedpython-line cannot claim, and Add Log Point still gives Ctrl+Alt+F8 to the IDE's Add Logpoint wherever that is enabled. ide always gives way."/>
 
         <!-- ===== Stream D: action notification group ===== -->
         <notificationGroup id="basedpython.Actions" displayType="BALLOON"/>
@@ -663,8 +663,8 @@
         <action id="basedpython.RestartLsp"
                 class="dev.basedpython.pycharm.lsp.RestartLspAction"/>
 
-        <!-- Shares Ctrl+Alt+F8 with IntelliJ IDEA's own Add Logpoint and disables itself where that
-             exists, so the action system hands the keystroke to whichever one is enabled. -->
+        <!-- Shares Ctrl+Alt+F8 with the IDE's own Add Logpoint and disables itself where that is
+             enabled, so the action system hands the keystroke to whichever one is. -->
         <action id="basedpython.AddLogpoint"
                 class="dev.basedpython.pycharm.debug.logpoint.ByAddLogpointAction">
             <keyboard-shortcut keymap="$default" first-keystroke="control alt F8"/>
