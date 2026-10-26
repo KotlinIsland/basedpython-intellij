@@ -555,6 +555,19 @@
         <codeBlockSupportHandler
             language="basedpython"
             implementationClass="dev.basedpython.pycharm.editor.highlight.BasedPythonCodeBlockSupportHandler"/>
+        <!-- Navigation read off by's outline: Next/Previous Method, Code Block Start/End, method
+             separators; and Fill Paragraph over comments and the docstrings by reports. -->
+        <methodNavigationOffsetProvider
+            implementation="dev.basedpython.pycharm.navigation.ByMethodNavigation"/>
+        <codeBlockProvider
+            language="basedpython"
+            implementationClass="dev.basedpython.pycharm.editor.highlight.ByCodeBlockProvider"/>
+        <codeInsight.lineMarkerProvider
+            language="basedpython"
+            implementationClass="dev.basedpython.pycharm.editor.highlight.ByMethodSeparators"/>
+        <codeInsight.fillParagraph
+            language="basedpython"
+            implementationClass="dev.basedpython.pycharm.editor.smart.ByParagraphFillHandler"/>
         <annotator
             language="basedpython"
             implementationClass="dev.basedpython.pycharm.editor.highlight.BasedPythonNumericLiteralAnnotator"/>
