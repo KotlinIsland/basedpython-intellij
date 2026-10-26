@@ -378,6 +378,20 @@ interface ByServerExtensions {
     @JsonRequest("by/endpoints")
     fun endpoints(params: Map<String, Any>): CompletableFuture<List<ByEndpoint>?>
 
+    /**
+     * For each of a merge's conflicts, the text that replaces its lines, or `null` where it cannot be
+     * resolved. A `by` from before the request answers `MethodNotFound`.
+     */
+    @JsonRequest("by/resolveMergeConflicts")
+    fun resolveMergeConflicts(params: ByMergeConflictsParams): CompletableFuture<List<String?>?>
+
+    /**
+     * What a diff ignoring imports and formatting may ignore in a text: its import statements, and the
+     * whitespace its tokenizer discards. A `by` from before the request answers `MethodNotFound`.
+     */
+    @JsonRequest("by/diffIgnoredRanges")
+    fun diffIgnoredRanges(params: ByDiffIgnoredRangesParams): CompletableFuture<ByDiffIgnoredRanges?>
+
     @JsonRequest("by/references")
     fun references(args: ReferenceParams): CompletableFuture<List<ByReference>?>
 
@@ -1514,3 +1528,27 @@ data class ByEndpointSymbol(
     val range: Range? = null,
     val selectionRange: Range? = null,
 )
+
+/**
+ * A merge's three versions, each a whole file, and its conflicts. [uri] names the file they are
+ * versions of: its extension says how they are parsed, and the isort configuration buff reads for it
+ * sorts imports.
+ */
+data class ByMergeConflictsParams(
+    val base: String,
+    val ours: String,
+    val theirs: String,
+    val conflicts: List<ByMergeConflict>,
+    val uri: String? = null,
+)
+
+/** The lines a conflict spans in each version, 0-based with `end` excluded. */
+data class ByMergeConflict(val base: ByLineSpan, val ours: ByLineSpan, val theirs: ByLineSpan)
+
+data class ByLineSpan(val start: Int, val end: Int)
+
+/** A text to find what a diff may ignore in, and the file it is a version of, as for [ByMergeConflictsParams]. */
+data class ByDiffIgnoredRangesParams(val text: String, val uri: String? = null)
+
+/** Each import statement, and the text the tokenizer discards without its being significant. */
+data class ByDiffIgnoredRanges(val imports: List<Range> = emptyList(), val formatting: List<Range> = emptyList())

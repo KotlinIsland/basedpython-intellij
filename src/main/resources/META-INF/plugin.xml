@@ -433,6 +433,10 @@
              by/endpoints; see navigation.endpoints.ByEndpointsProvider. -->
         <microservices.endpointsProvider implementation="dev.basedpython.pycharm.navigation.endpoints.ByFastApiEndpointsProvider"/>
         <microservices.endpointsProvider implementation="dev.basedpython.pycharm.navigation.endpoints.ByDjangoEndpointsProvider"/>
+        <!-- The merge window's semantic resolution and Ignore imports and formatting for .by files,
+             from by/resolveMergeConflicts and by/diffIgnoredRanges; see vcs.ByMerges. -->
+        <diff.merge.conflict.semantic.resolver implementation="dev.basedpython.pycharm.vcs.ByMergeConflictResolver"/>
+        <diff.lang.DiffIgnoredRangeProvider implementation="dev.basedpython.pycharm.vcs.ByDiffIgnoredRangeProvider"/>
         <lang.refactoringSupport
             language="basedpython"
             implementationClass="dev.basedpython.pycharm.lsp.refactor.ByRefactoringSupportProvider"/>
