@@ -1,5 +1,6 @@
 package dev.basedpython.pycharm.lsp.refactor
 
+import org.eclipse.lsp4j.Position
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.google.gson.JsonParseException
@@ -142,6 +143,19 @@ object ByRefactoringRequest {
  * that edit's start moves by what each edit wholly before it adds or removes.
  */
 object ByExtractedName {
+
+    /**
+     * Where the name [action], resolved, made up is, in [document] once its edit is made: the start
+     * of the `data.rename` range `by` gives an extraction, when [isDocument] says its URI is that
+     * document's; `null` from a `by` that gives none.
+     */
+    fun renameAt(action: CodeAction, document: Document, isDocument: (String) -> Boolean): Int? {
+        val rename = (action.data as? JsonObject)?.getAsJsonObject("rename") ?: return null
+        if (rename.get("uri")?.asString?.let(isDocument) != true) return null
+        val start = rename.getAsJsonObject("range")?.getAsJsonObject("start") ?: return null
+        val position = Position(start.get("line")?.asInt ?: return null, start.get("character")?.asInt ?: return null)
+        return getOffsetInDocument(document, position)
+    }
 
     /**
      * The offset, in [document] once [edits] are made to it, of the end of the text replacing

@@ -29,6 +29,7 @@ import com.intellij.refactoring.util.CommonRefactoringUtil
 import dev.basedpython.pycharm.format.ByCleanup
 import dev.basedpython.pycharm.lang.BasedPythonLanguage
 import dev.basedpython.pycharm.lsp.ByServerDocuments
+import dev.basedpython.pycharm.lsp.askBy
 import dev.basedpython.pycharm.lsp.byServerFor
 import dev.basedpython.pycharm.util.BasedPythonBundle
 import org.eclipse.lsp4j.CodeAction
@@ -114,8 +115,9 @@ internal class ByRefactoringHandler(private val refactoring: ByRefactoring) : Re
  *
  * With nothing selected, `by` offers a refactoring that replaces an expression for each expression
  * around the caret, and they are shown in the platform's expression chooser, each highlighting its
- * expression, as `.py`'s Introduce Variable does. Once such a refactoring is made, the name it chose
- * is renamed in place ([ByRename]), so it can be given a name of the user's choosing.
+ * expression, as `.py`'s Introduce Variable does. Once a refactoring that makes up a name — an
+ * extracted variable, constant, parameter, attribute or function — is made, the name is renamed in
+ * place ([ByRename]) where `by` says it is, so it can be given a name of the user's choosing.
  */
 internal object ByRefactoringRun {
 
@@ -180,20 +182,27 @@ internal object ByRefactoringRun {
         val title = refactoring.title
         val document = editor.document
         if (!target.isValid) return error(project, editor, title, BasedPythonBundle.message("refactoring.by.changed"))
-        val intention = ByRefactoringIntention(server, target.action, server.getDocumentIdentifier(file).uri, document, target.range)
-        // resolving is what computes the edit, and it is the server's to refuse too
+        val uri = server.getDocumentIdentifier(file).uri
+        // resolving is what computes the edit, and where the new name is; it is the server's to refuse too
+        val action = runWithModalProgressBlocking(project, title) {
+            readAction { server.askBy("codeAction/resolve") { it.textDocumentService.resolveCodeAction(target.action) }.value }
+        } ?: return error(project, editor, title, BasedPythonBundle.message("refactoring.by.notApplied", target.action.title))
+        val intention = ByRefactoringIntention(server, action, uri, document, target.range)
         val resolved = runWithModalProgressBlocking(project, title) { readAction { intention.isAvailable() } }
         if (!resolved) return error(project, editor, title, BasedPythonBundle.message("refactoring.by.notApplied", target.action.title))
         if (!target.isValid) return error(project, editor, title, BasedPythonBundle.message("refactoring.by.changed"))
 
         CommandProcessor.getInstance().executeCommand(project, { intention.invoke(file) }, target.action.title, null, document)
 
-        val nameEnd = intention.nameEnd ?: return
-        if (!refactoring.replacesExpression) return
+        // where `by` says the name it made up is; from a `by` that does not say, an expression's
+        // replacement, which ends with the name — inside it rather than just after, where a `(` or
+        // `.` could be what is asked about
+        val nameAt = ByExtractedName.renameAt(action, document) { server.descriptor.findFileByUri(it) == file }
+            ?: intention.nameEnd?.takeIf { refactoring.replacesExpression }?.minus(1)
+            ?: return
         val psiFile = PsiDocumentManager.getInstance(project).getPsiFile(document) ?: return
         PsiDocumentManager.getInstance(project).commitDocument(document)
-        // inside the name rather than just after it, where a `(` or `.` could be what is asked about
-        ByRename.start(project, editor, psiFile, nameEnd - 1)
+        ByRename.start(project, editor, psiFile, nameAt)
     }
 
     /** The platform's "cannot perform refactoring" hint, which every language's refactorings show. */

@@ -82,4 +82,18 @@ class ByExtractedNameTest {
 
         assertNull(ByExtractedName.endAfter(document, edits, range(0, 4, 0, 5)))
     }
+
+    /** An extraction resolved by a `by` that says where the name it made up is, as `data.rename`. */
+    private fun resolved(data: String) = org.eclipse.lsp4j.CodeAction("Extract function `extracted`").apply {
+        this.data = com.google.gson.JsonParser.parseString(data)
+    }
+
+    @Test
+    fun `the name is where by's data says, in the document as the edit leaves it`() {
+        val document = com.intellij.openapi.editor.impl.DocumentImpl("def extracted(xs):\n    return 1\n\n\ndef total(xs):\n    s = extracted(xs)\n")
+        val action = resolved("""{"rename": {"uri": "file:///em.by", "range": {"start": {"line": 5, "character": 8}, "end": {"line": 5, "character": 17}}}}""")
+        assertEquals(document.text.indexOf("extracted(xs)\n"), ByExtractedName.renameAt(action, document) { it == "file:///em.by" })
+        assertEquals(null, ByExtractedName.renameAt(action, document) { false }, "a name in another document")
+        assertEquals(null, ByExtractedName.renameAt(resolved("""{"refactor": "extract-function"}"""), document) { true }, "a by that does not say")
+    }
 }
