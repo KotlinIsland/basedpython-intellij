@@ -90,3 +90,11 @@ data class ByPushMembersDownParams(
     val position: Position,
     val members: List<String>,
 )
+
+data class ByExtractSuperclassParams(
+    val textDocument: TextDocumentIdentifier,
+    val position: Position,
+    val members: List<String>,
+    /** The new class's name. */
+    val name: String,
+)

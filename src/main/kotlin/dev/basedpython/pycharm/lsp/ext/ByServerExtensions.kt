@@ -501,6 +501,13 @@ interface ByServerExtensions {
     /** The edits that move members of the class at a position into its subclasses, or why not. */
     @JsonRequest("by/pushMembersDown")
     fun pushMembersDown(params: ByPushMembersDownParams): CompletableFuture<ByProjectEditAnswer?>
+
+    /**
+     * The edits that make a new class above the class at a position, with the members named, as its
+     * one base — Extract Superclass — or why not.
+     */
+    @JsonRequest("by/extractSuperclass")
+    fun extractSuperclass(params: ByExtractSuperclassParams): CompletableFuture<ByProjectEditAnswer?>
 }
 
 /** The file or directory to name. */

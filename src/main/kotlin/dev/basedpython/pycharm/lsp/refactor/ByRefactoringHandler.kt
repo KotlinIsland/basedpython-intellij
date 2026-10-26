@@ -53,6 +53,7 @@ internal class ByRefactoringSupportProvider : RefactoringSupportProvider() {
     override fun getExtractMethodHandler(): RefactoringActionHandler = ByRefactoringHandler(ByRefactoring.ExtractFunction)
     override fun getPullUpHandler(): RefactoringActionHandler = ByPullUpHandler()
     override fun getPushDownHandler(): RefactoringActionHandler = ByPushDownHandler()
+    override fun getExtractSuperClassHandler(): RefactoringActionHandler = ByExtractSuperclassHandler()
 }
 
 /**
