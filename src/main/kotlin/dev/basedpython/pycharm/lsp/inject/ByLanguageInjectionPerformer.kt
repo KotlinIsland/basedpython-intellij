@@ -8,6 +8,7 @@ import com.intellij.openapi.util.TextRange
 import com.intellij.psi.PsiElement
 import dev.basedpython.pycharm.lang.BasedPythonStringLiteral
 import dev.basedpython.pycharm.lsp.outline.ByOutlines
+import org.intellij.plugins.intelliLang.inject.TemporaryPlacesRegistry
 
 /**
  * Puts a language the user chose into a `.by` string — Alt+Enter *Inject language or reference*,
@@ -39,6 +40,18 @@ import dev.basedpython.pycharm.lsp.outline.ByOutlines
  * Where there is no answer — no server, an answer for another revision, or a `by` that does not
  * report the runs — this declines, and the platform places the injection as it always has. Not
  * primary for the same reason: declining must leave the platform's placement in force.
+ *
+ * ## Only the user's own
+ *
+ * IntelliLang hands over more than what the user injected: its comment injector reads a
+ * `# language=` comment off the text for any string no injector before it took, and reads it its
+ * own way — a comment at the end of a line marks the statement on the *next* line. In a `.by` file
+ * those comments are `by`'s to read (`by/injections`, through [BasedPythonLanguageInjector]), and
+ * `by` reads a trailing one as marking the statement it ends and no other; with IntelliLang's
+ * reading placed too, `loose = "x(y"  # language=RegExp` injected `loose`, from `by`, and the
+ * unmarked statement under it, from IntelliLang (measured in PyCharm 263.7528). So an injection
+ * that is not one the user placed ([TemporaryPlacesRegistry]) is taken here and not injected,
+ * which keeps the platform's own placement from injecting it either.
  */
 internal class ByLanguageInjectionPerformer : LanguageInjectionPerformer {
 
@@ -46,6 +59,8 @@ internal class ByLanguageInjectionPerformer : LanguageInjectionPerformer {
 
     override fun performInjection(registrar: MultiHostRegistrar, injection: Injection, context: PsiElement): Boolean {
         val host = context as? BasedPythonStringLiteral ?: return false
+        // IntelliLang's reading of the text, which is `by`'s: taken, and nothing injected
+        if (injection.supportId != TemporaryPlacesRegistry.SUPPORT_ID) return true
         if (!host.isValidHost) return false
         val language = injection.injectedLanguage ?: return false
         val places = placesIn(host) ?: return false

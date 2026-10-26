@@ -5,6 +5,7 @@ import com.intellij.lang.injection.InjectedLanguageManager
 import com.intellij.lang.injection.general.LanguageInjectionContributor
 import com.intellij.lang.injection.general.LanguageInjectionPerformer
 import com.intellij.lang.injection.general.SimpleInjection
+import org.intellij.plugins.intelliLang.inject.TemporaryPlacesRegistry
 import com.intellij.openapi.fileTypes.PlainTextLanguage
 import com.intellij.openapi.util.TextRange
 import com.intellij.psi.PsiFile
@@ -16,6 +17,7 @@ import dev.basedpython.pycharm.lsp.outline.OutlineSpec
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
 import dev.basedpython.pycharm.testFramework.onEdt
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
@@ -35,9 +37,9 @@ class ByLanguageInjectionPerformerTest {
 
     private val manager get() = InjectedLanguageManager.getInstance(fixture.project)
 
-    private fun everyStringIsPlainText() {
+    private fun everyStringIsPlainText(supportId: String = TemporaryPlacesRegistry.SUPPORT_ID) {
         val contributor = LanguageInjectionContributor { context ->
-            SimpleInjection(PlainTextLanguage.INSTANCE, "", "", null).takeIf { context is BasedPythonStringLiteral }
+            SimpleInjection(PlainTextLanguage.INSTANCE, "", "", supportId).takeIf { context is BasedPythonStringLiteral }
         }
         LanguageInjectionContributor.INJECTOR_EXTENSION.addExplicitExtension(
             BasedPythonLanguage, contributor, fixture.testRootDisposable,
@@ -78,13 +80,28 @@ class ByLanguageInjectionPerformerTest {
     }
 
     @Test
+    fun `IntelliLang's reading of a language= comment is by's, so it is taken and nothing is injected`() = onEdt {
+        // the shape IntelliLang's comment injector hands over: an injection of its "comment" support
+        everyStringIsPlainText(supportId = "comment")
+        val source = "loose = \"x(y\"  # language=RegExp\nother = \"x(y\"\n"
+        val file = fixture.configureByText("main.by", source)
+        OutlineSpec.remember(fixture.project, fixture.editor.document) {
+            string("\"x(y\"", text = listOf("x(y"))
+            string("\"x(y\"", text = listOf("x(y"))
+        }
+
+        // without the performer taking it, the platform's own placement injects the unmarked `other`
+        assertNull(injectedAt(file, source.lastIndexOf("x(y") + 1))
+    }
+
+    @Test
     fun `without an outline for the text the performer declines and leaves the platform's placement`() = onEdt {
         val file = fixture.configureByText("main.by", "a = \"x\"\n")
         val host = PsiTreeUtil.findChildOfType(file, BasedPythonStringLiteral::class.java)!!
         val registrar = RecordingRegistrar()
 
         val handled = ByLanguageInjectionPerformer().performInjection(
-            registrar, SimpleInjection(PlainTextLanguage.INSTANCE, "", "", null), host,
+            registrar, SimpleInjection(PlainTextLanguage.INSTANCE, "", "", TemporaryPlacesRegistry.SUPPORT_ID), host,
         )
 
         assertEquals(false, handled)
@@ -103,7 +120,7 @@ class ByLanguageInjectionPerformerTest {
         val registrar = RecordingRegistrar()
 
         ByLanguageInjectionPerformer().performInjection(
-            registrar, SimpleInjection(PlainTextLanguage.INSTANCE, "<", ">", null), host,
+            registrar, SimpleInjection(PlainTextLanguage.INSTANCE, "<", ">", TemporaryPlacesRegistry.SUPPORT_ID), host,
         )
 
         assertEquals(listOf("<" to null, null to ">"), registrar.affixes)

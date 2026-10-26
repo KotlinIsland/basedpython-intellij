@@ -67,6 +67,9 @@ dependencies {
     bundledPlugin("tanvd.grazi")
     // Spellchecker ships as a platform module, not a bundled plugin.
     bundledModule("intellij.spellchecker")
+    // IntelliLang, the platform's language injection, also a platform module: which injections in a
+    // `.by` string are the user's own (TemporaryPlacesRegistry), for ByLanguageInjectionPerformer.
+    bundledModule("intellij.platform.langInjection")
     // The platform's Debug Adapter Protocol client (DebugAdapterSupportProvider, DapProcessStarter,
     // …), also a platform module rather than a bundled plugin. Powers `.by` debugging.
     bundledModule("intellij.platform.dap")

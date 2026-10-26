@@ -44,6 +44,9 @@
              `by`'s whole-project diagnostics through, and the tab that Check Project opens. -->
         <module name="intellij.platform.problemView.shared"/>
         <module name="intellij.platform.problemView.ui"/>
+        <!-- IntelliLang: ByLanguageInjectionPerformer tells the user's own injections, which it
+             places, from IntelliLang's reading of a `# language=` comment, which is by's. -->
+        <module name="intellij.platform.langInjection"/>
     </dependencies>
 
     <resource-bundle>messages.BasedPythonBundle</resource-bundle>

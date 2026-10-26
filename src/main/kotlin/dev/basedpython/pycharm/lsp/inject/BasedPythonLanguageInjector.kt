@@ -33,9 +33,9 @@ import dev.basedpython.pycharm.lang.BasedPythonStringLiteral
  * The platform hands an element to each registered injector in turn and stops at the first that
  * injects something. IntelliLang's own adapter — the one behind `# language=` comments in every
  * other language — is registered `order="last"`, so this one is asked first and wins wherever `by`
- * has an answer. Where it has none, because the server is not running, IntelliLang's comment
- * injector still reads a `# language=` comment off the text, which is a better fallback than
- * nothing.
+ * has an answer. Where it has none, IntelliLang's comment injector would read a `# language=`
+ * comment off the text its own way, which differs from `by`'s; [ByLanguageInjectionPerformer]
+ * takes that reading without injecting it, and places only what the user injected themselves.
  */
 class BasedPythonLanguageInjector : MultiHostInjector {
 
