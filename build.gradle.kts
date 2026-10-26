@@ -434,7 +434,11 @@ changelog {
 // verifier's side of `-Xwarning-level=DEPRECATION:error` above: it also sees the newest build's
 // deprecations, which compiling against the floor cannot, and bytecode the compiler generated.
 // An entry that stops matching fails the build too, so the list cannot outlive its reasons.
-val allowedDeprecatedUsages: Map<String, String> = mapOf()
+val allowedDeprecatedUsages: Map<String, String> = mapOf(
+  "InlayProviderSettingsModel.getMainCheckBoxLabel() : java.lang.String is overridden in class dev.basedpython.pycharm.lsp.inlay.ByInlaySettingsModel" to
+    "abstract in InlayProviderSettingsModel, which the model of every entry of Settings | Editor | Inlay Hints extends, " +
+    "and deprecated as unused by the page; there is no model to extend without it",
+)
 
 // A task of its own, run after every `verifyPlugin`, so it can also be run alone against the
 // reports a verification already wrote.
