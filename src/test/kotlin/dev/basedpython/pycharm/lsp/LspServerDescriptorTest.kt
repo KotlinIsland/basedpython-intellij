@@ -32,6 +32,7 @@ import dev.basedpython.pycharm.settings.BasedPythonSettings
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
 import dev.basedpython.pycharm.testFramework.onEdt
 import org.junit.jupiter.api.AfterEach
+import com.intellij.openapi.editor.ex.EditorSettingsExternalizable
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
@@ -312,6 +313,23 @@ class LspServerDescriptorTest {
     assertEquals(true, hints["inferredRaises"])
     assertEquals(true, hints["callArgumentNames"])
     assertFalse(hints.containsKey("other"), "the plugin's catch-all is not one of `by`'s options")
+  }
+
+  @Test
+  fun `by completes a callable with its parentheses only while the IDE's setting says so`() = onEdt {
+    val editor = EditorSettingsExternalizable.getInstance()
+    val was = editor.isInsertParenthesesAutomatically
+    try {
+      for (on in listOf(true, false)) {
+        editor.isInsertParenthesesAutomatically = on
+        @Suppress("UNCHECKED_CAST")
+        val completions =
+          (byDescriptor().createInitializationOptions() as Map<String, Any>)["completions"] as Map<String, Boolean>
+        assertEquals(mapOf("completeFunctionParentheses" to on), completions)
+      }
+    } finally {
+      editor.isInsertParenthesesAutomatically = was
+    }
   }
 
   @Test

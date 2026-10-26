@@ -7,6 +7,7 @@ import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.Logger
+import com.intellij.openapi.editor.ex.EditorSettingsExternalizable
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
 import com.intellij.platform.lsp.api.LspClientManager
@@ -80,6 +81,12 @@ internal class BasedPythonLspReloader(private val project: Project) : Disposable
     if (project.isDisposed) return
     if (!listenerRegistered.compareAndSet(false, true)) return
     project.messageBus.connect(this).subscribe(ByLspLifecycleListener.TOPIC, CrashListener())
+    // `by` reads *Insert parentheses automatically* from its initialization options and has no
+    // `workspace/didChangeConfiguration`, so a change reaches it only through a restart.
+    EditorSettingsExternalizable.getInstance().addPropertyChangeListener(
+      { event -> if (event.propertyName == INSERT_PARENTHESES) onSettingsChanged() },
+      this,
+    )
   }
 
   private inner class CrashListener : ByLspLifecycleListener {
@@ -127,6 +134,9 @@ internal class BasedPythonLspReloader(private val project: Project) : Disposable
   companion object {
     private const val GROUP_ID = "basedpython.Actions"
     private const val DEBOUNCE_MS = 1000
+
+    /** The property `EditorSettingsExternalizable.setInsertParenthesesAutomatically` fires. */
+    private const val INSERT_PARENTHESES = "insertParenthesesAutomatically"
 
     @JvmStatic
     fun getInstance(project: Project): BasedPythonLspReloader = project.service()

@@ -6,6 +6,7 @@ import com.intellij.execution.process.ProcessEvent
 import com.intellij.execution.process.ProcessListener
 import com.intellij.execution.process.ProcessOutputTypes
 import com.intellij.openapi.diagnostic.Logger
+import com.intellij.openapi.editor.ex.EditorSettingsExternalizable
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Key
 import com.intellij.openapi.vfs.VirtualFile
@@ -228,6 +229,13 @@ internal class ByLspServerDescriptor(
       // requests the editor sends answer the same in either mode. Always on rather than following
       // the setting, so turning the setting on needs no restart, and Inspect Code works without it.
       "diagnosticMode" to "workspace",
+      // *Settings | Editor | General | Code Completion | Insert parentheses automatically*: `by`
+      // completes a callable as its call — `total()`, the caret after the parentheses when it
+      // takes no arguments — only while it is on. Read once, at start; BasedPythonLspReloader
+      // restarts the server when it changes.
+      "completions" to mapOf(
+        "completeFunctionParentheses" to EditorSettingsExternalizable.getInstance().isInsertParenthesesAutomatically,
+      ),
     )
 
   // `by` advertises: completion, hover, goto-def/decl/type-def, references, rename,
