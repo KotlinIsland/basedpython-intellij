@@ -10,8 +10,8 @@ import dev.basedpython.pycharm.lsp.ByServerDocuments
 import dev.basedpython.pycharm.lsp.ByTextHash
 import dev.basedpython.pycharm.lsp.awaitBy
 import dev.basedpython.pycharm.lsp.awaitingAgain
+import dev.basedpython.pycharm.lsp.ext.ByMroParams
 import dev.basedpython.pycharm.lsp.ext.ByNamedDocumentSymbolParams
-import dev.basedpython.pycharm.lsp.ext.ByNamedTypeHierarchyPrepareParams
 import dev.basedpython.pycharm.lsp.ext.ByServerExtensions
 import dev.basedpython.pycharm.lsp.ext.BySuperMember
 import dev.basedpython.pycharm.lsp.ext.BySuperMembersParams
@@ -25,7 +25,6 @@ import org.eclipse.lsp4j.SymbolInformation
 import org.eclipse.lsp4j.SymbolKind
 import org.eclipse.lsp4j.TextDocumentIdentifier
 import org.eclipse.lsp4j.TypeHierarchyItem
-import org.eclipse.lsp4j.TypeHierarchySupertypesParams
 import org.eclipse.lsp4j.jsonrpc.messages.Either
 
 /** Where Go to Super can go from the caret, or why it cannot go anywhere. */
@@ -61,9 +60,8 @@ internal sealed interface BySuperSubject {
  * Go to Super (Ctrl+U) in a `.by` file, asked of `by`.
  *
  * Everything that decides where to go is `by`'s. Which definition the caret is in comes from its
- * `textDocument/documentSymbol` outline, and a class's bases from its type hierarchy: the
- * `typeHierarchy/supertypes` of the class and of each of its bases in turn, listed in the class's
- * method resolution order as PyCharm lists a `.py` class's superclasses ([ancestors]). What a member
+ * `textDocument/documentSymbol` outline, and what a class inherits from from `by/mro`, listed in the
+ * class's method resolution order as PyCharm lists a `.py` class's superclasses ([bases]). What a member
  * overrides is `by/superMembers`, the override checks' own answer.
  *
  * Every request names the text the caret's position was read in ([ByTextHash]), so each is answered
@@ -104,90 +102,40 @@ internal object BySupers {
         }
     }
 
-    /** The bases of [symbol], a class, from `by`'s type hierarchy. */
-    private suspend fun bases(
+    /**
+     * Every class [symbol], a class of the text [textHash] names, inherits from, in its method
+     * resolution order without itself — `C`, `B`, `A`, `M`, `object` for `class D(C)` with
+     * `class C(B, M)` and `class B(A)` — as PyCharm lists a `.py` class's superclasses: `by/mro`, the
+     * order Python itself looks names up in. A `by` that does not know the request is said to be one.
+     */
+    suspend fun bases(
         server: LspClient,
         document: TextDocumentIdentifier,
         textHash: String,
         symbol: DocumentSymbol,
     ): BySuperAnswer {
-        val prepareParams = ByNamedTypeHierarchyPrepareParams(document, symbol.selectionRange.start, textHash)
-        val item = when (
-            val answer = server.awaitBy("textDocument/prepareTypeHierarchy") {
-                it.textDocumentService.prepareTypeHierarchy(prepareParams)
+        val params = ByMroParams(document, symbol.selectionRange.start, textHash)
+        var unknownRequest = false
+        val answer = awaitingAgain<List<TypeHierarchyItem>>("by/mro", LspClient.DEFAULT_REQUEST_TIMEOUT_MS.toLong()) { sent ->
+            try {
+                server.sendRequest { (it as ByServerExtensions).mro(params).also(sent) }
+            } catch (e: Exception) {
+                if (isMethodNotFound(e)) unknownRequest = true
+                throw e
             }
-        ) {
-            is ByAnswer.Answer -> answer.value.firstOrNull() ?: return nowhere("goto.super.class.unknown", symbol.name)
-            ByAnswer.None -> return nowhere("goto.super.class.unknown", symbol.name)
-            ByAnswer.Failed -> return nowhere("goto.super.noAnswer", "textDocument/prepareTypeHierarchy")
         }
-        val ancestors = ancestors(item) { of ->
-            when (val answer = server.awaitBy("typeHierarchy/supertypes") { it.textDocumentService.typeHierarchySupertypes(TypeHierarchySupertypesParams(of)) }) {
-                is ByAnswer.Answer -> answer.value
-                ByAnswer.None -> emptyList()
-                ByAnswer.Failed -> null
-            }
-        } ?: return nowhere("goto.super.noAnswer", "typeHierarchy/supertypes")
-        if (ancestors.isEmpty()) return nowhere("goto.super.class.none", item.name)
+        val ancestors = when (answer) {
+            is ByAnswer.Answer -> answer.value
+            ByAnswer.None -> return nowhere("goto.super.class.unknown", symbol.name)
+            ByAnswer.Failed ->
+                return if (unknownRequest) nowhere("goto.super.class.unsupported", symbol.name) else nowhere("goto.super.noAnswer", "by/mro")
+        }
+        if (ancestors.isEmpty()) return nowhere("goto.super.class.none", symbol.name)
         return BySuperAnswer.Targets(
-            BasedPythonBundle.message("goto.super.class.chooser", item.name),
+            BasedPythonBundle.message("goto.super.class.chooser", symbol.name),
             ancestors.map(::classTarget),
         )
     }
-
-    /**
-     * Every class [item] inherits from, in its method resolution order without itself — `C`, `B`,
-     * `A`, `M`, `object` for `class D(C)` with `class C(B, M)` and `class B(A)` — as PyCharm lists a
-     * `.py` class's superclasses. Each class's direct bases are `by`'s `typeHierarchy/supertypes`,
-     * asked by [supertypes] once per class; the order is C3's merge of them, the linearisation Python
-     * itself uses. A hierarchy C3 cannot linearise, which Python refuses to create, is listed in the
-     * order the classes were first reached. Null when `by` did not answer for some class.
-     */
-    suspend fun ancestors(
-        item: TypeHierarchyItem,
-        supertypes: suspend (TypeHierarchyItem) -> List<TypeHierarchyItem>?,
-    ): List<TypeHierarchyItem>? {
-        val bases = HashMap<HierarchyKey, List<HierarchyKey>>()
-        val items = LinkedHashMap<HierarchyKey, TypeHierarchyItem>()
-        val pending = ArrayDeque(listOf(item))
-        items[HierarchyKey.of(item)] = item
-        while (pending.isNotEmpty() && items.size <= MAX_ANCESTORS) {
-            val next = pending.removeFirst()
-            val key = HierarchyKey.of(next)
-            if (key in bases) continue
-            val direct = supertypes(next) ?: return null
-            bases[key] = direct.map { base -> HierarchyKey.of(base).also { if (items.putIfAbsent(it, base) == null) pending.addLast(base) } }
-        }
-        val linearised = HashMap<HierarchyKey, List<HierarchyKey>?>()
-        fun mro(key: HierarchyKey, visiting: Set<HierarchyKey>): List<HierarchyKey>? {
-            if (key in linearised) return linearised[key]
-            if (key in visiting) return null
-            val direct = bases[key].orEmpty()
-            val sequences = direct.map { mro(it, visiting + key) ?: return null }.map { it.toMutableList() } + listOf(direct.toMutableList())
-            val result = mutableListOf(key)
-            while (sequences.any { it.isNotEmpty() }) {
-                val head = sequences.firstNotNullOfOrNull { sequence ->
-                    sequence.firstOrNull()?.takeIf { candidate -> sequences.none { candidate in it.drop(1) } }
-                } ?: return null.also { linearised[key] = null }
-                result += head
-                for (sequence in sequences) sequence.remove(head)
-            }
-            return result.also { linearised[key] = it }
-        }
-        val order = mro(HierarchyKey.of(item), emptySet())?.drop(1) ?: items.keys.drop(1)
-        return order.mapNotNull { items[it] }
-    }
-
-    /** One class of a hierarchy, as the same class however `by` reached it. */
-    private data class HierarchyKey(val uri: String, val line: Int, val character: Int, val name: String) {
-        companion object {
-            fun of(item: TypeHierarchyItem) =
-                HierarchyKey(item.uri, item.selectionRange.start.line, item.selectionRange.start.character, item.name)
-        }
-    }
-
-    /** A bound on the classes walked, against a hierarchy that is not one. */
-    private const val MAX_ANCESTORS = 200
 
     /**
      * What [subject], a class member of the text [textHash] names, overrides, from `by/superMembers`.

@@ -15,7 +15,7 @@ import org.eclipse.lsp4j.SemanticTokensParams
 import org.eclipse.lsp4j.SymbolKind
 import org.eclipse.lsp4j.TextDocumentIdentifier
 import org.eclipse.lsp4j.TextEdit
-import org.eclipse.lsp4j.TypeHierarchyPrepareParams
+import org.eclipse.lsp4j.TypeHierarchyItem
 import org.eclipse.lsp4j.WorkspaceDiagnosticParams
 import org.eclipse.lsp4j.WorkspaceDiagnosticReport
 import org.eclipse.lsp4j.jsonrpc.services.JsonRequest
@@ -349,6 +349,14 @@ interface ByServerExtensions {
      * the same order, each with its [ByReference.kind]. `null` where `textDocument/references` is. A
      * `by` from before the request answers `MethodNotFound`.
      */
+    /**
+     * Every class the class whose name is at the position inherits from, in its method resolution
+     * order without itself, as `typeHierarchy/supertypes` items. `null` where there is no class. A
+     * `by` from before the request answers `MethodNotFound`.
+     */
+    @JsonRequest("by/mro")
+    fun mro(args: ByMroParams): CompletableFuture<List<TypeHierarchyItem>?>
+
     @JsonRequest("by/references")
     fun references(args: ReferenceParams): CompletableFuture<List<ByReference>?>
 
@@ -1134,9 +1142,8 @@ class ByNamedDocumentSymbolParams(textDocument: TextDocumentIdentifier, val text
 class ByNamedImplementationParams(textDocument: TextDocumentIdentifier, position: Position, val textHash: String) :
     ImplementationParams(textDocument, position)
 
-/** `textDocument/prepareTypeHierarchy` at a position in one text of the document, as [ByNamedSemanticTokensParams]. */
-class ByNamedTypeHierarchyPrepareParams(textDocument: TextDocumentIdentifier, position: Position, val textHash: String) :
-    TypeHierarchyPrepareParams(textDocument, position)
+/** A position on a class's name in one text of the document, for `by/mro`. */
+data class ByMroParams(val textDocument: TextDocumentIdentifier, val position: Position, val textHash: String)
 
 /** `textDocument/rename` at a position in one text of the document, as [ByNamedSemanticTokensParams]. */
 class ByNamedRenameParams(textDocument: TextDocumentIdentifier, position: Position, newName: String, val textHash: String) :

@@ -4,7 +4,7 @@ import com.google.gson.JsonElement
 import com.google.gson.JsonParser
 import dev.basedpython.pycharm.lsp.ext.ByNamedDocumentSymbolParams
 import dev.basedpython.pycharm.lsp.ext.ByNamedSemanticTokensParams
-import dev.basedpython.pycharm.lsp.ext.ByNamedTypeHierarchyPrepareParams
+import dev.basedpython.pycharm.lsp.ext.ByMroParams
 import dev.basedpython.pycharm.lsp.ext.BySuperMembersParams
 import dev.basedpython.pycharm.lsp.ext.BySyntaxOutlineParams
 import org.eclipse.lsp4j.Position
@@ -90,10 +90,7 @@ class ByTextHashTest {
         )
         assertEquals(
             atPosition,
-            paramsOnTheWire(
-                "textDocument/prepareTypeHierarchy",
-                ByNamedTypeHierarchyPrepareParams(document, Position(3, 8), "cbf29ce484222325"),
-            ),
+            paramsOnTheWire("by/mro", ByMroParams(document, Position(3, 8), "cbf29ce484222325")),
         )
         assertEquals(
             atPosition,

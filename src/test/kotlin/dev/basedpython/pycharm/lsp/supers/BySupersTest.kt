@@ -205,26 +205,33 @@ class BySupersTest {
     private fun cls(name: String, line: Int) =
         TypeHierarchyItem(name, SymbolKind.Class, "file:///supers.by", range(line, line + 1), Range(Position(line, 6), Position(line, 6 + name.length)))
 
-    @Test
-    fun `a class goes to every class it inherits from, in its method resolution order`() = onEdt {
-        // class A; class B(A); class M; class C(B, M); class D(C) — and object under A and M
-        val obj = TypeHierarchyItem("object", SymbolKind.Class, "file:///builtins.byi", range(0, 1), Range(Position(0, 6), Position(0, 12)))
-        val a = cls("A", 0)
-        val b = cls("B", 4)
-        val m = cls("M", 8)
-        val c = cls("C", 12)
-        val d = cls("D", 16)
-        val bases = mapOf("A" to listOf(obj), "B" to listOf(a), "M" to listOf(obj), "C" to listOf(b, m), "D" to listOf(c), "object" to emptyList())
+    /** Go to Super on `Shape`, answered by a `by` that says [answer]. */
+    private fun bases(answer: (String) -> CompletableFuture<*>): Pair<BySuperAnswer, List<String>> {
         val asked = mutableListOf<String>()
-
-        val ancestors = runBlocking { BySupers.ancestors(d) { asked += it.name; bases.getValue(it.name) } }!!
-
-        assertEquals(listOf("C", "B", "A", "M", "object"), ancestors.map { it.name })
-        assertEquals(asked.toSet().size, asked.size, "each class asked about once")
+        val client = AnsweringClient(fixture.project) { method -> asked += method; answer(method) }
+        val result = runBlocking { BySupers.bases(client, TextDocumentIdentifier("file:///shapes.by"), "cbf29ce484222325", outline[0].right) }
+        return result to asked
     }
 
     @Test
-    fun `a class whose bases by could not give has no answer`() = onEdt {
-        assertNull(runBlocking { BySupers.ancestors(cls("D", 16)) { null } })
+    fun `a class goes to every class it inherits from, in the order by-mro gives`() = onEdt {
+        val obj = TypeHierarchyItem("object", SymbolKind.Class, "file:///builtins.byi", range(0, 1), Range(Position(0, 6), Position(0, 12)))
+        val (answer, asked) = bases { answered(listOf(cls("C", 12), cls("B", 4), cls("A", 0), cls("M", 8), obj)) }
+
+        assertEquals(listOf("by/mro"), asked, "one request, the MRO itself")
+        answer as BySuperAnswer.Targets
+        assertEquals(BasedPythonBundle.message("goto.super.class.chooser", "Shape"), answer.chooserTitle)
+        assertEquals(listOf("C", "B", "A", "M", "object"), answer.targets.map { it.name })
+    }
+
+    @Test
+    fun `a by without by-mro is said to be one`() = onEdt {
+        val (answer, _) = bases { failed(ResponseErrorCode.MethodNotFound) }
+        assertEquals(BySuperAnswer.Nowhere(BasedPythonBundle.message("goto.super.class.unsupported", "Shape")), answer)
+    }
+
+    @Test
+    fun `a class that inherits from nothing goes nowhere`() = onEdt {
+        assertEquals(BySuperAnswer.Nowhere(BasedPythonBundle.message("goto.super.class.none", "Shape")), bases { answered(emptyList<TypeHierarchyItem>()) }.first)
     }
 }
