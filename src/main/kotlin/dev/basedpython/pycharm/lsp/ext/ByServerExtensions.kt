@@ -799,6 +799,22 @@ data class ByDeclarationUsages(
      * that what overrides it implements it. Only said of a method with implementations.
      */
     val abstract: Boolean = false,
+    /**
+     * What [implementations] counts, in the order `textDocument/implementation` answers it: each
+     * subclass of a class, or each member overriding a method. Absent from a `by` that predates it.
+     */
+    val implementors: List<ByImplementor>? = null,
+)
+
+/** A subclass of a class, or a member overriding a method, as [ByDeclarationUsages.implementors] gives it. */
+data class ByImplementor(
+    /** The subclass, or the class whose member overrides. */
+    val className: String? = null,
+    /** That class's dotted name, `shapes.base.Circle`; absent for a class local to a function. */
+    val qualifiedName: String? = null,
+    val uri: String? = null,
+    val range: Range? = null,
+    val selectionRange: Range? = null,
 )
 
 /** A class member of the document that overrides at least one superclass member. */

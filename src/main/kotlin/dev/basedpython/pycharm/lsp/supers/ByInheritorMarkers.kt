@@ -13,6 +13,7 @@ import com.intellij.openapi.editor.Document
 import com.intellij.openapi.editor.markup.GutterIconRenderer
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.roots.ProjectFileIndex
+import com.intellij.openapi.util.text.HtmlBuilder
 import com.intellij.platform.ide.progress.withBackgroundProgress
 import com.intellij.platform.lsp.util.getLsp4jPosition
 import com.intellij.platform.lsp.util.getOffsetInDocument
@@ -23,6 +24,7 @@ import com.intellij.psi.PsiFile
 import dev.basedpython.pycharm.lang.BasedPythonFile
 import dev.basedpython.pycharm.lsp.byServerFor
 import dev.basedpython.pycharm.lsp.ext.ByDeclarationUsages
+import dev.basedpython.pycharm.lsp.ext.ByImplementor
 import dev.basedpython.pycharm.lsp.vision.ByCodeVisionScope
 import dev.basedpython.pycharm.lsp.vision.ByUsageCounts
 import dev.basedpython.pycharm.lsp.vision.implementationsOf
@@ -43,8 +45,9 @@ import javax.swing.Icon
  * class, each edit once the document has been still for a second: on fastapi's `applications.py`,
  * ~240 `implementation` and ~150 `subtypes` requests per quiet edit. Everything an icon says is in
  * the count — whether there is anything, and whether the method is abstract, which makes what
- * overrides it implement it — so it costs nothing beyond the request the code vision makes anyway.
- * What subclasses or overrides is asked when the icon is clicked, as Ctrl+Alt+B would.
+ * overrides it implement it — and which classes those are, which the tooltip names — so it costs
+ * nothing beyond the request the code vision makes anyway. What subclasses or overrides is asked when
+ * the icon is clicked, as Ctrl+Alt+B would, for the text as it is then.
  *
  * The other direction, *overrides* and *implements* (↑), is [ByOverridingMarkers].
  */
@@ -73,6 +76,9 @@ class ByInheritorMarkers : LineMarkerProviderDescriptor(), DumbAware {
         /** [ByDeclarationUsages.kind] of a class. */
         private const val CLASS = "class"
 
+        /** How many classes a tooltip names, as many as PyCharm's own name before giving up on names. */
+        private const val MAX_NAMED = 9
+
         /**
          * An icon for each of [declarations] with implementations whose name is one of [elements],
          * on that name's token — a leaf, which the pass requires of a marker's element.
@@ -99,7 +105,7 @@ class ByInheritorMarkers : LineMarkerProviderDescriptor(), DumbAware {
                 else ->
                     Triple(AllIcons.Gutter.OverridenMethod, "inheritor.markers.overridden", "code.vision.overrides.chooser")
             }
-            val tooltip = BasedPythonBundle.message(tooltipKey, count)
+            val tooltip = tooltip(tooltipKey, count, declaration.implementors)
             val label = declaration.name ?: name.text
             val info = LineMarkerInfo(
                 name,
@@ -115,6 +121,21 @@ class ByInheritorMarkers : LineMarkerProviderDescriptor(), DumbAware {
                 BasedPythonBundle.message("inheritor.markers.action"),
                 IdeActions.ACTION_GOTO_IMPLEMENTATION,
             )
+        }
+
+        /**
+         * What the icon says: the classes that subclass the class, or whose members override the method,
+         * one a line under a heading, as PyCharm's own icons name them — `implementors` of the count the
+         * icon was drawn from, so hovering asks `by` nothing. Past [MAX_NAMED] the rest are counted
+         * rather than named. A `by` that gives the count without the classes is said as the count.
+         */
+        private fun tooltip(key: String, count: Int, implementors: List<ByImplementor>?): String {
+            val names = implementors?.mapNotNull { it.className }?.takeIf { it.isNotEmpty() }
+                ?: return BasedPythonBundle.message(key, count)
+            val html = HtmlBuilder().append(BasedPythonBundle.message("$key.header"))
+            for (name in names.take(MAX_NAMED)) html.br().nbsp(2).append(name)
+            if (names.size > MAX_NAMED) html.br().nbsp(2).append(BasedPythonBundle.message("inheritor.markers.more", names.size - MAX_NAMED))
+            return html.wrapWithHtmlBody().toString()
         }
     }
 
