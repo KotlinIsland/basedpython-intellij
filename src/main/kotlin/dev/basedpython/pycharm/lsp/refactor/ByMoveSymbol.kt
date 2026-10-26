@@ -27,7 +27,9 @@ import dev.basedpython.pycharm.lang.BasedPythonLanguage
 import dev.basedpython.pycharm.lsp.ext.ByMovableSymbol
 import dev.basedpython.pycharm.lsp.ext.ByMoveSymbolParams
 import dev.basedpython.pycharm.util.BasedPythonBundle
+import org.eclipse.lsp4j.CreateFilesParams
 import org.eclipse.lsp4j.DidChangeWatchedFilesParams
+import org.eclipse.lsp4j.FileCreate
 import org.eclipse.lsp4j.FileChangeType
 import org.eclipse.lsp4j.FileEvent
 import java.io.IOException
@@ -36,8 +38,8 @@ import java.nio.file.Path
 import javax.swing.JComponent
 
 /**
- * F6 on a top-level function, class or variable of a `.by` file — in its name or in a reference to
- * it — moves that definition to another module, through `by/prepareMoveSymbol` and `by/moveSymbol`,
+ * F6 on a top-level function, class or variable of a `.by` file — in its name, in a reference to it,
+ * or anywhere in its definition, its body included — moves that definition to another module, through `by/prepareMoveSymbol` and `by/moveSymbol`,
  * as F6 on one in a `.py` file opens Move Module Members.
  *
  * Which definition the caret is on is `by`'s answer, and so is the move: what the definition takes
@@ -166,15 +168,24 @@ internal class ByMoveSymbolDialog(
     /**
      * Tells `by` about the module [create] just made, before it is asked to move anything into it.
      *
-     * `by` learns of new files from a file system watcher of its own, which reports a little later,
-     * and until then answers that the module is not one anything can import (measured: every move
-     * into a module made a moment before was refused). A client that makes a file says so with
-     * `workspace/didChangeWatchedFiles`, which `by` applies at once, and in order: the request sent
-     * after it is answered about a project that has the module.
+     * `by` answers from the file system as it last read it, and until it hears of the module it
+     * answers that the module is not one anything can import (measured: every move into a module made
+     * a moment before was refused). A client that makes a file says so with LSP's
+     * `workspace/didCreateFiles`, which `by` registers for every module and folder and applies at
+     * once, and in order: the request sent after it is answered about a project that has the module.
+     * A `by` that does not register for it hears of the file as a watched file that was created,
+     * which it applies the same way.
      */
     private fun announce(module: VirtualFile) {
-        val created = FileEvent(site.server.descriptor.getFileUri(module), FileChangeType.Created)
-        site.server.sendNotification { it.workspaceService.didChangeWatchedFiles(DidChangeWatchedFilesParams(listOf(created))) }
+        val uri = site.server.descriptor.getFileUri(module)
+        val registered = site.server.initializeResult?.capabilities?.workspace?.fileOperations?.didCreate != null
+        if (registered) {
+            site.server.sendNotification { it.workspaceService.didCreateFiles(CreateFilesParams(listOf(FileCreate(uri)))) }
+        } else {
+            site.server.sendNotification {
+                it.workspaceService.didChangeWatchedFiles(DidChangeWatchedFilesParams(listOf(FileEvent(uri, FileChangeType.Created))))
+            }
+        }
     }
 
     /** Takes away the module [create] made for a move that did not happen. */
