@@ -120,6 +120,11 @@
         <completion.contributor
             language="basedpython"
             implementationClass="dev.basedpython.pycharm.debug.ByDapCompletionContributor"/>
+        <!-- Smart completion (Ctrl+Shift+Space) in a .by file from by/smartCompletion; the platform's
+             LSP completion, which would answer it as basic, leaves it to this. See BySmartCompletion. -->
+        <completion.contributor
+            language="basedpython" order="first"
+            implementationClass="dev.basedpython.pycharm.lsp.completion.BySmartCompletionContributor"/>
         <!-- Where undoing and redoing a log point lands. The undo step itself is the platform's
              (ModUpdateSystemOptions), so nothing of this plugin's sits in UndoManager and pins its
              classloader after an unload; see ByLogpointUndo. -->

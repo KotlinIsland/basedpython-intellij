@@ -357,6 +357,13 @@ interface ByServerExtensions {
     @JsonRequest("by/mro")
     fun mro(args: ByMroParams): CompletableFuture<List<TypeHierarchyItem>?>
 
+    /**
+     * `textDocument/completion` kept to the items that fit the type the position expects, or `null`
+     * where it expects none. A `by` from before the request answers `MethodNotFound`.
+     */
+    @JsonRequest("by/smartCompletion")
+    fun smartCompletion(params: org.eclipse.lsp4j.CompletionParams): CompletableFuture<org.eclipse.lsp4j.CompletionList?>
+
     @JsonRequest("by/references")
     fun references(args: ReferenceParams): CompletableFuture<List<ByReference>?>
 

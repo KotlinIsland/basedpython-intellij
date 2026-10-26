@@ -17,6 +17,10 @@ import org.eclipse.lsp4j.CompletionItem
  */
 internal object ByCompletionSupport : LspCompletionSupport() {
 
+    /** Not for smart completion, which is `by/smartCompletion`'s: [BySmartCompletionContributor]. */
+    override fun shouldRunCodeCompletion(parameters: CompletionParameters): Boolean =
+        BySmartCompletionContributor.platformRuns(parameters) && super.shouldRunCodeCompletion(parameters)
+
     /**
      * `by` owns basedpython's postfix templates: `xs.for` completes to a `for` loop over `xs`, an item
      * labelled `for` whose detail is `postfix` and whose edit replaces all of `xs.for`. They are
