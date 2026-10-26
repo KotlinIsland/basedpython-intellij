@@ -72,7 +72,7 @@ lexical colour only. Don't reintroduce guessed semantic colour; fix the LSP path
 - [x] Capability-scoped descriptor (format, lint, code actions, hover)
 - [x] Organize imports, fix-all commands
 - [x] Format-on-save integration
-- [x] Reformat selection / file routed to buff (editor.format.BuffFormattingService)
+- [x] Reformat selection / file routed to buff (editor.format.BuffFormattingService): a whole file is laid out and its imports sorted (`source.formatAndOrganizeImports`); a selection, or the ranges a refactoring hands over, is laid out alone with `textDocument/rangeFormatting` per range (`BuffRangeFormatting`, the service declaring `FORMAT_FRAGMENTS`), which `buff` answers for the statements the range covers — where a selection used to be left exactly as it was. Measured in PyCharm 263.7528: `def b( y ):` / `return y*2` selected becomes `def b(y):` / `return y * 2` and `def a( x ):` above it is untouched, as in `.py`; `.py` also puts the second blank line before `def b`, which is outside the range `buff` lays out. Imports are sorted only by a whole-file reformat
 - [x] Optimize-imports action routed to buff organize-imports
 - [x] Lint severity mapping → IDE inspection severities (LSP diagnostic severities mapped by platform)
 - [x] Quick-fix preview (LSP code actions via platform intention preview)
