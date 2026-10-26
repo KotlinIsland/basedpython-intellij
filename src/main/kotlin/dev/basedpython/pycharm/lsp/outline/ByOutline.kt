@@ -52,6 +52,8 @@ class ByOutline(
         val parameters: List<TextRange> = emptyList(),
         /** On a `def` a class body owns: `instance`, `class` or `static`; null on a function or from an older `by`. */
         val method: String? = null,
+        /** On a simple statement: the expression a line break inside it may wrap in parentheses. */
+        val wrap: TextRange? = null,
     )
 
     /** One clause: `if`, `elif`, a `case`, a function's `def`. */
@@ -63,6 +65,8 @@ class ByOutline(
         /** From the start of the header to the end of the body. */
         val range: TextRange,
         val body: List<Statement> = emptyList(),
+        /** The header's expression a line break inside it may wrap in parentheses. */
+        val wrap: TextRange? = null,
     )
 
     /** A basedpython modifier keyword — `frozen data` — and what the parser read it as. */
@@ -204,6 +208,7 @@ object ByOutlineReplies {
             name = statement.name?.let(::range),
             parameters = statement.parameters.map(::range),
             method = statement.method,
+            wrap = statement.wrap?.let(::range),
         )
 
         fun clause(clause: ByOutlineClause): ByOutline.Clause = ByOutline.Clause(
@@ -211,6 +216,7 @@ object ByOutlineReplies {
             colon = clause.colon?.let(::range),
             range = range(clause.range),
             body = clause.body.map(::statement),
+            wrap = clause.wrap?.let(::range),
         )
 
         fun string(string: ByOutlineString): ByOutline.StringPart = ByOutline.StringPart(

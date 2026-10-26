@@ -88,9 +88,10 @@ class OutlineSpec private constructor(private val text: CharSequence) {
             )
         }
 
-        /** A simple statement spelled [text]. */
-        fun simple(text: String) {
-            statements += ByOutline.Statement(find(text))
+        /** A simple statement spelled [text], whose expression spelled [wrap] in it may be wrapped in parentheses. */
+        fun simple(text: String, wrap: String? = null) {
+            val range = find(text)
+            statements += ByOutline.Statement(range, wrap = wrap?.let { within(range, it) })
         }
 
         /** A call statement spelled [text], calling what comes before its first `(`. */
@@ -145,17 +146,27 @@ class OutlineSpec private constructor(private val text: CharSequence) {
         fun clause(
             header: String,
             keyword: String? = header.takeWhile { it.isLetter() }.ifEmpty { null },
+            wrap: String? = null,
             body: Suite.() -> Unit = {},
         ) {
             val range = find(header)
+            val wrapRange = wrap?.let { within(range, it) }
             val suite = Suite().apply(body)
             clauses += ByOutline.Clause(
                 keyword = keyword?.let { TextRange.from(range.startOffset + header.indexOf(it), it.length) },
                 colon = if (header.endsWith(":")) TextRange(range.endOffset - 1, range.endOffset) else null,
                 range = TextRange(range.startOffset, maxOf(range.endOffset, suite.statements.lastOrNull()?.range?.endOffset ?: 0)),
                 body = suite.statements,
+                wrap = wrapRange,
             )
         }
+    }
+
+    /** Where [part] is spelled inside [range]. */
+    private fun within(range: TextRange, part: String): TextRange {
+        val start = text.indexOf(part, range.startOffset)
+        require(start >= 0 && start + part.length <= range.endOffset) { "`$part` is not in ${range}" }
+        return TextRange.from(start, part.length)
     }
 
     /**

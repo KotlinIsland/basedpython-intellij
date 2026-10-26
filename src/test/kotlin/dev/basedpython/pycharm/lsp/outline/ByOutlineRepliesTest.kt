@@ -68,6 +68,12 @@ class ByOutlineRepliesTest {
         assertEquals("f", outline.statements[1].name?.text())
         assertEquals(listOf("x"), outline.statements[1].parameters.map { it.text() })
         assertEquals(listOf(listOf("text", "x")), outline.lists.map { list -> list.map { it.text() } })
+
+        // what Enter may wrap in parentheses: an assignment's value, a condition, a statement's expression
+        assertEquals("1", outline.statements[0].wrap?.text())
+        assertEquals("x", ifStatement.clauses[0].wrap?.text())
+        assertEquals("print(f\"x\\n{x!r}\")", ifStatement.clauses[0].body.single().wrap?.text())
+        assertNull(ifStatement.clauses[2].wrap)
     }
 
     @Test

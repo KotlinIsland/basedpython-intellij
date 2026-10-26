@@ -145,21 +145,33 @@ internal class ByIndents(
     }
 
     /**
-     * Anywhere else: inside a statement, a backslash carries it on to the next line; at its end, the
-     * next line is where the statement after it would go.
+     * Anywhere else: inside a statement, the statement is carried on to the next line — inside
+     * parentheses put around the expression `by` says may be wrapped (an assignment's value, an
+     * `if`'s condition), as `.py`'s Enter does, or with a backslash where there is none to wrap; at
+     * its end, the next line is where the statement after it would go.
      */
     private fun statementBreak(offset: Int): LineBreak? {
         val statement = innermostStatementAround(offset)
-        if (statement != null && continuesAfter(offset, statement)) {
+        if (statement != null && continuesAfter(offset, statement.range)) {
             if (precedingNonBlank(offset) == '\\') return null
-            return LineBreak(indentAt(statement.startOffset) + unit, before = "\\")
+            return wrapBreak(offset, statement.wrap) ?: LineBreak(indentAt(statement.range.startOffset) + unit, before = "\\")
         }
-        val header = headerAround(offset)
-        if (header != null && continuesAfter(offset, header)) {
+        val clause = headerAround(offset)
+        if (clause != null && continuesAfter(offset, clause.header)) {
             if (precedingNonBlank(offset) == '\\') return null
-            return LineBreak(indentAt(header.startOffset) + unit, before = "\\")
+            return wrapBreak(offset, clause.wrap) ?: LineBreak(indentAt(clause.header.startOffset) + unit, before = "\\")
         }
         return afterStatements(offset)?.let { LineBreak(it) }
+    }
+
+    /**
+     * Breaking inside [wrap] by putting it in parentheses: the next line goes on just inside the
+     * `(`, as the rest of a bracket's contents do. Only strictly inside it — at either end there is
+     * nothing of the expression on one side of the break.
+     */
+    private fun wrapBreak(offset: Int, wrap: TextRange?): LineBreak? {
+        if (wrap == null || offset <= wrap.startOffset || offset >= wrap.endOffset) return null
+        return LineBreak(column(wrap.startOffset) + 1, wrap = wrap)
     }
 
     /** Whether [range] has code both before [offset] and after it on the offset's line. */
@@ -276,24 +288,27 @@ internal class ByIndents(
     }
 
     /** The innermost simple statement whose range holds [offset]. */
-    private fun innermostStatementAround(offset: Int): TextRange? {
-        var found: TextRange? = null
+    private fun innermostStatementAround(offset: Int): ByOutline.Statement? {
+        var found: ByOutline.Statement? = null
         walk { statement, _, _ ->
             if (statement.clauses.isEmpty() && statement.range.startOffset < offset && offset < statement.range.endOffset) {
-                found = statement.range
+                found = statement
             }
         }
         return found
     }
 
+    /** A clause header — from its keyword to its `:` — and the expression in it that may be wrapped. */
+    private class Header(val header: TextRange, val wrap: TextRange?)
+
     /** The clause header — from its keyword to its `:` — that holds [offset]. */
-    private fun headerAround(offset: Int): TextRange? {
-        var found: TextRange? = null
+    private fun headerAround(offset: Int): Header? {
+        var found: Header? = null
         outline.walk { statement, _ ->
             for (clause in statement.clauses) {
                 val start = clause.keyword?.startOffset ?: clause.range.startOffset
                 val end = clause.colon?.startOffset ?: continue
-                if (start < offset && offset <= end) found = TextRange(start, end)
+                if (start < offset && offset <= end) found = Header(TextRange(start, end), clause.wrap)
             }
         }
         return found

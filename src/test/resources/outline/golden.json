@@ -36,6 +36,16 @@
      "character": 0,
      "line": 0
     }
+   },
+   "wrap": {
+    "end": {
+     "character": 14,
+     "line": 0
+    },
+    "start": {
+     "character": 13,
+     "line": 0
+    }
    }
   },
   {
@@ -44,6 +54,16 @@
      "body": [
       {
        "range": {
+        "end": {
+         "character": 7,
+         "line": 7
+        },
+        "start": {
+         "character": 4,
+         "line": 4
+        }
+       },
+       "wrap": {
         "end": {
          "character": 7,
          "line": 7
@@ -91,6 +111,16 @@
              "character": 8,
              "line": 9
             }
+           },
+           "wrap": {
+            "end": {
+             "character": 26,
+             "line": 9
+            },
+            "start": {
+             "character": 8,
+             "line": 9
+            }
            }
           }
          ],
@@ -123,6 +153,16 @@
            "character": 4,
            "line": 8
           }
+         },
+         "wrap": {
+          "end": {
+           "character": 8,
+           "line": 8
+          },
+          "start": {
+           "character": 7,
+           "line": 8
+          }
          }
         },
         {
@@ -135,6 +175,16 @@
             },
             "start": {
              "character": 8,
+             "line": 11
+            }
+           },
+           "wrap": {
+            "end": {
+             "character": 16,
+             "line": 11
+            },
+            "start": {
+             "character": 15,
              "line": 11
             }
            }
@@ -167,6 +217,16 @@
           },
           "start": {
            "character": 4,
+           "line": 10
+          }
+         },
+         "wrap": {
+          "end": {
+           "character": 17,
+           "line": 10
+          },
+          "start": {
+           "character": 9,
            "line": 10
           }
          }
@@ -239,6 +299,16 @@
          "character": 4,
          "line": 14
         }
+       },
+       "wrap": {
+        "end": {
+         "character": 11,
+         "line": 16
+        },
+        "start": {
+         "character": 11,
+         "line": 14
+        }
        }
       },
       {
@@ -249,6 +319,16 @@
         },
         "start": {
          "character": 4,
+         "line": 17
+        }
+       },
+       "wrap": {
+        "end": {
+         "character": 18,
+         "line": 17
+        },
+        "start": {
+         "character": 11,
          "line": 17
         }
        }
@@ -332,7 +412,29 @@
      "line": 4
     }
    },
-   "strippedIndent": 4
+   "strippedIndent": 4,
+   "text": [
+    {
+     "end": {
+      "character": 0,
+      "line": 6
+     },
+     "start": {
+      "character": 4,
+      "line": 5
+     }
+    },
+    {
+     "end": {
+      "character": 18,
+      "line": 6
+     },
+     "start": {
+      "character": 4,
+      "line": 6
+     }
+    }
+   ]
   },
   {
    "escapes": [
@@ -368,7 +470,19 @@
      "character": 14,
      "line": 9
     }
-   }
+   },
+   "text": [
+    {
+     "end": {
+      "character": 19,
+      "line": 9
+     },
+     "start": {
+      "character": 16,
+      "line": 9
+     }
+    }
+   ]
   },
   {
    "range": {
@@ -380,7 +494,19 @@
      "character": 14,
      "line": 10
     }
-   }
+   },
+   "text": [
+    {
+     "end": {
+      "character": 16,
+      "line": 10
+     },
+     "start": {
+      "character": 15,
+      "line": 10
+     }
+    }
+   ]
   },
   {
    "range": {
@@ -393,7 +519,19 @@
      "line": 14
     }
    },
-   "strippedIndent": 12
+   "strippedIndent": 12,
+   "text": [
+    {
+     "end": {
+      "character": 17,
+      "line": 15
+     },
+     "start": {
+      "character": 12,
+      "line": 15
+     }
+    }
+   ]
   }
  ]
 }

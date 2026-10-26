@@ -919,6 +919,12 @@ data class ByOutlineStatement(
      * function, and from a `by` that does not report it.
      */
     val method: String? = null,
+    /**
+     * On a simple statement: the expression Enter may break by wrapping it in parentheses — an
+     * assignment's value, a `return`'s. Absent where none can be, and from a `by` that does not
+     * report it.
+     */
+    val wrap: Range? = null,
 )
 
 /** One clause of a compound statement. */
@@ -930,6 +936,8 @@ data class ByOutlineClause(
     /** From the start of the header to the end of the body. */
     val range: Range? = null,
     val body: List<ByOutlineStatement> = emptyList(),
+    /** The expression of the header Enter may break by wrapping it in parentheses — an `if`'s condition. */
+    val wrap: Range? = null,
 )
 
 /** A basedpython modifier keyword, e.g. `frozen data`, and what the parser read it as. */

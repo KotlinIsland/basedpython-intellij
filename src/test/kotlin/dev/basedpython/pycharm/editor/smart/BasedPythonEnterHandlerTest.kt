@@ -230,6 +230,31 @@ class BasedPythonEnterHandlerTest {
     }
 
     @Test
+    fun `inside an expression by says may be wrapped, it is wrapped in parentheses, as py's Enter does`() = enter(
+        "x = 1 +<caret> 2\n",
+        "x = (1 +\n     <caret>2)\n",
+    ) {
+        simple("x = 1 + 2", wrap = "1 + 2")
+    }
+
+    @Test
+    fun `and inside a clause header's condition`() = enter(
+        "if a and<caret> b:\n    pass\n",
+        "if (a and\n    <caret>b):\n    pass\n",
+    ) {
+        compound { clause("if a and b:", wrap = "a and b") { simple("pass") } }
+    }
+
+    @Test
+    fun `a statement with nothing to wrap still takes a backslash`() = enter(
+        "def f(a):\n    return<caret> a\n",
+        "def f(a):\n    return\\\n        <caret>a\n",
+    ) {
+        // `return a` has an expression, but the break is before it, outside what can be wrapped
+        compound { clause("def f(a):") { simple("return a", wrap = "a") } }
+    }
+
+    @Test
     fun `a string is closed, reopened and wrapped so it stays one expression`() = enter(
         "x = 'a' f'bc<caret>de'\n",
         "x = ('a' f'bc'\n     f'<caret>de')\n",
