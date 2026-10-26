@@ -201,4 +201,30 @@ class BySupersTest {
         DocumentSymbol(name, kind, range(from, to), Range(Position(from, 4), Position(from, 4 + name.length)), null, children.toList())
 
     private fun range(from: Int, to: Int) = Range(Position(from, 0), Position(to, 40))
+
+    private fun cls(name: String, line: Int) =
+        TypeHierarchyItem(name, SymbolKind.Class, "file:///supers.by", range(line, line + 1), Range(Position(line, 6), Position(line, 6 + name.length)))
+
+    @Test
+    fun `a class goes to every class it inherits from, in its method resolution order`() = onEdt {
+        // class A; class B(A); class M; class C(B, M); class D(C) — and object under A and M
+        val obj = TypeHierarchyItem("object", SymbolKind.Class, "file:///builtins.byi", range(0, 1), Range(Position(0, 6), Position(0, 12)))
+        val a = cls("A", 0)
+        val b = cls("B", 4)
+        val m = cls("M", 8)
+        val c = cls("C", 12)
+        val d = cls("D", 16)
+        val bases = mapOf("A" to listOf(obj), "B" to listOf(a), "M" to listOf(obj), "C" to listOf(b, m), "D" to listOf(c), "object" to emptyList())
+        val asked = mutableListOf<String>()
+
+        val ancestors = runBlocking { BySupers.ancestors(d) { asked += it.name; bases.getValue(it.name) } }!!
+
+        assertEquals(listOf("C", "B", "A", "M", "object"), ancestors.map { it.name })
+        assertEquals(asked.toSet().size, asked.size, "each class asked about once")
+    }
+
+    @Test
+    fun `a class whose bases by could not give has no answer`() = onEdt {
+        assertNull(runBlocking { BySupers.ancestors(cls("D", 16)) { null } })
+    }
 }

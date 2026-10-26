@@ -62,8 +62,8 @@ internal sealed interface BySuperSubject {
  *
  * Everything that decides where to go is `by`'s. Which definition the caret is in comes from its
  * `textDocument/documentSymbol` outline, and a class's bases from its type hierarchy: the
- * `typeHierarchy/supertypes` of the class, which are its explicit bases in the order the class
- * lists them — the order they take in its MRO, which C3 linearisation keeps. What a member
+ * `typeHierarchy/supertypes` of the class and of each of its bases in turn, listed in the class's
+ * method resolution order as PyCharm lists a `.py` class's superclasses ([ancestors]). What a member
  * overrides is `by/superMembers`, the override checks' own answer.
  *
  * Every request names the text the caret's position was read in ([ByTextHash]), so each is answered
@@ -121,21 +121,73 @@ internal object BySupers {
             ByAnswer.None -> return nowhere("goto.super.class.unknown", symbol.name)
             ByAnswer.Failed -> return nowhere("goto.super.noAnswer", "textDocument/prepareTypeHierarchy")
         }
-        val supertypes = when (
-            val answer = server.awaitBy("typeHierarchy/supertypes") {
-                it.textDocumentService.typeHierarchySupertypes(TypeHierarchySupertypesParams(item))
+        val ancestors = ancestors(item) { of ->
+            when (val answer = server.awaitBy("typeHierarchy/supertypes") { it.textDocumentService.typeHierarchySupertypes(TypeHierarchySupertypesParams(of)) }) {
+                is ByAnswer.Answer -> answer.value
+                ByAnswer.None -> emptyList()
+                ByAnswer.Failed -> null
             }
-        ) {
-            is ByAnswer.Answer -> answer.value
-            ByAnswer.None -> emptyList()
-            ByAnswer.Failed -> return nowhere("goto.super.noAnswer", "typeHierarchy/supertypes")
-        }
-        if (supertypes.isEmpty()) return nowhere("goto.super.class.none", item.name)
+        } ?: return nowhere("goto.super.noAnswer", "typeHierarchy/supertypes")
+        if (ancestors.isEmpty()) return nowhere("goto.super.class.none", item.name)
         return BySuperAnswer.Targets(
             BasedPythonBundle.message("goto.super.class.chooser", item.name),
-            supertypes.map(::classTarget),
+            ancestors.map(::classTarget),
         )
     }
+
+    /**
+     * Every class [item] inherits from, in its method resolution order without itself — `C`, `B`,
+     * `A`, `M`, `object` for `class D(C)` with `class C(B, M)` and `class B(A)` — as PyCharm lists a
+     * `.py` class's superclasses. Each class's direct bases are `by`'s `typeHierarchy/supertypes`,
+     * asked by [supertypes] once per class; the order is C3's merge of them, the linearisation Python
+     * itself uses. A hierarchy C3 cannot linearise, which Python refuses to create, is listed in the
+     * order the classes were first reached. Null when `by` did not answer for some class.
+     */
+    suspend fun ancestors(
+        item: TypeHierarchyItem,
+        supertypes: suspend (TypeHierarchyItem) -> List<TypeHierarchyItem>?,
+    ): List<TypeHierarchyItem>? {
+        val bases = HashMap<HierarchyKey, List<HierarchyKey>>()
+        val items = LinkedHashMap<HierarchyKey, TypeHierarchyItem>()
+        val pending = ArrayDeque(listOf(item))
+        items[HierarchyKey.of(item)] = item
+        while (pending.isNotEmpty() && items.size <= MAX_ANCESTORS) {
+            val next = pending.removeFirst()
+            val key = HierarchyKey.of(next)
+            if (key in bases) continue
+            val direct = supertypes(next) ?: return null
+            bases[key] = direct.map { base -> HierarchyKey.of(base).also { if (items.putIfAbsent(it, base) == null) pending.addLast(base) } }
+        }
+        val linearised = HashMap<HierarchyKey, List<HierarchyKey>?>()
+        fun mro(key: HierarchyKey, visiting: Set<HierarchyKey>): List<HierarchyKey>? {
+            if (key in linearised) return linearised[key]
+            if (key in visiting) return null
+            val direct = bases[key].orEmpty()
+            val sequences = direct.map { mro(it, visiting + key) ?: return null }.map { it.toMutableList() } + listOf(direct.toMutableList())
+            val result = mutableListOf(key)
+            while (sequences.any { it.isNotEmpty() }) {
+                val head = sequences.firstNotNullOfOrNull { sequence ->
+                    sequence.firstOrNull()?.takeIf { candidate -> sequences.none { candidate in it.drop(1) } }
+                } ?: return null.also { linearised[key] = null }
+                result += head
+                for (sequence in sequences) sequence.remove(head)
+            }
+            return result.also { linearised[key] = it }
+        }
+        val order = mro(HierarchyKey.of(item), emptySet())?.drop(1) ?: items.keys.drop(1)
+        return order.mapNotNull { items[it] }
+    }
+
+    /** One class of a hierarchy, as the same class however `by` reached it. */
+    private data class HierarchyKey(val uri: String, val line: Int, val character: Int, val name: String) {
+        companion object {
+            fun of(item: TypeHierarchyItem) =
+                HierarchyKey(item.uri, item.selectionRange.start.line, item.selectionRange.start.character, item.name)
+        }
+    }
+
+    /** A bound on the classes walked, against a hierarchy that is not one. */
+    private const val MAX_ANCESTORS = 200
 
     /**
      * What [subject], a class member of the text [textHash] names, overrides, from `by/superMembers`.
