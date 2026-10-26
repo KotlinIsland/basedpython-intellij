@@ -198,10 +198,20 @@
              See editor.ByBreadcrumbsProvider. -->
         <breadcrumbsInfoProvider implementation="dev.basedpython.pycharm.editor.ByBreadcrumbsProvider"/>
 
+        <!-- The Structure view and File Structure popup: the platform's LSP structure of by's document
+             symbols, with an Alphabetical sorter and a Show Fields filter as .py has. See
+             navigation.ByStructureView. -->
+        <lang.psiStructureViewFactory language="basedpython"
+                                      implementationClass="dev.basedpython.pycharm.navigation.ByStructureViewFactory"/>
+        <!-- Qualified names for by's workspace symbols, so Go to Class and Go to Symbol match a dotted
+             query, Shape.desc, against shapes.base.Shape.describe. See navigation.ByWorkspaceSymbols. -->
+        <gotoClassContributor implementation="dev.basedpython.pycharm.navigation.ByQualifiedSymbolNames"/>
+        <gotoSymbolContributor implementation="dev.basedpython.pycharm.navigation.ByQualifiedSymbolNames"/>
+
         <!-- ===== Stream G: structure view, folding, breadcrumbs =====
-             The structure view and breadcrumbs come from the `by` server via the platform's LSP
-             integration (LspStructureViewFactory, LspFileBreadcrumbsCollector); registering our own
-             shadowed the first and doubled up the second. Folding is by's ranges through a builder
+             The structure view is the platform's LspStructureViewFactory wrapped by
+             ByStructureViewFactory above, which delegates to it rather than shadowing it; breadcrumbs
+             are ByBreadcrumbsProvider, the platform's LSP ones being off for by. Folding is by's ranges through a builder
              of our own, the platform's LSP folding being off for by: the platform's asked too late
              for Fold by default to fold anything, and knew none of basedpython's kinds. -->
         <lang.foldingBuilder

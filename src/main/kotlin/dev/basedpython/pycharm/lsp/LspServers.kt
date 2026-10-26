@@ -370,6 +370,12 @@ internal class ByLspServerDescriptor(
     override val documentSymbolCustomizer = object : LspDocumentSymbolSupport() {
       override val breadcrumbsSupport: Boolean = false
     }
+
+    /**
+     * `by`'s workspace symbols, each placed in its `containerName` and given a qualified name to
+     * match a dotted query against — [dev.basedpython.pycharm.navigation.ByWorkspaceSymbols].
+     */
+    override val workspaceSymbolCustomizer = dev.basedpython.pycharm.navigation.ByWorkspaceSymbols
   }
 
   private object ByDocumentHighlights : LspDocumentHighlightsSupport() {
