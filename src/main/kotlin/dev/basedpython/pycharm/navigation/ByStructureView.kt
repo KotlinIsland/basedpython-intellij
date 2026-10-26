@@ -11,6 +11,8 @@ import com.intellij.ide.util.treeView.smartTree.ActionPresentation
 import com.intellij.ide.util.treeView.smartTree.ActionPresentationData
 import com.intellij.ide.util.treeView.smartTree.Filter
 import com.intellij.ide.util.treeView.smartTree.Grouper
+import com.intellij.ide.util.treeView.smartTree.NodeProvider
+import com.intellij.ide.util.treeView.smartTree.ProvidingTreeModel
 import com.intellij.ide.util.treeView.smartTree.Sorter
 import com.intellij.ide.util.treeView.smartTree.TreeElement
 import com.intellij.lang.Language
@@ -18,6 +20,7 @@ import com.intellij.lang.LanguageStructureViewBuilder
 import com.intellij.lang.PsiStructureViewFactory
 import com.intellij.openapi.editor.Editor
 import com.intellij.psi.PsiFile
+import dev.basedpython.pycharm.lsp.ext.ByInheritedMember
 import dev.basedpython.pycharm.util.BasedPythonBundle
 import org.eclipse.lsp4j.DocumentSymbol
 import org.eclipse.lsp4j.SymbolKind
@@ -30,9 +33,8 @@ import org.eclipse.lsp4j.SymbolKind
  *
  * The structure itself stays the platform's, asked for the same symbols at the same moments; this
  * only wraps the model it builds, and reads each node's kind off the `DocumentSymbol` the platform's
- * nodes carry as their value. Not done: PyCharm's *Inherited members* toggle, which needs where each
- * inherited member is declared, and `by/overridableMembers` names a class's inherited methods without
- * their locations.
+ * nodes carry as their value. *Show Inherited* adds each class's inherited members, from `by`
+ * ([ByInheritedMembersProvider]).
  */
 class ByStructureViewFactory : PsiStructureViewFactory {
 
@@ -41,7 +43,8 @@ class ByStructureViewFactory : PsiStructureViewFactory {
             .firstNotNullOfOrNull { factory -> factory.takeIf { it !is ByStructureViewFactory }?.getStructureViewBuilder(psiFile) }
             as? TreeBasedStructureViewBuilder ?: return null
         return object : TreeBasedStructureViewBuilder() {
-            override fun createStructureViewModel(editor: Editor?): StructureViewModel = ByStructureViewModel(lsp.createStructureViewModel(editor))
+            override fun createStructureViewModel(editor: Editor?): StructureViewModel =
+                ByStructureViewModel(lsp.createStructureViewModel(editor), psiFile)
 
             override fun isRootNodeShown(): Boolean = lsp.isRootNodeShown
         }
@@ -49,10 +52,17 @@ class ByStructureViewFactory : PsiStructureViewFactory {
 }
 
 /** [delegate], the platform's model of `by`'s symbols, with a sorter and a filter of its own. */
-internal class ByStructureViewModel(private val delegate: StructureViewModel) :
-    StructureViewModel by delegate, StructureViewModel.ElementInfoProvider {
+internal class ByStructureViewModel(private val delegate: StructureViewModel, file: PsiFile) :
+    StructureViewModel by delegate, StructureViewModel.ElementInfoProvider, ProvidingTreeModel {
+
+    private val inherited = ByInheritedMembersProvider(file)
 
     override fun getSorters(): Array<Sorter> = arrayOf(Sorter.ALPHA_SORTER)
+
+    override fun getNodeProviders(): Collection<NodeProvider<*>> = listOf(inherited)
+
+    /** Whether a provider's toggle is on is the view's to say; this model, used bare, adds nothing. */
+    override fun isEnabled(provider: NodeProvider<*>): Boolean = false
 
     override fun getFilters(): Array<Filter> = arrayOf(ByFieldsFilter)
 
@@ -81,8 +91,12 @@ internal class ByStructureViewModel(private val delegate: StructureViewModel) :
 internal object ByFieldsFilter : Filter {
 
     override fun isVisible(treeNode: TreeElement): Boolean {
-        val symbol = (treeNode as? StructureViewTreeElement)?.value as? DocumentSymbol ?: return true
-        return symbol.kind != SymbolKind.Field
+        val kind = when (val value = (treeNode as? StructureViewTreeElement)?.value) {
+            is DocumentSymbol -> value.kind
+            is ByInheritedMember -> value.kind
+            else -> return true
+        }
+        return kind != SymbolKind.Field
     }
 
     override fun isReverted(): Boolean = true

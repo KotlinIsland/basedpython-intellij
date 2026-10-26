@@ -49,16 +49,17 @@ class ByStructureAndSymbolsTest {
     }
 
     @Test
-    fun `the model sorts alphabetically and filters fields, the rest being the platform's`() {
+    fun `the model sorts alphabetically, filters fields and adds inherited members, the rest being the platform's`() = onEdt {
         val platform = Proxy.newProxyInstance(javaClass.classLoader, arrayOf(StructureViewModel::class.java)) { _, method, _ ->
             when (method.name) {
                 "getSorters", "getFilters", "getGroupers" -> java.lang.reflect.Array.newInstance(method.returnType.componentType, 0)
                 else -> null
             }
         } as StructureViewModel
-        val model = ByStructureViewModel(platform)
+        val model = ByStructureViewModel(platform, fixture.configureByText("shapes.by", ""))
         assertEquals(listOf(Sorter.ALPHA_SORTER), model.sorters.toList())
         assertEquals(listOf(ByFieldsFilter), model.filters.toList())
+        assertEquals(listOf("SHOW_INHERITED"), model.nodeProviders.map { it.name }, "the platform's own toggle's name, shared with every language")
     }
 
     @Test

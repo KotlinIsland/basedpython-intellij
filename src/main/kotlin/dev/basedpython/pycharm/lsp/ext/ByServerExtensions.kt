@@ -353,6 +353,15 @@ interface ByServerExtensions {
     fun references(args: ReferenceParams): CompletableFuture<List<ByReference>?>
 
     /**
+     * Every class of the document, in source order, with the members it inherits: what each class of
+     * its MRO declares, from the first to declare the name, none it declares itself, `object`'s last.
+     * Depends on every file the classes inherit from. A `by` from before the request answers
+     * `MethodNotFound`.
+     */
+    @JsonRequest("by/documentInheritedMembers")
+    fun documentInheritedMembers(args: BySyntaxOutlineParams): CompletableFuture<List<ByInheritingClass>?>
+
+    /**
      * Every expression of the statement that contains a range, innermost first, each with its type
      * as the document's language spells it — Type Info's chooser, and Surround With's test for an
      * expression.
@@ -1406,4 +1415,27 @@ data class ByReference(
     val uri: String? = null,
     val range: Range? = null,
     val kind: String? = null,
+)
+
+/** A class of the document, by [selectionRange], its name, and the [members] it inherits. */
+data class ByInheritingClass(
+    val selectionRange: Range? = null,
+    val members: List<ByInheritedMember> = emptyList(),
+)
+
+/**
+ * A member a class inherits: a document symbol of its superclass's file at [uri], with that
+ * superclass as [containerName] and its module as [containerModule].
+ */
+data class ByInheritedMember(
+    val name: String? = null,
+    val kind: SymbolKind? = null,
+    /** The signature, `(self) -> str`; absent where the symbol has none. */
+    val detail: String? = null,
+    val containerName: String? = null,
+    /** Absent for a superclass in a file no module is imported from. */
+    val containerModule: String? = null,
+    val uri: String? = null,
+    val range: Range? = null,
+    val selectionRange: Range? = null,
 )
