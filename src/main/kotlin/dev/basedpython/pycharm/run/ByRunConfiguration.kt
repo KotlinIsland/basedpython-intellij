@@ -7,6 +7,9 @@ import dev.basedpython.pycharm.run.main.promptForArguments
 import dev.basedpython.pycharm.run.model.ByProgramModel
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.execution.CantRunException
+import com.intellij.execution.EnvFilesOptions
+import com.intellij.execution.ExecutionException
+import com.intellij.execution.InputRedirectAware
 import com.intellij.execution.Executor
 import com.intellij.execution.executors.DefaultRunExecutor
 import com.intellij.execution.configurations.ConfigurationFactory
@@ -22,19 +25,49 @@ import com.intellij.execution.target.TargetEnvironmentConfiguration
 import com.intellij.execution.target.getEffectiveConfiguration
 import com.intellij.execution.target.getEffectiveTargetName
 import com.intellij.execution.ui.ConsoleView
+import com.intellij.execution.util.ProgramParametersConfigurator
+import com.intellij.execution.util.configureEnvsFromFiles
 import com.intellij.openapi.options.SettingsEditor
 import com.intellij.openapi.project.Project
 import com.intellij.util.execution.ParametersListUtil
 import dev.basedpython.pycharm.run.target.ByLanguageRuntimeType
 import dev.basedpython.pycharm.util.BasedPythonBundle
+import java.io.File
 
 class ByRunConfiguration(project: Project, factory: ConfigurationFactory, name: String) :
-    RunConfigurationBase<ByRunOptions>(project, factory, name), ByConfiguration, TargetEnvironmentAwareRunProfile {
+    RunConfigurationBase<ByRunOptions>(project, factory, name), ByConfiguration, TargetEnvironmentAwareRunProfile,
+    EnvFilesOptions, InputRedirectAware {
 
     public override fun getOptions(): ByRunOptions = super.getOptions() as ByRunOptions
 
     override fun getConfigurationEditor(): SettingsEditor<out RunConfigurationBase<ByRunOptions>> =
-        ByRunSettingsEditor(project)
+        ByRunFragmentedEditor(this)
+
+    /** The platform's word for [ByRunOptions.envFilePaths], which its environment field edits. */
+    override var envFilePaths: List<String>
+        get() = options.envFilePaths
+        set(value) { options.envFilePaths = value.toMutableList() }
+
+    override fun getInputRedirectOptions(): InputRedirectAware.InputRedirectOptions = object : InputRedirectAware.InputRedirectOptions {
+        override fun isRedirectInput(): Boolean = options.redirectInput
+        override fun setRedirectInput(value: Boolean) {
+            options.redirectInput = value
+        }
+        override fun getRedirectInputPath(): String = options.inputFile
+        override fun setRedirectInputPath(value: String?) {
+            options.inputFile = value.orEmpty()
+        }
+    }
+
+    /**
+     * The file [ByRunOptions.redirectInput] reads, its macros expanded, relative to the working
+     * directory when it is not absolute; `null` when input is not redirected.
+     */
+    fun inputFile(): File? {
+        val file = InputRedirectAware.getInputFile(this) ?: return null
+        if (file.isAbsolute) return file
+        return File(options.workingDir.ifBlank { project.basePath ?: return file }, file.path)
+    }
 
     /**
      * A target this configuration can run on: one with a basedpython runtime, which says where its
@@ -74,6 +107,10 @@ class ByRunConfiguration(project: Project, factory: ConfigurationFactory, name: 
                 )
             }
         }
+        inputFile()?.let { file ->
+            if (!file.isFile) throw RuntimeConfigurationException(BasedPythonBundle.message("run.error.inputFile", file.path))
+        }
+        checkEnvFiles()
         if (getEffectiveTargetName(project) != null) {
             checkTarget()
         } else if (!BasedPythonBinaries.isByAvailable(project)) {
@@ -118,6 +155,17 @@ class ByRunConfiguration(project: Project, factory: ConfigurationFactory, name: 
 
             override fun buildSubcommandArgs(): List<String> = runSubcommandArgs(opts)
 
+            override fun fileEnvironment(): Map<String, String> =
+                try {
+                    configureEnvsFromFiles(this@ByRunConfiguration)
+                } catch (e: ProgramParametersConfigurator.ParametersConfiguratorException) {
+                    throw ExecutionException(e.message, e)
+                }
+
+            override val inputFile: File? = inputFile()
+
+            override val emulateTerminal: Boolean = opts.emulateTerminal
+
             // The console is created after the process, so the hint is told about each as it
             // appears; it needs the process to read the failure and the console to answer it.
             override fun startProcess(): ProcessHandler = super.startProcess().also(hint::watch)
@@ -158,6 +206,15 @@ class ByRunConfiguration(project: Project, factory: ConfigurationFactory, name: 
             proceed = promptForArguments(project, this, main!!, start = executor.actionName) != null
         }
         return proceed
+    }
+
+    /** Whether every `.env` file named can be read, as the platform checks a configuration's. */
+    private fun checkEnvFiles() {
+        try {
+            configureEnvsFromFiles(this, parse = false)
+        } catch (e: ProgramParametersConfigurator.ParametersConfiguratorException) {
+            throw RuntimeConfigurationException(e.message)
+        }
     }
 
     private companion object {

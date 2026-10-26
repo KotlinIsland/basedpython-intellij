@@ -89,6 +89,39 @@ class ByRunOptions : ByCommonOptions() {
     var programArgs: String
         get() = programArgsProp.getValue(this) ?: ""
         set(v) { programArgsProp.setValue(this, v) }
+
+    private val envFilePathsProp = list<String>().provideDelegate(this, "envFilePaths")
+    private val redirectInputProp = property(false).provideDelegate(this, "redirectInput")
+    private val inputFileProp = string("").provideDelegate(this, "inputFile")
+    private val emulateTerminalProp = property(false).provideDelegate(this, "emulateTerminal")
+
+    /**
+     * `.env` files whose variables the program gets, beneath [envVars], which win over them — read
+     * when the run starts, as the platform reads any configuration's ([ByRunConfiguration] is its
+     * `EnvFilesOptions`).
+     */
+    var envFilePaths: MutableList<String>
+        get() = envFilePathsProp.getValue(this)
+        set(v) { envFilePathsProp.setValue(this, v) }
+
+    /** Whether the program's standard input is [inputFile] rather than the console. */
+    var redirectInput: Boolean
+        get() = redirectInputProp.getValue(this)
+        set(v) { redirectInputProp.setValue(this, v) }
+
+    /** The file [redirectInput] reads from, relative to the working directory when not absolute. */
+    var inputFile: String
+        get() = inputFileProp.getValue(this) ?: ""
+        set(v) { inputFileProp.setValue(this, v) }
+
+    /**
+     * Whether the program runs in a pseudo-terminal and its output in a terminal console, as `.py`'s
+     * *Emulate terminal in output console*: what reads a key at a time, draws progress bars or asks
+     * `isatty()` behaves as it does in a terminal.
+     */
+    var emulateTerminal: Boolean
+        get() = emulateTerminalProp.getValue(this)
+        set(v) { emulateTerminalProp.setValue(this, v) }
 }
 
 class ByBuildOptions : ByCommonOptions()

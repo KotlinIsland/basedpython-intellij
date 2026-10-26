@@ -10,8 +10,10 @@ import dev.basedpython.pycharm.run.target.ByTargetPaths
 import dev.basedpython.pycharm.run.target.byTargetCommandLine
 import dev.basedpython.pycharm.util.BasedPythonBundle
 import com.intellij.execution.ExecutionException
+import com.intellij.execution.Executor
 import com.intellij.execution.configurations.CommandLineState
 import com.intellij.execution.configurations.GeneralCommandLine
+import com.intellij.execution.configurations.PtyCommandLine
 import com.intellij.execution.process.KillableColoredProcessHandler
 import com.intellij.execution.process.ProcessEvent
 import com.intellij.execution.process.ProcessHandler
@@ -24,11 +26,13 @@ import com.intellij.execution.target.TargetEnvironmentAwareRunProfileState
 import com.intellij.execution.target.TargetEnvironmentRequest
 import com.intellij.execution.target.TargetProgressIndicator
 import com.intellij.execution.target.getEffectiveTargetName
+import com.intellij.execution.ui.ConsoleView
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.progress.EmptyProgressIndicator
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.io.FileUtil
+import com.intellij.terminal.TerminalExecutionConsoleBuilder
 import com.intellij.util.EnvironmentUtil
 import com.intellij.util.execution.ParametersListUtil
 import java.io.File
@@ -115,6 +119,23 @@ abstract class ByCommandLineState(
     val pythonPathPrefix: MutableList<String> = mutableListOf()
 
     /**
+     * Variables read from the configuration's `.env` files, which the user's own variables win over;
+     * read when the run starts, so an edit to a file is seen by the next run.
+     *
+     * @throws ExecutionException when a file cannot be read.
+     */
+    protected open fun fileEnvironment(): Map<String, String> = emptyMap()
+
+    /** The file the program reads its standard input from, rather than the console; `null` for the console. */
+    protected open val inputFile: File? get() = null
+
+    /**
+     * Whether the program runs in a pseudo-terminal, its output shown in a terminal console — what
+     * reads a key at a time, draws a progress bar or asks `isatty()` sees a terminal.
+     */
+    protected open val emulateTerminal: Boolean get() = false
+
+    /**
      * Whether this subcommand ends up running the transpiled program, and so needs the project's
      * own `.py` modules to be importable — see [byCommandLine].
      *
@@ -160,8 +181,10 @@ abstract class ByCommandLineState(
             infrastructureEnv = infrastructureEnv,
             pythonPathPrefix = pythonPathPrefix,
             startsProgram = startsProgram,
+            fileEnvironment = fileEnvironment(),
         )
-        val handler = KillableColoredProcessHandler(cmd)
+        inputFile?.let(cmd::withInput)
+        val handler = KillableColoredProcessHandler(if (emulateTerminal) PtyCommandLine(cmd).withConsoleMode(false) else cmd)
         // Stop has to reach the program, not just the launcher. `by run` is a Rust parent that
         // spawns `python _by_runner.py` and then blocks waiting for it, and a SIGINT to `by`
         // demonstrably kills neither — both survive, and under a debugger the orphaned interpreter
@@ -187,6 +210,8 @@ abstract class ByCommandLineState(
         if (infrastructureEnv.isNotEmpty() || infrastructureArgs.isNotEmpty() || pythonPathPrefix.isNotEmpty()) {
             throw ExecutionException(BasedPythonBundle.message("target.error.onlyRun"))
         }
+        // both are this machine's: a file here, and a terminal console attached to a local pty
+        if (inputFile != null || emulateTerminal) throw ExecutionException(BasedPythonBundle.message("target.error.localOnlyOptions"))
         val launch = targetLaunch
         val paths = targetPaths
         if (launch == null || paths == null) throw ExecutionException(BasedPythonBundle.message("target.error.notPrepared"))
@@ -201,7 +226,7 @@ abstract class ByCommandLineState(
             byPath = launch.byPath,
             arguments = buildCommand(),
             workDirectory = workDir,
-            environment = byTargetEnvironment(options, workDir, startsProgram, paths.platform.pathSeparator),
+            environment = byTargetEnvironment(options, workDir, startsProgram, paths.platform.pathSeparator, fileEnvironment()),
         )
         val process = target.createProcess(commandLine, EmptyProgressIndicator())
         val handler = KillableColoredProcessHandler(process, commandLine.getCommandPresentation(target), commandLine.charset)
@@ -222,6 +247,10 @@ abstract class ByCommandLineState(
         addConsoleFilters(ByConsoleFilter(project, paths::toLocal))
         return handler
     }
+
+    /** A terminal console for a run that [emulateTerminal]s, attached to its pty as any console is. */
+    override fun createConsole(executor: Executor): ConsoleView? =
+        if (emulateTerminal) TerminalExecutionConsoleBuilder(project).build() else super.createConsole(executor)
 
     /** Everything after the executable, as [byArguments] assembles it. */
     internal fun buildCommand(): List<String> = byArguments(
@@ -249,8 +278,10 @@ internal fun byTargetEnvironment(
     workDirectory: String,
     startsProgram: Boolean,
     separator: Char,
+    fileEnvironment: Map<String, String> = emptyMap(),
 ): Map<String, String> = buildMap {
     put(PYTHONUNBUFFERED, "1")
+    putAll(fileEnvironment)
     putAll(options.envVars)
     if (startsProgram) {
         put(PYTHONPATH, composePythonPath(listOf(workDirectory), options.envVars[PYTHONPATH], separator))
@@ -265,7 +296,8 @@ internal fun byTargetEnvironment(
  * "Run `by build` first" step builds with the environment of the configuration it precedes, so the
  * build and the run cannot disagree about which `by` or which variables they saw.
  *
- * [infrastructureEnv] is applied after the user's variables and [pythonPathPrefix] goes in front of
+ * [fileEnvironment], the variables of the configuration's `.env` files, is applied before the user's
+ * variables, [infrastructureEnv] after them, and [pythonPathPrefix] goes in front of
  * `PYTHONPATH`, as [ByCommandLineState.infrastructureEnv] and [ByCommandLineState.pythonPathPrefix]
  * describe. [startsProgram] puts the working directory on `PYTHONPATH` as well.
  *
@@ -278,6 +310,7 @@ internal fun byCommandLine(
     infrastructureEnv: Map<String, String> = emptyMap(),
     pythonPathPrefix: List<String> = emptyList(),
     startsProgram: Boolean = false,
+    fileEnvironment: Map<String, String> = emptyMap(),
 ): GeneralCommandLine {
     val launch = BasedPythonBinaries.launchBy(project, kind = options.environmentKind)
         ?: throw ExecutionException(byNotFoundMessage(options.environmentKind))
@@ -305,6 +338,8 @@ internal fun byCommandLine(
     // a program's output appeared only when it exited, which is useless while stepping through
     // it in the debugger. Set before the user's own environment so it stays overridable.
     cmd.withEnvironment(PYTHONUNBUFFERED, "1")
+    // a configuration's `.env` files, beneath the variables it sets itself
+    cmd.withEnvironment(fileEnvironment)
     cmd.withEnvironment(options.envVars)
     cmd.withEnvironment(infrastructureEnv)
     // The working directory belongs on `PYTHONPATH`, behind whatever the debugger put there.
