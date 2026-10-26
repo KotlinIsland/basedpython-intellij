@@ -11,11 +11,18 @@ import dev.basedpython.pycharm.run.model.ByProgramModel
 /**
  * Bridges `by run pytest` output into the SMTRunner test tree.
  *
- * The base [OutputToGeneralTestEventsConverter] hands us already-buffered,
- * newline-consistent text via [processConsistentText]. We run each line through
- * the pure [ByTestOutputParser], turn the resulting [ByTestEvent]s into TeamCity
- * service messages (via the platform's [ServiceMessageBuilder]), and re-feed those
- * to the base converter so the standard `GeneralTestEventsProcessor` builds the tree.
+ * A `by` with a test reporter ([dev.basedpython.pycharm.run.test.ByPytest.REPORTER_VARIABLE]) writes
+ * the run as TeamCity service messages itself, starting with `##teamcity[enteredTheMatrix]`. From that
+ * message on, everything goes to the base converter untouched: the messages build the tree, with
+ * pytest's report of each failure, a failed `==`'s expected and actual values, the `.by` line and
+ * node id of each test, and its captured output, and pytest's own `-v` lines are just output.
+ *
+ * Until it arrives — plain pytest, or a `by` without the reporter — the base
+ * [OutputToGeneralTestEventsConverter] hands us already-buffered, newline-consistent text via
+ * [processConsistentText]. We run each line through the pure [ByTestOutputParser], turn the
+ * resulting [ByTestEvent]s into TeamCity service messages (via the platform's
+ * [ServiceMessageBuilder]), and re-feed those to the base converter so the standard
+ * `GeneralTestEventsProcessor` builds the tree.
  *
  * All recognized lines are consumed; unrecognized text still flows to the console
  * via the base implementation so nothing is lost.
@@ -38,7 +45,19 @@ class ByTestEventsConverter(
     }
     private var finished = false
 
+    /** Whether the run's own reporter has said it speaks for the run; see the class comment. */
+    private var reported = false
+
     override fun processConsistentText(text: String, outputType: Key<*>) {
+        if (!reported && text.trimStart().startsWith(ENTERED_THE_MATRIX)) {
+            reported = true
+            // nothing the parser opened can be closed by the reporter, which knows nothing of it
+            for (event in parser.finish()) emit(event, outputType)
+        }
+        if (reported) {
+            super.processConsistentText(text, outputType)
+            return
+        }
         var handledAny = false
         for (rawLine in text.split('\n')) {
             if (rawLine.isEmpty()) continue
@@ -96,5 +115,8 @@ class ByTestEventsConverter(
 
     private companion object {
         val KEY: Key<*> = Key.create<Any>("by.test.flush")
+
+        /** The message a TeamCity reporter starts with, before its first test. */
+        const val ENTERED_THE_MATRIX = "##teamcity[enteredTheMatrix"
     }
 }

@@ -78,6 +78,8 @@ class ByTestConfiguration(project: Project, factory: ConfigurationFactory, name:
 
             override fun buildSubcommandArgs(): List<String> = ByPytest.arguments(opts.paths)
 
+            override val runnerEnvironment = mapOf(ByPytest.REPORTER_VARIABLE to ByPytest.REPORTER_TEAMCITY)
+
             // The editor labels them "Extra pytest args": they are pytest's, after its targets.
             override val extraArgsForProgram = true
 

@@ -3,7 +3,8 @@ package dev.basedpython.pycharm.run.test.node
 import com.intellij.execution.testframework.sm.runner.SMTRunnerEventsListener
 import com.intellij.execution.testframework.sm.runner.SMTestProxy
 import com.intellij.openapi.project.Project
-import dev.basedpython.pycharm.run.test.tree.ByTestLocator
+import dev.basedpython.pycharm.run.test.ByRerunTargets
+import dev.basedpython.pycharm.run.test.ByTestConfiguration
 
 /**
  * Feeds the node view the outcome of every test the SM runner reports.
@@ -16,8 +17,7 @@ import dev.basedpython.pycharm.run.test.tree.ByTestLocator
  * present — the same reason the rest of the SM usage lives behind that optional dependency.
  *
  * Other frameworks' runs pass through here too, since the topic is per project rather than per
- * configuration. They are ignored for free: their tests carry no `by_test://` location, so nothing
- * matches a node id and nothing is recorded.
+ * configuration. They are ignored: a test is ours when the tree it is in is a [ByTestConfiguration]'s.
  */
 internal class ByTestRunStateListener(private val project: Project) : SMTRunnerEventsListener {
 
@@ -63,9 +63,10 @@ internal class ByTestRunStateListener(private val project: Project) : SMTRunnerE
     /**
      * Records [state] for [test], if it is one of ours.
      *
-     * The link between a run's tree and the collected one is the location our converter emits:
-     * `by_test://tests/test_math.py::TestGroup::test_add` is the node id the collected tree stores
-     * as that node's target, verbatim.
+     * The link between a run's tree and the collected one is the test's pytest node id, the
+     * `metainfo` `by`'s reporter gives it or the location our converter emits otherwise:
+     * `tests/test_math.py::TestGroup::test_add` is the node id the collected tree stores as that
+     * node's target, verbatim.
      */
     private fun record(test: SMTestProxy, state: ByTestState) {
         val nodeId = nodeIdOf(test) ?: return
@@ -73,9 +74,5 @@ internal class ByTestRunStateListener(private val project: Project) : SMTRunnerE
     }
 
     private fun nodeIdOf(test: SMTestProxy): String? =
-        test.locationUrl?.takeIf { it.startsWith(PREFIX) }?.removePrefix(PREFIX)
-
-    private companion object {
-        val PREFIX = "${ByTestLocator.PROTOCOL}://"
-    }
+        if (test.root?.testConsoleProperties?.configuration is ByTestConfiguration) ByRerunTargets.nodeId(test.locationUrl, test.metainfo) else null
 }

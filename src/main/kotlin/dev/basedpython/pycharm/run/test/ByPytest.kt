@@ -46,9 +46,24 @@ internal object ByPytest {
     const val MODULE: String = "pytest"
 
     /**
-     * Verbose output is required, not cosmetic: `ByTestOutputParser` builds the test tree from
+     * Has the pytest plugin `by run` puts in the staged tree report the run as TeamCity service
+     * messages, which the test console reads as they come: each test with its pytest node id, its
+     * `.by` line, its captured output, and a failing `==`'s actual and expected values.
+     *
+     * A `by` that predates the reporter ignores the variable, and then the tree is built from
+     * [VERBOSE]'s lines instead — see [dev.basedpython.pycharm.run.test.tree.ByTestEventsConverter].
+     */
+    const val REPORTER_VARIABLE: String = "BY_TEST_REPORTER"
+
+    /** The [REPORTER_VARIABLE] value that asks for TeamCity service messages. */
+    const val REPORTER_TEAMCITY: String = "teamcity"
+
+    /**
+     * Verbose output is required, not cosmetic, wherever no reporter speaks for pytest: plain pytest,
+     * and a `by` without [REPORTER_VARIABLE]. `ByTestOutputParser` builds the test tree from
      * pytest's per-test `path::name PASSED` lines, and without `-v` pytest prints only the
-     * one-character progress line, which carries no names to build a tree from.
+     * one-character progress line, which carries no names to build a tree from. Under the reporter
+     * the lines stay in each test's output, as PyCharm's own pytest runs show them.
      */
     const val VERBOSE: String = "-v"
 

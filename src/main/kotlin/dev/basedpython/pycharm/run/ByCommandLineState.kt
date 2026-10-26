@@ -115,6 +115,13 @@ abstract class ByCommandLineState(
      */
     val infrastructureListeners: MutableList<ProcessListener> = mutableListOf()
 
+    /**
+     * Variables the configuration sets for whatever reads the run's output, here or on a run target:
+     * a test run's `BY_TEST_REPORTER`, which has `by run pytest` report to the IDE's test tree. Applied
+     * after [ByCommonOptions.envVars], since the console is built for this output and no other.
+     */
+    protected open val runnerEnvironment: Map<String, String> get() = emptyMap()
+
     /** Directories to put in front of `PYTHONPATH`; see [composePythonPath]. */
     val pythonPathPrefix: MutableList<String> = mutableListOf()
 
@@ -178,7 +185,7 @@ abstract class ByCommandLineState(
             project = project,
             options = options,
             arguments = buildCommand(),
-            infrastructureEnv = infrastructureEnv,
+            infrastructureEnv = runnerEnvironment + infrastructureEnv,
             pythonPathPrefix = pythonPathPrefix,
             startsProgram = startsProgram,
             fileEnvironment = fileEnvironment(),
@@ -226,7 +233,8 @@ abstract class ByCommandLineState(
             byPath = launch.byPath,
             arguments = buildCommand(),
             workDirectory = workDir,
-            environment = byTargetEnvironment(options, workDir, startsProgram, paths.platform.pathSeparator, fileEnvironment()),
+            environment = byTargetEnvironment(options, workDir, startsProgram, paths.platform.pathSeparator, fileEnvironment()) +
+                runnerEnvironment,
         )
         val process = target.createProcess(commandLine, EmptyProgressIndicator())
         val handler = KillableColoredProcessHandler(process, commandLine.getCommandPresentation(target), commandLine.charset)
