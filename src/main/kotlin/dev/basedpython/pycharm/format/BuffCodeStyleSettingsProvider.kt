@@ -62,6 +62,8 @@ class BuffLanguageCodeStyleSettingsProvider : LanguageCodeStyleSettingsProvider(
         indentOptions: com.intellij.psi.codeStyle.CommonCodeStyleSettings.IndentOptions,
     ) {
         commonSettings.RIGHT_MARGIN = BuffCodeStyleSettings.DEFAULT_LINE_LENGTH
+        // `# total = 1`, as Python writes it; see BasedPythonCommenter for why not a `"# "` prefix.
+        commonSettings.LINE_COMMENT_ADD_SPACE = true
         indentOptions.INDENT_SIZE = 4
         indentOptions.TAB_SIZE = 4
         indentOptions.USE_TAB_CHARACTER = false
