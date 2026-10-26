@@ -20,6 +20,20 @@ class ByConsoleLinksTest {
         return links.single()
     }
 
+    /**
+     * `by run pytest` now reports a failure at the `.by` file and line its test was transpiled
+     * from, rather than at the generated `.py`: such a link is the source already, and is taken as
+     * written — only a `.py` is looked up as the `.by` it came from.
+     */
+    @Test
+    fun `a pytest failure at a by line is linked as it is written`() {
+        val link = single("tests/test_shapes.by:11: AssertionError")
+        assertEquals("tests/test_shapes.by", link.path)
+        assertEquals(11, link.line)
+        assertNull(byCounterpart(link.path))
+        assertEquals("tests/test_shapes.by", byCounterpart("tests/test_shapes.py"))
+    }
+
     @Test
     fun `a by diagnostic carries line and column`() {
         val link = single("  --> boom.by:11:11")
