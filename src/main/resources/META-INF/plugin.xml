@@ -292,9 +292,14 @@
         <codeInsight.template.postfixTemplateProvider
             language="basedpython"
             implementationClass="dev.basedpython.pycharm.editor.templates.BasedPythonPostfixTemplateProvider"/>
+        <!-- Surround With: statement surrounders for whole statements, expression ones inside one,
+             told apart by by's outline. -->
         <lang.surroundDescriptor
             language="basedpython"
             implementationClass="dev.basedpython.pycharm.editor.templates.BasedPythonSurroundDescriptor"/>
+        <lang.surroundDescriptor
+            language="basedpython"
+            implementationClass="dev.basedpython.pycharm.editor.templates.BasedPythonExpressionSurroundDescriptor"/>
         <!-- The platform's own Extract/Introduce and Inline actions (Ctrl+Alt+V, C, M, N), each one of
              by's refactorings: the edit, and the reason when it refuses, are the server's. -->
         <lang.refactoringSupport
