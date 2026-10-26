@@ -193,10 +193,16 @@
         <internalFileTemplate name="basedpython Protocol"/>
 
         <!-- ===== Stream G: structure view, folding, breadcrumbs =====
-             All three come from the `by` server via the platform's LSP integration, which
-             registers LspStructureViewFactory, LspFoldingBuilder and LspFileBreadcrumbsCollector
-             for every language. Registering our own here shadowed the first two and doubled up
-             the third. -->
+             The structure view and breadcrumbs come from the `by` server via the platform's LSP
+             integration (LspStructureViewFactory, LspFileBreadcrumbsCollector); registering our own
+             shadowed the first and doubled up the second. Folding is by's ranges through a builder
+             of our own, the platform's LSP folding being off for by: the platform's asked too late
+             for Fold by default to fold anything, and knew none of basedpython's kinds. -->
+        <lang.foldingBuilder
+            language="basedpython"
+            implementationClass="dev.basedpython.pycharm.editor.folding.ByFoldingBuilder"/>
+        <codeFoldingOptionsProvider
+            instance="dev.basedpython.pycharm.editor.folding.ByFoldingOptionsProvider"/>
 
         <!-- ===== Stream H: string escapes =====
              Semantic colour comes from the `by` server's semantic tokens. What is left here is

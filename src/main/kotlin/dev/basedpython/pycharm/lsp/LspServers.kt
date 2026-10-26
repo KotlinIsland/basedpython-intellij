@@ -55,6 +55,7 @@ import dev.basedpython.pycharm.lsp.diagnostics.ByDiagnosticsSupport
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import dev.basedpython.pycharm.ui.log.BasedPythonLog
 import dev.basedpython.pycharm.util.BasedPythonBundle
+import org.eclipse.lsp4j.ClientCapabilities
 
 private val LOG = Logger.getInstance("dev.basedpython.pycharm.lsp")
 
@@ -176,6 +177,13 @@ internal class ByLspServerSupportProvider : LspIntegrationProvider {
     LspClientWidgetItem(lspClient, currentFile, BasedPythonIcons.Logo)
 }
 
+/**
+ * Every kind of folding range `by` sends: LSP's three and basedpython's own, as `by`'s
+ * `docs/basedpython/features/editor.md` lists them.
+ */
+private val FOLDING_RANGE_KINDS =
+  listOf("imports", "region", "comment", "docstring", "function", "class", "string", "collection", "annotation")
+
 internal class ByLspServerDescriptor(
   project: Project,
   private val launch: ByLaunch,
@@ -219,6 +227,17 @@ internal class ByLspServerDescriptor(
    */
   override val lsp4jServerClass: Class<out org.eclipse.lsp4j.services.LanguageServer> =
     ByDataFlowServer::class.java
+
+  /**
+   * The platform's capabilities, with every kind of folding range `by` has listed: `by` sends a
+   * kind of its own — a docstring, a function's body, a long string — only to a client that lists
+   * it, and the folding builder folds each by default under its own option. The platform lists
+   * `imports` and `region` only.
+   */
+  override val clientCapabilities: ClientCapabilities
+    get() = super.clientCapabilities.apply {
+      textDocument.foldingRange.foldingRangeKind.valueSet = FOLDING_RANGE_KINDS
+    }
 
   override fun createInitializationOptions(): Any =
     mapOf(
@@ -317,6 +336,13 @@ internal class ByLspServerDescriptor(
      * the provider sends.
      */
     override val inlayHintCustomizer = LspInlayHintDisabled
+
+    /**
+     * Off: folding is [dev.basedpython.pycharm.editor.folding.ByFoldingBuilder], over the same
+     * `textDocument/foldingRange`. The platform's asked once a file was in an editor and folded what
+     * came back in passes after the first, the only one that folds by default.
+     */
+    override val foldingRangeCustomizer = LspFoldingRangeDisabled
 
     /**
      * `by`'s `textDocument/onTypeFormatting`, which the platform leaves off unless a customization

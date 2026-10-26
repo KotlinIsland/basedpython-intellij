@@ -4,6 +4,7 @@ import org.eclipse.lsp4j.CodeActionContext
 import org.eclipse.lsp4j.CodeActionParams
 import org.eclipse.lsp4j.DocumentDiagnosticParams
 import org.eclipse.lsp4j.DocumentSymbolParams
+import org.eclipse.lsp4j.FoldingRangeRequestParams
 import org.eclipse.lsp4j.FormattingOptions
 import org.eclipse.lsp4j.ImplementationParams
 import org.eclipse.lsp4j.Position
@@ -935,6 +936,10 @@ data class ByInjectionsParams(val textDocument: TextDocumentIdentifier, val text
  */
 class ByNamedSemanticTokensParams(textDocument: TextDocumentIdentifier, val textHash: String) :
     SemanticTokensParams(textDocument)
+
+/** `textDocument/foldingRange` about one text of the document, as [ByNamedSemanticTokensParams]. */
+class ByNamedFoldingRangeParams(textDocument: TextDocumentIdentifier, val textHash: String) :
+    FoldingRangeRequestParams(textDocument)
 
 /** `textDocument/documentSymbol` about one text of the document, as [ByNamedSemanticTokensParams]. */
 class ByNamedDocumentSymbolParams(textDocument: TextDocumentIdentifier, val textHash: String) :
