@@ -36,7 +36,7 @@ import org.eclipse.lsp4j.WorkspaceEdit
 
 /**
  * The platform's own refactoring actions — Refactor | Extract/Introduce, Ctrl+Alt+V, Ctrl+Alt+C,
- * Ctrl+Alt+M — for a `.by` file.
+ * Ctrl+Alt+P, Ctrl+Alt+F, Ctrl+Alt+M — for a `.by` file.
  *
  * The platform finds them through this provider: an action is shown for a language only when the
  * language's provider hands it a handler, and without one the shortcuts did nothing at all in a
@@ -47,6 +47,8 @@ import org.eclipse.lsp4j.WorkspaceEdit
 internal class ByRefactoringSupportProvider : RefactoringSupportProvider() {
     override fun getIntroduceVariableHandler(): RefactoringActionHandler = ByRefactoringHandler(ByRefactoring.ExtractVariable)
     override fun getIntroduceConstantHandler(): RefactoringActionHandler = ByRefactoringHandler(ByRefactoring.IntroduceConstant)
+    override fun getIntroduceParameterHandler(): RefactoringActionHandler = ByRefactoringHandler(ByRefactoring.IntroduceParameter)
+    override fun getIntroduceFieldHandler(): RefactoringActionHandler = ByRefactoringHandler(ByRefactoring.IntroduceField)
     override fun getExtractMethodHandler(): RefactoringActionHandler = ByRefactoringHandler(ByRefactoring.ExtractFunction)
 }
 

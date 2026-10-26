@@ -26,7 +26,7 @@ class ByRefactoringActionsTest {
     private val fixture by codeInsightFixture()
 
     @ParameterizedTest
-    @ValueSource(strings = ["IntroduceVariable", "IntroduceConstant", "ExtractMethod", "Inline"])
+    @ValueSource(strings = ["IntroduceVariable", "IntroduceConstant", "IntroduceParameter", "IntroduceField", "ExtractMethod", "Inline"])
     fun `the platform's refactoring action is enabled in a by file and asks by`(actionId: String) = onEdt {
         fixture.configureByText("main.by", "def f(a: int) -> int:\n    x = <selection>a + 1</selection>\n    return x * 2\n")
 

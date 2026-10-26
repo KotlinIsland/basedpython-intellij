@@ -38,6 +38,8 @@ enum class ByRefactoring(val kind: String, private val titleKey: String, val rep
     InlineVariable("refactor.inline.variable", "refactoring.by.title.inlineVariable", false),
     ExtractVariable("refactor.extract.variable", "refactoring.by.title.extractVariable", true),
     IntroduceConstant("refactor.extract.constant", "refactoring.by.title.introduceConstant", true),
+    IntroduceParameter("refactor.extract.parameter", "refactoring.by.title.introduceParameter", true),
+    IntroduceField("refactor.extract.field", "refactoring.by.title.introduceField", true),
     ExtractFunction("refactor.extract.function", "refactoring.by.title.extractFunction", false),
     ;
 

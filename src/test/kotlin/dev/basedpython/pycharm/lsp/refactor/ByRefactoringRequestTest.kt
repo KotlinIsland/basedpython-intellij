@@ -41,6 +41,8 @@ class ByRefactoringRequestTest {
                 "refactor.inline.variable",
                 "refactor.extract.variable",
                 "refactor.extract.constant",
+                "refactor.extract.parameter",
+                "refactor.extract.field",
                 "refactor.extract.function",
             ),
             ByRefactoring.entries.map { it.kind },
