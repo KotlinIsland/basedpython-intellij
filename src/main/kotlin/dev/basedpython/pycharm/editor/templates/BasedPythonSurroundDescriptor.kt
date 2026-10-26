@@ -6,11 +6,15 @@ import com.intellij.openapi.editor.Document
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.TextRange
+import com.intellij.platform.lsp.api.LspClient
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
 import dev.basedpython.pycharm.lang.ByRangeElement
 import dev.basedpython.pycharm.lsp.outline.ByOutline
 import dev.basedpython.pycharm.lsp.outline.ByOutlines
+import dev.basedpython.pycharm.lsp.ByAnswer
+import dev.basedpython.pycharm.lsp.byServerFor
+import dev.basedpython.pycharm.lsp.typeinfo.ByTypeInfoProvider
 
 /**
  * Surround With (Ctrl+Alt+T) in a `.by` file: statement surrounders for a selection of whole
@@ -23,15 +27,28 @@ import dev.basedpython.pycharm.lsp.outline.ByOutlines
  * for any selection, so `if`, `while` and `try` wrapped part of an expression in a statement, and
  * `if` and `while` took a run of statements for their condition.
  *
+ * A selection inside a statement is an expression when `by/expressionTypes` says the smallest
+ * expression holding it is exactly it — `float(size)` or `spec.partition`, and not `return Circle` or
+ * `= spec`, which PyCharm offers no expression surrounder for either. That is asked as Type Info asks
+ * it ([ByTypeInfoProvider.expressionsAround]): under a modal progress on the EDT, where the platform
+ * computes the surrounders, and waited for off it. A `by` without the request, or one that does not
+ * answer, offers the expression surrounders for any part of one simple statement, as before it.
+ *
  * Before `by` has outlined the text on screen, or across statements without covering them, there is
- * nothing to surround here: this is asked on the EDT, where the server cannot be, and does not guess.
- * Whether a selection inside a statement is an expression and not, say, `= 1`, is not in the outline;
- * the expression surrounders are offered for any of it.
+ * nothing to surround here: the outline is read as it is on screen, and nothing guesses.
  */
 internal object BySurroundSelections {
 
-    /** What a selection of [document] from [start] to [end] is, by the outline of its text. */
-    fun of(file: PsiFile, start: Int, end: Int): Selection? {
+    /**
+     * What a selection of [file] from [start] to [end] is, by the outline of its text and, inside a
+     * statement, what [client] says the expressions there are.
+     */
+    fun of(
+        file: PsiFile,
+        start: Int,
+        end: Int,
+        client: LspClient? = file.originalFile.virtualFile?.let { byServerFor(file.project, it) },
+    ): Selection? {
         val document = file.viewProvider.document ?: return null
         val outline = ByOutlines.getInstance(file.project).current(document) ?: return null
         val text = document.immutableCharSequence
@@ -40,8 +57,16 @@ internal object BySurroundSelections {
         while (from < to && text[from].isWhitespace()) from++
         while (to > from && text[to - 1].isWhitespace()) to--
         if (from >= to) return null
-        return statements(outline.statements, from, to)?.let { Selection.Statements(TextRange(from, to)) }
-            ?: inOneStatement(outline, from, to)?.let { Selection.Expression(TextRange(from, to)) }
+        val range = TextRange(from, to)
+        statements(outline.statements, from, to)?.let { return Selection.Statements(range) }
+        val expressions = client?.let { ByTypeInfoProvider.expressionsAround(it, file, range) } ?: ByAnswer.Failed
+        return when (expressions) {
+            // `by` lists the smallest expression holding the selection first: it is one exactly when that is it
+            is ByAnswer.Answer -> Selection.Expression(range).takeIf { expressions.value.first().textRange == range }
+            ByAnswer.None -> null
+            // a `by` without `by/expressionTypes`: any part of one simple statement, as before it
+            ByAnswer.Failed -> inOneStatement(outline, from, to)?.let { Selection.Expression(range) }
+        }
     }
 
     /** The run of sibling statements spanning exactly [from]..[to], searched at every depth. */

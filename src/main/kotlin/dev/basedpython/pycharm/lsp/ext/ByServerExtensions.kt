@@ -344,6 +344,17 @@ interface ByServerExtensions {
     fun declaration(args: ByDeclarationParams): CompletableFuture<ByDeclaration?>
 
     /**
+     * Every expression of the statement that contains a range, innermost first, each with its type
+     * as the document's language spells it — Type Info's chooser, and Surround With's test for an
+     * expression.
+     *
+     * An empty answer is a range in no expression; `null` is language services being off. A `by`
+     * from before the request answers `MethodNotFound`.
+     */
+    @JsonRequest("by/expressionTypes")
+    fun expressionTypes(args: ByExpressionTypesParams): CompletableFuture<List<ByExpressionType>?>
+
+    /**
      * The code a test, a class of tests or a test module exercises: the project's own functions,
      * methods and classes it calls — see [dev.basedpython.pycharm.navigation.tests.ByTestFinder].
      *
@@ -461,6 +472,12 @@ data class ByDeclaration(
     /** The declaration's name. */
     val selectionRange: Range? = null,
 )
+
+/** A selection, or an empty range at the caret. */
+data class ByExpressionTypesParams(val textDocument: TextDocumentIdentifier, val range: Range)
+
+/** One expression around a range and its type. */
+data class ByExpressionType(val range: Range? = null, val type: String? = null)
 
 /**
  * Where to start from: a test, a class of tests or anywhere in a test module for `by/testSubjects`;

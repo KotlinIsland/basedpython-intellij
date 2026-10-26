@@ -9,6 +9,13 @@ import dev.basedpython.pycharm.testFramework.codeInsightFixture
 import dev.basedpython.pycharm.testFramework.onEdt
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.Assertions.assertInstanceOf
+import org.junit.jupiter.api.Assertions.assertNull
+import dev.basedpython.pycharm.lsp.ext.ByExpressionType
+import dev.basedpython.pycharm.testFramework.AnsweringClient
+import dev.basedpython.pycharm.testFramework.AnsweringClient.Companion.answered
+import org.eclipse.lsp4j.Position
+import org.eclipse.lsp4j.Range
 
 /**
  * Surround With in a `.by` file, with `by`'s outline put in by hand: statement surrounders for whole
@@ -80,5 +87,30 @@ class BasedPythonSurroundTest {
         configure("def f():\n    x = 1\n    y = <selection>x + 2</selection>\n", statements)
         surround("( ... )")
         fixture.checkResult("def f():\n    x = 1\n    y = (<selection>x + 2</selection>)\n")
+    }
+
+    @Test
+    fun `inside a statement only what by says is an expression is one`() = onEdt {
+        configure("def f():\n    x = 1\n    y = x + 2\n", statements)
+        val text = fixture.editor.document.text
+        // what by answers for `x + 2` and anything in it: `x`, then the sum
+        val client = AnsweringClient(fixture.project) {
+            answered(
+                listOf(
+                    ByExpressionType(Range(Position(2, 8), Position(2, 9)), "int"),
+                    ByExpressionType(Range(Position(2, 8), Position(2, 13)), "int"),
+                ),
+            )
+        }
+        val none = AnsweringClient(fixture.project) { answered(emptyList<ByExpressionType>()) }
+        val sum = text.indexOf("x + 2")
+
+        assertInstanceOf(
+            BySurroundSelections.Selection.Expression::class.java,
+            BySurroundSelections.of(fixture.file, sum, sum + 1, client),
+            "`x`, which by lists first",
+        )
+        assertNull(BySurroundSelections.of(fixture.file, sum, sum + 3, client), "`x +` is in the sum, not an expression of its own")
+        assertNull(BySurroundSelections.of(fixture.file, text.indexOf("= x"), sum + 5, none), "`= x + 2` is in no expression")
     }
 }

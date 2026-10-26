@@ -9,6 +9,18 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import com.intellij.openapi.util.TextRange
+import dev.basedpython.pycharm.lsp.ByAnswer
+import dev.basedpython.pycharm.lsp.ext.ByExpressionType
+import dev.basedpython.pycharm.lsp.ext.ByExpressionTypesParams
+import dev.basedpython.pycharm.testFramework.AnsweringClient
+import dev.basedpython.pycharm.testFramework.AnsweringClient.Companion.answered
+import dev.basedpython.pycharm.testFramework.AnsweringClient.Companion.failed
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import org.eclipse.lsp4j.Position
+import org.eclipse.lsp4j.Range
+import org.eclipse.lsp4j.jsonrpc.messages.ResponseErrorCode
 
 /**
  * Type Info is a platform action driven by whichever [com.intellij.lang.ExpressionTypeProvider] is
@@ -16,8 +28,9 @@ import org.junit.jupiter.api.Test
  * that the provider is *found* for `.by` (registration, not code, is what was missing before) and
  * that it offers only the tokens `by` can type.
  *
- * The hint itself needs a running `by` server and is not asserted here; the binary-free half of it —
- * turning a hover payload into hint HTML — is [ByHoverMarkupTest].
+ * With a `by` that answers `by/expressionTypes`, every expression around the token is offered with
+ * its type; the hover-based hint for a `by` without it needs a running server, and its binary-free
+ * half — turning a hover payload into hint HTML — is [ByHoverMarkupTest].
  */
 @TestFixtures
 class ByTypeInfoProviderTest {
@@ -72,5 +85,47 @@ class ByTypeInfoProviderTest {
             "No type: the by language server is not running",
             ByTypeInfoProvider().getInformationHint(leaf),
         )
+    }
+
+    @Test
+    fun `every expression around the token is offered with by's type, innermost first`() = onEdt {
+        val source = "kind, _, size = spec.partition(\":\")\n"
+        val file = fixture.configureByText("a.by", source)
+        val at = source.indexOf("spec")
+        val client = AnsweringClient(fixture.project) {
+            answered(
+                listOf(
+                    ByExpressionType(Range(Position(0, 16), Position(0, 20)), "str"),
+                    ByExpressionType(Range(Position(0, 16), Position(0, 30)), "bound method str.partition(sep: str, /) -> tuple[str, str, str]"),
+                    ByExpressionType(Range(Position(0, 16), Position(0, 35)), "tuple[str, str, str]"),
+                ),
+            )
+        }
+
+        val onEdt = ByTypeInfoProvider.expressionsAround(client, file, TextRange.from(at, 4))
+        val inBackground = withContext(Dispatchers.Default) { ByTypeInfoProvider.expressionsAround(client, file, TextRange.from(at, 4)) }
+
+        for (answer in listOf(onEdt, inBackground)) {
+            val expressions = (answer as ByAnswer.Answer).value
+            assertEquals(listOf("spec", "spec.partition", "spec.partition(\":\")"), expressions.map { it.text })
+            assertEquals("tuple[str, str, str]", ByTypeInfoProvider().getInformationHint(expressions.last()))
+            assertEquals("bound method str.partition(sep: str, /) -&gt; tuple[str, str, str]", ByTypeInfoProvider().getAdvancedInformationHint(expressions[1]))
+        }
+        assertEquals(Range(Position(0, 16), Position(0, 20)), (client.sentParams.first() as ByExpressionTypesParams).range)
+        assertEquals(
+            (onEdt as ByAnswer.Answer).value.first(),
+            (inBackground as ByAnswer.Answer).value.first(),
+            "a second press on the same expression is the same one, which asks for the advanced information",
+        )
+    }
+
+    @Test
+    fun `a range in no expression is none, and a by without the request falls back to the token`() = onEdt {
+        val file = fixture.configureByText("a.by", "return x\n")
+        val none = AnsweringClient(fixture.project) { answered(emptyList<ByExpressionType>()) }
+        val old = AnsweringClient(fixture.project) { failed(ResponseErrorCode.MethodNotFound) }
+
+        assertEquals(ByAnswer.None, ByTypeInfoProvider.expressionsAround(none, file, TextRange(0, 6)))
+        assertEquals(ByAnswer.Failed, ByTypeInfoProvider.expressionsAround(old, file, TextRange(0, 6)))
     }
 }

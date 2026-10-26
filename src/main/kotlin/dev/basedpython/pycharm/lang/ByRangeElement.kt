@@ -14,7 +14,7 @@ import com.intellij.psi.impl.FakePsiElement
  * Unwrap/Remove popup — read nothing of an element but where it is, and that is all this has. It
  * holds the file and two offsets, and is made afresh each time one is asked for; nothing keeps it.
  */
-internal class ByRangeElement(private val file: PsiFile, private val range: TextRange) : FakePsiElement() {
+internal open class ByRangeElement(private val file: PsiFile, private val range: TextRange) : FakePsiElement() {
 
     override fun getParent(): PsiElement = file
 
