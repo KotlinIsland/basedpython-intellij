@@ -41,6 +41,14 @@ class ByMethodReceiverTypedHandlerTest {
     }
 
     @Test
+    fun `__new__, which by reports static, is passed its class and gets cls, as in py`() = paren(
+        "class C:\n    def __new__<caret>\n",
+        "class C:\n    def __new__(cls<caret>):\n",
+    ) {
+        compound { clause("class C:") { def("def __new__", method = "static") } }
+    }
+
+    @Test
     fun `a function, or a by that does not say, is left to the platform`() {
         paren("def foo<caret>\n", "def foo(<caret>)\n") { def("def foo") }
         paren("class C:\n    def foo<caret>\n", "class C:\n    def foo(<caret>)\n") {
