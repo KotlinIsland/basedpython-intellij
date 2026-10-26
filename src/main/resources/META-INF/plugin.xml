@@ -411,9 +411,6 @@
 
         <!-- ===== Stream L: extra templates ===== -->
         <defaultLiveTemplates file="liveTemplates/BasedPythonExtra"/>
-        <codeInsight.template.postfixTemplateProvider
-            language="basedpython"
-            implementationClass="dev.basedpython.pycharm.editor.templates.BasedPythonPostfixTemplateProvider"/>
         <!-- Surround With: statement surrounders for whole statements, expression ones inside one,
              told apart by by's outline. -->
         <lang.surroundDescriptor

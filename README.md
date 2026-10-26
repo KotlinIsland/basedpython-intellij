@@ -127,7 +127,7 @@ support, run configurations, CLI actions, and editor tooling.
 - Structure view, breadcrumbs, code folding and Go to Symbol / Go to Class come from the
   `by` server — document symbols, folding ranges and workspace symbols — through the
   platform's LSP integration.
-- Surround-with (try/except, if, while, brackets) and postfix templates
+- Surround-with (try/except, if, while, brackets), and postfix templates from `by`'s completion
   (`.if`, `.for`, `.while`, `.not`, `.return`/`.ret`, `.print`, `.len`, `.var`,
   `.none`, `.notnone`, `.else`).
 

@@ -1,6 +1,8 @@
 package dev.basedpython.pycharm.lsp.completion
 
 import com.intellij.codeInsight.completion.CompletionParameters
+import com.intellij.codeInsight.lookup.LookupElement
+import com.intellij.codeInsight.template.postfix.settings.PostfixTemplatesSettings
 import com.intellij.openapi.util.TextRange
 import com.intellij.platform.lsp.api.customization.LspCompletionSupport
 import com.intellij.psi.PsiElement
@@ -8,6 +10,7 @@ import com.intellij.psi.PsiFile
 import dev.basedpython.pycharm.lang.BasedPythonFile
 import dev.basedpython.pycharm.lang.BasedPythonTokenTypes
 import dev.basedpython.pycharm.lang.FStrings
+import org.eclipse.lsp4j.CompletionItem
 
 /**
  * Completion inside an f-string's or t-string's replacement field, `f"{car‸}"`, where `by` answers
@@ -77,7 +80,10 @@ internal object ByFStringFields {
     private const val CLOSED = -1
 }
 
-/** `by`'s completion, filtered inside a replacement field by the identifier before the caret. */
+/**
+ * `by`'s completion, filtered inside a replacement field by the identifier before the caret, and its
+ * postfix templates offered where the platform's own would be.
+ */
 internal object ByCompletionSupport : LspCompletionSupport() {
 
     override fun getCompletionPrefix(parameters: CompletionParameters, defaultPrefix: String): String {
@@ -85,4 +91,32 @@ internal object ByCompletionSupport : LspCompletionSupport() {
         if (!ByFStringFields.isInFieldCode(file, parameters.offset)) return defaultPrefix
         return ByFStringFields.identifierBefore(file.viewProvider.contents, parameters.offset)
     }
+
+    /**
+     * `by` owns basedpython's postfix templates: `xs.for` completes to a `for` loop over `xs`, an item
+     * labelled `for` whose detail is `postfix` and whose edit replaces all of `xs.for`. They are
+     * offered when *Settings | Editor | General | Postfix Completion* would offer a language's own in
+     * completion, as [ByPostfixCompletion.offered] reads it.
+     */
+    override fun createLookupElement(parameters: CompletionParameters, item: CompletionItem): LookupElement? {
+        if (ByPostfixCompletion.isPostfix(item) && !ByPostfixCompletion.offered()) return null
+        return super.createLookupElement(parameters, item)
+    }
+}
+
+/** What makes one of `by`'s completions a postfix template, and when the platform's settings offer one. */
+internal object ByPostfixCompletion {
+
+    /** The detail `by` gives every postfix template's completion, and no other. */
+    private const val DETAIL = "postfix"
+
+    fun isPostfix(item: CompletionItem): Boolean = item.detail == DETAIL
+
+    /**
+     * Whether postfix templates are offered: *Enable postfix completion*. Measured in PyCharm 263.7528,
+     * a `.py`'s completion lists the platform's `.for` and `.fore` on `xs.fo` exactly when it is on,
+     * asked for or popped up alike, whatever *Show postfix templates in completion autopopup* says.
+     */
+    fun offered(settings: PostfixTemplatesSettings = PostfixTemplatesSettings.getInstance()): Boolean =
+        settings.isPostfixTemplatesEnabled
 }
