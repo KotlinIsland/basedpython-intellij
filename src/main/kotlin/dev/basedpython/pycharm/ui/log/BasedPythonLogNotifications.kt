@@ -11,7 +11,6 @@ import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.ex.ActionUtil
 import com.intellij.openapi.actionSystem.impl.SimpleDataContext
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.wm.ToolWindowManager
 import dev.basedpython.pycharm.settings.ui.BasedPythonSettingsPage
 import dev.basedpython.pycharm.util.BasedPythonBundle
 
@@ -72,8 +71,6 @@ internal object BasedPythonLogNotifications {
 
     fun viewLog(project: Project): NotificationAction =
         NotificationAction.createSimple(BasedPythonBundle.message("notification.action.viewLog")) {
-            ToolWindowManager.getInstance(project)
-                .getToolWindow(TOOL_WINDOW_ID)
-                ?.activate(null)
+            BasedPythonLog.show(project)
         }
 }

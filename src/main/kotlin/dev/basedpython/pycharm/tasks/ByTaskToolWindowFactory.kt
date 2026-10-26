@@ -6,20 +6,22 @@ import com.intellij.openapi.wm.ToolWindow
 import com.intellij.openapi.wm.ToolWindowFactory
 import com.intellij.openapi.wm.ToolWindowManager
 import com.intellij.ui.content.ContentFactory
+import dev.basedpython.pycharm.lang.dialect.BasedPythonProjectDetector
 import java.nio.file.Files
 import java.nio.file.Paths
 
 /**
  * Backs the "basedpython Tasks" tool window (registered in plugin.xml) with [ByTaskPanel].
  *
- * Offered to any project that configures one of the four tools, basedpython or not. That is
- * deliberate and unlike the test view: `.pre-commit-config.yaml` has nothing to do with `.by` files,
- * and a plugin that reads it should not make a Python project prove itself first. What gates the
- * window is the only thing that matters — whether there is anything in it.
+ * Offered to a basedpython project ([BasedPythonProjectDetector.isBasedPythonProject]) that
+ * configures one of the four tools, like the test view. It used to be offered to any project that
+ * did, basedpython or not, which put a "basedpython" window into every plain Python project with a
+ * `.pre-commit-config.yaml` — noise for someone who never asked for this plugin's view of it.
  */
 internal class ByTaskToolWindowFactory : ToolWindowFactory, DumbAware {
 
-    override fun shouldBeAvailable(project: Project): Boolean = ByTaskToolWindow.hasConfiguration(project)
+    override fun shouldBeAvailable(project: Project): Boolean =
+        BasedPythonProjectDetector.isBasedPythonProject(project) && ByTaskToolWindow.hasConfiguration(project)
 
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
         val panel = ByTaskPanel(project)
@@ -61,6 +63,7 @@ internal object ByTaskToolWindow {
     fun refreshAvailability(project: Project) {
         if (project.isDisposed) return
         if (ByTaskService.getInstance(project).files.isEmpty()) return
+        if (!BasedPythonProjectDetector.isBasedPythonProject(project)) return
         val window = ToolWindowManager.getInstance(project).getToolWindow(ID) ?: return
         if (!window.isAvailable) window.isAvailable = true
     }

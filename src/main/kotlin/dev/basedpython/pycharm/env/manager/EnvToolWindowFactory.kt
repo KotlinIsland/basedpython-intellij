@@ -7,13 +7,21 @@ import com.intellij.openapi.wm.ToolWindow
 import com.intellij.openapi.wm.ToolWindowFactory
 import com.intellij.openapi.wm.ToolWindowManager
 import com.intellij.ui.content.ContentFactory
+import dev.basedpython.pycharm.lang.dialect.BasedPythonProjectDetector
 import java.nio.file.Files
 import java.nio.file.Paths
 
-/** Backs the "basedpython Environment" tool window (registered in plugin.xml) with [EnvPanel]. */
+/**
+ * Backs the "basedpython Environment" tool window (registered in plugin.xml) with [EnvPanel].
+ *
+ * Offered to a basedpython project ([BasedPythonProjectDetector.isBasedPythonProject]) with a
+ * manifest some backend recognises. A plain Python project has the IDE's own interpreter and
+ * package views; a second, "basedpython"-named one there is noise.
+ */
 internal class EnvToolWindowFactory : ToolWindowFactory, DumbAware {
 
-    override fun shouldBeAvailable(project: Project): Boolean = EnvToolWindow.hasBackend(project)
+    override fun shouldBeAvailable(project: Project): Boolean =
+        BasedPythonProjectDetector.isBasedPythonProject(project) && EnvToolWindow.hasBackend(project)
 
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
         val panel = EnvPanel(project)
@@ -65,6 +73,7 @@ internal object EnvToolWindow {
     fun refreshAvailability(project: Project) {
         if (project.isDisposed) return
         if (EnvService.getInstance(project).status.backend == null) return
+        if (!BasedPythonProjectDetector.isBasedPythonProject(project)) return
         val window = ToolWindowManager.getInstance(project).getToolWindow(ID) ?: return
         if (!window.isAvailable) window.isAvailable = true
     }

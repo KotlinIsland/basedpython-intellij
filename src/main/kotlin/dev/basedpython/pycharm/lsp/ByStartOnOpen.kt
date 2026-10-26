@@ -29,13 +29,21 @@ import kotlinx.coroutines.withContext
  */
 internal class ByStartOnOpen : ProjectActivity {
     override suspend fun execute(project: Project) {
-        if (!BasedPythonSettings.getInstance(project).byEnabled) return
-        val serves = BasedPythonProjectDetector.isBasedPythonProject(project) ||
-            smartReadAction(project) {
-                FileTypeIndex.containsFileOfType(BasedPythonFileType.INSTANCE, GlobalSearchScope.projectScope(project))
-            }
-        if (!serves) return
+        if (!byServesProject(project)) return
         // resolving the binary can mean asking uv
         withContext(Dispatchers.IO) { startByServer(project) }
     }
+}
+
+/**
+ * Whether `by` has anything to serve in [project]: it is switched on, and the project either carries a
+ * basedpython marker or holds a `.by` source somewhere — the projects [ByLspServerSupportProvider]
+ * starts a server for when one of their files is opened. Waits for the index.
+ */
+internal suspend fun byServesProject(project: Project): Boolean {
+    if (!BasedPythonSettings.getInstance(project).byEnabled) return false
+    return BasedPythonProjectDetector.isBasedPythonProject(project) ||
+        smartReadAction(project) {
+            FileTypeIndex.containsFileOfType(BasedPythonFileType.INSTANCE, GlobalSearchScope.projectScope(project))
+        }
 }

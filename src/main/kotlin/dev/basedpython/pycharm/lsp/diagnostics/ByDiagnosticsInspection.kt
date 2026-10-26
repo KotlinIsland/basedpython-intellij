@@ -16,6 +16,7 @@ import com.intellij.openapi.progress.runBlockingCancellable
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.TextRange
 import com.intellij.psi.PsiManager
+import dev.basedpython.pycharm.lsp.byServesProject
 import org.eclipse.lsp4j.Diagnostic
 import org.eclipse.lsp4j.Position
 
@@ -32,7 +33,9 @@ import org.eclipse.lsp4j.Position
  * changes, and a run over a project with nothing wrong in it would wait on it forever. See
  * [dev.basedpython.pycharm.lsp.ext.ByServerExtensions.checkWorkspace].
  *
- * In a batch run nothing has opened a file, so nothing has started `by`; the run starts it.
+ * In a batch run nothing has opened a file, so nothing has started `by`; the run starts it — in a
+ * project `by` serves ([byServesProject]) and nowhere else. A plain Python project has nothing for
+ * `by` to check, and the run used to report an ERROR there saying no `by` binary was found.
  */
 internal class ByDiagnosticsInspection : GlobalInspectionTool() {
 
@@ -48,6 +51,7 @@ internal class ByDiagnosticsInspection : GlobalInspectionTool() {
         processor: ProblemDescriptionsProcessor,
     ) {
         val project = globalContext.project
+        if (!runBlockingCancellable { byServesProject(project) }) return
         val (client, report) = when (val checked = runBlockingCancellable { ByWorkspaceCheck.check(project) }) {
             is ByWorkspaceCheck.Report -> checked.client to checked.report
             // Said in the results, where the run's reader looks for `by`'s findings: an empty

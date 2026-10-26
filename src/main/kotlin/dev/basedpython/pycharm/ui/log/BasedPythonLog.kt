@@ -9,6 +9,7 @@ import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
+import com.intellij.openapi.wm.ToolWindowManager
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 
@@ -124,6 +125,17 @@ internal class BasedPythonLog(private val project: Project) : Disposable {
         const val MAX_PENDING_LINES: Int = 2_000
 
         fun getInstance(project: Project): BasedPythonLog = project.service()
+
+        /**
+         * Brings the "basedpython" tool window forward, making it available first: outside a
+         * basedpython project it is not offered on its own, and the one asking to see it is someone
+         * who wants it now.
+         */
+        fun show(project: Project) {
+            val window = ToolWindowManager.getInstance(project).getToolWindow(BasedPythonLogNotifications.TOOL_WINDOW_ID) ?: return
+            if (!window.isAvailable) window.isAvailable = true
+            window.activate(null)
+        }
     }
 }
 

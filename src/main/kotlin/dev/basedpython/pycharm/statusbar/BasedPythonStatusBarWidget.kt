@@ -143,12 +143,7 @@ internal class BasedPythonStatusBarWidget(private val project: Project) :
     }
 
     private fun showLogs() {
-        val mgr = com.intellij.openapi.wm.ToolWindowManager.getInstance(project)
-        // "basedpython" is this plugin's own tool window (plugin.xml); "Language Servers" is the
-        // platform's, kept as a fallback. The branding pass left this list with the same id twice.
-        val toolWindow = mgr.getToolWindow("basedpython")
-            ?: mgr.getToolWindow("Language Servers")
-        toolWindow?.activate(null)
+        dev.basedpython.pycharm.ui.log.BasedPythonLog.show(project)
     }
 
     companion object {
