@@ -29,17 +29,8 @@ import org.jetbrains.annotations.TestOnly
  * action shows itself on a file or a directory only when some provider names it, and offers Copy
  * Relative Path instead, `src/shapes/circle.by`. Measured in PyCharm 263.5701.32: hidden on both.
  *
- * ## What this cannot do: a name inside a `.by` editor
- *
- * In an editor the action names what the caret is on only when the platform finds a PSI element
- * there — a reference at the caret, or `PSI_ELEMENT` from the target-element search — and hands it
- * to the providers. A `.by` file's PSI is one leaf per token, with no declarations and no references
- * in it (see [dev.basedpython.pycharm.lang.BasedPythonParserDefinition]), so in a `.by` editor both
- * are null and the action copies `path:line` without asking a provider anything. Measured: the
- * caret on `Circle.area`'s name, on `Circle`, in a body and on a use of `Circle` in a test all copy
- * `src/shapes/circle.by:8` and the like, and `PSI_ELEMENT` is null at each. Naming a declaration
- * there would take a PSI element per declaration or per reference, which is the parser this plugin
- * no longer has, so `by` is not asked for one.
+ * In a `.by` editor it also names the declaration [ByCopyReferenceAction] found at the caret, by the
+ * dotted name `by/declaration` gave it.
  *
  * Nor does this resolve a name back ([qualifiedNameToElement]): the platform asks that only to paste
  * a copied reference, which then inserts the text it would have pasted anyway unless the provider
@@ -50,6 +41,7 @@ class ByQualifiedNameProvider : QualifiedNameProvider {
     override fun adjustElementToCopy(element: PsiElement): PsiElement? = null
 
     override fun getQualifiedName(element: PsiElement): String? {
+        if (element is ByNamedDeclaration) return element.qualifiedName
         val item = element as? PsiFileSystemItem ?: return null
         if (item !is BasedPythonFile && item !is PsiDirectory) return null
         val file = item.virtualFile ?: return null

@@ -722,6 +722,12 @@
     </projectListeners>
 
     <actions>
+        <!-- Copy Reference in a .by editor copies the dotted name by/declaration gives the name at the
+             caret, shapes.base.Circle.area, rather than path:line; everywhere else it is the
+             platform's action unchanged. See navigation.ByCopyReferenceAction. -->
+        <action id="CopyReference" overrides="true"
+                class="dev.basedpython.pycharm.navigation.ByCopyReferenceAction"/>
+
         <!-- ===== Stream B ===== -->
         <action id="basedpython.RestartLsp"
                 class="dev.basedpython.pycharm.lsp.RestartLspAction"/>

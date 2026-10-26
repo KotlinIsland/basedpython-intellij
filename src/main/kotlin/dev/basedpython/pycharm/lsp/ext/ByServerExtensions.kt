@@ -329,6 +329,21 @@ interface ByServerExtensions {
     fun moduleName(args: ByModuleNameParams): CompletableFuture<String?>
 
     /**
+     * What the name at a position declares or refers to: its kind, its name, its dotted name, and
+     * where it is declared — for Copy Reference and for naming what a usage search searched for.
+     *
+     * **Why the server.** Which declaration a use refers to is resolution, and a dotted name is the
+     * module resolver's name for the file plus the classes the declaration is made in. A `.by` file's
+     * PSI has neither.
+     *
+     * A `null` answer is a position on no name, or on a name whose definitions declare different
+     * things; `qualifiedName` is `null` for a name local to a function. A `by` from before the
+     * request answers `MethodNotFound`.
+     */
+    @JsonRequest("by/declaration")
+    fun declaration(args: ByDeclarationParams): CompletableFuture<ByDeclaration?>
+
+    /**
      * The code a test, a class of tests or a test module exercises: the project's own functions,
      * methods and classes it calls — see [dev.basedpython.pycharm.navigation.tests.ByTestFinder].
      *
@@ -427,6 +442,25 @@ interface ByServerExtensions {
 
 /** The file or directory to name. */
 data class ByModuleNameParams(val uri: String)
+
+/** The name to ask about: where it is declared or anywhere it is used. */
+data class ByDeclarationParams(val textDocument: TextDocumentIdentifier, val position: Position)
+
+/** What a name declares or refers to, and where, from `by/declaration`. */
+data class ByDeclaration(
+    /** One of the kinds a hover names: `class`, `method`, `function`, `property`, `variable`, … */
+    val kind: String? = null,
+    val name: String? = null,
+    /** `shapes.base.Circle.area`; `null` for a name local to a function or a file nothing imports. */
+    val qualifiedName: String? = null,
+    /** The name at the position asked about. */
+    val originSelectionRange: Range? = null,
+    val uri: String? = null,
+    /** The whole declaration. */
+    val range: Range? = null,
+    /** The declaration's name. */
+    val selectionRange: Range? = null,
+)
 
 /**
  * Where to start from: a test, a class of tests or anywhere in a test module for `by/testSubjects`;
