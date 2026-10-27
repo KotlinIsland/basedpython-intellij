@@ -9,8 +9,12 @@ import com.intellij.openapi.util.Ref
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiElement
 import dev.basedpython.pycharm.lang.dialect.BasedPythonSources
+import dev.basedpython.pycharm.run.model.ByProgramModel
 
-/** Right-click a basedpython source file → produce a `by check <path>` configuration. */
+/**
+ * Right-click a basedpython source file → produce a `by check <path>` configuration. Not in a file of
+ * tests, which is [ByTestFromFileProducer]'s alone; see [ByRunFromFileProducer.isPreferredConfiguration].
+ */
 class ByCheckFromFileProducer : LazyRunConfigurationProducer<ByCheckConfiguration>() {
 
     override fun getConfigurationFactory(): ConfigurationFactory =
@@ -35,7 +39,9 @@ class ByCheckFromFileProducer : LazyRunConfigurationProducer<ByCheckConfiguratio
         sourceElement: Ref<PsiElement>,
     ): Boolean {
         val file = context.location?.virtualFile ?: contextFile(context) ?: return false
-        if (!BasedPythonSources.isOwnedSource(file)) return false
+        if (!BasedPythonSources.isOwnedSource(file) || ByProgramModel.getInstance(context.project).mayHoldTests(file)) {
+            return false
+        }
         val base = context.project.basePath
         val rel = if (!base.isNullOrBlank()) {
             com.intellij.openapi.vfs.LocalFileSystem.getInstance().findFileByPath(base)
@@ -55,7 +61,9 @@ class ByCheckFromFileProducer : LazyRunConfigurationProducer<ByCheckConfiguratio
         context: ConfigurationContext,
     ): Boolean {
         val file = context.location?.virtualFile ?: contextFile(context) ?: return false
-        if (!BasedPythonSources.isOwnedSource(file)) return false
+        if (!BasedPythonSources.isOwnedSource(file) || ByProgramModel.getInstance(context.project).mayHoldTests(file)) {
+            return false
+        }
         val base = context.project.basePath
         val rel = if (!base.isNullOrBlank()) {
             com.intellij.openapi.vfs.LocalFileSystem.getInstance().findFileByPath(base)

@@ -5,7 +5,6 @@ import dev.basedpython.pycharm.run.model.innermostAt
 import dev.basedpython.pycharm.run.test.ByTestConfiguration
 import dev.basedpython.pycharm.run.test.ByTestConfigurationType
 import com.intellij.execution.actions.ConfigurationContext
-import com.intellij.execution.actions.ConfigurationFromContext
 import com.intellij.execution.actions.LazyRunConfigurationProducer
 import com.intellij.execution.configurations.ConfigurationFactory
 import com.intellij.openapi.util.Ref
@@ -26,8 +25,15 @@ import com.intellij.util.execution.ParametersListUtil
  *
  * Without this producer the test gutter icons contributed by
  * [dev.basedpython.pycharm.run.testmarker.ByTestRunLineMarkerContributor] have no configuration
- * to resolve to and silently fall through to `by run <module>`, running the whole module instead
- * of the test.
+ * to resolve to.
+ *
+ * A file of tests is this producer's alone: the `by run` and `by check` producers make nothing in a
+ * `.by` file that holds tests or that `by` has not yet said holds none
+ * ([ByProgramModel.mayHoldTests]). So nothing here outranks them; they are never offered beside it.
+ * Ranking them instead was not enough: a ranking only orders the producers that answered, and until
+ * `by` had said where the tests are this one could not, so the first Ctrl+Shift+R in a test of a
+ * freshly opened file, or straight after an edit to one, ran `by run` on the whole module (measured
+ * in PyCharm 263.7528, three runs out of three after an edit).
  */
 class ByTestFromFileProducer : LazyRunConfigurationProducer<ByTestConfiguration>() {
 
@@ -56,24 +62,6 @@ class ByTestFromFileProducer : LazyRunConfigurationProducer<ByTestConfiguration>
         val target = testTargetFor(context) ?: return false
         return configuration.options.paths == target.paths
     }
-
-    /**
-     * Running one test is more specific than running the whole module, so prefer this over
-     * [ByRunConfiguration] when both producers match the same context (e.g. the gutter icon on a
-     * `def test_…` line) — and over [ByCheckConfiguration], which matches it too.
-     *
-     * Over both, not only the first: the platform sorts the three with a comparator built from these
-     * answers and then drops whatever sorts after its neighbour, so the order has to be total.
-     * Preferred to `by run` but level with `by check`, the comparator was not transitive (pytest ahead
-     * of `by run`, `by run` ahead of `by check`, pytest and `by check` equal), the sort put `by run`
-     * first, and Ctrl+Shift+R inside a test offered a chooser led by `by run` (measured in PyCharm
-     * 263.7528).
-     */
-    override fun isPreferredConfiguration(self: ConfigurationFromContext?, other: ConfigurationFromContext?): Boolean =
-        other?.configuration.let { it is ByRunConfiguration || it is ByCheckConfiguration }
-
-    override fun shouldReplace(self: ConfigurationFromContext, other: ConfigurationFromContext): Boolean =
-        other.configuration.let { it is ByRunConfiguration || it is ByCheckConfiguration }
 }
 
 /** What a context runs: pytest's targets, and what the configuration is called. */
@@ -107,16 +95,15 @@ private fun testTargetFor(context: ConfigurationContext): TestTarget? {
  * `by run` stages the file at — null too while `by` has not said where that is.
  *
  * Which declarations are tests is `by/testItems`' answer ([ByProgramModel]), the same one the gutter
- * icons are drawn from: an icon whose producer declined would leave a green arrow that runs the
- * whole module through the plain `by run` producer instead.
+ * icons are drawn from: an icon whose producer declined would leave a green arrow that runs nothing.
  *
  * A context inside a test — its `def` line, which is where the gutter icon puts it, or anywhere in
  * its body — targets the innermost test or class around it. Any other context in a file that holds
  * tests — the file in the project view, a line between tests — targets the whole file.
  *
- * Never waits for the server, since a producer runs inside a read action while a menu is built: a
- * position inside the file is answered from the answer held for the document's current revision,
- * and the file as a whole from the project-wide answer, which holds files nobody has opened.
+ * A position inside the file is answered from `by`'s answer for the document's current revision,
+ * waited for off the EDT as [ByProgramModel.testItems] does, and the file as a whole from that or,
+ * on the EDT, the project-wide answer, which holds files nobody has opened.
  */
 private fun fileTargetFor(context: ConfigurationContext): String? {
     val element = context.psiLocation ?: return null
@@ -131,7 +118,7 @@ private fun fileTargetFor(context: ConfigurationContext): String? {
     val document = psiFile?.let { PsiDocumentManager.getInstance(context.project).getDocument(it) }
     val offset = element.textRange.startOffset
     if (element !is PsiFile && document != null && offset < document.textLength) {
-        val items = model.cachedTestItems(file) ?: return null
+        val items = model.testItems(file) ?: return null
         if (items.isEmpty()) return null
         val line = document.getLineNumber(offset)
         val item = items.innermostAt(line, offset - document.getLineStartOffset(line))
@@ -139,7 +126,7 @@ private fun fileTargetFor(context: ConfigurationContext): String? {
         return staged + "::" + item.symbols.joinToString("::")
     }
 
-    val holdsTests = model.cachedTestItems(file)?.isNotEmpty()
+    val holdsTests = model.testItems(file)?.isNotEmpty()
         ?: model.projectTests()?.let { it.byFile[file]?.isNotEmpty() ?: false }
         ?: return null
     return staged.takeIf { holdsTests }

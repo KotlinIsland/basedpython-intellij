@@ -48,14 +48,14 @@ class ByProgramModelTest {
     fun `an answer is only served for the revision it was given about`() = onEdt {
         val file = fixture.configureByText("test_rev.by", nested)
         model.rememberTestItems(file.virtualFile, ByReplies.testItems(nested))
-        assertEquals(2, model.cachedTestItems(file.virtualFile)?.size)
+        assertEquals(2, model.testItems(file.virtualFile)?.size)
 
         WriteCommandAction.runWriteCommandAction(fixture.project) {
             fixture.editor.document.insertString(0, "\n")
         }
         PsiDocumentManager.getInstance(fixture.project).commitAllDocuments()
 
-        assertNull(model.cachedTestItems(file.virtualFile), "an edit must not be answered with what the file said before it")
+        assertNull(model.testItems(file.virtualFile), "an edit must not be answered with what the file said before it")
     }
 
     @Test

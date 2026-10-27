@@ -34,7 +34,9 @@ class ByRunFromFileProducer : LazyRunConfigurationProducer<ByRunConfiguration>()
         sourceElement: Ref<PsiElement>,
     ): Boolean {
         val file = context.location?.virtualFile ?: contextFile(context) ?: return false
-        if (!BasedPythonSources.isOwnedSource(file)) return false
+        if (!BasedPythonSources.isOwnedSource(file) || ByProgramModel.getInstance(context.project).mayHoldTests(file)) {
+            return false
+        }
         val module = moduleNameFor(context, file) ?: return false
         configuration.options.module = module
         // Named for what is being run, not for the command that runs it — the configuration
@@ -59,19 +61,22 @@ class ByRunFromFileProducer : LazyRunConfigurationProducer<ByRunConfiguration>()
         context: ConfigurationContext,
     ): Boolean {
         val file = context.location?.virtualFile ?: contextFile(context) ?: return false
-        if (!BasedPythonSources.isOwnedSource(file)) return false
+        if (!BasedPythonSources.isOwnedSource(file) || ByProgramModel.getInstance(context.project).mayHoldTests(file)) {
+            return false
+        }
         val module = moduleNameFor(context, file) ?: return false
         return configuration.options.module == module
     }
 
     /**
      * Running a file is the natural context action; checking it is not. Both producers match every
-     * `.by` file, and with nothing arbitrating between them the platform offers a chooser on every
-     * context run — one that is unreadable here, because it labels entries by configuration *type*
-     * and `by run` / `by check` are two factories of the same type, so both render as "basedpython".
+     * `.by` file that holds no tests, and with nothing arbitrating between them the platform offers a
+     * chooser on every context run — one that is unreadable here, because it labels entries by
+     * configuration *type* and `by run` / `by check` are two factories of the same type, so both
+     * render as "basedpython".
      *
-     * Precedence is therefore pytest > `by run` > `by check`; see [ByTestFromFileProducer],
-     * which claims the same relationship over this producer.
+     * A file that holds tests, or may ([ByProgramModel.mayHoldTests]), is not arbitrated at all: it
+     * is [ByTestFromFileProducer]'s alone, and neither of these makes anything there.
      */
     override fun isPreferredConfiguration(self: ConfigurationFromContext?, other: ConfigurationFromContext?): Boolean =
         other?.configuration is ByCheckConfiguration

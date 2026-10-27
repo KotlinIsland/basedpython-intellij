@@ -23,8 +23,9 @@
     <extensions defaultExtensionNs="com.intellij">
         <configurationType
             implementation="dev.basedpython.pycharm.run.test.ByTestConfigurationType"/>
-        <!-- Precedence against the `by run` and `by check` producers is decided in code, not by
-             registration order; see ByRunFromFileProducer. -->
+        <!-- A test file's contexts are this producer's alone, decided in code rather than by
+             registration order: the `by run` and `by check` producers make nothing there; see
+             ByProgramModel.mayHoldTests. -->
         <runConfigurationProducer implementation="dev.basedpython.pycharm.run.ByTestFromFileProducer"/>
         <runLineMarkerContributor
             language="basedpython"

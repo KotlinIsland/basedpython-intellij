@@ -30,6 +30,7 @@ import dev.basedpython.pycharm.lsp.ext.ByRunModulesProjectReply
 import dev.basedpython.pycharm.lsp.ext.ByServerExtensions
 import dev.basedpython.pycharm.lsp.ext.ByTestItemsParams
 import dev.basedpython.pycharm.run.main.ByMainFunction
+import dev.basedpython.pycharm.settings.BasedPythonSettings
 import dev.basedpython.pycharm.util.Debounced
 import java.net.URI
 import java.nio.file.Paths
@@ -53,13 +54,13 @@ import kotlin.time.Duration.Companion.milliseconds
  * A request to the server is background-only, and some callers cannot wait even there. So there are
  * two ways to ask:
  *
- *  - [entryPoint] and [testItems] **ask and wait** off the EDT — the line-marker pass is a
- *    cancellable background read action, and `sendRequestSync` polls for that cancellation — and
- *    serve only what is already known on the EDT, starting a request behind the answer.
- *  - [cachedTestItems], [moduleName], [projectTests], [stagedPath] and [configuredMain] **never wait**: a run
- *    configuration producer runs inside a read action while a menu is being built, and blocking it
- *    on a process would freeze whoever is holding the menu open. They answer from what the last
- *    request said, and start one when nothing has been said yet.
+ *  - [entryPoint], [testItems] and [mayHoldTests] **ask and wait** off the EDT — the line-marker
+ *    pass, and the action system updating a run action, are cancellable background read actions
+ *    (an edit cancels them), and `sendRequestSync` polls for that cancellation — and serve only what
+ *    is already known on the EDT, starting a request behind the answer.
+ *  - [cachedEntryPoint], [moduleName], [projectTests], [stagedPath] and [configuredMain] **never
+ *    wait**. They answer from what the last request said, and start one when nothing has been said
+ *    yet.
  *
  * Per-file answers are held against the document's modification stamp, so an edit is never answered
  * with what the file said before it. Project-wide answers are refreshed a moment after the project's
@@ -175,9 +176,26 @@ internal class ByProgramModel(private val project: Project, scope: CoroutineScop
     fun testItems(file: VirtualFile): List<ByTestItem>? =
         stamped(testFiles, file) ?: askOrSchedule(TEST_ITEMS, file) { askTestItems(file) }
 
-    /** What [testItems] already knows about [file] at its current revision, without asking. */
-    fun cachedTestItems(file: VirtualFile): List<ByTestItem>? =
-        stamped(testFiles, file) ?: run { schedule(TEST_ITEMS, file) { askTestItems(file) }; null }
+    /**
+     * Whether a run from a context in [file] is the test configuration's to make: [file] is a `.by`
+     * file that holds tests, or one `by` has not yet said holds none. The `by run` and `by check`
+     * producers make nothing there.
+     *
+     * Not yet known counts. The test configuration cannot be made before `by` has said where the
+     * tests are, and a producer that cannot answer is simply absent from the platform's choice — so
+     * while the test producer waited, `by run` was the only answer, and the first Ctrl+Shift+R in a
+     * test of a freshly opened file, or straight after an edit to one, ran the whole module instead
+     * of the test. Leaving the context unanswered until `by` has spoken makes that run nothing
+     * rather than the wrong thing; off the EDT, where the action system asks, it waits for the
+     * answer instead.
+     *
+     * `.by` only, as the test producer is: a `.py` test is PyCharm's pytest configuration's to run.
+     * And never while `by` is switched off for the project, where no test configuration is ever made.
+     */
+    fun mayHoldTests(file: VirtualFile): Boolean {
+        if (file.extension != BY_EXTENSION || !BasedPythonSettings.getInstance(project).byEnabled) return false
+        return testItems(file)?.isEmpty() != true
+    }
 
     /**
      * The tests of every file of the project, as of the last project-wide answer; null before there
