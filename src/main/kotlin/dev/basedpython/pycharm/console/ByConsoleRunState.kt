@@ -37,12 +37,14 @@ internal class ByConsoleRunState(private val configuration: ByRunConfiguration) 
         } catch (e: ProgramParametersConfigurator.ParametersConfiguratorException) {
             throw ExecutionException(e.message, e)
         }
-        val start = suspend { ByConsoleSession.startProcess(project, module, options, fileEnvironment) }
-        // it asks `by repl --help` whether it has `--events` before it starts the session
+        val start = { underModal: Boolean ->
+            suspend { ByConsoleSession.startProcess(project, module, options, fileEnvironment, waitForNewStart = !underModal) }
+        }
+        // it asks `by` which flags its `by repl` takes before it starts the session
         val started = if (ApplicationManager.getApplication().isDispatchThread) {
-            runWithModalProgressBlocking(project, BasedPythonBundle.message("console.starting")) { start() }
+            runWithModalProgressBlocking(project, BasedPythonBundle.message("console.starting")) { start(true)() }
         } else {
-            runBlockingCancellable { start() }
+            runBlockingCancellable { start(false)() }
         }
         val session = ConsoleOnEdt.build(project, started)
         ByConsoles.getInstance(project).adopt(session)

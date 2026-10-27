@@ -23,14 +23,14 @@ import com.intellij.platform.lsp.api.LspServerState
 import com.intellij.openapi.project.Project
 import com.intellij.util.concurrency.AppExecutorUtil
 import dev.basedpython.pycharm.lang.BasedPythonLanguage
+import dev.basedpython.pycharm.lsp.ByCommandFlags
 import dev.basedpython.pycharm.lsp.ByLspServerSupportProvider
+import dev.basedpython.pycharm.lsp.awaitByServer
 import dev.basedpython.pycharm.run.ByCommonOptions
 import dev.basedpython.pycharm.run.byCommandLine
-import dev.basedpython.pycharm.run.runCapturing
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.atomic.AtomicInteger
-import kotlin.time.Duration.Companion.seconds
 
 private val LOG = Logger.getInstance(ByConsoleSession::class.java)
 
@@ -281,8 +281,10 @@ internal class ByConsoleSession private constructor(
          * Starts `by repl` for [project] — in [module] first, as `by run` names one, when it is given.
          * Starts processes, so off the EDT; the console it returns is built on the EDT by [build].
          *
-         * `--events` when this `by` has it, asked of `by repl --help`: a `by` from before it refuses
-         * the flag and starts no session, and is talked to as it was before, every line an input.
+         * `--events` when this `by` takes it, as its language server says ([ByCommandFlags]): a `by`
+         * that does not refuses the flag and starts no session, and is talked to as it was before,
+         * every line an input. [waitForNewStart] is [awaitByServer]'s, for asking a `by` that is not
+         * running yet: false under a modal progress, where a new start cannot finish.
          *
          * @throws com.intellij.execution.ExecutionException when no `by` can be found or started.
          */
@@ -291,8 +293,10 @@ internal class ByConsoleSession private constructor(
             module: String? = null,
             options: ByCommonOptions = ByCommonOptions(),
             fileEnvironment: Map<String, String> = emptyMap(),
+            waitForNewStart: Boolean = true,
         ): Started {
-            val events = if (hasEvents(project)) ByReplEvents.open() else null
+            val flags = ByCommandFlags.of(project, waitForNewStart)
+            val events = if (flags.takes(ByCommandFlags.REPL, ByCommandFlags.REPL_EVENTS)) ByReplEvents.open() else null
             val sessionFile = Files.createTempFile("basedpython-console", ".by")
             val commandLine = try {
                 byCommandLine(
@@ -320,15 +324,6 @@ internal class ByConsoleSession private constructor(
             ProcessTerminatedListener.attach(handler)
             return Started(handler, sessionFile, events)
         }
-
-        /** Whether this project's `by repl` takes `--events`. */
-        private suspend fun hasEvents(project: Project): Boolean {
-            val help = runCapturing(byCommandLine(project, ByCommonOptions(), listOf("repl", "--help")), HELP_TIMEOUT)
-            return help.exitCode == 0 && EVENTS_FLAG in help.stdout
-        }
-
-        private const val EVENTS_FLAG = "--events"
-        private val HELP_TIMEOUT = 30.seconds
 
         /**
          * The console for a process [startProcess] started. On the EDT. [ownsConsole] when the console
