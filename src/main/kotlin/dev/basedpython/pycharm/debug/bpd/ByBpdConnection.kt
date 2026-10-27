@@ -51,7 +51,6 @@ private val POLL_INTERVAL: Duration = 100.milliseconds
  */
 class ByBpdConnection private constructor(
     private val socket: Socket,
-    private val debuggee: ProcessHandler?,
     /** What the wrapper and `bpd` recorded, which is also what the session is launched with. */
     val record: ByBpdRecord.Ready,
 ) : DebugAdapterHandle {
@@ -65,11 +64,9 @@ class ByBpdConnection private constructor(
             runCatching { socket.close() }
                 .onFailure { LOG.warn("the bpd adapter's socket would not close", it) }
         }
-        // `by run` is the process the IDE started, so `by run` is the process the IDE ends.
-        // Detaching and leaving it running would be the wrong reading of the Stop button for a
-        // session that looks and behaves like a launch — the same judgement the debugpy backend
-        // makes about the same process
-        debuggee?.destroyProcess()
+        // and nothing more: `by run` is the session's process, which the platform's own end of the
+        // session ends — Stop by killing it, the program finishing by leaving it to exit with the
+        // program's code, which a kill from here would replace with SIGKILL's
     }
 
     companion object {
@@ -119,7 +116,7 @@ class ByBpdConnection private constructor(
                 )
             }
 
-            return ByBpdConnection(socket, debuggee, ready)
+            return ByBpdConnection(socket, ready)
         }
 
         /**

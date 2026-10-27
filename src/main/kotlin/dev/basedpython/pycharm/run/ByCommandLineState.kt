@@ -116,6 +116,14 @@ abstract class ByCommandLineState(
     val infrastructureListeners: MutableList<ProcessListener> = mutableListOf()
 
     /**
+     * Whether a request to end the process comes after what it ran has already ended — written by
+     * the same hook as [infrastructureEnv], for the debug session the process runs under, and read
+     * by [ByProcessHandler]: such a request leaves `by` to exit with the program's code rather than
+     * killing it. Never, for a run nothing else watches.
+     */
+    var finishesOnItsOwn: () -> Boolean = { false }
+
+    /**
      * Variables the configuration sets for whatever reads the run's output, here or on a run target:
      * a test run's `BY_TEST_REPORTER`, which has `by run pytest` report to the IDE's test tree. Applied
      * after [ByCommonOptions.envVars], since the console is built for this output and no other.
@@ -191,7 +199,7 @@ abstract class ByCommandLineState(
             fileEnvironment = fileEnvironment(),
         )
         inputFile?.let(cmd::withInput)
-        val handler = KillableColoredProcessHandler(if (emulateTerminal) PtyCommandLine(cmd).withConsoleMode(false) else cmd)
+        val handler = ByProcessHandler(if (emulateTerminal) PtyCommandLine(cmd).withConsoleMode(false) else cmd, finishesOnItsOwn)
         // Stop has to reach the program, not just the launcher. `by run` is a Rust parent that
         // spawns `python _by_runner.py` and then blocks waiting for it, and a SIGINT to `by`
         // demonstrably kills neither — both survive, and under a debugger the orphaned interpreter

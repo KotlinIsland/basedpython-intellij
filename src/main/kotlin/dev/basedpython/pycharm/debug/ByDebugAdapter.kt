@@ -190,6 +190,13 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
         val commandLine = state as? ByCommandLineState
             ?: throw ExecutionException(BasedPythonBundle.message("debug.error.unsupportedState"))
 
+        // The platform ends the session's process when the session ends, and the adapter ends a
+        // session itself when the program has finished — at which point `by run` is on its way out
+        // with the program's exit code, and killing it would replace that code with SIGKILL's. Stop
+        // ends the process first and the session after it, so a session already over when the
+        // process is ended is one the adapter ended.
+        commandLine.finishesOnItsOwn = { process?.dapDebugSession?.sessionStopped?.isCompleted == true }
+
         when (setup.backend) {
             ByDebugBackend.DEBUGPY -> {
                 commandLine.infrastructureEnv[ByDebugSetup.ENV_PORT] = setup.port.toString()
@@ -272,16 +279,15 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
 
         reportMappingProblems(info)
 
+        // Closing the connection ends nothing else. `by run` is the session's process
+        // ([ByDapXDebugProcess]), so the platform's own end of the session ends it — Stop by killing
+        // it, the program finishing by leaving it to exit with the program's code
         return DebugAdapterSocketConnection(
             host = LOCALHOST,
             port = setup.port,
             connectionAttempts = CONNECTION_ATTEMPTS,
             intervalBetweenAttempts = CONNECTION_INTERVAL_MS.milliseconds,
-        ) {
-            // The IDE started this process, so the IDE ends it. Detaching and leaving the program
-            // running would be the wrong reading of the Stop button for a launch-shaped session.
-            processHandler?.destroyProcess()
-        }
+        )
     }
 
     /**
