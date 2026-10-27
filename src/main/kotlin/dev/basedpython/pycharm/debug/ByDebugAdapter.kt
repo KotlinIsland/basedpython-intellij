@@ -83,8 +83,8 @@ class ByDebugAdapterSupportProvider : DebugAdapterSupportProvider<ByDebugAdapter
  *
  *  - **source maps** are never sent. bpd reads `_by_sourcemap.py` itself at `launch`, out of the
  *    directory beside the program, and holds a `.by` breakpoint that arrives before it as
- *    `pending`; under debugpy the bootstrap hands pydevd the maps inside the debuggee before it
- *    reports the port, so before anything can connect ([ByDebuggeeInfo.mapped])
+ *    `pending`; debugpy needs none, because `by run`'s runner compiles each `.by` module under the
+ *    `.by`'s own path and lines, so pydevd finds a `.by` breakpoint in the frames that name it
  *  - **what this plugin reads** of bpd's events, and the **recomposition watch**, ride the `launch`
  *    itself ([startArguments]) — the one request that cannot arrive after the program has started,
  *    because it is what starts it
@@ -231,9 +231,6 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
 
     /**
      * Waits for the bootstrap to report that it is listening, then connects.
-     *
-     * Under debugpy the report is written only once pydevd holds every `.by` file's map, so what
-     * this connects to already translates a `.by` breakpoint whenever the platform sends one.
      */
     override suspend fun launchDebugAdapter(
         environment: ExecutionEnvironment,
@@ -277,7 +274,7 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
             )
         }
 
-        reportMappingProblems(info)
+        reportCollisions(info)
 
         // Closing the connection ends nothing else. `by run` is the session's process
         // ([ByDapXDebugProcess]), so the platform's own end of the session ends it — Stop by killing
@@ -411,26 +408,20 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
     }
 
     /**
-     * A session can be perfectly healthy and still have nothing to map — an older `by` that does
-     * not emit `_by_sourcemap.py`, say. Debugging still works against the generated `.py`, but no
-     * breakpoint set in a `.by` file will ever bind, and silence about that would look like a bug
-     * in the debugger.
+     * Says what the bootstrap found wrong with a session that is otherwise healthy: two `.by` files
+     * transpiled to one module, of which only the last runs, or why it could not look.
      */
-    private fun reportMappingProblems(info: ByDebuggeeInfo) {
-        // Ordered by how specific the explanation is. A collision is the *reason* a mapping is
-        // missing, so saying "no source map" instead would send the user looking in the wrong
-        // place entirely — which is exactly what it used to do.
+    private fun reportCollisions(info: ByDebuggeeInfo) {
         val collisions = info.realCollisions
         val detail = when {
             collisions.isNotEmpty() -> describeCollisions(collisions)
             info.message != null -> info.message
-            (info.mapped ?: 0) == 0 -> BasedPythonBundle.message("debug.warning.noMappedLines")
             else -> return
         }
-        LOG.warn("basedpython debug session started with a mapping problem: $detail")
+        LOG.warn("basedpython debug session started with a .by file that does not run: $detail")
         ByCli.notifyWarning(
             project,
-            BasedPythonBundle.message("debug.warning.noMapping.title"),
+            BasedPythonBundle.message("debug.warning.collision.title"),
             detail,
         )
     }

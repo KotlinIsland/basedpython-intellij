@@ -9,11 +9,11 @@ What it does, in order:
 
 1. Refuses to act unless this really is the transpiled program. ``by`` also runs the interpreter as
    ``python -c ...`` to probe its version, and that must not try to bind a port.
-2. Reads ``_by_sourcemap.py`` out of ``by run``'s temp directory — the generated-line to
-   ``.by``-line table the CLI already writes and ``_by_runner.py`` already uses to rewrite
-   tracebacks.
-3. Starts ``debugpy`` listening, and hands pydevd the map inverted — ``.by`` lines to generated
-   ones — in this process, before anything can connect. See ``_register_source_maps``.
+2. Reads ``_by_sourcemap.py`` out of ``by run``'s temp directory for the generated files more than
+   one ``.by`` was transpiled to — see ``_read_collisions``.
+3. Starts ``debugpy`` listening. It hands pydevd no source map: ``by run``'s runner compiles each
+   ``.by`` module it loads under the ``.by``'s own path, with the ``.by``'s lines, so a frame
+   already names the file and line a breakpoint was set on.
 4. Writes the outcome to the JSON file named by ``BASEDPYTHON_DEBUG_INFO_OUT``. That file is the
    IDE's readiness signal *and* its error channel: an interpreter with no ``debugpy`` reports why
    instead of silently never opening a port.
@@ -66,38 +66,6 @@ def _sourcemap_path(run_dir):
     return os.path.join(run_dir, "_by_sourcemap.py")
 
 
-def _read_source_map(run_dir):
-    """`_by_sourcemap.py` as ``[{source, generated, lines}]``.
-
-    Loaded by explicit path rather than with a plain ``import``: ``sys.path[0]`` is not the script's
-    directory yet when ``site`` runs ``sitecustomize`` — CPython computes it after initialisation.
-    """
-    import importlib.util
-
-    path = _sourcemap_path(run_dir)
-    if not os.path.isfile(path):
-        return []
-
-    spec = importlib.util.spec_from_file_location("_by_debug_sourcemap", path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-
-    files = []
-    for generated, entry in getattr(module, "SOURCEMAP", {}).items():
-        source, lines = entry
-        files.append({
-            # realpath, not the key as written: on macOS the temp directory is reached through
-            # /var -> /private/var, `by` records the unresolved form, and Python reports the
-            # resolved one in frames. pydevd matches `runtimeSource` against a frame's filename
-            # with no normalisation of its own, so a mismatch here means breakpoints verify and
-            # then never hit. `by run`'s own `_by_runner.py` calls realpath for the same reason.
-            "generated": os.path.realpath(generated),
-            "source": source,
-            "lines": list(lines),
-        })
-    return files
-
-
 def _read_collisions(run_dir):
     """Generated files that more than one ``.by`` source claims.
 
@@ -140,94 +108,6 @@ def _read_collisions(run_dir):
         for generated in order
         if len(claims[generated]) > 1
     ]
-
-
-def _invert_lines(lines):
-    """``_by_sourcemap.py``'s generated-line to ``.by``-line table as ``.by``-line runs.
-
-    ``lines`` is indexed by 0-based generated line and holds the 0-based ``.by`` line, or ``None``
-    for prelude. The result is ``[(line, end_line, runtime_line)]``, 1-based and sorted: ``.by``
-    lines ``line``..``end_line`` are generated lines from ``runtime_line`` on, one for one — the
-    shape pydevd's ``SourceMappingEntry`` models (``runtime_line + (lineno - line)``).
-
-    The inversion is not a reversal. The forward table is a function of generated lines; the
-    inverse is a relation, because one ``.by`` line routinely becomes several generated ones. Each
-    ``.by`` line is pinned to the **last** generated line that claims it, and consecutive ``.by``
-    lines whose pinned generated lines are consecutive too coalesce into one run.
-
-    Last, not first, because the extra lines are overwhelmingly prologue the transpiler emits ahead
-    of what the user wrote, attributed to the same source line. ``def f(a = [])`` becomes::
-
-        def f(a = _MISSING):       # .by 1
-            if a is _MISSING:      # .by 2
-                a = []             # .by 2
-            a.append(1)            # .by 2
-
-    and pinning ``.by`` 2 to the first of its three lines stopped the debugger on the guard, where
-    ``a`` is still the sentinel. The trade is real but smaller: where a line expands to real work
-    *followed* by emitted code, the breakpoint lands after the work rather than before it.
-    """
-    last = {}
-    for generated, source in enumerate(lines):
-        if isinstance(source, int) and not isinstance(source, bool) and source >= 0:
-            last[source] = generated
-
-    runs = []
-    start = None
-    previous = None
-    for source in sorted(last):
-        generated = last[source]
-        if start is not None and source == previous[0] + 1 and generated == previous[1] + 1:
-            previous = (source, generated)
-            continue
-        if start is not None:
-            runs.append((start[0] + 1, previous[0] + 1, start[1] + 1))
-        start = previous = (source, generated)
-    if start is not None:
-        runs.append((start[0] + 1, previous[0] + 1, start[1] + 1))
-    return runs
-
-
-def _register_source_maps(files):
-    """Hand pydevd every ``.by`` file's map, in this process. Returns ``(registered, problem)``.
-
-    Here rather than over the protocol, and that is the whole of why ``.by`` breakpoints do not
-    depend on the order the IDE's requests arrive in. pydevd translates a breakpoint through the
-    map it holds when the breakpoint is set, and lets the program go at ``configurationDone``; a map
-    that arrived over DAP had to overtake both, and the platform promises nothing about when a
-    request of a plugin's goes out against its own. Registered here, the maps exist before the port
-    is announced, so before anything can connect, let alone set a breakpoint.
-
-    The same call pydevd's own ``setPydevdSourceMap`` handler makes, with the entries built the way
-    it builds them. A file that pydevd refuses is named in ``problem`` and costs that file; the rest
-    are still registered.
-    """
-    import pydevd
-    from _pydevd_bundle.pydevd_api import PyDevdAPI
-
-    py_db = pydevd.get_global_debugger()
-    if py_db is None:
-        return 0, "debugpy is listening but pydevd has no debugger to register the source map with"
-
-    api = PyDevdAPI()
-    registered = 0
-    refused = []
-    for file in files:
-        runs = _invert_lines(file["lines"])
-        if not runs:
-            continue
-        runtime = api.filename_to_str(file["generated"])
-        entries = [api.SourceMappingEntry(line, end, first, runtime) for line, end, first in runs]
-        error = api.set_source_mapping(py_db, file["source"], entries)
-        if error:
-            refused.append("{0}: {1}".format(file["source"], error))
-        else:
-            registered += 1
-
-    problem = None
-    if refused:
-        problem = "pydevd refused the source map of " + "; ".join(refused)
-    return registered, problem
 
 
 def _listen_without_inheriting_console(debugpy, port):
@@ -279,15 +159,10 @@ def _activate(port):
         return
 
     warning = None
-    collisions = []
     try:
-        files = _read_source_map(run_dir)
         collisions = _read_collisions(run_dir)
-        if not os.path.isfile(_sourcemap_path(run_dir)):
-            warning = "by run wrote no _by_sourcemap.py into {0}, so breakpoints in .by files " \
-                      "cannot be placed on the transpiled output".format(run_dir)
     except Exception as exc:
-        files = []
+        collisions = []
         warning = "could not read _by_sourcemap.py: {0}".format(exc)
 
     try:
@@ -301,16 +176,6 @@ def _activate(port):
         })
         return
 
-    # Before the report, because the report is what the IDE waits for before it connects: nothing
-    # can set a breakpoint until the maps are in.
-    mapped = 0
-    try:
-        mapped, problem = _register_source_maps(files)
-    except Exception as exc:
-        problem = "could not hand the source map to pydevd: {0}".format(exc)
-    if problem:
-        warning = problem if warning is None else "{0}; {1}".format(warning, problem)
-
     # Written only once the port is open, which is what makes its appearance a readiness signal.
     _write_info({
         "status": "listening",
@@ -318,7 +183,6 @@ def _activate(port):
         "python": sys.executable,
         "runDir": run_dir,
         "message": warning,
-        "mapped": mapped,
         "collisions": collisions,
     })
     debugpy.wait_for_client()

@@ -37,43 +37,17 @@ class ByDebugBootstrapTest {
         assertTrue(bootstrap.contains("_by_runner.py"), "bootstrap does not check what it was loaded into")
     }
 
-    /**
-     * On macOS the temp directory is reached through `/var` -> `/private/var`, `by` records the
-     * unresolved form in `SOURCEMAP`, and Python reports the resolved one in frames. pydevd matches
-     * `runtimeSource` against a frame's filename with no normalisation of its own, so without this
-     * the breakpoint verifies and then never hits — observed live before the fix. `by run`'s own
-     * `_by_runner.py` calls realpath for the same reason.
-     */
     @Test
-    fun `the bootstrap resolves generated paths before reporting them`() {
-        assertTrue(
-            bootstrap.contains("os.path.realpath(generated)"),
-            "the generated path must be realpath'd or breakpoints verify but never hit",
-        )
-    }
-
-    @Test
-    fun `a listening report says how many files pydevd was handed a map for`() {
+    fun `a listening report is a live session on its port`() {
         val info = ByDebuggeeInfo.parse(
             """
             {"status": "listening", "port": 5679, "python": "/usr/bin/python3",
-             "runDir": "/tmp/x", "message": null, "mapped": 2}
+             "runDir": "/tmp/x", "message": null, "collisions": []}
             """.trimIndent()
         )
         assertNotNull(info)
         assertTrue(info!!.isListening)
         assertEquals(5679, info.port)
-        assertEquals(2, info.mapped)
-    }
-
-    /**
-     * The key the bootstrap writes and the one [ByDebuggeeInfo] reads are two spellings in two
-     * languages with nothing linking them: renamed on one side, every debugpy session would warn
-     * that the map was empty.
-     */
-    @Test
-    fun `the bootstrap reports the count under the key the IDE reads`() {
-        assertTrue(bootstrap.contains("\"mapped\": mapped"), "the bootstrap no longer reports `mapped`")
     }
 
     @Test
@@ -83,8 +57,8 @@ class ByDebugBootstrapTest {
         assertFalse(info!!.isListening)
         assertEquals("cannot import debugpy", info.message)
         // Gson builds instances without running the constructor, so an absent key leaves null
-        // behind whatever a Kotlin default declares. The error report carries no "mapped" at all.
-        assertNull(info.mapped)
+        // behind whatever a Kotlin default declares. The error report carries no collisions at all.
+        assertTrue(info.realCollisions.isEmpty())
     }
 
     /**

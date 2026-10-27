@@ -23,16 +23,11 @@ data class ByDebuggeeInfo(
     /** Present when [status] is [STATUS_ERROR], and as a warning alongside [STATUS_LISTENING]. */
     val message: String? = null,
     /**
-     * How many `.by` files the bootstrap handed pydevd a map for, in the debuggee, before it wrote
-     * this — so before the IDE can connect, let alone set a breakpoint. Zero with no [message]
-     * means `by run` wrote a map with nothing in it.
-     *
      * Every field is nullable and defaulted because Gson builds instances without running the
      * constructor: an absent key leaves `null` behind whatever a Kotlin default declares, so
      * anything not marked nullable here would be a type-system lie waiting to throw. The error
-     * report, for one, carries no `mapped` at all.
+     * report, for one, carries no `collisions` at all.
      */
-    val mapped: Int? = null,
     val collisions: List<ByGeneratedCollision>? = null,
 ) {
     val isListening: Boolean get() = status == STATUS_LISTENING

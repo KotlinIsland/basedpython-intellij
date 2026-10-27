@@ -23,7 +23,9 @@ enum class ByDebugBackend {
     BPD,
 
     /**
-     * debugpy, with the source map handed to pydevd inside the debuggee by the bootstrap.
+     * debugpy, started inside the debuggee by the bootstrap. It is handed no source map: `by run`'s
+     * runner compiles each `.by` module under the `.by`'s path and lines, which is where pydevd
+     * looks for a breakpoint.
      *
      * Kept because it is what shipped, because it needs no extra binary — `pip install debugpy`
      * and nothing else — and because a bug in one backend should not leave `.by` undebuggable.
@@ -60,12 +62,13 @@ enum class ByDebugBackend {
      *
      * Not the same fact as the `supportsGotoTargetsRequest` both adapters answer `initialize` with.
      * [BPD] moves the frame through its own source map and says why when cpython will not.
-     * [DEBUGPY] advertises the capability, and pydevd takes the `.by` line through the map the
-     * bootstrap handed it, but the move does not happen: measured against debugpy 1.8.21 on
-     * python 3.14, a jump back to a line of the paused function was refused with cpython's "line 22
-     * comes after the current code block" (22 being the transpiled line), and a jump forward left
-     * the frame where it was, with no stop and nothing said. A menu item that does that is broken
-     * rather than unavailable, so under debugpy there is none.
+     * [DEBUGPY] advertises the capability, and measured against debugpy 1.8.21 on python 3.14 it
+     * refused a jump back with cpython's "line 22 comes after the current code block" (22 being the
+     * transpiled line) and left the frame where it was on a jump forward — while the bootstrap
+     * handed pydevd a source map, which moved the `.by` line to a transpiled one no frame was on.
+     * With no map, pydevd moved a frame of `main` back a line and forward a line (debugpy 1.8.22,
+     * a raw DAP client), but this menu item has not been measured against it since, so under
+     * debugpy there is still none.
      */
     val setsNextStatement: Boolean
         get() = when (this) {

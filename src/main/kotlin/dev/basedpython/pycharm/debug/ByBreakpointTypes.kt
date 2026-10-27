@@ -18,9 +18,10 @@ import dev.basedpython.pycharm.util.BasedPythonBundle
  * the IDE this plugin targets does not bundle the Python plugin (FEATURES.md §5), and a session
  * would not see that type's breakpoints anyway — the platform dispatches a breakpoint to a handler
  * by exact type class, never by assignability. Everything the debugger needs is the file and the
- * line — the mapping onto the transpiled output happens in the debugger, which reads
- * `_by_sourcemap.py` itself — so its [ByBreakpointProperties] carry one thing the debugger does not
- * use at all: whether this breakpoint is a log point.
+ * line — bpd maps it onto the transpiled output, reading `_by_sourcemap.py` itself, and under
+ * debugpy `by run`'s runner has compiled the `.by` under its own path and lines — so its
+ * [ByBreakpointProperties] carry one thing the debugger does not use at all: whether this
+ * breakpoint is a log point.
  *
  * Claiming a `.py` we own — and only one we own — is also what keeps this from being a second
  * breakpoint type in PyCharm: the platform collects *every* type whose [canPutAt] says yes and puts
@@ -30,10 +31,10 @@ import dev.basedpython.pycharm.util.BasedPythonBundle
  *
  * A `.py` breakpoint needs no source map. `by run` never transpiles a plain `.py`, so the
  * interpreter loads the file the user is looking at, and both backends place the breakpoint on it
- * directly — pydevd because the file is simply not one it was given a map for, bpd because its
- * mapping layer passes everything that is not `.by` straight through. Verified live against
- * debugpy 1.8.21: the breakpoint reports `verified`, stops in `helper.py` with locals intact, and
- * the `.by` frames below it are still mapped onto their sources.
+ * directly — pydevd as it places any breakpoint, bpd because its mapping layer passes everything
+ * that is not `.by` straight through. Verified live against debugpy 1.8.21: the breakpoint reports
+ * `verified`, stops in `helper.py` with locals intact, and the `.by` frames below it are reported
+ * against their sources.
  */
 class ByLineBreakpointType : XLineBreakpointType<ByBreakpointProperties>(
     ID,
