@@ -11,6 +11,7 @@ import com.intellij.execution.process.ProcessTerminatedListener
 import com.intellij.execution.process.OSProcessUtil
 import com.intellij.execution.ui.ConsoleViewContentType
 import com.intellij.openapi.Disposable
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.editor.RangeMarker
 import com.intellij.openapi.util.Disposer
@@ -25,9 +26,11 @@ import dev.basedpython.pycharm.lang.BasedPythonLanguage
 import dev.basedpython.pycharm.lsp.ByLspServerSupportProvider
 import dev.basedpython.pycharm.run.ByCommonOptions
 import dev.basedpython.pycharm.run.byCommandLine
+import dev.basedpython.pycharm.run.runCapturing
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.atomic.AtomicInteger
+import kotlin.time.Duration.Companion.seconds
 
 private val LOG = Logger.getInstance(ByConsoleSession::class.java)
 
@@ -36,9 +39,11 @@ private val LOG = Logger.getInstance(ByConsoleSession::class.java)
  * language console it is typed into.
  *
  * `by repl` runs in the project as `by run` would, with `--session-file` keeping the session's source
- * for completion ([ByConsoleDocument]). Each input is written to its standard input framed as a paste
- * ([ByConsoleText.framed]), so it is one input whatever it holds; what the program prints, the values
- * the session shows and its tracebacks are the process's output. Enter is [ByConsoleExecuteHandler]'s.
+ * for completion ([ByConsoleDocument]). What is typed is written to its standard input as
+ * [ByReplInput] decides: an input framed as a paste ([ByConsoleText.framed]), so it is one input
+ * whatever it holds, and a line the program reads — `input()` — as it is, which `--events` tells the
+ * two apart by ([ByReplEvents]). What the program prints, the values the session shows and its
+ * tracebacks are the process's output. Enter is [ByConsoleExecuteHandler]'s.
  *
  * Interrupting sends `SIGINT` to the process tree, as a terminal sends it to the process group: `by
  * repl` ignores it, and the interpreter running the input raises `KeyboardInterrupt` and carries on.
@@ -50,6 +55,7 @@ internal class ByConsoleSession private constructor(
     val project: Project,
     private val handler: KillableColoredProcessHandler,
     private val sessionFile: Path,
+    private val events: ByReplEvents?,
     id: Int,
 ) : Disposable {
 
@@ -61,6 +67,22 @@ internal class ByConsoleSession private constructor(
     /** Where each input numbered so far is in the history, by its number. */
     private val inputs = java.util.concurrent.ConcurrentHashMap<Int, SentInput>()
     private val numbered = AtomicInteger()
+
+    /**
+     * How each submission is written. With no [events] — a `by` from before `--events` — everything
+     * is an input, framed, as it was before there was a way to know.
+     */
+    private val reader = ByReplInput(
+        write = ::write,
+        sentAsInput = { submission -> (submission.place as? SentInput)?.let { inputs[numbered.incrementAndGet()] = it } },
+        alwaysInput = events == null,
+    )
+
+    /**
+     * Whether what is typed now is a line for the program or the rest of an input rather than an input
+     * of its own: Enter sends it as it is then, without asking `by` whether it is whole.
+     */
+    val readsLine: Boolean get() = reader.readsLine
 
     val executeHandler = ByConsoleExecuteHandler(this)
 
@@ -87,6 +109,12 @@ internal class ByConsoleSession private constructor(
                 document.close()
             }
         })
+        events?.listen { event ->
+            if (event is ByReplEvents.Event.Waiting) {
+                reader.reading(event.reading)
+                ApplicationManager.getApplication().invokeLater({ if (!console.consoleEditor.isDisposed) console.prompt = promptFor(event.reading) }, project.disposed)
+            }
+        }
         handler.startNotify()
     }
 
@@ -118,14 +146,12 @@ internal class ByConsoleSession private constructor(
     }
 
     /**
-     * Sends [text], just printed to the history, to `by repl` as one input, and remembers where it is
-     * in the history under the number `by repl` gives it. On the EDT.
+     * Sends [text], just printed to the history, to `by repl`: as one input when the session reads its
+     * next input, remembered under the number `by repl` gives it, and as a line when the program reads
+     * one. On the EDT, where the history is.
      */
     fun send(text: String) {
-        if (!ByConsoleText.isInput(text)) return
-        val number = numbered.incrementAndGet()
-        remember(number, text)
-        write(ByConsoleText.framed(text))
+        reader.submit(ByReplInput.Submission(text, locate(text)))
     }
 
     private fun write(text: String) {
@@ -142,27 +168,27 @@ internal class ByConsoleSession private constructor(
     }
 
     /**
-     * Records where input [number], which ends the history, is: the history's last lines, each the
-     * prompt the console printed before it and then the input's own line.
+     * Where [text], which ends the history, is: the history's last lines, each the prompt the console
+     * printed before it and then the text's own line.
      */
-    private fun remember(number: Int, text: String) {
+    private fun locate(text: String): SentInput? {
         val history = (console as? LanguageConsoleImpl)?.let { console ->
             // the input is still in the console's buffer; it is printed before anything printed after it
             console.flushDeferredText()
             console.historyViewer.document
-        } ?: return
+        } ?: return null
         // one line of the history each, a last empty one included: the console prints the input and then a line break
         val lines = text.split('\n')
         val end = history.textLength
-        if (end == 0 || history.charsSequence[end - 1] != '\n') return
+        if (end == 0 || history.charsSequence[end - 1] != '\n') return null
         val first = history.getLineNumber(end) - lines.size
-        if (first < 0) return
+        if (first < 0) return null
         val prefixes = lines.mapIndexed { index, line ->
             val historyLine = first + index
             (history.getLineEndOffset(historyLine) - history.getLineStartOffset(historyLine) - line.length).coerceAtLeast(0)
         }
         val marker = history.createRangeMarker(history.getLineStartOffset(first), history.getLineEndOffset(first + lines.size - 1))
-        inputs[number] = SentInput(marker, prefixes)
+        return SentInput(marker, prefixes)
     }
 
     /** Where `<by-input-[number]>`'s [line] and [column], 1-based, are in the history, if it is still there. */
@@ -217,6 +243,7 @@ internal class ByConsoleSession private constructor(
 
     override fun dispose() {
         if (!handler.isProcessTerminated) handler.destroyProcess()
+        events?.close()
         document.close()
         input.shutdown()
         try {
@@ -231,37 +258,75 @@ internal class ByConsoleSession private constructor(
     companion object {
         const val PROMPT = ">>> "
 
+        /** What the console's prompt says while the program reads a line: nothing, as python's console shows `input()`'s own. */
+        private const val PROGRAM_PROMPT = ""
+
+        /** While an input sent unframed goes on. */
+        private const val CONTINUATION_PROMPT = "... "
+
+        private fun promptFor(reading: ByReplEvents.Reading): String = when (reading) {
+            ByReplEvents.Reading.INPUT -> PROMPT
+            ByReplEvents.Reading.CONTINUATION -> CONTINUATION_PROMPT
+            ByReplEvents.Reading.PROGRAM -> PROGRAM_PROMPT
+        }
+
         /** The console history's own kind, which the platform keeps the history under. */
         private const val HISTORY_TYPE = "basedpython"
 
         private val ids = AtomicInteger()
 
         /**
-         * Starts `by repl` for [project]. Starts a process, so off the EDT; the console it returns is
-         * built on the EDT by [build].
+         * Starts `by repl` for [project] — in [module] first, as `by run` names one, when it is given.
+         * Starts processes, so off the EDT; the console it returns is built on the EDT by [build].
+         *
+         * `--events` when this `by` has it, asked of `by repl --help`: a `by` from before it refuses
+         * the flag and starts no session, and is talked to as it was before, every line an input.
          *
          * @throws com.intellij.execution.ExecutionException when no `by` can be found or started.
          */
-        fun startProcess(project: Project): Pair<KillableColoredProcessHandler, Path> {
+        suspend fun startProcess(project: Project, module: String? = null): Started {
+            val events = if (hasEvents(project)) ByReplEvents.open() else null
             val sessionFile = Files.createTempFile("basedpython-console", ".by")
-            val commandLine = byCommandLine(
-                project = project,
-                options = ByCommonOptions(),
-                arguments = listOf("repl", "--session-file", sessionFile.toString()),
-                // the session imports the project's modules as a program does
-                startsProgram = true,
-            )
+            val commandLine = try {
+                byCommandLine(
+                    project = project,
+                    options = ByCommonOptions(),
+                    arguments = buildList {
+                        addAll(listOf("repl", "--session-file", sessionFile.toString()))
+                        if (events != null) addAll(listOf("--events", events.port.toString()))
+                        if (module != null) addAll(listOf("--module", module))
+                    },
+                    infrastructureEnv = events?.let { mapOf(ByReplEvents.ENV_TOKEN to it.token) }.orEmpty(),
+                    // the session imports the project's modules as a program does
+                    startsProgram = true,
+                )
+            } catch (e: com.intellij.execution.ExecutionException) {
+                events?.close()
+                throw e
+            }
             val handler = KillableColoredProcessHandler(commandLine)
             // `by repl` ignores SIGINT, so the soft kill would interrupt the input running rather than
             // stop anything; and the interpreter is its child, which a stop has to reach too
             handler.setShouldKillProcessSoftly(false)
             handler.setShouldDestroyProcessRecursively(true)
             ProcessTerminatedListener.attach(handler)
-            return handler to sessionFile
+            return Started(handler, sessionFile, events)
         }
 
+        /** Whether this project's `by repl` takes `--events`. */
+        private suspend fun hasEvents(project: Project): Boolean {
+            val help = runCapturing(byCommandLine(project, ByCommonOptions(), listOf("repl", "--help")), HELP_TIMEOUT)
+            return help.exitCode == 0 && EVENTS_FLAG in help.stdout
+        }
+
+        private const val EVENTS_FLAG = "--events"
+        private val HELP_TIMEOUT = 30.seconds
+
         /** The console for a process [startProcess] started. On the EDT. */
-        fun build(project: Project, process: Pair<KillableColoredProcessHandler, Path>): ByConsoleSession =
-            ByConsoleSession(project, process.first, process.second, ids.incrementAndGet())
+        fun build(project: Project, started: Started): ByConsoleSession =
+            ByConsoleSession(project, started.handler, started.sessionFile, started.events, ids.incrementAndGet())
     }
+
+    /** A `by repl` [startProcess] started, and what the console talks to it through. */
+    class Started(val handler: KillableColoredProcessHandler, val sessionFile: Path, val events: ByReplEvents?)
 }

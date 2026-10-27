@@ -58,6 +58,8 @@ internal class ByConsoleExecuteHandler(internal val session: ByConsoleSession) :
 
     override fun runExecuteAction(consoleView: LanguageConsoleView) {
         if (runningNow) return super.runExecuteAction(consoleView)
+        // a line the program reads, or the rest of an input, is not a question of grammar: it is sent as typed
+        if (session.readsLine) return runNow(consoleView)
         val editor = consoleView.consoleEditor
         val document = editor.document
         val stamp = document.modificationStamp

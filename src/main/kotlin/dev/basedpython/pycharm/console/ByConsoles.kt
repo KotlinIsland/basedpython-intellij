@@ -73,7 +73,7 @@ internal class ByConsoles(private val project: Project, val scope: CoroutineScop
                 return@launch
             }
             withContext(Dispatchers.EDT) {
-                if (project.isDisposed) return@withContext process.first.destroyProcess()
+                if (project.isDisposed) return@withContext process.handler.destroyProcess().also { process.events?.close() }
                 val session = ByConsoleSession.build(project, process)
                 sessions += session
                 Disposer.register(session) { sessions -= session }

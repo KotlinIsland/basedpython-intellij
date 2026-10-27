@@ -23,6 +23,9 @@ internal object ByConsoleText {
      */
     fun framed(input: String): String = PASTE_START + input + PASTE_END + "\n"
 
+    /** [text] as the program reads it — a line `input()` returns — or as an input sent unframed goes on: as it is, ended by a newline. */
+    fun line(text: String): String = text + "\n"
+
     /**
      * Whether `by repl` reads [input] as an input at all. A blank one is skipped without being run or
      * numbered, as python's own repl skips it, so the console sends nothing for it.
