@@ -355,6 +355,15 @@ internal class ByProgramModel(private val project: Project, scope: CoroutineScop
         tests = ByProjectTests((tests?.byFile ?: emptyMap()) + (file to items))
     }
 
+    /** Forgets every answer, project-wide ones too: a light test project outlives the test that put them in. */
+    @TestOnly
+    fun forgetAll() {
+        entryPoints.clear()
+        testFiles.clear()
+        modules = null
+        tests = null
+    }
+
     companion object {
         fun getInstance(project: Project): ByProgramModel = project.service()
 

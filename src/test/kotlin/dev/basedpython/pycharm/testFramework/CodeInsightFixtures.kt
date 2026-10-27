@@ -1,6 +1,7 @@
 package dev.basedpython.pycharm.testFramework
 
 import com.intellij.openapi.Disposable
+import com.intellij.openapi.components.serviceIfCreated
 import com.intellij.platform.lsp.api.LspIntegrationProvider
 import com.intellij.testFramework.ExtensionTestUtil
 import com.intellij.testFramework.LeakHunter
@@ -15,6 +16,7 @@ import com.intellij.testFramework.junit5.impl.testApplication
 import com.intellij.testFramework.runInEdtAndWait
 import dev.basedpython.pycharm.lsp.BuffLspServerSupportProvider
 import dev.basedpython.pycharm.lsp.ByLspServerSupportProvider
+import dev.basedpython.pycharm.run.model.ByProgramModel
 import org.junit.jupiter.api.extension.ExtensionContext
 
 /**
@@ -50,7 +52,12 @@ fun codeInsightFixture(
   val fixture = factory.createCodeInsightFixture(projectFixture, LightTempDirTestFixtureImpl(true))
   fixture.setUp()
   withoutOwnLanguageServers(fixture.testRootDisposable)
-  initialized(fixture) { fixture.tearDown() }
+  initialized(fixture) {
+    // The light project is shared by every test, and so is its program model: module names one test
+    // put in were completed by Run Anything in a later one, whenever that ran after.
+    fixture.project.serviceIfCreated<ByProgramModel>()?.forgetAll()
+    fixture.tearDown()
+  }
 }
 
 /**
