@@ -445,6 +445,21 @@ interface ByServerExtensions {
     fun testSubjects(args: ByTestLinksParams): CompletableFuture<List<ByTestLink>?>
 
     /**
+     * Whether the text typed into a basedpython console is a whole input yet — see
+     * [dev.basedpython.pycharm.console.ByConsoleExecuteHandler].
+     *
+     * **Why the server.** Whether Enter runs what has been typed or starts another line of it is a
+     * question about basedpython's grammar: a compound statement goes on until a blank line, an open
+     * bracket until it closes, a triple-quoted string until its quotes. `by repl` answers it the same
+     * way for the lines it reads itself, so the console and the session agree.
+     *
+     * The text is all there is to it: no document. A `by` from before the request answers
+     * `MethodNotFound`.
+     */
+    @JsonRequest("by/inputStatus")
+    fun inputStatus(args: ByInputStatusParams): CompletableFuture<ByInputStatus?>
+
+    /**
      * The collected tests that call a function, a method, a class or anything a module declares,
      * and where a new test of it goes — the other direction of [testSubjects].
      *
@@ -1570,3 +1585,12 @@ data class ByDiffIgnoredRangesParams(val text: String, val uri: String? = null)
 
 /** Each import statement, and the text the tokenizer discards without its being significant. */
 data class ByDiffIgnoredRanges(val imports: List<Range> = emptyList(), val formatting: List<Range> = emptyList())
+
+/** The text typed into a console so far, each line ending in a newline, the one Enter adds included. */
+data class ByInputStatusParams(val text: String)
+
+/**
+ * Whether a console's input can run: `complete`, `incomplete` — it needs more lines — or `invalid` —
+ * no more lines can make it valid, and running it reports why.
+ */
+data class ByInputStatus(val status: String? = null)

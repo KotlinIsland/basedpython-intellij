@@ -125,6 +125,11 @@
         <completion.contributor
             language="basedpython" order="first"
             implementationClass="dev.basedpython.pycharm.lsp.completion.BySmartCompletionContributor"/>
+        <!-- Completion in a basedpython console's input, from by's completion over the session's
+             module with the input at its end; see console.ByConsoleCompletionContributor. -->
+        <completion.contributor
+            language="basedpython" order="first"
+            implementationClass="dev.basedpython.pycharm.console.ByConsoleCompletionContributor"/>
         <!-- Where undoing and redoing a log point lands. The undo step itself is the platform's
              (ModUpdateSystemOptions), so nothing of this plugin's sits in UndoManager and pins its
              classloader after an unload; see ByLogpointUndo. -->
@@ -808,6 +813,13 @@
              uv is the only backend today; `env.manager.EnvBackend` is the seam a conda or pixi one
              slots into, and `EnvBackends.ALL` is the whole registration. Nothing here creates or
              modifies an environment without a user gesture — see env.manager.EnvOperations. -->
+        <!-- A basedpython console: `by repl` over its standard streams, behind a language console
+             typed in basedpython. See console.ByConsoles. -->
+        <toolWindow id="basedpython Console"
+                    anchor="bottom"
+                    canCloseContents="true"
+                    icon="/icons/basedpython.svg"
+                    factoryClass="dev.basedpython.pycharm.console.ByConsoleToolWindowFactory"/>
         <toolWindow id="basedpython Environment"
                     anchor="right"
                     icon="/icons/basedpythonEnv.svg"
@@ -901,6 +913,19 @@
                 class="dev.basedpython.pycharm.debug.ByJumpToCursorAction">
             <add-to-group group-id="DebugMainMenu" relative-to-action="ForceRunToCursor" anchor="after"/>
             <add-to-group group-id="EditorPopupMenuDebug" relative-to-action="ForceRunToCursor" anchor="after"/>
+        </action>
+
+        <!-- The basedpython console, beside PyCharm's own Python Console in Tools, and Alt+Shift+E — .py's
+             Execute Selection in Python Console — sending a .by editor's selection or line to it. -->
+        <action id="basedpython.OpenConsole"
+                class="dev.basedpython.pycharm.console.ByOpenConsoleAction"
+                icon="/icons/basedpython.svg">
+            <add-to-group group-id="ToolsMenu" anchor="first"/>
+        </action>
+        <action id="basedpython.ExecuteInConsole"
+                class="dev.basedpython.pycharm.console.ByExecuteInConsoleAction">
+            <keyboard-shortcut keymap="$default" first-keystroke="alt shift E"/>
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
         </action>
 
         <!-- ===== Stream D: Tools menu group + popup entries ===== -->
