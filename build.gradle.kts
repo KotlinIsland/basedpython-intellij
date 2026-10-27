@@ -119,6 +119,19 @@ dependencies {
       plugin("com.jonnyzzz.mcp-steroid", "0.102.0-r-c68d8f15d")
     }
   }
+
+  // The Python plugin, PythonCore, which PyCharm bundles and IntelliJ IDEA does not: PyCharm's
+  // *Docstring format* setting (PyDocumentationSettings), read under an optional dependency in
+  // plugin.xml (basedpython-python.xml). On the main compile classpath and nowhere else. As
+  // `intellijPlatform { plugin(…) }` it would be installed into every sandbox: the tests would only
+  // ever run with the Python plugin, never as an IDEA without it, and `runPyCharm`'s PyCharm would
+  // get a second PythonCore beside its own. The platform's transforms on the compile classpath
+  // unpack the plugin zip into its jars, as they do for a `plugin(…)`.
+  //
+  // Pinned to the build `platformVersion` names, and moved with it: PythonCore is published for each
+  // public build, under that build's number. `-PpythonCoreVersion` names another, for a
+  // `-PplatformVersion` with no PythonCore of its own (a snapshot such as 263.7307.60).
+  compileOnly("com.jetbrains.plugins:PythonCore:${providers.gradleProperty("pythonCoreVersion").getOrElse("263.7307.44")}")
 }
 
 kotlin {

@@ -18,6 +18,7 @@ import com.intellij.platform.lsp.util.getLsp4jPosition
 import com.intellij.platform.lsp.util.getOffsetInDocument
 import com.intellij.platform.lsp.util.getRangeInDocument
 import com.intellij.psi.PsiFile
+import com.intellij.psi.PsiManager
 import dev.basedpython.pycharm.lang.BasedPythonFile
 import dev.basedpython.pycharm.lsp.ByAnswer
 import dev.basedpython.pycharm.lsp.ByServerDocuments
@@ -48,8 +49,9 @@ import org.jetbrains.annotations.VisibleForTesting
  * stub is written only if the text and caret are as they were, and not at all by a `by` without
  * the request or where it answers `null`.
  *
- * The format is the one the file's other docstrings are written in, `by`'s choice: PyCharm's own
- * *Docstring format* setting belongs to the Python plugin, which this plugin does not depend on.
+ * The format is PyCharm's *Docstring format* setting where the Python plugin is, as for `.py`
+ * ([ByDocstringFormatProvider]); without it, the one the file's other docstrings are written in,
+ * `by`'s choice.
  */
 class ByDocstringEnterHandler : EnterHandlerDelegate {
 
@@ -149,11 +151,20 @@ class ByDocstringStubs(private val project: Project, private val scope: Coroutin
             return if (text.subSequence(caret, lineEnd).isBlank()) Opened(indent, quotes, null) else null
         }
 
-        /** What `by` answers for the empty docstring at [offset] of [document]; `null` for no stub, whatever the reason. */
+        /**
+         * What `by` answers for the empty docstring at [offset] of [document], in the format the
+         * IDE's settings name for [file] if they name one; `null` for no stub, whatever the reason.
+         */
         suspend fun ask(server: LspClient, file: VirtualFile, document: Document, offset: Int): ByDocstringStub? {
             val params = readAction {
                 ByServerDocuments.ensureOpen(server, server.project, file)
-                ByDocstringStubParams(server.getDocumentIdentifier(file), getLsp4jPosition(document, offset), ByTextHash.of(document.immutableCharSequence))
+                val format = PsiManager.getInstance(server.project).findFile(file)?.let(ByDocstringFormatProvider::formatFor)
+                ByDocstringStubParams(
+                    server.getDocumentIdentifier(file),
+                    getLsp4jPosition(document, offset),
+                    ByTextHash.of(document.immutableCharSequence),
+                    format?.wire,
+                )
             }
             val answer = awaitingAgain<ByDocstringStub>("by/docstringStub", LspClient.DEFAULT_REQUEST_TIMEOUT_MS.toLong()) { sent ->
                 server.sendRequest { (it as ByServerExtensions).docstringStub(params).also(sent) }

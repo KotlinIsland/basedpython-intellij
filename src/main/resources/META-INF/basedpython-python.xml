@@ -1,0 +1,12 @@
+<!--
+  Loaded only when the Python plugin is present — PyCharm, or IntelliJ IDEA with the Python plugin:
+  a `.by` function's docstring stub is written in the format PyCharm's Docstring format setting
+  names (Settings | Tools | Python Integrated Tools), as a `.py` one is
+  (editor.smart.python.PythonDocstringFormatProvider). Optional because basedpython does not need
+  the Python plugin; without it `by` picks the format from the file's other docstrings.
+-->
+<idea-plugin>
+    <extensions defaultExtensionNs="dev.basedpython.ide">
+        <docstringFormat implementation="dev.basedpython.pycharm.editor.smart.python.PythonDocstringFormatProvider"/>
+    </extensions>
+</idea-plugin>

@@ -515,7 +515,8 @@ interface ByServerExtensions {
      *
      * **Why the server.** Which parameters a function has, which of them is the receiver, whether
      * it is a generator and what its annotation says it returns are the parser's and the checker's;
-     * the format is the file's own other docstrings', which is `by`'s to read.
+     * the format, unless the IDE's settings name one, is the file's own other docstrings', which is
+     * `by`'s to read.
      *
      * A `null` answer means there is no empty function docstring at the position, or the server
      * declined. A `by` from before the request answers `MethodNotFound`.
@@ -729,13 +730,37 @@ data class ByCompletedStatement(
 data class ByUnwrapParams(val textDocument: TextDocumentIdentifier, val range: Range, val textHash: String)
 
 /**
- * A position inside an empty docstring, in the text [textHash] names. No `format`: `by` writes the
- * format the file's other docstrings are in, and reStructuredText, as PyCharm does, when none says.
+ * A position inside an empty docstring, in the text [textHash] names, and the [format] to write the
+ * stub in: a [ByDocstringFormat.wire] name, or `null` for `by` to write the format the file's other
+ * docstrings are in, and reStructuredText, as PyCharm does, when none says.
  *
  * Field names are the wire format and must match `ty_server`'s `DocstringStubParams`, which is
  * `deny_unknown_fields`; `textHash` is taken out by the server's dispatcher before that.
  */
-data class ByDocstringStubParams(val textDocument: TextDocumentIdentifier, val position: Position, val textHash: String)
+data class ByDocstringStubParams(
+    val textDocument: TextDocumentIdentifier,
+    val position: Position,
+    val textHash: String,
+    val format: String? = null,
+)
+
+/**
+ * A format `by/docstringStub` writes a stub in, by its name on the wire, `ty_server`'s `StubFormat`.
+ * A string rather than this enum in [ByDocstringStubParams]: lsp4j writes an enum as a number.
+ */
+enum class ByDocstringFormat(val wire: String) {
+    /** `:param width:` and `:return:` fields. */
+    REST("rest"),
+
+    /** An `Args:` and a `Returns:` section. */
+    GOOGLE("google"),
+
+    /** `Parameters` and `Returns` sections underlined with dashes. */
+    NUMPY("numpy"),
+
+    /** The summary line alone. */
+    PLAIN("plain"),
+}
 
 /** The docstring to write: [newText] in place of the whole literal at [range], the caret at [caret] after it. */
 data class ByDocstringStub(
