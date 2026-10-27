@@ -8,7 +8,7 @@ import com.intellij.execution.process.KillableColoredProcessHandler
 import com.intellij.execution.process.ProcessEvent
 import com.intellij.execution.process.ProcessListener
 import com.intellij.execution.process.ProcessTerminatedListener
-import com.intellij.execution.process.UnixProcessManager
+import com.intellij.execution.process.OSProcessUtil
 import com.intellij.execution.ui.ConsoleViewContentType
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.diagnostic.Logger
@@ -195,9 +195,8 @@ internal class ByConsoleSession private constructor(
         // ignores it, and the interpreter it runs the session in is its child
         val root = handler.process.toHandle()
         for (process in sequenceOf(root) + root.descendants().iterator().asSequence()) {
-            if (UnixProcessManager.sendSignal(process.pid().toInt(), UnixProcessManager.SIGINT) != 0) {
-                LOG.info("could not interrupt process ${process.pid()} of by repl")
-            }
+            // SIGINT, on Unix
+            OSProcessUtil.terminateProcessGracefully(process.pid().toInt())
         }
     }
 
