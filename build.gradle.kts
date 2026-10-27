@@ -12,27 +12,25 @@ plugins {
   id("org.jetbrains.changelog")
 }
 
-// The build everything compiles and tests against: the floor itself, a build `sinceBuild` admits.
+// The build everything compiles and tests against: the newest 263 EAP, the only build this plugin
+// supports (`sinceBuild` is its branch). An EAP stops at "EAP Build Expired" about 30 days after it
+// ships — 263.5153 did on 2026-10-22 and 263.5701.42 on 2026-10-25 — so an older floor admits only
+// IDEs that cannot start, and nothing can be run or measured against it.
 //
-// Pinned, and to the bottom of the range rather than the top. It was `263.+`, so the build would
-// follow the platform, and it did — out from under everyone at once: 263.5701.9 landing in the
-// snapshot repository took `intellij.platform.vcs` out of the core classloader, and every checkout
-// stopped compiling with nothing changed here and nothing to bisect. Compiling against the floor is
-// also what holds the floor honest: an API newer than 263.5701 is a compile error here, where
-// against the newest snapshot it compiled clean and nothing checked the oldest build `sinceBuild`
-// lets install the plugin.
+// Pinned rather than `263.+`. Following the snapshot repository moved the build out from under
+// everyone at once: 263.5701.9 landing there took `intellij.platform.vcs` out of the core
+// classloader, and every checkout stopped compiling with nothing changed here and nothing to
+// bisect. Moving to a newer build is a change to this line and to `sinceBuild`, made together.
 //
-// Following the platform moves out of the compile: `verifyPlugin` checks the newest 263
-// snapshot as well as this build (see `ides { }`), and `-PplatformVersion=263.+` — or any build —
-// compiles and tests against the top, which catches what the verifier cannot.
-//
-// 263.5701.42 because it is the build the floor moved to when the 263.5153 EAPs expired (see
-// `sinceBuild`). It is a build of the floor's branch rather than its first: 263.5701.9 and
-// 263.5701.37 are older, and `sinceBuild` admits them.
-val platformVersion: String = providers.gradleProperty("platformVersion").getOrElse("263.5701.42-EAP-CANDIDATE")
+// `verifyPlugin` also checks the newest 263 snapshot (see `ides { }`), and
+// `-PplatformVersion=263.+` — or any build — compiles and tests against it.
+val platformVersion: String = providers.gradleProperty("platformVersion").getOrElse("263.7307.44-EAP-CANDIDATE")
 
 dependencies {
-  testImplementation(platform("org.junit:junit-bom:5.14.2"))
+  // JUnit 6: the platform's JUnit 5 test framework calls `ExtensionContext.Store.computeIfAbsent`,
+  // new in 6.0, from 263.7307 on; against 5.14 every test died before it ran with a
+  // NoSuchMethodError in `TestUncaughtExceptionHandler`.
+  testImplementation(platform("org.junit:junit-bom:6.1.3"))
   testImplementation("org.junit.jupiter:junit-jupiter")
   // Gradle needs the launcher on the test runtime classpath to drive the JUnit Platform.
   testRuntimeOnly("org.junit.platform:junit-platform-launcher")
@@ -82,6 +80,11 @@ dependencies {
     // classloader and so on the compile classpath unasked; 263.5701 made it a module of its own,
     // on the classpath only when named. Declared in plugin.xml too.
     bundledModule("intellij.platform.vcs")
+    // CommitContext, the commit's shared state that CheckinHandlerFactory.createHandler takes. A
+    // module of its own, which was on the classpath only transitively, through
+    // `intellij.platform.vcs`'s generated dependencies, until 263.7307 dropped it from them.
+    // Declared in plugin.xml too.
+    bundledModule("intellij.platform.vcs.core")
     // The Problems view (ProblemsCollector, FileProblem, the Project Errors tab), which `by`'s
     // whole-project diagnostics are listed in. Content modules of the bundled Problems View plugin;
     // declared in plugin.xml too.
@@ -339,9 +342,8 @@ intellijPlatform {
     // distribution, which is what the artifact is.
     //
     // Then two 263 builds, the two ends of the range as far as a repository can supply them. The
-    // floor is the pinned build everything compiles against (`platformVersion`), verified so the
-    // artifact is checked against the oldest IDE `sinceBuild` lets install it — nothing else checks
-    // that. The top is dynamic on purpose, and is the one place in the
+    // floor is the pinned build everything compiles against (`platformVersion`), the only build
+    // `sinceBuild` admits. The top is dynamic on purpose, and is the one place in the
     // build that is: pinning it would freeze the check at whatever platform existed the day it was
     // pinned. It means a JetBrains change can turn this red without a change here — that is the
     // signal, not noise: 263.4732 to 263.5153 rewrote the DAP client and turned it red in 70 places.
@@ -382,11 +384,9 @@ intellijPlatform {
       // build of the debugger links against both: against 263.5153 the 262-compiled plugin had 70
       // unresolved references. The floor went where the platform is going, 2026.3.
       //
-      // 263.5701, not 263.5153, since the 263.5153 builds can no longer run: IU 263.5153.20 and
-      // PyCharm 263.5153.49 are EAPs that stop at "EAP Build Expired" on start (measured
-      // 2026-10-22), so the floor admitted only IDEs that do not start, and nothing compiled or
-      // verified against it any more.
-      sinceBuild = "263.5701"
+      // Only the latest build: the branch of `platformVersion`, which moves with it, since an older
+      // EAP stops at "EAP Build Expired" on start (see `platformVersion`).
+      sinceBuild = "263.7307"
       untilBuild = "263.*"
     }
 
@@ -563,8 +563,14 @@ tasks {
   // outlives the edit that started it, so whichever test edited a document first failed the
   // fixture's thread-leak check for the platform's lazy initialisation. The plugin records how code
   // was written for AI analytics and nothing here touches it.
+  //
+  // Air, the AI agent plugin 263.7307 bundles, starts Junie's RPC server when the application does,
+  // and its socket-accept thread lives as long as the application: whichever test started the
+  // application failed the thread-leak check on it (`ByCliTest`, first in the suite). Nothing here
+  // touches it either.
   prepareTestSandbox {
     disabledPlugins.add("com.intellij.code.provenance")
+    disabledPlugins.add("com.intellij.air")
   }
 
   // One zip per platform, distinguishable in build/distributions and as a release asset.
@@ -590,7 +596,7 @@ val PYCHARM_VERSION = "263.+"
 // (see debug.logpoint.ByLogpoints) — which was only visible from the PyCharm side.
 //
 // `-PpycharmPath=/Applications/PyCharm.app` launches a PyCharm already installed — a nightly, say —
-// instead of downloading one. `-PpycharmVersion=263.5701.32-EAP-CANDIDATE` picks a particular snapshot.
+// instead of downloading one. `-PpycharmVersion=263.7307.50-EAP-CANDIDATE` picks a particular snapshot.
 intellijPlatformTesting.runIde.register("runPyCharm") {
   val installed = providers.gradleProperty("pycharmPath")
   if (installed.isPresent) {

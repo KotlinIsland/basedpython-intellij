@@ -88,12 +88,12 @@ class ByDapCompletionTest {
             .getConstructor(CoroutineScope::class.java, DapServer::class.java, DapRemoteEndpoint::class.java, StateFlow::class.java)
             .newInstance(scope, server, unusedEndpoint(), MutableStateFlow(Capabilities(supportsCompletionsRequest = supportsCompletions)))
         return object : DapSessionExecutor {
-            override fun post(command: suspend DapSessionContext.() -> Unit) {
-                scope.launch { context.command() }
+            override fun post(block: suspend DapSessionContext.() -> Unit) {
+                scope.launch { context.block() }
             }
 
-            override fun <T> postAsync(command: suspend DapSessionContext.() -> T): Deferred<T> =
-                scope.async { context.command() }
+            override fun <T> postAsync(block: suspend DapSessionContext.() -> T): Deferred<T> =
+                scope.async { context.block() }
         }
     }
 

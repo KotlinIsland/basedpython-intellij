@@ -399,7 +399,7 @@ lexical colour only. Don't reintroduce guessed semantic colour; fix the LSP path
 ## 18. Quality / infra
 - [x] Unit tests (lexer, file type, binary resolution)
 - [x] LSP tests (50 test classes under `lsp/`, none of them needing a binary: `codeInsightFixture` removes the real servers, and a test that needs one uses a fake)
-- [x] Plugin verifier (pluginVerifier task) passes for target IDEs — Compatible against IU-263.5701.42, the floor `sinceBuild` admits, and IU-263.7307.14, the newest 263 snapshot: no compatibility problems, no internal-API or override-only usage, 403 usages of experimental API (measured on dda0b1e plus FEATURES-only commits)
+- [x] Plugin verifier (pluginVerifier task) passes for target IDEs — Compatible against IU-263.7307.44, the build the plugin compiles against and the only one `sinceBuild` admits, and IU-263.7307.60, the newest 263 snapshot: no compatibility problems, no internal-API or override-only usage, 1 explained deprecated override (`InlayProviderSettingsModel.getMainCheckBoxLabel`), 695 usages of experimental API (measured 2026-10-27)
 - [x] CI build + verify
 - [x] Compatibility range (sinceBuild/untilBuild) set
 - [x] Plugin logo/marketplace assets (pluginIcon.svg light/dark)

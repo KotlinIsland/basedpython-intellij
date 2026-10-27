@@ -46,6 +46,7 @@ internal class FakeBuffClient(
   override val initializeResult: InitializeResult? get() = null
 
   override fun sendNotification(lsp4jSender: (Lsp4jServer) -> Unit) = Unit
+  override fun invalidateServerResults() = Unit
 
   override suspend fun <Lsp4jResponse> sendRequest(
     lsp4jSender: (Lsp4jServer) -> CompletableFuture<Lsp4jResponse>,

@@ -99,7 +99,7 @@ private fun withoutOwnLanguageServers(disposable: Disposable) {
  */
 private fun closeLightProjectsBeforeTheApplication(context: ExtensionContext) {
   context.testApplication().getOrThrow()
-  context.root.getStore(ExtensionContext.Namespace.GLOBAL).getOrComputeIfAbsent(
+  context.root.getStore(ExtensionContext.Namespace.GLOBAL).computeIfAbsent(
     "basedpython.lightProjects",
     { AutoCloseable { runInEdtAndWait { LeakHunter.cleanupAllProjects() } } },
     AutoCloseable::class.java,

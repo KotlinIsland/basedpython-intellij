@@ -78,6 +78,7 @@ class RecordingByClient(project: Project) : LspClient {
     override val initializeResult: InitializeResult? = null
 
     override fun sendNotification(lsp4jSender: (LanguageServer) -> Unit) = lsp4jSender(server)
+    override fun invalidateServerResults() = Unit
 
     override suspend fun <Lsp4jResponse> sendRequest(
         lsp4jSender: (LanguageServer) -> CompletableFuture<Lsp4jResponse>,

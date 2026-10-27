@@ -109,6 +109,8 @@ class AnsweringClient(
 
     override fun getDocumentIdentifier(file: VirtualFile) = TextDocumentIdentifier(descriptor.getFileUri(file))
 
+    override fun invalidateServerResults() = Unit
+
     override fun getDocumentVersion(document: Document): Int = -1
 
     override fun nextDocumentVersion(document: Document): Int = -1

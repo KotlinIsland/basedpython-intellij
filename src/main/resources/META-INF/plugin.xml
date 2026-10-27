@@ -30,9 +30,8 @@
          loaded.
 
          `intellij.platform.vcs` is the commit workflow's API (CheckinHandlerFactory, CommitCheck),
-         which the before-commit cleanup implements. Through 263.5153 it was embedded in the core
-         classloader; from 263.5701 it loads in a classloader of its own. Without this line its
-         classes still resolved on 263.5701.9, but only transitively, through
+         which the before-commit cleanup implements. It loads in a classloader of its own. Without
+         this line its classes still resolved, but only transitively, through
          `intellij.platform.vcs.impl` (the module behind `com.intellij.modules.vcs`) and that
          module's own generated dependency list, which JetBrains regenerates at will. Named here
          so the cleanup rests on what it uses. The Plugin Verifier cannot check this either way:
@@ -40,6 +39,10 @@
     <dependencies>
         <module name="intellij.platform.dap"/>
         <module name="intellij.platform.vcs"/>
+        <!-- CommitContext, which CheckinHandlerFactory.createHandler takes. Reached only through
+             `intellij.platform.vcs`'s generated dependencies until 263.7307 dropped it from them,
+             as the note above warns they may. -->
+        <module name="intellij.platform.vcs.core"/>
         <!-- The Problems view: ProblemsCollector and the problem types, which Project Errors lists
              `by`'s whole-project diagnostics through, and the tab that Check Project opens. -->
         <module name="intellij.platform.problemView.shared"/>

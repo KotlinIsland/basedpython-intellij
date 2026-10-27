@@ -111,9 +111,9 @@ class ByTypeSourceTest {
     }
 
     private val executor = object : DapSessionExecutor {
-        override fun post(action: suspend DapSessionContext.() -> Unit) = error("nothing is sent to the adapter")
+        override fun post(block: suspend DapSessionContext.() -> Unit) = error("nothing is sent to the adapter")
 
-        override fun <T> postAsync(action: suspend DapSessionContext.() -> T): Deferred<T> = error("nothing is sent to the adapter")
+        override fun <T> postAsync(block: suspend DapSessionContext.() -> T): Deferred<T> = error("nothing is sent to the adapter")
     }
 
     @Test

@@ -316,9 +316,8 @@ support, run configurations, CLI actions, and editor tooling.
   guard, async def, match/case, enum, and pytest fixture.
 
 ## Requirements
-- IntelliJ Platform 2026.3, build 263.5701 or newer (IntelliJ IDEA Ultimate or PyCharm
-  Professional). `.by` debugging is built on the Debug Adapter Protocol client 263.5153 rewrote,
-  and the 263.5153 builds themselves are EAPs that have expired. Not the Community editions: `com.intellij.modules.lsp` is a paid-IDE module, which is why
+- IntelliJ Platform 2026.3, the latest EAP: build 263.7307 or newer (IntelliJ IDEA Ultimate or
+  PyCharm Professional). Older EAPs have expired. Not the Community editions: `com.intellij.modules.lsp` is a paid-IDE module, which is why
   Marketplace lists IntelliJ IDEA Community and PyCharm Community as unsupported products.
 - A project with basedpython installed (`uv add --dev basedpython`), exposing `by` and
   `buff` in `.venv/` or on `PATH`.
@@ -345,7 +344,7 @@ of its own, for whatever behaves differently in the IDE the plugin is mostly use
 ```bash
 ./gradlew runPyCharm
 ./gradlew runPyCharm -PpycharmPath=/Applications/PyCharm.app   # a PyCharm you already have
-./gradlew runPyCharm -PpycharmVersion=263.5701.32-EAP-CANDIDATE # a particular snapshot
+./gradlew runPyCharm -PpycharmVersion=263.7307.50-EAP-CANDIDATE # a particular snapshot
 ```
 
 Both are also **Run IDE** and **Run PyCharm** in the IDE's own run-configuration dropdown.
