@@ -540,6 +540,18 @@ internal class ByDapXDebugProcess(
 ) {
     override fun doGetProcessHandler(): ProcessHandler? = result?.processHandler ?: super.doGetProcessHandler()
 
+    /**
+     * The platform's handlers, with [ByDapSourceBreakpointHandler] in place of its own for `.by` line
+     * breakpoints: the one that decides which of them the adapter only logs.
+     */
+    private val handlers: Array<XBreakpointHandler<*>> by lazy {
+        super.getBreakpointHandlers()
+            .map { if (it.breakpointTypeClass == ByLineBreakpointType::class.java) ByDapSourceBreakpointHandler(dapDebugSession, session) else it }
+            .toTypedArray()
+    }
+
+    override fun getBreakpointHandlers(): Array<XBreakpointHandler<*>> = handlers
+
     /** Jump To Cursor in this session: what [ByJumpToCursorAction] asks the adapter through. */
     internal val jumps = ByJumps(session, dapDebugSession, xDebugProcessScope, backend)
 }
