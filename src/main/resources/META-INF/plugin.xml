@@ -813,6 +813,9 @@
              uv is the only backend today; `env.manager.EnvBackend` is the seam a conda or pixi one
              slots into, and `EnvBackends.ALL` is the whole registration. Nothing here creates or
              modifies an environment without a user gesture — see env.manager.EnvOperations. -->
+        <!-- `by run|check|build|repl` in Run Anything, completing modules and tests from by's own
+             answers; see run.ByRunAnythingProvider. -->
+        <runAnything.executionProvider implementation="dev.basedpython.pycharm.run.ByRunAnythingProvider"/>
         <!-- A basedpython console: `by repl` over its standard streams, behind a language console
              typed in basedpython. See console.ByConsoles. -->
         <toolWindow id="basedpython Console"
