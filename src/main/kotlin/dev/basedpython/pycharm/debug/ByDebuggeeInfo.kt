@@ -20,6 +20,11 @@ data class ByDebuggeeInfo(
     val python: String? = null,
     /** `by run`'s temp directory: the transpiled output and `_by_sourcemap.py` live here. */
     val runDir: String? = null,
+    /**
+     * `by run`'s runner, `_by_runner.py` in [runDir], as python names it in the runner's frames —
+     * the path as the program was started with it, not resolved through `/var` -> `/private/var`.
+     */
+    val runner: String? = null,
     /** Present when [status] is [STATUS_ERROR], and as a warning alongside [STATUS_LISTENING]. */
     val message: String? = null,
     /**
@@ -32,6 +37,22 @@ data class ByDebuggeeInfo(
 ) {
     val isListening: Boolean get() = status == STATUS_LISTENING
 
+    /**
+     * debugpy's `attach` arguments for this program: [provided], with [runner]'s frames left out of
+     * the stack and of stepping, as debugpy leaves out `runpy`'s under `python -m`.
+     *
+     * `by run` documents the runner's frames as the outermost of the main thread and by's alone, to
+     * be treated as the launcher's. Left in, they were the program's to pydevd, which counts any
+     * file outside the environment as the user's: the stack ended in three of them, and Step Over
+     * from the program's last line went on through `_by_runner.py` three times before the program
+     * ended, where a `.py` run ends at once. A pydevd rule with no wildcard matches a frame's file by
+     * equality, so the path is the one python reports for the runner, exactly.
+     */
+    fun attachArguments(provided: Map<String, Any?>): Map<String, Any?> {
+        val runner = runner ?: return provided
+        return provided + (RULES to listOf(mapOf(RULE_PATH to runner, RULE_INCLUDE to false)))
+    }
+
     /** Collisions with at least two real sources; anything malformed is ignored. */
     val realCollisions: List<ByGeneratedCollision>
         get() = collisions.orEmpty().filter { it.sources.orEmpty().size > 1 }
@@ -39,6 +60,11 @@ data class ByDebuggeeInfo(
     companion object {
         const val STATUS_LISTENING: String = "listening"
         const val STATUS_ERROR: String = "error"
+
+        /** debugpy's `attach` key for which files are the user's, and the keys of one rule. */
+        const val RULES: String = "rules"
+        const val RULE_PATH: String = "path"
+        const val RULE_INCLUDE: String = "include"
 
         /** Parses the bootstrap's JSON, or returns `null` for anything that is not valid JSON. */
         fun parse(json: String): ByDebuggeeInfo? =

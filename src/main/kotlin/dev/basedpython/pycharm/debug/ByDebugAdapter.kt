@@ -275,6 +275,7 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
         }
 
         reportCollisions(info)
+        debuggee = info
 
         // Closing the connection ends nothing else. `by run` is the session's process
         // ([ByDapXDebugProcess]), so the platform's own end of the session ends it — Stop by killing
@@ -362,7 +363,8 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
 
     /**
      * The arguments the session is started with: [provided], as the launch-arguments provider built
-     * them, completed from what `by run` recorded when the session is a bpd one.
+     * them, completed from what `by run` recorded when the session is a bpd one, and from what the
+     * bootstrap reported when it is a debugpy one ([ByDebuggeeInfo.attachArguments]).
      *
      * The provider runs before `by run` has chosen the program, so it cannot name it, and the
      * platform takes the arguments now, when the process is built — before `by run` has started.
@@ -376,16 +378,28 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
      * recompositions ([ByBpdRecord.Ready.launchArguments]). The watch is read from the preference
      * here, when the platform builds the `launch`.
      */
-    private fun startArguments(provided: Map<String, Any?>): Map<String, Any?> {
-        if (setup?.backend != ByDebugBackend.BPD) return provided
-        return ByRecordedArguments {
+    private fun startArguments(provided: Map<String, Any?>): Map<String, Any?> = when (setup?.backend) {
+        ByDebugBackend.BPD -> ByRecordedArguments {
             val record = bpdRecord ?: throw ExecutionException(BasedPythonBundle.message("debug.error.noSetup"))
             record.launchArguments(
                 provided,
                 watchRecompositions = ByRecompositionSession.getInstance(project).watchesFromTheStart,
             )
         }
+
+        // the runner the bootstrap was loaded into is only known once it has reported, which is
+        // also what [launchDebugAdapter] waits for before the platform can send the `attach`
+        ByDebugBackend.DEBUGPY -> ByRecordedArguments {
+            val info = debuggee ?: throw ExecutionException(BasedPythonBundle.message("debug.error.noSetup"))
+            info.attachArguments(provided)
+        }
+
+        null -> provided
     }
+
+    /** What a debugpy session's bootstrap reported, once [launchDebugAdapter] has read it. */
+    @Volatile
+    private var debuggee: ByDebuggeeInfo? = null
 
     /**
      * Report why the session cannot start, then abort without the platform reporting it again.

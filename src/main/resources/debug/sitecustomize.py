@@ -182,6 +182,9 @@ def _activate(port):
         "port": port,
         "python": sys.executable,
         "runDir": run_dir,
+        # As python names it in the runner's frames, which is what pydevd matches a rule against:
+        # the IDE hands it back in the attach, to leave the runner's frames out as the launcher's.
+        "runner": _script_path(),
         "message": warning,
         "collisions": collisions,
     })

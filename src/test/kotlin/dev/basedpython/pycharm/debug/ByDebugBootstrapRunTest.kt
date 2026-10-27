@@ -48,6 +48,17 @@ class ByDebugBootstrapRunTest {
     }
 
     /**
+     * The runner's path as python names it in the runner's frames — the path the program was started
+     * with — which is what a pydevd rule is matched against, character for character.
+     */
+    @Test
+    fun `the report names the runner the program was started under`() {
+        val report = activate("SOURCEMAP = {}\nDIGESTS = {}")
+        val run = dir.resolve("run").toRealPath()
+        assertEquals(run.resolve("_by_runner.py").toString(), report.get("runner").asString)
+    }
+
+    /**
      * The failure this guards, taken from a real project: `main.by` beside an empty `src/main.by`,
      * both transpiled to one `main.py`. The empty one was written last, so it won — the program ran
      * and printed nothing. `SOURCEMAP` cannot show this once loaded, because it is a dict literal

@@ -99,6 +99,27 @@ class ByDebugBootstrapTest {
         assertTrue(info!!.realCollisions.isEmpty())
     }
 
+    /**
+     * The runner's frames are by's, and the launcher's to a debugger, as `runpy`'s are under
+     * `python -m`: measured with a raw DAP client against debugpy 1.8.22 and `by` b8b4749b69a5,
+     * Step Over from `ok.by`'s last line stopped at `ok.by:0` and then at `_by_runner.py` lines 665,
+     * 1091 and 1095 before the program ended; with this rule, at `ok.by:0` and then nowhere.
+     */
+    @Test
+    fun `the attach leaves the runner's frames out as the launcher's`() {
+        val info = ByDebuggeeInfo.parse(
+            """{"status": "listening", "port": 1, "runner": "/var/folders/x/T/.tmp1/_by_runner.py"}"""
+        )!!
+        val connect = mapOf("host" to "127.0.0.1", "port" to 1)
+        assertEquals(
+            mapOf(
+                "connect" to connect,
+                "rules" to listOf(mapOf("path" to "/var/folders/x/T/.tmp1/_by_runner.py", "include" to false)),
+            ),
+            info.attachArguments(mapOf("connect" to connect)),
+        )
+    }
+
     @Test
     fun `garbage is not a report`() {
         assertNull(ByDebuggeeInfo.parse("{ this is not json"))
