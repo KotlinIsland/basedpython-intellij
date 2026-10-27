@@ -33,6 +33,9 @@ import com.intellij.platform.dap.xdebugger.DapXDebugProcess
 import com.intellij.util.PathUtil
 import com.intellij.xdebugger.XDebugSession
 import com.intellij.xdebugger.breakpoints.XBreakpointHandler
+import com.intellij.xdebugger.ui.XDebugTabLayouter
+import com.intellij.execution.ui.RunnerLayoutUi
+import com.intellij.ui.content.Content
 import com.jetbrains.dap.impl.DapClientHandlersBuilder
 import com.jetbrains.dap.protocol.OutputEventArguments
 import dev.basedpython.pycharm.actions.ByCli
@@ -507,7 +510,7 @@ private class ByRecordedArguments(resolve: () -> Map<String, Any?>) : AbstractMa
 internal class ByDapXDebugProcess(
     session: XDebugSession,
     dapDebugSession: DapDebugSession,
-    xDebugProcessScope: CoroutineScope,
+    private val xDebugProcessScope: CoroutineScope,
     globalScope: CoroutineScope,
     debugAdapterDescriptor: DebugAdapterDescriptor<*>,
     executionEnvironment: ExecutionEnvironment,
@@ -551,6 +554,14 @@ internal class ByDapXDebugProcess(
     }
 
     override fun getBreakpointHandlers(): Array<XBreakpointHandler<*>> = handlers
+
+    /** The *Console* tab with a basedpython prompt under the run's console ([ByDebugPrompt]). */
+    override fun createTabLayouter(): XDebugTabLayouter = object : XDebugTabLayouter() {
+        override fun registerConsoleContent(ui: RunnerLayoutUi, console: ExecutionConsole): Content {
+            val prompt = ByDebugPrompt(session, xDebugProcessScope)
+            return super.registerConsoleContent(ui, prompt.UnderConsole(console)).also { it.setDisposer(prompt) }
+        }
+    }
 
     /** Jump To Cursor in this session: what [ByJumpToCursorAction] asks the adapter through. */
     internal val jumps = ByJumps(session, dapDebugSession, xDebugProcessScope, backend)
