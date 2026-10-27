@@ -31,8 +31,16 @@ object ByInjectedLanguages {
     private fun byIdIgnoringCase(id: String): Language? =
         Language.getRegisteredLanguages().firstOrNull { it.id.equals(id, ignoreCase = true) }
 
-    private fun byDisplayName(id: String): Language? =
-        Language.getRegisteredLanguages().firstOrNull { it.displayName.equals(id, ignoreCase = true) }
+    /**
+     * The language a user sees named [id]. Display names are not unique: Full Line registers a
+     * hidden `fake_text_cloud` language that also calls itself "Plain Text", and the registry's
+     * order is the order plugins happened to load in. So of several, the one with a file type of
+     * its own, which is the one a user can have met by that name; still several, none.
+     */
+    private fun byDisplayName(id: String): Language? {
+        val named = Language.getRegisteredLanguages().filter { it.displayName.equals(id, ignoreCase = true) }
+        return named.singleOrNull() ?: named.filter { it.associatedFileType != null }.singleOrNull()
+    }
 
     /**
      * The language of the file type registered for `.<id>`, which is how the short spellings
