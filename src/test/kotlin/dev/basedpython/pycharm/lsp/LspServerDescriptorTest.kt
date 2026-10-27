@@ -302,6 +302,22 @@ class LspServerDescriptorTest {
   }
 
   @Test
+  fun `by offers its postfix templates only while basedpython's switch says so`() = onEdt {
+    val settings = BasedPythonAppSettings.getInstance()
+    val was = settings.offerPostfixTemplates
+    try {
+      for (on in listOf(true, false)) {
+        settings.offerPostfixTemplates = on
+        @Suppress("UNCHECKED_CAST")
+        val completions = (byDescriptor().createInitializationOptions() as Map<String, Any>)["completions"] as Map<String, Any>
+        assertEquals(on, completions["postfixTemplates"])
+      }
+    } finally {
+      settings.offerPostfixTemplates = was
+    }
+  }
+
+  @Test
   fun `by completes a callable with its parentheses only while the IDE's setting says so`() = onEdt {
     val editor = EditorSettingsExternalizable.getInstance()
     val was = editor.isInsertParenthesesAutomatically

@@ -261,10 +261,13 @@ internal class ByLspServerDescriptor(
       // *Settings | Editor | General | Code Completion | basedpython | Suggest importable names*:
       // whether completion offers names the file does not import yet, with the import. Read at
       // start; ByCodeCompletionOptions restarts the servers when it changes.
+      // *Postfix templates*, on the same page: whether completion offers `by`'s `xs.for` and the
+      // rest (`.await`, which is syntax, either way). Read at start, restarted on change, the same.
       "completions" to mapOf(
         "autoImport" to BasedPythonAppSettings.getInstance().suggestImportableNames,
         "completeFunctionParentheses" to EditorSettingsExternalizable.getInstance().isInsertParenthesesAutomatically,
         "importStyle" to BasedPythonSettings.getInstance(project).importStyle.id,
+        "postfixTemplates" to BasedPythonAppSettings.getInstance().offerPostfixTemplates,
       ),
       // The rules the inspection profile changes from their defaults, a rule switched off as
       // `ignore`, above the project's own configuration; ByRuleConfiguration restarts the servers
@@ -285,7 +288,7 @@ internal class ByLspServerDescriptor(
     /** Not a toggle: `by`'s messages are written in markdown, and a tooltip is HTML. */
     override val diagnosticsCustomizer = ByDiagnosticsSupport()
 
-    /** `by`'s completion, its postfix templates switched as the platform's — see [dev.basedpython.pycharm.lsp.completion.ByCompletionSupport]. */
+    /** `by`'s completion, which smart completion leaves to `by/smartCompletion` — see [dev.basedpython.pycharm.lsp.completion.ByCompletionSupport]. */
     override val completionCustomizer
       get() = if (s.byCompletion) dev.basedpython.pycharm.lsp.completion.ByCompletionSupport else LspCompletionDisabled
     override val goToDefinitionCustomizer

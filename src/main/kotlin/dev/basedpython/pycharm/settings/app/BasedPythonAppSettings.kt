@@ -96,8 +96,9 @@ class BasedPythonAppSettings : PersistentStateComponent<BasedPythonAppSettings.S
 
   /**
    * Whether completion lists `by`'s postfix templates, `xs.for` and the rest — *Settings | Editor |
-   * General | Code Completion*, see [dev.basedpython.pycharm.lsp.completion.ByPostfixCompletion]. On,
-   * as postfix completion is for every language until switched off.
+   * General | Code Completion*, sent as `by`'s `completions.postfixTemplates`. On, as postfix
+   * completion is for every language until switched off. The platform's *Enable postfix completion*
+   * is not public API (`PostfixTemplatesSettings` is `@ApiStatus.Internal`), so it is not followed.
    */
   var offerPostfixTemplates: Boolean
     get() = state.offerPostfixTemplates
