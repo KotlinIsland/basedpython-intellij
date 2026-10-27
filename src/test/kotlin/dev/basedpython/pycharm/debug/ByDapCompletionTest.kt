@@ -10,6 +10,7 @@ import com.intellij.platform.dap.xdebugger.DefaultDapXDebuggerPresentationFactor
 import com.intellij.platform.dap.xdebugger.DefaultDapXStackFrame
 import com.intellij.psi.PsiDocumentManager
 import com.intellij.testFramework.junit5.fixture.TestFixtures
+import com.intellij.util.ref.GCWatcher
 import com.intellij.xdebugger.XDebugSession
 import com.intellij.xdebugger.XSourcePosition
 import com.intellij.xdebugger.evaluation.EvaluationMode
@@ -140,7 +141,7 @@ class ByDapCompletionTest {
     private fun field(text: String, session: XDebugSession?) {
         // a name of its own each time, so no field reuses another's document and the mark on it
         fixture.configureByText("expression${++fields}.by", text)
-        session?.let { fixture.editor.document.putUserData(FIELD_SESSION, it) }
+        session?.let { ByFieldSessions.getInstance().mark(fixture.editor.document, it) }
     }
 
     @Test
@@ -188,9 +189,20 @@ class ByDapCompletionTest {
         val provider = ByExpressionSupport.createEditorsProvider(session)
         val document = provider.createDocument(fixture.project, expression("a.b"), null as XSourcePosition?, EvaluationMode.EXPRESSION)
         assertEquals(BasedPythonLanguage, PsiDocumentManager.getInstance(fixture.project).getPsiFile(document)?.language)
-        assertSame(session, document.getUserData(FIELD_SESSION))
+        assertSame(session, ByFieldSessions.getInstance().sessionOf(document))
         val breakpoints = ByDebuggerEditorsProvider.createDocument(fixture.project, expression("a.b"), null as XSourcePosition?, EvaluationMode.EXPRESSION)
-        assertNull(breakpoints.getUserData(FIELD_SESSION))
+        assertNull(ByFieldSessions.getInstance().sessionOf(breakpoints))
+    }
+
+    @Test
+    fun `a field's mark keeps neither the session nor anything of the plugin's alive`() = onEdt {
+        // A field's document outlives its session and the plugin (the platform's file finder keeps
+        // the last light file it saw): a session kept on the document held the plugin's debug
+        // process, and with it the plugin's class loader, after an unload.
+        val document = ByExpressionSupport.createEditorsProvider(session(null))
+            .createDocument(fixture.project, expression("a.b"), null as XSourcePosition?, EvaluationMode.EXPRESSION)
+        GCWatcher.tracking(ByFieldSessions.getInstance().sessionOf(document)).ensureCollected()
+        assertNull(ByFieldSessions.getInstance().sessionOf(document))
     }
 
     private fun expression(text: String) =

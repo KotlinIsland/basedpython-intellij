@@ -196,7 +196,7 @@ internal class ByLspServerDescriptor(
   override fun isSupportedFile(file: VirtualFile): Boolean = file.isByServerFile()
 
   /** Start/stop for [dev.basedpython.pycharm.lsp.reload.BasedPythonLspReloader] and the status widget. */
-  override val lspServerListener: LspServerListener = ByLspLifecycleListener.Broadcaster(project, "by")
+  override val lspServerListener: LspServerListener = ByLspLifecycleListener.Broadcaster(ByLspLifecycle.getInstance(project), "by")
 
   override fun createCommandLine(): GeneralCommandLine =
     GeneralCommandLine(buildList(2 + launch.prependArgs.size + extraArgs.size) {
@@ -439,7 +439,7 @@ internal class BuffLspServerDescriptor(
   override fun isSupportedFile(file: VirtualFile): Boolean = file.isBasedPythonSource()
 
   /** Start/stop for [dev.basedpython.pycharm.lsp.reload.BasedPythonLspReloader] and the status widget. */
-  override val lspServerListener: LspServerListener = ByLspLifecycleListener.Broadcaster(project, "buff")
+  override val lspServerListener: LspServerListener = ByLspLifecycleListener.Broadcaster(ByLspLifecycle.getInstance(project), "buff")
 
   override fun createCommandLine(): GeneralCommandLine =
     GeneralCommandLine(buildList(2 + launch.prependArgs.size + extraArgs.size) {

@@ -55,7 +55,7 @@ object ByDebuggerEditorsProvider : ByExpressionEditorsProvider()
  * The same `.by` fragments as the breakpoints' fields, so the expression is highlighted as the code
  * it is. Left to itself the client answers with its own provider, whose fragments are plain text.
  *
- * Each document is marked with the session it was made for ([FIELD_SESSION]), which is how
+ * Each document is marked with the session it was made for ([ByFieldSessions]), which is how
  * [ByDapCompletionContributor] finds the frame to ask the adapter's `completions` in — what the
  * client does for its own plain-text fields, which it marks with keys of its own that a plugin
  * cannot use.
@@ -69,7 +69,7 @@ internal class BySessionEditorsProvider(private val session: XDebugSession) : By
         mode: EvaluationMode,
     ): Document = super.createDocument(project, expression, context, mode).also(::mark)
 
-    private fun mark(document: Document) = document.putUserData(FIELD_SESSION, session)
+    private fun mark(document: Document) = ByFieldSessions.getInstance().mark(document, session)
 }
 
 /** The [DapExpressionSupport] of a `.by` session: its fields are [BySessionEditorsProvider]'s. */

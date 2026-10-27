@@ -1,8 +1,13 @@
 package dev.basedpython.pycharm.lsp
 
+import com.intellij.openapi.components.Service
+import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
 import com.intellij.platform.lsp.api.LspServerListener
 import com.intellij.util.messages.Topic
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.launch
 import org.eclipse.lsp4j.InitializeResult
 
 /**
@@ -47,22 +52,56 @@ internal interface ByLspLifecycleListener {
 
   /**
    * The [LspServerListener] a descriptor hands the platform, republishing onto [TOPIC] under the
-   * server's name.
+   * server's name, through [ByLspLifecycle].
    *
    * Both callbacks run on a background thread without a read lock (the platform annotates them
-   * `@RequiresBackgroundThread` / `@RequiresReadLockAbsence`), and a synchronous publish keeps them
-   * on it — so a subscriber that needs the EDT or a read action must ask for one, as both here do.
+   * `@RequiresBackgroundThread` / `@RequiresReadLockAbsence`), and the publish runs on another one,
+   * so a subscriber that needs the EDT or a read action must ask for one.
    */
-  class Broadcaster(private val project: Project, private val serverName: String) : LspServerListener {
+  class Broadcaster(private val lifecycle: ByLspLifecycle, private val serverName: String) : LspServerListener {
 
     override fun serverInitialized(params: InitializeResult) {
-      if (project.isDisposed) return
-      project.messageBus.syncPublisher(TOPIC).serverInitialized(serverName)
+      lifecycle.publish { it.serverInitialized(serverName) }
     }
 
     override fun serverStopped(shutdownNormally: Boolean) {
-      if (project.isDisposed) return
-      project.messageBus.syncPublisher(TOPIC).serverStopped(serverName, shutdownNormally)
+      lifecycle.publish { it.serverStopped(serverName, shutdownNormally) }
     }
+  }
+}
+
+/**
+ * Where [ByLspLifecycleListener.Broadcaster] publishes from: one coroutine of the plugin's, which
+ * delivers the events in the order the servers reported them.
+ *
+ * Not from the callback itself, because the platform calls `serverStopped` *after* the plugin is
+ * unloaded: removing the plugin's integration providers is what stops its servers, and they stop on
+ * their own threads, after the platform has cleared the message buses' publisher caches. A publish
+ * then put [ByLspLifecycleListener.TOPIC]'s publisher back into the project's bus, which held the
+ * plugin's class loader for as long as the project was open (measured in unpinned PyCharm 263.7355).
+ * The plugin's coroutines are
+ * cancelled and joined before any of its extensions is removed, so a publish from here either
+ * finished before the caches were cleared or never starts.
+ */
+@Service(Service.Level.PROJECT)
+internal class ByLspLifecycle(private val project: Project, scope: CoroutineScope) {
+
+  private val events = Channel<(ByLspLifecycleListener) -> Unit>(Channel.UNLIMITED)
+
+  init {
+    scope.launch {
+      for (event in events) {
+        if (!project.isDisposed) event(project.messageBus.syncPublisher(ByLspLifecycleListener.TOPIC))
+      }
+    }
+  }
+
+  /** Queues [event] for [ByLspLifecycleListener.TOPIC]'s subscribers; nothing, once the plugin's scope has ended. */
+  fun publish(event: (ByLspLifecycleListener) -> Unit) {
+    events.trySend(event)
+  }
+
+  companion object {
+    fun getInstance(project: Project): ByLspLifecycle = project.service()
   }
 }

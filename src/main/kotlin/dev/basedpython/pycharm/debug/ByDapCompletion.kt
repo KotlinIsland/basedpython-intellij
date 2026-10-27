@@ -11,10 +11,11 @@ import com.intellij.codeInsight.lookup.LookupElementBuilder
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.diagnostic.ControlFlowException
 import com.intellij.openapi.diagnostic.Logger
+import com.intellij.openapi.components.Service
+import com.intellij.openapi.components.service
 import com.intellij.openapi.editor.Document
 import com.intellij.openapi.progress.runBlockingCancellable
 import com.intellij.openapi.project.DumbAware
-import com.intellij.openapi.util.Key
 import com.intellij.openapi.util.TextRange
 import com.intellij.platform.dap.xdebugger.DefaultDapXStackFrame
 import com.intellij.psi.PsiFile
@@ -24,6 +25,8 @@ import com.jetbrains.dap.protocol.CompletionItemType
 import com.jetbrains.dap.protocol.CompletionsArguments
 import com.jetbrains.dap.protocol.DapColumn
 import com.jetbrains.dap.protocol.DapLine
+import com.intellij.util.containers.ContainerUtil
+import java.lang.ref.WeakReference
 import javax.swing.Icon
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -80,13 +83,33 @@ internal class ByDapCompletionContributor : CompletionContributor(), DumbAware {
 }
 
 /**
- * The session a field's document was made for by [BySessionEditorsProvider], or null for any other
- * document. Only a platform object is kept on the document, so nothing of this plugin outlives an
- * unload there.
+ * The session each field's document was made for by [BySessionEditorsProvider].
+ *
+ * Kept here rather than on the document: a session is a platform object, but it holds the plugin's
+ * debug process, its console and its handlers, and a field's document outlives both the session and
+ * the plugin — the platform's workspace-model file finder keeps the last light file it was asked
+ * about, and that file its document. Kept on the document, the mark held a long-stopped session and
+ * through it the plugin's class loader after an unload (measured in unpinned PyCharm 263.7355). Weak
+ * at both ends, so a mark keeps neither the field nor its session.
  */
-internal val FIELD_SESSION: Key<XDebugSession> = Key.create("basedpython.debugger.fieldSession")
+@Service(Service.Level.APP)
+internal class ByFieldSessions {
 
-private fun Document.sessionOfField(): XDebugSession? = getUserData(FIELD_SESSION)?.takeUnless { it.isStopped }
+    private val sessions: MutableMap<Document, WeakReference<XDebugSession>> = ContainerUtil.createConcurrentWeakMap()
+
+    fun mark(document: Document, session: XDebugSession) {
+        sessions[document] = WeakReference(session)
+    }
+
+    /** The session [document] was made for, or null for any other document. */
+    fun sessionOf(document: Document): XDebugSession? = sessions[document]?.get()
+
+    companion object {
+        fun getInstance(): ByFieldSessions = service()
+    }
+}
+
+private fun Document.sessionOfField(): XDebugSession? = ByFieldSessions.getInstance().sessionOf(this)?.takeUnless { it.isStopped }
 
 private fun PsiFile.sessionOfField(): XDebugSession? = viewProvider.document.sessionOfField()
 
