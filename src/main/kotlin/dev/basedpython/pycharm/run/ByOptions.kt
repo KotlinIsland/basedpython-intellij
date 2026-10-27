@@ -94,6 +94,7 @@ class ByRunOptions : ByCommonOptions() {
     private val redirectInputProp = property(false).provideDelegate(this, "redirectInput")
     private val inputFileProp = string("").provideDelegate(this, "inputFile")
     private val emulateTerminalProp = property(false).provideDelegate(this, "emulateTerminal")
+    private val runWithConsoleProp = property(false).provideDelegate(this, "runWithConsole")
 
     /**
      * `.env` files whose variables the program gets, beneath [envVars], which win over them — read
@@ -122,6 +123,14 @@ class ByRunOptions : ByCommonOptions() {
     var emulateTerminal: Boolean
         get() = emulateTerminalProp.getValue(this)
         set(v) { emulateTerminalProp.setValue(this, v) }
+
+    /**
+     * Whether Run starts the module in a basedpython console — `by repl --module` — and leaves the
+     * console open on its names, as `.py`'s *Run with Python Console*, rather than `by run`.
+     */
+    var runWithConsole: Boolean
+        get() = runWithConsoleProp.getValue(this)
+        set(v) { runWithConsoleProp.setValue(this, v) }
 }
 
 class ByBuildOptions : ByCommonOptions()

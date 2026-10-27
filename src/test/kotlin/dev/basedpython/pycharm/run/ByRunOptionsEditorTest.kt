@@ -31,6 +31,7 @@ class ByRunOptionsEditorTest {
             inputRedirectOptions.isRedirectInput = true
             inputRedirectOptions.redirectInputPath = "in.txt"
             options.emulateTerminal = true
+            options.runWithConsole = true
         }
         val element = Element("configuration").also(original::writeExternal)
         val restored = configuration().also { it.readExternal(JDOMUtil.load(JDOMUtil.write(element))) }
@@ -39,6 +40,7 @@ class ByRunOptionsEditorTest {
         assertTrue(restored.options.redirectInput)
         assertEquals("in.txt", restored.options.inputFile)
         assertTrue(restored.options.emulateTerminal)
+        assertTrue(restored.options.runWithConsole)
         assertEquals(listOf("/p/.env", "/p/local.env"), (original.clone() as ByRunConfiguration).envFilePaths)
     }
 
@@ -72,11 +74,38 @@ class ByRunOptionsEditorTest {
             editor.component
             val ids = editor.javaClass.superclass.superclass.getDeclaredMethod("getFragments").let { it.isAccessible = true; it.invoke(editor) as Collection<*> }
                 .map { (it as com.intellij.execution.ui.SettingsEditorFragment<*, *>).id }
-            for (id in listOf("by.module", "by.programArgs", "by.environment", "workingDirectory", "environmentVariables", "by.redirectInput", "by.emulateTerminal", "beforeRunTasks")) {
+            for (id in listOf("by.module", "by.programArgs", "by.environment", "workingDirectory", "environmentVariables", "by.redirectInput", "by.emulateTerminal", "by.runWithConsole", "beforeRunTasks")) {
                 assertTrue(id in ids, "$id is not a fragment: $ids")
             }
         } finally {
             com.intellij.openapi.util.Disposer.dispose(editor)
         }
+    }
+
+    @Test
+    fun `run with the console runs the module in a console, and debug still runs it with by run`() = onEdt {
+        val c = configuration().apply {
+            options.module = "app.main"
+            options.runWithConsole = true
+        }
+        val run = com.intellij.execution.executors.DefaultRunExecutor.getRunExecutorInstance()
+        val debug = com.intellij.execution.executors.DefaultDebugExecutor.getDebugExecutorInstance()
+        fun state(executor: com.intellij.execution.Executor) =
+            c.getState(executor, com.intellij.execution.runners.ExecutionEnvironmentBuilder.create(fixture.project, executor, c).build())
+        assertTrue(state(run) is dev.basedpython.pycharm.console.ByConsoleRunState)
+        assertTrue(state(debug) is ByCommandLineState)
+        c.options.runWithConsole = false
+        assertTrue(state(run) is ByCommandLineState)
+    }
+
+    @Test
+    fun `what the console leaves out of a run is said before it starts`() = onEdt {
+        val c = configuration().apply {
+            options.module = "app.main"
+            options.runWithConsole = true
+            options.programArgs = "--n 2"
+        }
+        val warning = org.junit.jupiter.api.assertThrows<com.intellij.execution.configurations.RuntimeConfigurationException> { c.checkConsole() }
+        assertTrue(warning is com.intellij.execution.configurations.RuntimeConfigurationWarning, "$warning")
     }
 }

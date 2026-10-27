@@ -57,6 +57,7 @@ internal class ByConsoleSession private constructor(
     private val sessionFile: Path,
     private val events: ByReplEvents?,
     id: Int,
+    ownsConsole: Boolean,
 ) : Disposable {
 
     val document = ByConsoleDocument("untitled:basedpython-console-$id.by")
@@ -103,7 +104,8 @@ internal class ByConsoleSession private constructor(
     val isRunning: Boolean get() = !handler.isProcessTerminated
 
     init {
-        Disposer.register(this, console)
+        // a tab of the tool window is the session's, and goes with it; a run's tab is the run's, and the session goes with it
+        if (ownsConsole) Disposer.register(this, console) else Disposer.register(console, this)
         handler.addProcessListener(object : ProcessListener {
             override fun processTerminated(event: ProcessEvent) {
                 document.close()
@@ -284,13 +286,18 @@ internal class ByConsoleSession private constructor(
          *
          * @throws com.intellij.execution.ExecutionException when no `by` can be found or started.
          */
-        suspend fun startProcess(project: Project, module: String? = null): Started {
+        suspend fun startProcess(
+            project: Project,
+            module: String? = null,
+            options: ByCommonOptions = ByCommonOptions(),
+            fileEnvironment: Map<String, String> = emptyMap(),
+        ): Started {
             val events = if (hasEvents(project)) ByReplEvents.open() else null
             val sessionFile = Files.createTempFile("basedpython-console", ".by")
             val commandLine = try {
                 byCommandLine(
                     project = project,
-                    options = ByCommonOptions(),
+                    options = options,
                     arguments = buildList {
                         addAll(listOf("repl", "--session-file", sessionFile.toString()))
                         if (events != null) addAll(listOf("--events", events.port.toString()))
@@ -299,6 +306,7 @@ internal class ByConsoleSession private constructor(
                     infrastructureEnv = events?.let { mapOf(ByReplEvents.ENV_TOKEN to it.token) }.orEmpty(),
                     // the session imports the project's modules as a program does
                     startsProgram = true,
+                    fileEnvironment = fileEnvironment,
                 )
             } catch (e: com.intellij.execution.ExecutionException) {
                 events?.close()
@@ -322,9 +330,12 @@ internal class ByConsoleSession private constructor(
         private const val EVENTS_FLAG = "--events"
         private val HELP_TIMEOUT = 30.seconds
 
-        /** The console for a process [startProcess] started. On the EDT. */
-        fun build(project: Project, started: Started): ByConsoleSession =
-            ByConsoleSession(project, started.handler, started.sessionFile, started.events, ids.incrementAndGet())
+        /**
+         * The console for a process [startProcess] started. On the EDT. [ownsConsole] when the console
+         * is the session's own, as a tab of the tool window is, rather than a run's, which disposes it.
+         */
+        fun build(project: Project, started: Started, ownsConsole: Boolean = true): ByConsoleSession =
+            ByConsoleSession(project, started.handler, started.sessionFile, started.events, ids.incrementAndGet(), ownsConsole)
     }
 
     /** A `by repl` [startProcess] started, and what the console talks to it through. */

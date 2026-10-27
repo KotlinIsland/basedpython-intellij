@@ -117,6 +117,13 @@ class ByRunFragmentedEditor(configuration: ByRunConfiguration) : RunConfiguratio
                 { s: ByRunConfiguration -> s.options.emulateTerminal },
                 { s: ByRunConfiguration, on: Boolean -> s.options.emulateTerminal = on },
             ),
+            SettingsEditorFragment.createTag(
+                "by.runWithConsole",
+                BasedPythonBundle.message("run.editor.runWithConsole"),
+                BasedPythonBundle.message("run.editor.group"),
+                { s: ByRunConfiguration -> s.options.runWithConsole },
+                { s: ByRunConfiguration, on: Boolean -> s.options.runWithConsole = on },
+            ),
         )
     }
 

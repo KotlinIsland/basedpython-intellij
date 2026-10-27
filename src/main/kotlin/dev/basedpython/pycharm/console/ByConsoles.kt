@@ -44,6 +44,12 @@ internal class ByConsoles(private val project: Project, val scope: CoroutineScop
     /** Which tab holds which session; the tabs are this tool window's, the map this service's. */
     private val tabs = WeakHashMap<Content, ByConsoleSession>()
 
+    /** Keeps [session], one a run started in its own tab, among the project's: its Enter and completion are found here. */
+    fun adopt(session: ByConsoleSession) {
+        sessions += session
+        Disposer.register(session) { sessions -= session }
+    }
+
     /** The session whose console input [file] is, for completion in it. */
     fun sessionFor(file: VirtualFile): ByConsoleSession? = sessions.firstOrNull { it.inputFile == file }
 

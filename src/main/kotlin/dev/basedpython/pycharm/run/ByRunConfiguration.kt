@@ -1,5 +1,7 @@
 package dev.basedpython.pycharm.run
 
+import dev.basedpython.pycharm.console.ByConsoleRunState
+
 import dev.basedpython.pycharm.lsp.BasedPythonBinaries
 import dev.basedpython.pycharm.run.main.ByMainArguments
 import dev.basedpython.pycharm.run.main.ByMissingArgumentsHint
@@ -15,6 +17,7 @@ import com.intellij.execution.executors.DefaultRunExecutor
 import com.intellij.execution.configurations.ConfigurationFactory
 import com.intellij.execution.configurations.RuntimeConfigurationError
 import com.intellij.execution.configurations.RuntimeConfigurationException
+import com.intellij.execution.configurations.RuntimeConfigurationWarning
 import com.intellij.execution.configurations.RunConfigurationBase
 import com.intellij.execution.configurations.RunProfileState
 import com.intellij.execution.process.ProcessHandler
@@ -116,6 +119,14 @@ class ByRunConfiguration(project: Project, factory: ConfigurationFactory, name: 
         } else if (!BasedPythonBinaries.isByAvailable(project)) {
             throw RuntimeConfigurationException("by binary not found — set path in Settings | basedpython")
         }
+        if (options.runWithConsole) checkConsole()
+    }
+
+    /** What [ByRunOptions.runWithConsole] leaves out of a run, said before it starts rather than silently. */
+    internal fun checkConsole() {
+        if (getEffectiveTargetName(project) != null) throw RuntimeConfigurationError(BasedPythonBundle.message("run.error.consoleOnTarget"))
+        if (options.programArgs.isNotBlank()) throw RuntimeConfigurationWarning(BasedPythonBundle.message("run.warning.consoleArguments"))
+        if (options.emulateTerminal || options.redirectInput) throw RuntimeConfigurationWarning(BasedPythonBundle.message("run.warning.consoleTerminal"))
     }
 
     /**
@@ -146,6 +157,11 @@ class ByRunConfiguration(project: Project, factory: ConfigurationFactory, name: 
         val target = getEffectiveTargetName(project)
         if (target != null && executor.id != DefaultRunExecutor.EXECUTOR_ID) {
             throw CantRunException(BasedPythonBundle.message("target.error.executor", executor.actionName, target))
+        }
+        // Run only: a debug session needs `by run`'s process to attach to, which a console has not got
+        if (options.runWithConsole && executor.id == DefaultRunExecutor.EXECUTOR_ID) {
+            if (target != null) throw CantRunException(BasedPythonBundle.message("run.error.consoleOnTarget"))
+            return ByConsoleRunState(this)
         }
         if (!askForArguments(executor)) return null
         val opts = options
