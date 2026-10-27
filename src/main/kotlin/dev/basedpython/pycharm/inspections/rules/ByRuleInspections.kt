@@ -2,6 +2,8 @@ package dev.basedpython.pycharm.inspections.rules
 
 import com.intellij.codeHighlighting.HighlightDisplayLevel
 import com.intellij.codeInsight.daemon.HighlightDisplayKey
+import com.intellij.codeInspection.InspectionProfileEntry
+import com.intellij.codeInspection.LocalInspectionEP
 import com.intellij.codeInspection.LocalInspectionTool
 import com.intellij.codeInspection.ex.LocalInspectionToolWrapper
 import com.intellij.lang.annotation.HighlightSeverity
@@ -13,12 +15,14 @@ import com.intellij.openapi.components.State
 import com.intellij.openapi.components.Storage
 import com.intellij.openapi.components.StoragePathMacros
 import com.intellij.openapi.components.service
+import com.intellij.openapi.extensions.PluginDescriptor
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.project.ProjectManager
 import com.intellij.openapi.util.text.StringUtil
 import com.intellij.profile.codeInspection.InspectionProfileManager
 import com.intellij.psi.PsiElement
 import com.intellij.util.xmlb.annotations.XCollection
+import dev.basedpython.pycharm.env.bundled.BundledBinaries
 import dev.basedpython.pycharm.lsp.ext.ByRule
 import dev.basedpython.pycharm.util.BasedPythonBundle
 
@@ -30,10 +34,10 @@ import dev.basedpython.pycharm.util.BasedPythonBundle
  * that the inspections exist, and a profile's settings for them are read, before `by` has started.
  *
  * The rules are `by`'s and change with it, so there is no inspection class per rule to register; each
- * is a [ByRuleInspection] added to the profiles as `by` names them, the way the platform adds a
- * structural search pattern's. They find nothing themselves: a rule's diagnostics are `by`'s, drawn by
- * the language server client, and each is matched to its rule's inspection by its `code`
- * ([ByRuleLevels]) — which is what makes a severity changed here, or a rule switched off, apply.
+ * is a [ByRuleInspection], described by a [ByRuleInspectionEP], added to the profiles as `by` names
+ * them. They find nothing themselves: a rule's diagnostics are `by`'s, drawn by the language server
+ * client, and each is matched to its rule's inspection by its `code` ([ByRuleLevels]) — which is what
+ * makes a severity changed here, or a rule switched off, apply.
  *
  * Removed with the plugin: the tools come out of every profile and their keys are unregistered, so
  * nothing of the plugin's stays in the platform's registries.
@@ -103,11 +107,20 @@ internal class ByRuleInspections : PersistentStateComponent<ByRuleInspections.St
             for (rule in rules) {
                 val shortName = ByRuleInspection.shortName(rule.name)
                 if (profile.getToolsOrNull(shortName, project) != null) continue
-                profile.addTool(project, ByRuleInspectionWrapper(rule), null)
+                profile.addTool(project, LocalInspectionToolWrapper(ByRuleInspectionEP(rule, plugin)), null)
                 added = true
             }
             if (added) profile.profileChanged()
         }
+    }
+
+    /**
+     * This plugin, which the rules' inspections belong to: the descriptor of the inspections it
+     * registers in `plugin.xml`. Asked of them because every lookup of a plugin's own descriptor —
+     * `PluginManagerCore.getPlugin`, `PluginManager.getPluginByClass` — is internal API.
+     */
+    private val plugin: PluginDescriptor by lazy {
+        LocalInspectionEP.LOCAL_INSPECTION.extensionList.first { it.pluginDescriptor.pluginId.idString == BundledBinaries.PLUGIN_ID }.pluginDescriptor
     }
 
     /** Takes every rule's inspection out of the profiles of the application and of every open project, and out of the key registry. */
@@ -127,12 +140,36 @@ internal class ByRuleInspections : PersistentStateComponent<ByRuleInspections.St
 }
 
 /**
- * A rule's inspection as a profile holds it. Its own class only so that a copy — every settings page
- * and every scope makes one — is made for the same rule: the platform copies a tool by its no-argument
- * constructor, which a rule's inspection has not got.
+ * A rule's inspection as the platform describes an inspection — its name, group, default level and
+ * description — so that a profile's wrapper of it is made from this, as one of a registered
+ * `<localInspection>` is, though nothing registers it.
+ *
+ * That is what lets the plugin unload. A wrapper made from the tool alone
+ * (`LocalInspectionToolWrapper(tool)`) asks `InspectionToolRegistrar.findInspectionEP` for the tool's
+ * extension, finds none, and caches the tool's class against that answer in the registrar's
+ * `inconsistentInspectionNameCache`, which only an inspection being registered or a registered one
+ * being removed clears: after the plugin was disabled, [ByRuleInspection]'s class was still there, and
+ * the plugin's class loader with it (measured in PyCharm 263.7528). A wrapper made from an extension
+ * never asks.
+ *
+ * Its copies, which every settings page and every scope makes, are the same rule's too: the platform
+ * copies a wrapper made from an extension with [instantiateTool], where it copies one made from a tool
+ * by the tool's no-argument constructor, which a rule's inspection has not got.
  */
-internal class ByRuleInspectionWrapper(private val rule: ByRule) : LocalInspectionToolWrapper(ByRuleInspection(rule)) {
-    override fun createCopy(): LocalInspectionToolWrapper = ByRuleInspectionWrapper(rule)
+internal class ByRuleInspectionEP(private val rule: ByRule, plugin: PluginDescriptor) : LocalInspectionEP() {
+    init {
+        implementationClass = ByRuleInspection::class.java.name
+        shortName = ByRuleInspection.shortName(rule.name)
+        displayName = ByRuleInspection.displayName(rule)
+        groupDisplayName = BasedPythonBundle.message("rules.inspection.group")
+        groupPath = BasedPythonBundle.message("rules.inspection.root")
+        enabledByDefault = rule.defaultLevel != ByRuleInspection.IGNORE
+        level = (ByRuleInspection.levelOf(rule.defaultLevel) ?: HighlightDisplayLevel.WARNING).name
+        hasStaticDescription = true
+        setPluginDescriptor(plugin)
+    }
+
+    override fun instantiateTool(): InspectionProfileEntry = ByRuleInspection(rule)
 }
 
 /**
@@ -143,11 +180,7 @@ internal class ByRuleInspection(private val rule: ByRule) : LocalInspectionTool(
 
     override fun getShortName(): String = shortName(rule.name)
 
-    override fun getDisplayName(): String = when (rule.status) {
-        PREVIEW -> BasedPythonBundle.message("rules.inspection.preview", rule.name)
-        DEPRECATED -> BasedPythonBundle.message("rules.inspection.deprecated", rule.name)
-        else -> rule.name
-    }
+    override fun getDisplayName(): String = displayName(rule)
 
     override fun getGroupDisplayName(): String = BasedPythonBundle.message("rules.inspection.group")
 
@@ -168,6 +201,13 @@ internal class ByRuleInspection(private val rule: ByRule) : LocalInspectionTool(
         private const val PREVIEW = "preview"
         private const val DEPRECATED = "deprecated"
         const val IGNORE = "ignore"
+
+        /** What a rule's inspection is called in the settings: the rule's name, and whether it is a preview or deprecated. */
+        fun displayName(rule: ByRule): String = when (rule.status) {
+            PREVIEW -> BasedPythonBundle.message("rules.inspection.preview", rule.name)
+            DEPRECATED -> BasedPythonBundle.message("rules.inspection.deprecated", rule.name)
+            else -> rule.name
+        }
 
         /** The inspection's name, and the key its settings and severity are kept under. */
         fun shortName(rule: String): String = "ByRule_$rule"

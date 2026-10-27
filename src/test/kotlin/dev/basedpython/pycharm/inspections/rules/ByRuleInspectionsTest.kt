@@ -52,10 +52,26 @@ class ByRuleInspectionsTest {
 
     @Test
     fun `a rule's inspection copies as the same rule, as every settings page and scope copies it`() = onEdt {
-        // the platform's own copy instantiates the tool's class with no arguments, which a rule's inspection has not got
-        val copy = ByRuleInspectionWrapper(rules[0]).createCopy()
-        assertEquals("ByRule_unresolved-reference", copy.shortName)
-        assertEquals("unresolved-reference", copy.displayName)
+        // a copy of a wrapper made from a tool instantiates the tool's class with no arguments, which a rule's inspection has not got
+        val copy = profile().getInspectionTool("ByRule_unresolved-reference", fixture.project)!!.createCopy()
+        assertEquals("ByRule_unresolved-reference", copy.tool.shortName)
+        assertEquals("unresolved-reference", copy.tool.displayName)
+    }
+
+    /**
+     * A wrapper made from the tool alone puts the tool's class in `InspectionToolRegistrar`'s cache of
+     * tools with no extension, which nothing the plugin can reach clears, so it kept the plugin's class
+     * loader after an unload.
+     */
+    @Test
+    fun `a rule's inspection is described by an extension, so the registrar never caches its class`() = onEdt {
+        val tool = profile().getInspectionTool("ByRule_unresolved-reference", fixture.project)!!
+        assertTrue(tool.extension is ByRuleInspectionEP)
+        assertEquals(HighlightDisplayLevel.ERROR, tool.defaultLevel)
+        assertTrue(tool.tool is ByRuleInspection)
+        val registrar = com.intellij.codeInspection.ex.InspectionToolRegistrar.getInstance()
+        val cache = registrar.javaClass.getDeclaredField("inconsistentInspectionNameCache").apply { isAccessible = true }.get(registrar) as Map<*, *>
+        assertFalse(ByRuleInspection::class.java in cache.keys)
     }
 
     @Test
