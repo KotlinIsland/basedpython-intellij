@@ -66,8 +66,8 @@ internal class ByMergeConflictResolver : LangSpecificMergeConflictResolver {
         val resolved = server.awaitBy("by/resolveMergeConflicts", TIMEOUT_MS) { (it as ByServerExtensions).resolveMergeConflicts(params) }
             .value ?: return null
         if (resolved.size != params.conflicts.size) return null
-        // whole lines, each ending in its line break, which the platform splits back into those lines
-        return resolved
+        val baseLines = ByMerges.lineCount(params.base)
+        return resolved.mapIndexed { i, text -> text?.let { ByMerges.chunkContent(it, params.conflicts[i].base.end == baseLines) } }
     }
 
     private companion object {
@@ -112,6 +112,18 @@ internal object ByMerges {
         val file: VirtualFile? = psi.viewProvider.virtualFile.let { (it as? LightVirtualFile)?.originalFile ?: it }
         return file?.takeIf { it.isInLocalFileSystem }?.url ?: SYNTHETIC_URI
     }
+
+    /** The lines the merge window counts in [text]: one more than its line breaks, the last perhaps empty. */
+    fun lineCount(text: String): Int = text.count { it == '\n' } + 1
+
+    /**
+     * `by`'s [text] for a conflict, which is the text of the lines it replaces, as the content the
+     * merge window splits into those lines. The window drops one empty line after the content's last
+     * line break, which is right for lines that each end in one; the last line of a document has none,
+     * so a conflict [atEnd], reaching the end of the base, gets a line break more, or the file the
+     * merge writes loses the line break it ends in.
+     */
+    fun chunkContent(text: String, atEnd: Boolean): String = if (atEnd) text + "\n" else text
 
     /** [ranges] of [text] as offsets into it, each kept to the text. */
     fun offsets(text: String, ranges: List<Range>): List<TextRange> {
