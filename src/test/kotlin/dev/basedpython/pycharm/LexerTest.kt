@@ -49,7 +49,7 @@ class LexerTest {
     @Test
     fun `basedpython extra keywords are KEYWORD tokens`() {
         val extras = listOf("final", "override", "abstract", "static", "protocol", "open", "export",
-            "let", "newtype", "public", "private", "data", "frozen", "enum", "out")
+            "let", "newtype", "public", "private", "data", "frozen", "enum")
         val src = extras.joinToString(" ")
         val types = tokenTypes(src)
         assertEquals(extras.size, types.size)
@@ -65,6 +65,67 @@ class LexerTest {
         // `in out T` — both variance markers colour as keywords.
         tokenize("class B[in out T]:").filter { it.second == "in" || it.second == "out" }
             .forEach { assertEquals(BasedPythonTokenTypes.KEYWORD, it.first) }
+    }
+
+    private fun out(src: String): List<IElementType> = tokenize(src).filter { it.second == "out" }.map { it.first }
+
+    @Test
+    fun `out is the variance keyword where by's parser reads one`() {
+        listOf(
+            "class A[out T]: ...",
+            "class A[K, out V]: ...",
+            "type Box[out T] = list[T]",
+            "def first(xs: list[out int]) -> int: ...",
+            "x: dict[str, out int]",
+            "x: list[\n    out\n    int\n]",
+            "x: list[out  # covariant\n int]",
+            "x: list[out cast]",
+            "x: list[in out int]",
+            "class A[in out]: ...",
+        ).forEach { assertEquals(listOf(BasedPythonTokenTypes.KEYWORD), out(it), it) }
+    }
+
+    @Test
+    fun `out is a name everywhere else`() {
+        listOf(
+            "out = 1",
+            "print(out)",
+            "out.append(1)",
+            "if x in out: pass",
+            "for x in out: pass",
+            "xs[out]",
+            "xs[out[0]]",
+            "xs[out + 1]",
+            "xs[out cast int]",
+            "xs[out cast! int]",
+            "xs[1, out]",
+            "f(out x)",
+            "a, out\nb = 1, 2",
+            "lambda out: out",
+        ).forEach { src -> out(src).forEach { assertEquals(BasedPythonTokenTypes.IDENTIFIER, it, src) } }
+    }
+
+    @Test
+    fun `lexing again from any token the editor may restart at reads the same tokens`() {
+        val src = "x: dict[str, out int] = {}\nout = [out, in out]\ny = xs[out cast int, out T]\nclass A[in out T, out U]: ..."
+        val lexer = BasedPythonLexer()
+        lexer.start(src, 0, src.length, 0)
+        val whole = mutableListOf<Triple<Int, Int, IElementType>>()
+        val states = mutableListOf<Int>()
+        while (lexer.tokenType != null) {
+            whole += Triple(lexer.tokenStart, lexer.tokenEnd, lexer.tokenType!!)
+            states += lexer.state
+            lexer.advance()
+        }
+        whole.indices.filter { states[it] == 0 }.forEach { i ->
+            lexer.start(src, whole[i].first, src.length, 0)
+            val again = mutableListOf<Triple<Int, Int, IElementType>>()
+            while (lexer.tokenType != null) {
+                again += Triple(lexer.tokenStart, lexer.tokenEnd, lexer.tokenType!!)
+                lexer.advance()
+            }
+            assertEquals(whole.drop(i), again, "restarted at ${whole[i].first}")
+        }
     }
 
     @Test

@@ -17,7 +17,8 @@ import com.intellij.psi.tree.IElementType
  * whole.
  *
  * The lexer restarts only between top-level tokens: a token inside a literal reports a state other
- * than the initial one, so the editor re-lexes a changed literal from its start.
+ * than the initial one, so the editor re-lexes a changed literal from its start. A top-level token
+ * reports [BasedPythonLexer]'s state.
  */
 class BasedPythonHighlightingLexer : LexerBase() {
 
@@ -30,7 +31,7 @@ class BasedPythonHighlightingLexer : LexerBase() {
     private class Part(val start: Int, val end: Int, val type: IElementType)
 
     override fun start(buffer: CharSequence, startOffset: Int, endOffset: Int, initialState: Int) {
-        base.start(buffer, startOffset, endOffset, 0)
+        base.start(buffer, startOffset, endOffset, if (initialState == IN_LITERAL) BasedPythonLexer.NONE else initialState)
         split()
     }
 
@@ -45,7 +46,7 @@ class BasedPythonHighlightingLexer : LexerBase() {
         FStrings.scan(buffer, base.tokenStart, base.tokenEnd) { start, end, type -> if (end > start) parts += Part(start, end, type) }
     }
 
-    override fun getState(): Int = if (parts.isNotEmpty() && index > 0) IN_LITERAL else 0
+    override fun getState(): Int = if (parts.isNotEmpty() && index > 0) IN_LITERAL else base.state
     override fun getTokenType(): IElementType? = if (parts.isEmpty()) base.tokenType else parts[index].type
     override fun getTokenStart(): Int = if (parts.isEmpty()) base.tokenStart else parts[index].start
     override fun getTokenEnd(): Int = if (parts.isEmpty()) base.tokenEnd else parts[index].end
@@ -60,7 +61,7 @@ class BasedPythonHighlightingLexer : LexerBase() {
 
     companion object {
         /** The state of a token inside a literal, from which the editor does not restart. */
-        private const val IN_LITERAL = 1
+        private const val IN_LITERAL = BasedPythonLexer.STATE_COUNT
 
         /**
          * The whole literal whose text [iterator] is at — a string token, or a part of an f-string's

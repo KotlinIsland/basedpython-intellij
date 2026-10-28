@@ -26,6 +26,14 @@ import com.intellij.psi.tree.IElementType
  * the server reports as a `keyword` semantic token colours correctly whether or not it appears
  * below. Adding new basedpython keywords here is a convenience for the no-LSP case, not a
  * requirement — so a stale list is tolerable and not worth chasing.
+ *
+ * `out` is the one word read by where it stands, since it is as often a variable as a keyword: it is
+ * the variance keyword of `[out T]`, `[in out T]` and `list[out T]` only where `by`'s parser reads
+ * it as one, at the start of a type parameter or a subscript element (after `[` or `,`) with a name
+ * after it, or after the variance `in` that starts one. The state of a token is what it needs to be
+ * read again from its start: the significant token before it, while that is `[`, `,` or a variance
+ * `in`, and [AFTER_OUT] for the tokens read to decide an `out` before them, so that the editor
+ * re-reads the `out` when any of them changes.
  */
 class BasedPythonLexer : LexerBase() {
 
@@ -35,7 +43,15 @@ class BasedPythonLexer : LexerBase() {
     private var tokenStart: Int = 0
     private var tokenEnd: Int = 0
     private var currentToken: IElementType? = null
-    private var state: Int = 0
+
+    /** The state the current token starts in. */
+    private var state: Int = NONE
+
+    /** What the significant tokens read so far leave the next token in: [NONE] or one of the `AFTER_*`. */
+    private var context: Int = NONE
+
+    /** A token starting before this offset was read to decide an `out` before it. */
+    private var lookaheadEnd: Int = -1
 
     override fun start(buffer: CharSequence, startOffset: Int, endOffset: Int, initialState: Int) {
         this.buffer = buffer
@@ -43,7 +59,8 @@ class BasedPythonLexer : LexerBase() {
         this.endOffset = endOffset
         this.tokenStart = startOffset
         this.tokenEnd = startOffset
-        this.state = initialState
+        this.context = if (initialState == AFTER_OUT) NONE else initialState
+        this.lookaheadEnd = -1
         advance()
     }
 
@@ -60,8 +77,9 @@ class BasedPythonLexer : LexerBase() {
             currentToken = null
             return
         }
+        state = if (tokenStart < lookaheadEnd) AFTER_OUT else context
         val c = buffer[tokenStart]
-        currentToken = when {
+        val token = when {
             c == '\n' || c == '\r' -> scanNewline()
             isWhitespace(c) -> scanWhitespace()
             c == '#' -> scanComment()
@@ -71,6 +89,15 @@ class BasedPythonLexer : LexerBase() {
             c == '.' && tokenStart + 1 < endOffset && isDigit(buffer[tokenStart + 1]) -> scanNumber()
             isIdentStart(c) -> scanIdentifierOrKeyword()
             else -> scanOperatorOrPunct()
+        }
+        currentToken = token
+        context = when {
+            token == BasedPythonTokenTypes.WHITESPACE || token == BasedPythonTokenTypes.COMMENT -> context
+            token == BasedPythonTokenTypes.LBRACKET -> AFTER_BRACKET
+            token == BasedPythonTokenTypes.COMMA -> AFTER_COMMA
+            token == BasedPythonTokenTypes.KEYWORD && (context == AFTER_BRACKET || context == AFTER_COMMA) &&
+                tokenEnd - tokenStart == 2 && buffer[tokenStart] == 'i' && buffer[tokenStart + 1] == 'n' -> AFTER_VARIANCE_IN
+            else -> NONE
         }
     }
 
@@ -204,8 +231,82 @@ class BasedPythonLexer : LexerBase() {
         while (i < endOffset && isIdentPart(buffer[i])) i++
         tokenEnd = i
         val text = buffer.subSequence(tokenStart, i).toString()
+        if (text == "out") return if (isVarianceOut()) BasedPythonTokenTypes.KEYWORD else BasedPythonTokenTypes.IDENTIFIER
         return if (text in BasedPythonTokenTypes.ALL_KEYWORDS) BasedPythonTokenTypes.KEYWORD
         else BasedPythonTokenTypes.IDENTIFIER
+    }
+
+    /**
+     * Whether the `out` just scanned is a variance keyword, as `by`'s parser decides it: always right
+     * after a variance `in`, and at the start of an element when a name follows it, since two names
+     * in a row are never an expression, while `[out]`, `[out[0]]` and `[out cast int]` read a
+     * variable. After `[` the element is inside brackets, so its name may be on a later line; after
+     * `,` it may be a top-level tuple's, `a, out` ending a statement, so the name must be on the same
+     * line.
+     */
+    private fun isVarianceOut(): Boolean {
+        val acrossLines = when (context) {
+            AFTER_VARIANCE_IN -> return true
+            AFTER_BRACKET -> true
+            AFTER_COMMA -> false
+            else -> return false
+        }
+        val next = skipTrivia(tokenEnd, acrossLines)
+        lookaheadEnd = next + 1
+        val word = wordAt(next) ?: return false
+        if (word in HARD_KEYWORDS) return false
+        if (word != "cast") return true
+        // `out cast int` casts a variable named out; `cast` is a name only where no operand follows
+        val operand = skipTrivia(next + word.length, acrossLines)
+        lookaheadEnd = operand + 1
+        return !startsCastOperand(operand)
+    }
+
+    /** Where the next token after [from] starts, past spaces, continuations and, [acrossLines], line breaks and comments. */
+    private fun skipTrivia(from: Int, acrossLines: Boolean): Int {
+        var i = from
+        while (i < endOffset) {
+            val ch = buffer[i]
+            i = when {
+                isWhitespace(ch) -> i + 1
+                ch == '\\' && i + 1 < endOffset && (buffer[i + 1] == '\n' || buffer[i + 1] == '\r') -> i + 2
+                acrossLines && (ch == '\n' || ch == '\r') -> i + 1
+                acrossLines && ch == '#' -> {
+                    var j = i
+                    while (j < endOffset && buffer[j] != '\n' && buffer[j] != '\r') j++
+                    j
+                }
+                else -> return i
+            }
+        }
+        return i
+    }
+
+    private fun wordAt(at: Int): String? {
+        if (at >= endOffset || !isIdentStart(buffer[at])) return null
+        var i = at
+        while (i < endOffset && isIdentPart(buffer[i])) i++
+        return buffer.subSequence(at, i).toString()
+    }
+
+    /** Whether what starts at [at] makes a `cast` before it an infix cast: `!`, `?` or the start of an expression. */
+    private fun startsCastOperand(at: Int): Boolean {
+        if (at >= endOffset) return false
+        val ch = buffer[at]
+        val next = if (at + 1 < endOffset) buffer[at + 1] else ' '
+        val word = wordAt(at)
+        return when {
+            word != null -> word !in HARD_KEYWORDS || word in EXPRESSION_KEYWORDS
+            isDigit(ch) || ch == '"' || ch == '\'' -> true
+            ch == '.' -> isDigit(next) || next == '.' && at + 2 < endOffset && buffer[at + 2] == '.'
+            ch == '!' -> next != '='
+            ch == '?' -> next != '.' && next != '?'
+            ch == '(' || ch == '[' || ch == '{' || ch == '~' -> true
+            ch == '-' -> next != '=' && next != '>'
+            ch == '+' -> next != '='
+            ch == '*' -> next != '=' && !(next == '*' && at + 2 < endOffset && buffer[at + 2] == '=')
+            else -> false
+        }
     }
 
     private fun scanOperatorOrPunct(): IElementType {
@@ -281,6 +382,23 @@ class BasedPythonLexer : LexerBase() {
     private fun isIdentPart(c: Char): Boolean = isIdentStart(c) || isDigit(c)
 
     companion object {
+        /** The state of a token no `out`-deciding context comes before. */
+        const val NONE = 0
+        private const val AFTER_BRACKET = 1
+        private const val AFTER_COMMA = 2
+        private const val AFTER_VARIANCE_IN = 3
+        /** The state of a token read to decide an `out` before it: one the editor never restarts at. */
+        private const val AFTER_OUT = 4
+
+        /** One past the largest state this lexer reports, for a lexer around it to number its own above. */
+        const val STATE_COUNT = 5
+
+        /** `by`'s keywords that are never a name; `match`, `case`, `type`, `cast` and `lazy` are soft. */
+        private val HARD_KEYWORDS: Set<String> = BasedPythonTokenTypes.PYTHON_KEYWORDS - setOf("match", "case", "type")
+
+        /** The hard keywords an expression can start with. */
+        private val EXPRESSION_KEYWORDS: Set<String> = setOf("lambda", "await", "not", "yield", "None", "True", "False")
+
         /** A string prefix letter: raw, bytes, unicode, f-string, t-string. */
         fun isStringPrefix(c: Char): Boolean =
             c == 'r' || c == 'R' || c == 'b' || c == 'B' || c == 'f' || c == 'F' || c == 'u' || c == 'U' || c == 't' || c == 'T'
