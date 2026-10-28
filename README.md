@@ -88,7 +88,7 @@ support, run configurations, CLI actions, and editor tooling.
 
 ### Actions (Tools | basedpython)
 - **Transpile to .py** / **Reverse Transpile to .by** (also in editor & project popups).
-- **Generate api.lock** — `by generate-api-file`.
+- **Generate api.lock** / **Diff api.lock** — from `by`'s language server (`by/apiLock`), unsaved edits included.
 - **Format with buff** (`Ctrl+Alt+Shift+L`) — works without the LSP.
 - **Check Project** — lists what `by` finds in every file, open or not, in *Problems | Project
   Errors*, and keeps the list current (off until asked for: `by` then holds the whole project).

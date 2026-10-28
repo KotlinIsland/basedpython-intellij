@@ -407,6 +407,16 @@ interface ByServerExtensions {
     @JsonRequest("by/diffIgnoredRanges")
     fun diffIgnoredRanges(params: ByDiffIgnoredRangesParams): CompletableFuture<ByDiffIgnoredRanges?>
 
+    /**
+     * The project's `api.lock` as `by` would generate it now, from what it holds — unsaved edits
+     * included — for the python target the lockfile on disk names, and whether that lockfile is
+     * stale. `null` when [ByApiLockParams.uri] is in no project. Refused with an error when the
+     * lockfile's `#python:` header names a version `by` cannot read; a `by` from before the request
+     * answers `MethodNotFound`.
+     */
+    @JsonRequest("by/apiLock")
+    fun apiLock(params: ByApiLockParams): CompletableFuture<ByApiLock?>
+
     @JsonRequest("by/references")
     fun references(args: ReferenceParams): CompletableFuture<List<ByReference>?>
 
@@ -1610,6 +1620,24 @@ data class ByDiffIgnoredRangesParams(val text: String, val uri: String? = null)
 
 /** Each import statement, and the text the tokenizer discards without its being significant. */
 data class ByDiffIgnoredRanges(val imports: List<Range> = emptyList(), val formatting: List<Range> = emptyList())
+
+/** A file or folder in the project whose `api.lock` is asked for; without one, `by`'s first project. */
+data class ByApiLockParams(val uri: String? = null)
+
+/**
+ * A project's `api.lock`: where the project writes it ([uri]), its [text] as generated now, the
+ * python target it is generated for (`default` or a version, read from the lockfile's `#python:`
+ * header), whether the lockfile [exists], and the 0-based line of the lockfile — on disk, or as an
+ * editor holds it — where it first differs from [text]; `null` when it is up to date or missing. A
+ * difference in the `#tool:by=` line alone is not stale.
+ */
+data class ByApiLock(
+    val uri: String,
+    val text: String,
+    val python: String,
+    val exists: Boolean,
+    val staleLine: Int? = null,
+)
 
 /** The text typed into a console so far, each line ending in a newline, the one Enter adds included. */
 data class ByInputStatusParams(val text: String)

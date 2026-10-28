@@ -68,8 +68,7 @@ internal object EnvFiles {
     /**
      * Re-reads the manifests after a command has rewritten them.
      *
-     * Synchronous, and therefore to be called off the EDT — the convention the rest of this plugin
-     * follows for the same job (see [dev.basedpython.pycharm.actions.GenerateApiFileAction]).
+     * Synchronous, and therefore to be called off the EDT.
      * [LocalFileSystem.refreshAndFindFileByNioFile] finds a file that did not exist before, which is
      * the `uv.lock` a first sync creates; [VfsUtil.markDirtyAndRefresh] is what forces the content
      * of one that did to be read again rather than trusted from cache.

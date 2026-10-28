@@ -103,8 +103,7 @@ class BasedPythonBundleTest {
             "notification.transpileFailed.title",
             "notification.reverseTranspileFailed.title",
             "notification.generateApiFailed.title",
-            "notification.apiLockGenerated",
-            "notification.apiLockGenerated.withRules",
+            "notification.apiLockGenerated.records",
             "explainRule.noExplanation",
             "explainRule.noExplanationFor.title",
             "explainRule.prompt.message",
@@ -387,8 +386,8 @@ class BasedPythonBundleTest {
 
     @Test
     fun `utf8 glyphs survive load`() {
-        // em-dash in the with-rules summary, ellipsis in progress item
-        assertTrue(msg("notification.apiLockGenerated.withRules", 3).contains("—"))
+        // em-dash in the api.lock diff's title, ellipsis in progress item
+        assertTrue(value("apiLock.diff.title").contains("—"))
         assertTrue(msg("download.progress.item", "by").contains("…"))
         assertTrue(value("banner.byMissing.configure").contains("…"))
     }
