@@ -1,6 +1,7 @@
 package dev.basedpython.pycharm.debug
 
 import com.intellij.codeInsight.lookup.Lookup
+import com.intellij.codeInsight.lookup.LookupElement
 import com.intellij.codeInsight.lookup.impl.LookupImpl
 import com.intellij.platform.dap.DapSessionContext
 import com.intellij.platform.dap.DapSessionExecutor
@@ -137,17 +138,33 @@ class ByDapCompletionTest {
         else -> null
     }
 
+    /**
+     * The sessions of this test's fields, held as the platform's debugger manager holds a session
+     * while it runs: a field's mark is weak, so a session nothing else held was collected whenever a
+     * collection came between marking its field and completing in it, which a long suite's did.
+     */
+    private val sessions = mutableListOf<XDebugSession>()
+
     /** Opens a session field holding [text] (`<caret>` marks the caret) for [session]. */
     private fun field(text: String, session: XDebugSession?) {
         // a name of its own each time, so no field reuses another's document and the mark on it
         fixture.configureByText("expression${++fields}.by", text)
-        session?.let { ByFieldSessions.getInstance().mark(fixture.editor.document, it) }
+        session?.let {
+            sessions += it
+            ByFieldSessions.getInstance().mark(fixture.editor.document, it)
+        }
+    }
+
+    /** Completes at the caret of the field opened last, after a collection, as one may come anywhere in a long suite. */
+    private fun complete(): Array<LookupElement>? {
+        GCWatcher.tracking(Any()).ensureCollected()
+        return fixture.completeBasic()
     }
 
     @Test
     fun `a session's field offers what the adapter answers, asked at the caret in the frame on screen`() = onEdt {
         field("sys.vers<caret>", session(frame(executor(server(debugpyVers), supportsCompletions = true))))
-        val offered = fixture.completeBasic()?.map { it.lookupString }.orEmpty()
+        val offered = complete()?.map { it.lookupString }.orEmpty()
         assertTrue(offered.containsAll(listOf("version", "version_info")), "offered $offered")
         val request = asked.single()
         assertEquals(FrameId(FRAME), request.frameId)
@@ -159,7 +176,7 @@ class ByDapCompletionTest {
     @Test
     fun `picking an item replaces what the adapter said it covers, and keeps the dot`() = onEdt {
         field("sys.vers<caret>", session(frame(executor(server(debugpyVers), supportsCompletions = true))))
-        val items = fixture.completeBasic()!!
+        val items = complete()!!
         (fixture.lookup as LookupImpl).currentItem = items.first { it.lookupString == "version_info" }
         fixture.finishLookup(Lookup.NORMAL_SELECT_CHAR)
         fixture.checkResult("sys.version_info<caret>")
@@ -168,7 +185,7 @@ class ByDapCompletionTest {
     @Test
     fun `an adapter that does not advertise completions is not asked`() = onEdt {
         field("sys.vers<caret>", session(frame(executor(server(debugpyVers), supportsCompletions = null))))
-        val offered = fixture.completeBasic()?.map { it.lookupString }.orEmpty()
+        val offered = complete()?.map { it.lookupString }.orEmpty()
         assertTrue("version_info" !in offered, "offered $offered")
         assertTrue(asked.isEmpty())
     }
@@ -177,9 +194,9 @@ class ByDapCompletionTest {
     fun `a field of no session, or of a running one, asks nothing`() = onEdt {
         val frame = frame(executor(server(debugpyVers), supportsCompletions = true))
         field("sys.vers<caret>", null)
-        fixture.completeBasic()
+        complete()
         field("sys.vers<caret>", session(frame, suspended = false))
-        fixture.completeBasic()
+        complete()
         assertTrue(asked.isEmpty())
     }
 
