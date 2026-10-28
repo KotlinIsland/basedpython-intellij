@@ -97,7 +97,13 @@ data class ByMovableMembers(
 data class ByPullMembersUpParams(
     val textDocument: TextDocumentIdentifier,
     val position: Position,
+    /** The members of the class's body to move, by name. */
     val members: List<String>,
+    /**
+     * The bases to move, each as listed with the kind [ByMemberItem.BASE]; sent even when empty, since
+     * without it `by` reads the bases from [members] and refuses a name that is a member and a base.
+     */
+    val bases: List<String>,
     /** The superclass's `qualifiedName`. */
     val target: String,
 )

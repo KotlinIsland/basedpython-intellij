@@ -169,6 +169,15 @@ internal class ByMemberSelectionTable(infos: List<ByMemberInfo>) :
 /** The names of the members checked in [infos], in the table's order. */
 internal fun checkedNames(infos: List<ByMemberInfo>): List<String> = infos.filter { it.isChecked }.map { it.name }
 
+/**
+ * What Pull Members Up asks `by` to move: the checked rows of the class's body as `members` and its
+ * checked bases as `bases`, each named once, so a base and a member of the same name stay apart.
+ */
+internal fun pullUpParams(site: ByRefactoringSite, infos: List<ByMemberInfo>, superclass: String): ByPullMembersUpParams {
+    val (bases, members) = infos.filter { it.isChecked }.partition { it.member.member.isBase }
+    return ByPullMembersUpParams(site.identifier, site.position, members.map { it.name }, bases.map { it.name }, superclass)
+}
+
 /** Pull Members Up's dialog: the superclass to pull into, nearest first, and the members. */
 internal class ByPullUpDialog(
     project: Project,
@@ -199,12 +208,10 @@ internal class ByPullUpDialog(
     override fun hasHelpAction(): Boolean = false
 
     override fun doAction() {
-        val members = checkedNames(infos)
         val superclass = (target.selectedItem as? ByClassItem)?.qualifiedName ?: return
-        if (members.isEmpty()) return CommonRefactoringUtil.showErrorMessage(title, BasedPythonBundle.message("refactoring.by.members.noneChecked"), null, project)
-        val edited = ByProjectRefactorings.askEdit(site, title, "by/pullMembersUp") {
-            it.pullMembersUp(ByPullMembersUpParams(site.identifier, site.position, members, superclass))
-        }
+        if (checkedNames(infos).isEmpty()) return CommonRefactoringUtil.showErrorMessage(title, BasedPythonBundle.message("refactoring.by.members.noneChecked"), null, project)
+        val params = pullUpParams(site, infos, superclass)
+        val edited = ByProjectRefactorings.askEdit(site, title, "by/pullMembersUp") { it.pullMembersUp(params) }
         ByProjectRefactorings.processor(project, title, subject, edited)?.let(::invokeRefactoring)
     }
 }
