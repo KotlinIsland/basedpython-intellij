@@ -48,6 +48,10 @@ class BasedPythonSettings : PersistentStateComponent<BasedPythonSettings.State> 
     var checkApiLockOnCommit: Boolean = true,
     /** Offer, on the commit that ends a merge, rebase step or cherry-pick, to reconcile merged files' imports. */
     var reconcileMergeImportsOnCommit: Boolean = true,
+    /** Offer git merge integration when the project is in a git work tree without it; *Don't ask again* turns it off. */
+    var offerGitMergeIntegration: Boolean = true,
+    /** Set git merge integration up once `by` runs and the project's repository exists: the New Project wizard's answer. */
+    var enableGitMergeIntegration: Boolean = false,
     /**
      * The two toggles that came before the per-kind modes, kept as what an unset kind falls back
      * to: a project configured before this reads exactly as it did, its parameter-ish hints
@@ -197,6 +201,14 @@ class BasedPythonSettings : PersistentStateComponent<BasedPythonSettings.State> 
   var reconcileMergeImportsOnCommit: Boolean
     get() = state.reconcileMergeImportsOnCommit
     set(value) { state.reconcileMergeImportsOnCommit = value }
+
+  var offerGitMergeIntegration: Boolean
+    get() = state.offerGitMergeIntegration
+    set(value) { state.offerGitMergeIntegration = value }
+
+  var enableGitMergeIntegration: Boolean
+    get() = state.enableGitMergeIntegration
+    set(value) { state.enableGitMergeIntegration = value }
 
   var inlayParameterHints: Boolean
     get() = state.inlayParameterHints

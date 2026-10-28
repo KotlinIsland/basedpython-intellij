@@ -2,6 +2,7 @@ package dev.basedpython.pycharm.project
 
 import com.intellij.ide.util.projectWizard.WizardContext
 import com.intellij.ide.wizard.AbstractNewProjectWizardStep
+import com.intellij.ide.wizard.GitNewProjectWizardData.Companion.gitData
 import com.intellij.ide.wizard.NewProjectWizardStep
 import com.intellij.ide.wizard.language.LanguageGeneratorNewProjectWizard
 import com.intellij.openapi.application.WriteAction
@@ -12,7 +13,11 @@ import com.intellij.openapi.roots.ModuleRootModificationUtil
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.ui.dsl.builder.Panel
+import com.intellij.ui.dsl.builder.bindSelected
 import dev.basedpython.pycharm.BasedPythonIcons
+import dev.basedpython.pycharm.settings.BasedPythonSettings
+import dev.basedpython.pycharm.util.BasedPythonBundle
 import javax.swing.Icon
 
 /**
@@ -46,7 +51,27 @@ class BasedPythonLanguageGenerator : LanguageGeneratorNewProjectWizard {
  */
 internal class BasedPythonScaffoldStep(parent: NewProjectWizardStep) : AbstractNewProjectWizardStep(parent) {
 
+    /**
+     * Whether git merges the project with `by merge-driver`, asked where the platform's *Create Git
+     * repository* is. Only remembered here: the repository is created after the project opens, and
+     * the integration is `by`'s to set up (`by/gitMergeIntegration`, naming the `by` the project's
+     * server runs), so [dev.basedpython.pycharm.vcs.ByGitMergeOffers] sets it up once both exist.
+     */
+    private val gitMerge = propertyGraph.property(true)
+
+    override fun setupUI(builder: Panel) {
+        if (gitData == null) return
+        with(builder) {
+            row("") {
+                checkBox(BasedPythonBundle.message("wizard.gitMerge"))
+                    .bindSelected(gitMerge)
+                    .comment(BasedPythonBundle.message("wizard.gitMerge.comment"))
+            }
+        }
+    }
+
     override fun setupProject(project: Project) {
+        if (gitData?.git == true && gitMerge.get()) BasedPythonSettings.getInstance(project).enableGitMergeIntegration = true
         val basePath = project.basePath ?: return
         val baseDir = LocalFileSystem.getInstance().refreshAndFindFileByPath(basePath) ?: return
         WriteAction.runAndWait<Throwable> {

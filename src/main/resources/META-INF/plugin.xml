@@ -885,6 +885,14 @@
         <listener
             class="dev.basedpython.pycharm.inspections.rules.ByRuleRefresh"
             topic="dev.basedpython.pycharm.lsp.ByLspLifecycleListener"/>
+        <!-- Git merge integration, asked about once by runs and again when the project's version
+             control mappings change; see vcs.ByGitMergeOffers. -->
+        <listener
+            class="dev.basedpython.pycharm.vcs.ByGitMergeOfferOnStart"
+            topic="dev.basedpython.pycharm.lsp.ByLspLifecycleListener"/>
+        <listener
+            class="dev.basedpython.pycharm.vcs.ByGitMergeOfferOnMappings"
+            topic="com.intellij.openapi.vcs.VcsMappingListener"/>
     </projectListeners>
 
     <applicationListeners>
@@ -1016,6 +1024,10 @@
         <action id="dev.basedpython.pycharm.transpile.DiffApiLock"
                 class="dev.basedpython.pycharm.transpile.DiffApiLockAction">
             <add-to-group group-id="basedpython.ActionGroup" anchor="after" relative-to-action="basedpython.GenerateApiFile"/>
+        </action>
+        <action id="basedpython.GitMergeIntegration"
+                class="dev.basedpython.pycharm.vcs.ByGitMergeIntegrationAction">
+            <add-to-group group-id="basedpython.ActionGroup" anchor="after" relative-to-action="dev.basedpython.pycharm.transpile.DiffApiLock"/>
         </action>
         <action id="dev.basedpython.pycharm.transpile.ConvertByToPy"
                 class="dev.basedpython.pycharm.transpile.ConvertByToPyAction">

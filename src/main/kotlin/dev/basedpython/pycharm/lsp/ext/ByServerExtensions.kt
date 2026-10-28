@@ -428,6 +428,17 @@ interface ByServerExtensions {
     @JsonRequest("by/reconcileMergeImports")
     fun reconcileMergeImports(params: ByReconcileMergeImportsParams): CompletableFuture<ByReconciledImports?>
 
+    /**
+     * Whether git merges the project's python files and `api.lock` with `by merge-driver`, and with
+     * [ByGitMergeIntegrationParams.enable] sets that up first, as `by init --git-merge` does: the
+     * missing `.gitattributes` lines appended and `merge.by.*` written to the repository's local
+     * configuration, the driver naming the `by` the server is. `null` without a project; refused with
+     * an error, when enabling, outside a git work tree. A `by` from before the request answers
+     * `MethodNotFound`.
+     */
+    @JsonRequest("by/gitMergeIntegration")
+    fun gitMergeIntegration(params: ByGitMergeIntegrationParams): CompletableFuture<ByGitMergeIntegration?>
+
     @JsonRequest("by/references")
     fun references(args: ReferenceParams): CompletableFuture<List<ByReference>?>
 
@@ -1676,6 +1687,26 @@ data class ByImportChoice(
 
 /** One version's — `ours`, `base` or `theirs` — import statements binding a name. */
 data class ByVersionImports(val version: String, val statements: List<String> = emptyList())
+
+/** A file or folder of the project asked about (the first project without one), and whether to set the integration up. */
+data class ByGitMergeIntegrationParams(val uri: String? = null, val enable: Boolean? = null)
+
+/**
+ * Whether git merges a project with `by merge-driver`: [enabled] when every pattern is merged by a
+ * driver that is there and is the command `by` writes for itself; whether the project is in a git
+ * work tree ([repository]); the uri of its `.gitattributes`; the patterns git does not merge with the
+ * driver; the command `merge.by.driver` runs (`null` where unset), whether the `by` it names exists
+ * ([driverFound]) and whether it is exactly what `by` writes now ([driverCurrent]).
+ */
+data class ByGitMergeIntegration(
+    val enabled: Boolean,
+    val repository: Boolean,
+    val attributes: String? = null,
+    val missingAttributes: List<String> = emptyList(),
+    val driver: String? = null,
+    val driverFound: Boolean = false,
+    val driverCurrent: Boolean = false,
+)
 
 /** The text typed into a console so far, each line ending in a newline, the one Enter adds included. */
 data class ByInputStatusParams(val text: String)
