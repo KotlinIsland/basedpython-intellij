@@ -1,0 +1,12 @@
+<!--
+  Loaded only when the Git plugin is present: a commit that ends a merge, a rebase step or a
+  cherry-pick offers to reconcile the imports of each python file both sides changed, from the three
+  versions git holds while the operation is in progress (vcs.git.ByMergeImportsCheckinHandler).
+  Optional because a required dependency would stop basedpython loading in an IDE without Git, or
+  with it switched off.
+-->
+<idea-plugin>
+    <extensions defaultExtensionNs="com.intellij">
+        <checkinHandlerFactory implementation="dev.basedpython.pycharm.vcs.git.ByMergeImportsCheckinHandlerFactory"/>
+    </extensions>
+</idea-plugin>

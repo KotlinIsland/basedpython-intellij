@@ -63,6 +63,10 @@ dependencies {
     // Grazie, the grammar checker, which reads a `.by` file's comments and docstrings through the
     // extractor registered here. An optional dependency in plugin.xml (basedpython-grazie.xml).
     bundledPlugin("tanvd.grazi")
+    // Git, whose repository state names a merge's, rebase's or cherry-pick's three versions of a
+    // file, for reconciling a merged file's imports on commit. An optional dependency in plugin.xml
+    // (basedpython-git.xml).
+    bundledPlugin("Git4Idea")
     // Spellchecker ships as a platform module, not a bundled plugin.
     bundledModule("intellij.spellchecker")
     // IntelliLang, the platform's language injection, also a platform module: which injections in a
@@ -85,6 +89,12 @@ dependencies {
     // `intellij.platform.vcs`'s generated dependencies, until 263.7307 dropped it from them.
     // Declared in plugin.xml too.
     bundledModule("intellij.platform.vcs.core")
+    // Repository and its State, which git4idea's GitRepository extends and the reconciling of a
+    // merge's imports reads the operation in progress from, and ShortVcsRevisionNumber, which
+    // GitRevisionNumber implements: needed to compile the code that calls git4idea (basedpython-git.xml).
+    // Declared in plugin.xml too.
+    bundledModule("intellij.platform.vcs.dvcs")
+    bundledModule("intellij.platform.vcs.shared")
     // The Problems view (ProblemsCollector, FileProblem, the Project Errors tab), which `by`'s
     // whole-project diagnostics are listed in. Content modules of the bundled Problems View plugin;
     // declared in plugin.xml too.

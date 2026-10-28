@@ -24,6 +24,8 @@
     <depends optional="true" config-file="basedpython-coverage.xml">com.intellij.modules.coverage</depends>
     <!-- PyCharm's Docstring format setting, for the docstring stub; see basedpython-python.xml. -->
     <depends optional="true" config-file="basedpython-python.xml">PythonCore</depends>
+    <!-- A merged file's imports reconciled on commit, from git's versions; see basedpython-git.xml. -->
+    <depends optional="true" config-file="basedpython-git.xml">Git4Idea</depends>
 
     <!-- The platform's Debug Adapter Protocol client, which `.by` debugging is built on. A platform
          module rather than a plugin, so it is declared the v2 way; the legacy <depends> entries
@@ -45,6 +47,10 @@
              `intellij.platform.vcs`'s generated dependencies until 263.7307 dropped it from them,
              as the note above warns they may. -->
         <module name="intellij.platform.vcs.core"/>
+        <!-- Repository (dvcs), which GitRepository extends, and ShortVcsRevisionNumber (shared),
+             which GitRevisionNumber implements, for reading a merge's versions; see basedpython-git.xml. -->
+        <module name="intellij.platform.vcs.dvcs"/>
+        <module name="intellij.platform.vcs.shared"/>
         <!-- The Problems view: ProblemsCollector and the problem types, which Project Errors lists
              `by`'s whole-project diagnostics through, and the tab that Check Project opens. -->
         <module name="intellij.platform.problemView.shared"/>

@@ -46,6 +46,8 @@ class BasedPythonSettings : PersistentStateComponent<BasedPythonSettings.State> 
     var fixAllOnCommit: Boolean = false,
     /** Stop a commit whose `api.lock` is stale, offering to regenerate it. */
     var checkApiLockOnCommit: Boolean = true,
+    /** Offer, on the commit that ends a merge, rebase step or cherry-pick, to reconcile merged files' imports. */
+    var reconcileMergeImportsOnCommit: Boolean = true,
     /**
      * The two toggles that came before the per-kind modes, kept as what an unset kind falls back
      * to: a project configured before this reads exactly as it did, its parameter-ish hints
@@ -191,6 +193,10 @@ class BasedPythonSettings : PersistentStateComponent<BasedPythonSettings.State> 
   var checkApiLockOnCommit: Boolean
     get() = state.checkApiLockOnCommit
     set(value) { state.checkApiLockOnCommit = value }
+
+  var reconcileMergeImportsOnCommit: Boolean
+    get() = state.reconcileMergeImportsOnCommit
+    set(value) { state.reconcileMergeImportsOnCommit = value }
 
   var inlayParameterHints: Boolean
     get() = state.inlayParameterHints

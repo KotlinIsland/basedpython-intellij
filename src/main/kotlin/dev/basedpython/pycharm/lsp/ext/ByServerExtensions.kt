@@ -417,6 +417,17 @@ interface ByServerExtensions {
     @JsonRequest("by/apiLock")
     fun apiLock(params: ByApiLockParams): CompletableFuture<ByApiLock?>
 
+    /**
+     * The edits to a merged file that make its module-level imports say what its code reads, from the
+     * merge's three versions: an import a clean line merge dropped that the code still reads added, one
+     * a side removed that nothing mentions dropped, the leading imports sorted as buff's isort
+     * configuration sorts them. Where the versions import a name from different places, or the merged
+     * imports bind one name twice, no edits and a [ByReconciledImports.choice]. A `by` from before the
+     * request answers `MethodNotFound`.
+     */
+    @JsonRequest("by/reconcileMergeImports")
+    fun reconcileMergeImports(params: ByReconcileMergeImportsParams): CompletableFuture<ByReconciledImports?>
+
     @JsonRequest("by/references")
     fun references(args: ReferenceParams): CompletableFuture<List<ByReference>?>
 
@@ -1638,6 +1649,33 @@ data class ByApiLock(
     val exists: Boolean,
     val staleLine: Int? = null,
 )
+
+/** A merge's three versions of a file, each whole, and [merged], the file it wrote with every conflict resolved. */
+data class ByReconcileMergeImportsParams(
+    val base: String,
+    val ours: String,
+    val theirs: String,
+    val merged: String,
+    val uri: String? = null,
+)
+
+/** Edits to the merged text, in order, or the choice nothing in the versions settles. */
+data class ByReconciledImports(val edits: List<TextEdit> = emptyList(), val choice: ByImportChoice? = null)
+
+/**
+ * A name the merged code reads that the versions import from different places, or that the merged
+ * imports bind twice: each version's statements binding it, where in the merged text its import
+ * belongs, and the lines of the merged imports binding it and nothing else, which what is chosen replaces.
+ */
+data class ByImportChoice(
+    val name: String,
+    val imports: List<ByVersionImports> = emptyList(),
+    val position: Position,
+    val bindings: List<Range> = emptyList(),
+)
+
+/** One version's — `ours`, `base` or `theirs` — import statements binding a name. */
+data class ByVersionImports(val version: String, val statements: List<String> = emptyList())
 
 /** The text typed into a console so far, each line ending in a newline, the one Enter adds included. */
 data class ByInputStatusParams(val text: String)
