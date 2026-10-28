@@ -11,6 +11,7 @@ import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
 import com.intellij.psi.util.PsiTreeUtil
 import com.intellij.testFramework.junit5.fixture.TestFixtures
+import dev.basedpython.pycharm.lsp.ByLspLifecycleListener
 import dev.basedpython.pycharm.lsp.ext.ByOverridingMember
 import dev.basedpython.pycharm.lsp.ext.BySuperMember
 import dev.basedpython.pycharm.testFramework.AnsweringClient
@@ -148,6 +149,18 @@ class ByOverridingMarkersTest {
         PsiDocumentManager.getInstance(fixture.project).commitDocument(document)
 
         assertTrue(slowMarkers(file).isEmpty())
+    }
+
+    @Test
+    fun `a stopped server's answer is not drawn`() = onEdt {
+        val file = file()
+        val document = PsiDocumentManager.getInstance(fixture.project).getDocument(file)!!
+        ByOverridingMembers.getInstance(fixture.project).remember(document, file.virtualFile, listOf(f, greet))
+        assertEquals(listOf("f", "greet"), slowMarkers(file).map { it.element!!.text })
+
+        fixture.project.messageBus.syncPublisher(ByLspLifecycleListener.TOPIC).serverStopped("by", false)
+
+        assertTrue(slowMarkers(file).isEmpty(), "a crashed by's icons are gone with its diagnostics")
     }
 
     /** What the provider draws for [file], collected as the pass does: off the EDT, in a read action. */

@@ -30,7 +30,7 @@ internal data class ByToken(val range: TextRange, val type: String, val modifier
  *
  * Asked from background threads only; on the EDT `runningByServer` refuses and the answer is the
  * one already kept, or none. Kept against the modification stamp; a failure is never kept, and
- * every answer is dropped when a server initializes, since a restarted server may be a different
+ * every answer is dropped when `by` starts or stops, since a restarted server may be a different
  * `by`.
  */
 @Service(Service.Level.PROJECT)
@@ -50,7 +50,14 @@ internal class BySemanticTokens(project: Project) : Disposable {
         project.messageBus.connect(this).subscribe(
             ByLspLifecycleListener.TOPIC,
             object : ByLspLifecycleListener {
-                override fun serverInitialized(serverName: String) = byFile.clear()
+                override fun serverInitialized(serverName: String) {
+                    if (serverName == BY_SERVER) byFile.clear()
+                }
+
+                /** What a stopped server said is no longer anyone's answer. */
+                override fun serverStopped(serverName: String, shutdownNormally: Boolean) {
+                    if (serverName == BY_SERVER) byFile.clear()
+                }
             },
         )
     }
@@ -96,6 +103,9 @@ internal class BySemanticTokens(project: Project) : Disposable {
     }
 
     companion object {
+        /** The name [dev.basedpython.pycharm.lsp.ByLspServerDescriptor] broadcasts under. */
+        private const val BY_SERVER = "by"
+
         /** The modifier `by` puts on a name where it is declared. */
         const val DEFINITION = BasedPythonSemanticTokensMapping.MOD_DEFINITION
 

@@ -1,13 +1,23 @@
 package dev.basedpython.pycharm.lsp
 
+import com.intellij.codeInsight.codeVision.CodeVisionHost
+import com.intellij.codeInsight.daemon.DaemonCodeAnalyzer
+import com.intellij.codeInsight.daemon.impl.InlayHintsPassFactoryInternal
+import com.intellij.codeInsight.hints.codeVision.ModificationStampUtil
+import com.intellij.openapi.application.EDT
+import com.intellij.openapi.application.ModalityState
+import com.intellij.openapi.application.asContextElement
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
+import com.intellij.openapi.editor.EditorFactory
 import com.intellij.openapi.project.Project
 import com.intellij.platform.lsp.api.LspServerListener
 import com.intellij.util.messages.Topic
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.eclipse.lsp4j.InitializeResult
 
 /**
@@ -74,6 +84,13 @@ internal interface ByLspLifecycleListener {
  * Where [ByLspLifecycleListener.Broadcaster] publishes from: one coroutine of the plugin's, which
  * delivers the events in the order the servers reported them.
  *
+ * Once every subscriber has heard a start or a stop — and the ones keeping a server's answers have
+ * let go of the old server's — each open file is drawn again ([redraw]): what the editor shows from
+ * a server is worked out on a highlighting pass, which the platform runs on an edit, not when a
+ * server starts or stops. So after a restart the hints, code vision, gutter icons and folding are the
+ * new server's, and after a crash they are gone with the diagnostics and the semantic colours the
+ * platform takes down itself, rather than the old server's staying until the next edit.
+ *
  * Not from the callback itself, because the platform calls `serverStopped` *after* the plugin is
  * unloaded: removing the plugin's integration providers is what stops its servers, and they stop on
  * their own threads, after the platform has cleared the message buses' publisher caches. A publish
@@ -91,9 +108,28 @@ internal class ByLspLifecycle(private val project: Project, scope: CoroutineScop
   init {
     scope.launch {
       for (event in events) {
-        if (!project.isDisposed) event(project.messageBus.syncPublisher(ByLspLifecycleListener.TOPIC))
+        if (project.isDisposed) continue
+        event(project.messageBus.syncPublisher(ByLspLifecycleListener.TOPIC))
+        redraw()
       }
     }
+  }
+
+  /**
+   * Runs every highlighting pass over every open file again: a daemon restart, which the inlay hint
+   * and code vision passes sit out unless the PSI changed since they last ran, so that is forgotten
+   * for each editor first, in the same EDT turn, and the code vision drawn outside the daemon — the
+   * code author — is worked out again too.
+   */
+  private suspend fun redraw() = withContext(Dispatchers.EDT + ModalityState.any().asContextElement()) {
+    if (project.isDisposed) return@withContext
+    for (editor in EditorFactory.getInstance().allEditors) {
+      if (editor.project != project) continue
+      InlayHintsPassFactoryInternal.clearModificationStamp(editor)
+      ModificationStampUtil.clearModificationStamp(editor)
+    }
+    project.service<CodeVisionHost>().invalidateProvider(CodeVisionHost.LensInvalidateSignal(null))
+    DaemonCodeAnalyzer.getInstance(project).restart(REDRAW_REASON)
   }
 
   /** Queues [event] for [ByLspLifecycleListener.TOPIC]'s subscribers; nothing, once the plugin's scope has ended. */
@@ -102,6 +138,8 @@ internal class ByLspLifecycle(private val project: Project, scope: CoroutineScop
   }
 
   companion object {
+    const val REDRAW_REASON = "a basedpython language server started or stopped"
+
     fun getInstance(project: Project): ByLspLifecycle = project.service()
   }
 }

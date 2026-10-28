@@ -1,6 +1,5 @@
 package dev.basedpython.pycharm.lsp.supers
 
-import com.intellij.codeInsight.daemon.DaemonCodeAnalyzer
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
@@ -12,7 +11,6 @@ import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.platform.lsp.api.LspClient
 import com.intellij.psi.PsiDocumentManager
 import com.intellij.psi.PsiFile
-import com.intellij.psi.PsiManager
 import com.intellij.util.containers.ContainerUtil
 import dev.basedpython.pycharm.lsp.ByAnswer
 import dev.basedpython.pycharm.lsp.ByLspLifecycleListener
@@ -26,7 +24,6 @@ import dev.basedpython.pycharm.lsp.isMethodNotFound
 import dev.basedpython.pycharm.lsp.runningByServer
 import org.eclipse.lsp4j.TextDocumentIdentifier
 import org.jetbrains.annotations.TestOnly
-import java.util.Collections
 
 /**
  * What `by` last said about which class members of each `.by` document override something, per
@@ -77,14 +74,6 @@ internal class ByOverridingMembers(private val project: Project) : Disposable {
     /** Weakly keyed by file: a file closed and collected takes its answer with it. */
     private val answers: MutableMap<VirtualFile, Answer> = ContainerUtil.createConcurrentWeakMap()
 
-    /**
-     * Files a pass was given nothing for because of the server: none was running, or it did not
-     * know the request, or did not answer. The pass does not run again on its own until the file is
-     * edited, so when a server next starts — maybe a newer `by` — their highlighting is run again.
-     */
-    private val servedNothing: MutableSet<VirtualFile> =
-        Collections.newSetFromMap(ContainerUtil.createConcurrentWeakMap())
-
     /** Whether the running `by` has said it does not know the request. */
     @Volatile
     private var unknownRequest = false
@@ -98,9 +87,11 @@ internal class ByOverridingMembers(private val project: Project) : Disposable {
                     if (serverName != BY_SERVER) return
                     answers.clear()
                     unknownRequest = false
-                    val files = servedNothing.toList()
-                    servedNothing.clear()
-                    for (file in files) rehighlight(file)
+                }
+
+                /** What a stopped server said is no longer anyone's answer. */
+                override fun serverStopped(serverName: String, shutdownNormally: Boolean) {
+                    if (serverName == BY_SERVER) answers.clear()
                 }
             },
         )
@@ -121,23 +112,18 @@ internal class ByOverridingMembers(private val project: Project) : Disposable {
         val virtualFile = original.virtualFile ?: return null
         val document = PsiDocumentManager.getInstance(project).getDocument(original) ?: return null
         answers[virtualFile]?.takeIf { it.stamp == document.modificationStamp }?.let { return it }
-        if (unknownRequest) return servedNothing(virtualFile)
+        if (unknownRequest) return null
 
-        val server = runningByServer(project, virtualFile) ?: return servedNothing(virtualFile)
+        val server = runningByServer(project, virtualFile) ?: return null
         ByServerDocuments.ensureOpen(server, project, virtualFile)
         return when (val asked = runBlockingCancellable { ask(server, virtualFile, document) }) {
             is Asked.Answered -> Answer(document.modificationStamp, asked.members).also { answers[virtualFile] = it }
             Asked.Unknown -> {
                 unknownRequest = true
-                servedNothing(virtualFile)
+                null
             }
-            Asked.Failed -> servedNothing(virtualFile)
+            Asked.Failed -> null
         }
-    }
-
-    private fun servedNothing(file: VirtualFile): Answer? {
-        servedNothing.add(file)
-        return null
     }
 
     /** Puts in an answer for [document] as it is now, as though `by` had just given it. */
@@ -146,20 +132,8 @@ internal class ByOverridingMembers(private val project: Project) : Disposable {
         answers[file] = Answer(document.modificationStamp, members)
     }
 
-    private fun rehighlight(file: VirtualFile) {
-        ApplicationManager.getApplication().invokeLater(
-            {
-                if (!file.isValid) return@invokeLater
-                val psi = PsiManager.getInstance(project).findFile(file) ?: return@invokeLater
-                DaemonCodeAnalyzer.getInstance(project).restart(psi, "a by server started that may say which members override")
-            },
-            project.disposed,
-        )
-    }
-
     override fun dispose() {
         answers.clear()
-        servedNothing.clear()
     }
 
     companion object {

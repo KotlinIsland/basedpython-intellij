@@ -2,22 +2,18 @@ package dev.basedpython.pycharm.lsp.vision
 
 import com.intellij.codeInsight.codeVision.settings.CodeVisionSettings
 import com.intellij.codeInsight.codeVision.settings.PlatformCodeVisionIds
-import com.intellij.codeInsight.daemon.DaemonCodeAnalyzer
 import com.intellij.codeInsight.daemon.LineMarkerSettings
-import com.intellij.codeInsight.hints.codeVision.ModificationStampUtil
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
 import com.intellij.openapi.editor.Document
-import com.intellij.openapi.editor.EditorFactory
 import com.intellij.openapi.progress.runBlockingCancellable
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.platform.lsp.api.LspClient
 import com.intellij.psi.PsiDocumentManager
 import com.intellij.psi.PsiFile
-import com.intellij.psi.PsiManager
 import com.intellij.psi.util.PsiModificationTracker
 import com.intellij.util.containers.ContainerUtil
 import dev.basedpython.pycharm.lsp.ByAnswer
@@ -35,7 +31,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.async
 import org.eclipse.lsp4j.TextDocumentIdentifier
-import java.util.Collections
 
 /**
  * What `by/documentUsageCounts` says about a `.by` document now: its declarations with their counts
@@ -53,8 +48,9 @@ import java.util.Collections
  * provider is switched on, in one request, and the two providers draw from the one answer. The
  * answer is kept against what it was asked about — the document's text, the project's PSI
  * modification count and the counts — and handed to any provider that asks about the same; anything
- * that changes one of those is a new ask, and a server that starts forgets them all. Two providers
- * asking at once wait on the one request.
+ * that changes one of those is a new ask, and a server that starts or stops forgets them all, the
+ * passes then running again over every open file ([dev.basedpython.pycharm.lsp.ByLspLifecycle]).
+ * Two providers asking at once wait on the one request.
  *
  * ## Which thread asks
  *
@@ -69,8 +65,7 @@ import java.util.Collections
  *
  * Answers `MethodNotFound`, and gets no code vision and no word about it: the counts are ambient, not
  * something the user asked for. That server is not asked again; a restarted server may be a newer
- * `by`, and is, and so are the files a pass was given nothing for, since the platform does not run
- * the pass again on its own until something changes.
+ * `by`, and is.
  */
 @Service(Service.Level.PROJECT)
 internal class ByUsageCounts(private val project: Project, private val scope: CoroutineScope) : Disposable {
@@ -105,13 +100,6 @@ internal class ByUsageCounts(private val project: Project, private val scope: Co
     /** The last request for each file, finished or not. */
     private val asks = SharedAsks<VirtualFile, Asked>(scope) { it is Asked.Answered }
 
-    /**
-     * Files a pass was given nothing for because of the server: none was running, or it did not
-     * know the request, or did not answer. Weakly held: a file closed and collected leaves.
-     */
-    private val servedNothing: MutableSet<VirtualFile> =
-        Collections.newSetFromMap(ContainerUtil.createConcurrentWeakMap())
-
     /** Whether the running `by` has said it does not know the request. */
     @Volatile
     private var unknownRequest = false
@@ -125,9 +113,11 @@ internal class ByUsageCounts(private val project: Project, private val scope: Co
                     if (serverName != BY_SERVER) return
                     unknownRequest = false
                     asks.clear()
-                    val files = servedNothing.toList()
-                    servedNothing.clear()
-                    for (file in files) recount(file)
+                }
+
+                /** What a stopped server counted is no longer anyone's answer. */
+                override fun serverStopped(serverName: String, shutdownNormally: Boolean) {
+                    if (serverName == BY_SERVER) asks.clear()
                 }
             },
         )
@@ -146,9 +136,9 @@ internal class ByUsageCounts(private val project: Project, private val scope: Co
         val original = file.originalFile
         val virtualFile = original.virtualFile ?: return null
         val document = PsiDocumentManager.getInstance(project).getDocument(original) ?: return null
-        if (unknownRequest) return servedNothing(virtualFile)
+        if (unknownRequest) return null
 
-        val server = runningByServer(project, virtualFile) ?: return servedNothing(virtualFile)
+        val server = runningByServer(project, virtualFile) ?: return null
         ByServerDocuments.ensureOpen(server, project, virtualFile)
         val params = params(server, virtualFile, document, countsDrawn(count))
         val about = About(
@@ -160,38 +150,13 @@ internal class ByUsageCounts(private val project: Project, private val scope: Co
             is Asked.Answered -> asked.declarations
             Asked.Unknown -> {
                 unknownRequest = true
-                servedNothing(virtualFile)
+                null
             }
-            Asked.Failed -> servedNothing(virtualFile)
+            Asked.Failed -> null
         }
     }
 
-    private fun servedNothing(file: VirtualFile): List<ByDeclarationUsages>? {
-        servedNothing.add(file)
-        return null
-    }
-
-    /**
-     * Runs the passes over [file]'s editors again. The platform runs code vision's pass only when the
-     * PSI has changed since its last run, so that is forgotten for each editor first.
-     */
-    private fun recount(file: VirtualFile) {
-        ApplicationManager.getApplication().invokeLater(
-            {
-                if (!file.isValid) return@invokeLater
-                val psi = PsiManager.getInstance(project).findFile(file) ?: return@invokeLater
-                val document = PsiDocumentManager.getInstance(project).getDocument(psi) ?: return@invokeLater
-                for (editor in EditorFactory.getInstance().getEditors(document, project)) {
-                    ModificationStampUtil.clearModificationStamp(editor)
-                }
-                DaemonCodeAnalyzer.getInstance(project).restart(psi, "a by server started that may count its declarations")
-            },
-            project.disposed,
-        )
-    }
-
     override fun dispose() {
-        servedNothing.clear()
         asks.clear()
     }
 

@@ -1,12 +1,10 @@
 package dev.basedpython.pycharm.lsp.vision
 
-import com.intellij.codeInsight.codeVision.CodeVisionHost
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
 import com.intellij.openapi.editor.Document
-import com.intellij.openapi.editor.EditorFactory
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.progress.runBlockingCancellable
 import com.intellij.openapi.project.Project
@@ -27,7 +25,6 @@ import org.eclipse.lsp4j.DocumentSymbol
 import org.eclipse.lsp4j.SymbolKind
 import org.eclipse.lsp4j.TextDocumentIdentifier
 import org.jetbrains.annotations.TestOnly
-import java.util.Collections
 
 /**
  * The declarations of each `.by` document, as `by`'s document symbols have them, per revision: every
@@ -52,8 +49,9 @@ import java.util.Collections
  * ## Asked before anyone can answer
  *
  * The code author is worked out as soon as an editor opens, which on opening a project is before
- * `by` has started. The platform works it out again on an edit, not when a server starts, so a file
- * given nothing has its code vision worked out again when `by` initializes.
+ * `by` has started. The platform works it out again on an edit, not when a server starts, so every
+ * open file's code vision is worked out again when `by` initializes
+ * ([dev.basedpython.pycharm.lsp.ByLspLifecycle]).
  */
 @Service(Service.Level.PROJECT)
 internal class ByDeclarations(private val project: Project) : Disposable {
@@ -74,21 +72,13 @@ internal class ByDeclarations(private val project: Project) : Disposable {
     /** Weakly keyed by file: a file closed and collected takes its answer with it. */
     private val answers: MutableMap<VirtualFile, Answer> = ContainerUtil.createConcurrentWeakMap()
 
-    /** Files given no answer because nobody could give one. */
-    private val servedNothing: MutableSet<VirtualFile> =
-        Collections.newSetFromMap(ContainerUtil.createConcurrentWeakMap())
-
     init {
         project.messageBus.connect(this).subscribe(
             ByLspLifecycleListener.TOPIC,
             object : ByLspLifecycleListener {
                 /** A restarted server may be a different `by`, whose outline is the one that counts. */
                 override fun serverInitialized(serverName: String) {
-                    if (serverName != BY_SERVER) return
-                    answers.clear()
-                    val files = servedNothing.toList()
-                    servedNothing.clear()
-                    for (file in files) recompute(file)
+                    if (serverName == BY_SERVER) answers.clear()
                 }
             },
         )
@@ -104,9 +94,9 @@ internal class ByDeclarations(private val project: Project) : Disposable {
         val virtualFile = original.virtualFile ?: return null
         val document = PsiDocumentManager.getInstance(project).getDocument(original) ?: return null
         answers[virtualFile]?.takeIf { it.stamp == document.modificationStamp }?.let { return it }
-        if (ApplicationManager.getApplication().isDispatchThread) return servedNothing(virtualFile)
+        if (ApplicationManager.getApplication().isDispatchThread) return null
 
-        val server = runningByServer(project, virtualFile) ?: return servedNothing(virtualFile)
+        val server = runningByServer(project, virtualFile) ?: return null
         ByServerDocuments.ensureOpen(server, project, virtualFile)
         val params = ByNamedDocumentSymbolParams(
             TextDocumentIdentifier(server.getDocumentIdentifier(virtualFile).uri),
@@ -119,7 +109,7 @@ internal class ByDeclarations(private val project: Project) : Disposable {
             is ByAnswer.Answer -> answer.value.mapNotNull { it.right }
             // declined: language services are off, and there is nothing to put an author above
             ByAnswer.None -> emptyList()
-            ByAnswer.Failed -> return servedNothing(virtualFile)
+            ByAnswer.Failed -> return null
         }
         return read(document, symbols).also { answers[virtualFile] = it }
     }
@@ -131,28 +121,8 @@ internal class ByDeclarations(private val project: Project) : Disposable {
         answers[file] = read(document, symbols)
     }
 
-    private fun servedNothing(file: VirtualFile): Answer? {
-        servedNothing.add(file)
-        return null
-    }
-
-    /** Works out [file]'s code vision again, now that there may be someone to ask. */
-    private fun recompute(file: VirtualFile) {
-        ApplicationManager.getApplication().invokeLater(
-            {
-                val document = FileDocumentManager.getInstance().getCachedDocument(file) ?: return@invokeLater
-                val host = project.service<CodeVisionHost>()
-                for (editor in EditorFactory.getInstance().getEditors(document, project)) {
-                    host.invalidateProvider(CodeVisionHost.LensInvalidateSignal(editor))
-                }
-            },
-            project.disposed,
-        )
-    }
-
     override fun dispose() {
         answers.clear()
-        servedNothing.clear()
     }
 
     companion object {
