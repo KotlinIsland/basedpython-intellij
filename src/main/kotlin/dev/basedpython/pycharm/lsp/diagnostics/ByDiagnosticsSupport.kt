@@ -3,6 +3,7 @@ package dev.basedpython.pycharm.lsp.diagnostics
 import com.intellij.codeInsight.daemon.HighlightDisplayKey
 import com.intellij.psi.PsiDocumentManager
 import dev.basedpython.pycharm.inspections.rules.ByRuleInspection
+import dev.basedpython.pycharm.inspections.rules.ByRuleInspections
 import dev.basedpython.pycharm.inspections.rules.ByRuleLevels
 
 import com.intellij.codeInsight.intention.IntentionAction
@@ -35,7 +36,9 @@ internal class ByDiagnosticsSupport : LspDiagnosticsSupport() {
     override fun getTooltip(diagnostic: Diagnostic): String = ByCodeSpans.toHtml(getMessage(diagnostic))
 
     /**
-     * Every diagnostic that names its rule offers to explain it; see [ExplainRuleFix]. And it is drawn
+     * Every diagnostic that names its rule offers to explain it; see [ExplainRuleFix]. A code that is
+     * no rule of `by`'s, as `stale-api-lock` on an `api.lock`, has nothing to explain and is drawn as
+     * the platform draws it. And it is drawn
      * as its rule's inspection says ([ByRuleLevels]): not at all where the profile switches the rule
      * off for the file, at the profile's severity where it gives one, and as `by` reported it where
      * the profile leaves the rule as it comes. The explanation carries the inspection's key, so
@@ -47,7 +50,7 @@ internal class ByDiagnosticsSupport : LspDiagnosticsSupport() {
         textRange: TextRange,
         quickFixes: List<IntentionAction>,
     ) {
-        val code = ExplainRuleFix.codeOf(diagnostic)
+        val code = ExplainRuleFix.codeOf(diagnostic)?.takeIf { ByRuleInspections.getInstance().mayBeRule(it) }
             ?: return super.createAnnotation(holder, diagnostic, textRange, quickFixes)
         val file = holder.currentAnnotationSession.file
         val drawn = ByRuleLevels.forDiagnostic(file.project, code, file)

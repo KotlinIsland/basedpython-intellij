@@ -108,6 +108,13 @@ class LspServerDescriptorTest {
   }
 
   @Test
+  fun `by is given api lock, which it marks stale, and buff is not`() = onEdt {
+    assertTrue(byDescriptor().isSupportedFile(makeFile("api.lock")))
+    assertFalse(buffDescriptor().isSupportedFile(makeFile("api.lock")))
+    assertFalse(byDescriptor().isSupportedFile(makeFile("uv.lock")))
+  }
+
+  @Test
   fun `buff descriptor recognizes the same source extensions as by`() = onEdt {
     val buff = buffDescriptor()
     val by = byDescriptor()

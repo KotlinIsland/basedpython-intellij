@@ -37,6 +37,14 @@ class ByRuleInspectionsTest {
     }
 
     @Test
+    fun `a code that is none of by's rules is no rule to explain`() = onEdt {
+        ByRuleInspections.getInstance().update(rules)
+        assertTrue(ByRuleInspections.getInstance().mayBeRule("unresolved-reference"))
+        // what `by` marks a stale api.lock with
+        assertFalse(ByRuleInspections.getInstance().mayBeRule("stale-api-lock"))
+    }
+
+    @Test
     fun `each rule is an inspection at its default level, ignored ones switched off`() = onEdt {
         val profile = profile()
         val tool = profile.getInspectionTool("ByRule_unresolved-reference", fixture.project)

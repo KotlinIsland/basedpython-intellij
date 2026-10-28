@@ -78,6 +78,12 @@ internal class ByRuleInspections : PersistentStateComponent<ByRuleInspections.St
     val rules: List<ByRule> get() = state.rules.map { it.rule() }
 
     /**
+     * Whether [code], a diagnostic's, may name one of `by`'s rules: it is one of [rules], or `by` has
+     * not named its rules yet, so nothing says it is not.
+     */
+    fun mayBeRule(code: String): Boolean = state.rules.isEmpty() || state.rules.any { it.name == code }
+
+    /**
      * Keeps [rules] as `by`'s rules from now on, and adds an inspection to every profile for each one
      * it has not got yet. Whether anything changed.
      */

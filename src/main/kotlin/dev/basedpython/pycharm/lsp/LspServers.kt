@@ -97,14 +97,23 @@ private val OWN_EXTENSIONS = setOf("by", "byi")
 private fun VirtualFile.isBasedPythonSource(): Boolean = extension in SUPPORTED_EXTENSIONS
 
 /**
- * What the `by` server is given: python-ish sources, plus django templates.
+ * What the `by` server is given: python-ish sources, plus django templates, plus `api.lock`.
  *
  * A template is not python and is never read as one — the server checks it as the template it is —
  * but its completions, navigation and diagnostics all come from the same index as the project's
  * models, views and urls, so it is the same server that answers for it.
+ *
+ * `api.lock` is generated from the project's sources, and `by` is what generates it: given the
+ * lockfile, `by` marks the first line where it differs from what the sources say now
+ * (`stale-api-lock`), with a *Regenerate api.lock* fix, and asks to be asked again after any source
+ * edit. Every file of that name goes, since only `by` knows which project root it belongs to; one
+ * that is no project's lockfile gets nothing.
  */
 private fun VirtualFile.isByServerFile(): Boolean =
-  isBasedPythonSource() || ByTemplateFiles.isTemplate(this)
+  isBasedPythonSource() || ByTemplateFiles.isTemplate(this) || name == API_LOCK
+
+/** The name `by` writes a project's API lockfile under, at the project's root. */
+internal const val API_LOCK = "api.lock"
 
 /**
  * Whether opening [file] should start a language server for [project].
