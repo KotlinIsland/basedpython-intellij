@@ -44,6 +44,8 @@ class BasedPythonSettings : PersistentStateComponent<BasedPythonSettings.State> 
     var fixAllOnSave: Boolean = false,
     /** Apply every fix the project's lint configuration asks for across the files being committed. */
     var fixAllOnCommit: Boolean = false,
+    /** Stop a commit whose `api.lock` is stale, offering to regenerate it. */
+    var checkApiLockOnCommit: Boolean = true,
     /**
      * The two toggles that came before the per-kind modes, kept as what an unset kind falls back
      * to: a project configured before this reads exactly as it did, its parameter-ish hints
@@ -185,6 +187,10 @@ class BasedPythonSettings : PersistentStateComponent<BasedPythonSettings.State> 
   var fixAllOnCommit: Boolean
     get() = state.fixAllOnCommit
     set(value) { state.fixAllOnCommit = value }
+
+  var checkApiLockOnCommit: Boolean
+    get() = state.checkApiLockOnCommit
+    set(value) { state.checkApiLockOnCommit = value }
 
   var inlayParameterHints: Boolean
     get() = state.inlayParameterHints

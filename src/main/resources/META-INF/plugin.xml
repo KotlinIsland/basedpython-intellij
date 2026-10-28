@@ -288,6 +288,9 @@
              ordering guarantee across separately registered handlers. -->
         <checkinHandlerFactory
             implementation="dev.basedpython.pycharm.vcs.ByCleanupCheckinHandlerFactory"/>
+        <!-- A commit with a stale api.lock, asked of by/apiLock; see vcs.ByApiLockCheckinHandler. -->
+        <checkinHandlerFactory
+            implementation="dev.basedpython.pycharm.vcs.ByApiLockCheckinHandlerFactory"/>
         <!-- Git hooks run with the project's `by` and `buff` on PATH. -->
         <vcs.envCustomizer implementation="dev.basedpython.pycharm.vcs.ByVcsEnvCustomizer"/>
         <lang.importOptimizer
