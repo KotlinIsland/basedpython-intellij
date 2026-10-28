@@ -67,6 +67,9 @@ dependencies {
     // file, for reconciling a merged file's imports on commit. An optional dependency in plugin.xml
     // (basedpython-git.xml).
     bundledPlugin("Git4Idea")
+    // The terminal, whose new shells start with the project's `by` and `buff` on `PATH`. An optional
+    // dependency in plugin.xml (basedpython-terminal.xml).
+    bundledPlugin("org.jetbrains.plugins.terminal")
     // Spellchecker ships as a platform module, not a bundled plugin.
     bundledModule("intellij.spellchecker")
     // IntelliLang, the platform's language injection, also a platform module: which injections in a

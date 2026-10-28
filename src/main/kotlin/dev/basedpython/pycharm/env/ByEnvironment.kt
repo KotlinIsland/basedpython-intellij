@@ -184,18 +184,34 @@ object ByEnvironments {
      * Empty when there is nothing to add, so the caller's environment is left exactly as it was.
      */
     fun hookEnvironment(launches: List<ByLaunch>, parentPath: String?): Map<String, String> {
-        val venv = launches.firstNotNullOfOrNull { it.venvRoot }
-        val env = venv?.let { activationEnv(it, parentPath) }?.let(::LinkedHashMap) ?: LinkedHashMap()
-        val path = env["PATH"] ?: parentPath
-        val onPath = path.orEmpty().split(File.pathSeparator).filter { it.isNotEmpty() }.toSet()
-        val dirs = launches
-            .filter { it.prependArgs.isEmpty() && it.kind != ByEnvironmentKind.PATH }
-            .mapNotNull { it.exe.parent?.toString() }
-            .distinct()
-            .filter { it !in onPath }
-        if (dirs.isEmpty()) return env
-        env["PATH"] = (dirs + listOfNotNull(path?.takeIf { it.isNotEmpty() })).joinToString(File.pathSeparator)
+        val activation = toolchainActivation(launches, parentPath)
+        val env = LinkedHashMap(activation.variables)
+        if (activation.path.isEmpty()) return env
+        env["PATH"] = (activation.path.map { it.toString() } + listOfNotNull(parentPath?.takeIf { it.isNotEmpty() }))
+            .joinToString(File.pathSeparator)
         return env
+    }
+
+    /**
+     * What [hookEnvironment] adds, apart: the variables a venv-backed launch activates other than
+     * `PATH`, and the directories to put ahead of [parentPath], first first — each binary's from
+     * outside the venv not already on [parentPath], then the venv's own bin directory, which
+     * activation puts there wherever else it is.
+     */
+    data class Activation(val variables: Map<String, String>, val path: List<Path>)
+
+    /** See [Activation]. */
+    fun toolchainActivation(launches: List<ByLaunch>, parentPath: String?): Activation {
+        val onPath = parentPath.orEmpty().split(File.pathSeparator).filter { it.isNotEmpty() }.toSet()
+        val venv = launches.firstNotNullOfOrNull { it.venvRoot }
+        val variables = venv?.let { activationEnv(it, null) }.orEmpty().filterKeys { it != "PATH" }
+        val bin = venv?.let(::venvBinDir)
+        val outside = launches
+            .filter { it.prependArgs.isEmpty() && it.kind != ByEnvironmentKind.PATH }
+            .mapNotNull { it.exe.parent }
+            .distinct()
+            .filter { it != bin && it.toString() !in onPath }
+        return Activation(variables, outside + listOfNotNull(bin))
     }
 
     // --- Sources ------------------------------------------------------------

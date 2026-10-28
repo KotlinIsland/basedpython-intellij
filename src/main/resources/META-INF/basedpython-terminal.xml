@@ -1,0 +1,10 @@
+<!--
+  Loaded only when the Terminal plugin is present: a shell the terminal starts in a basedpython project
+  finds the `by` and `buff` the IDE runs, as PyCharm's terminal activates a `.py` project's interpreter
+  (terminal.ByTerminalExecOptionsCustomizer). Optional because basedpython does not need a terminal.
+-->
+<idea-plugin>
+    <extensions defaultExtensionNs="org.jetbrains.plugins.terminal">
+        <shellExecOptionsCustomizer implementation="dev.basedpython.pycharm.terminal.ByTerminalExecOptionsCustomizer"/>
+    </extensions>
+</idea-plugin>

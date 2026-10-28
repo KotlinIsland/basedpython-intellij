@@ -159,6 +159,15 @@ class ByEnvironmentTest {
         assertTrue(ByEnvironments.hookEnvironment(emptyList(), "/usr/bin").isEmpty())
     }
 
+    @Test
+    fun `toolchainActivation names the variables and the directories apart, for a caller that sets each`() {
+        val root = Path.of("/w/.venv")
+        val buff = ByLaunch(Path.of("/opt/buff/buff"), emptyList(), emptyMap(), null, ByEnvironmentKind.DOWNLOADED)
+        val activation = ByEnvironments.toolchainActivation(listOf(venvLaunch(root, "by"), buff), "/usr/bin${File.pathSeparator}/opt/buff")
+        assertEquals(mapOf("VIRTUAL_ENV" to root.toString(), "PYTHONHOME" to ""), activation.variables)
+        assertEquals(listOf(ByEnvironments.venvBinDir(root)), activation.path, "/opt/buff is on PATH already")
+    }
+
     // --- findVenvWithBinary (real files on a real filesystem) ---------------
 
     /** Creates an executable `<venvRoot>/bin/<name>`. */
