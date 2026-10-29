@@ -71,6 +71,7 @@ class ByDiagnosticColorsTest {
             assertEquals(EffectType.BOLD_DOTTED_LINE, look(infos[1])?.effectType)
             assertEquals(Color(0x808080), look(infos[1])?.effectColor)
             assertEquals(scheme.getAttributes(CodeInsightColors.NOT_USED_ELEMENT_ATTRIBUTES).foregroundColor, look(infos[2])?.foregroundColor)
+            assertEquals(null, look(infos[2])?.effectColor, "an unused name: grey, and never underlined")
         } finally {
             Disposer.dispose(disposable)
         }

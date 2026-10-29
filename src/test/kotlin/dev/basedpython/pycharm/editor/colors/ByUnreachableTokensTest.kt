@@ -101,6 +101,7 @@ class ByUnreachableTokensTest {
                 hints[1].getTextAttributes(fixture.file, scheme)?.foregroundColor,
                 "no code, an older by: grey as before",
             )
+            assertEquals(null, hints[1].getTextAttributes(fixture.file, scheme)?.effectColor, "and never underlined")
         } finally {
             Disposer.dispose(disposable)
         }
