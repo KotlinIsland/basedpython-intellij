@@ -687,8 +687,14 @@ data class ByDeclaration(
 /** A selection, or an empty range at the caret. */
 data class ByExpressionTypesParams(val textDocument: TextDocumentIdentifier, val range: Range)
 
-/** One expression around a range and its type. */
-data class ByExpressionType(val range: Range? = null, val type: String? = null)
+/**
+ * One expression around a range and its type: [type] on one line, and [pretty] as `by` lays it out
+ * to be read, a signature one parameter to a line, in the language it names.
+ */
+data class ByExpressionType(val range: Range? = null, val type: String? = null, val pretty: ByMarkedString? = null)
+
+/** LSP's `MarkedString`: [value], as code in [language]. */
+data class ByMarkedString(val language: String? = null, val value: String? = null)
 
 /**
  * Where to start from: a test, a class of tests or anywhere in a test module for `by/testSubjects`;

@@ -13,6 +13,7 @@ import com.intellij.platform.lsp.util.getRangeInDocument
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
 import dev.basedpython.pycharm.lang.BasedPythonFile
+import dev.basedpython.pycharm.lang.BasedPythonLanguage
 import dev.basedpython.pycharm.lang.BasedPythonTokenTypes
 import dev.basedpython.pycharm.lang.ByRangeElement
 import dev.basedpython.pycharm.lsp.ByAnswer
@@ -22,6 +23,9 @@ import dev.basedpython.pycharm.lsp.askBy
 import dev.basedpython.pycharm.lsp.awaitBy
 import dev.basedpython.pycharm.lsp.byServerFor
 import dev.basedpython.pycharm.lsp.ext.ByExpressionType
+import dev.basedpython.pycharm.lsp.ext.ByMarkedString
+import dev.basedpython.pycharm.lsp.inject.ByInjectedLanguages
+import com.intellij.lang.documentation.QuickDocHighlightingHelper
 import dev.basedpython.pycharm.lsp.ext.ByExpressionTypesParams
 import dev.basedpython.pycharm.lsp.ext.ByServerExtensions
 import dev.basedpython.pycharm.util.BasedPythonBundle
@@ -164,9 +168,28 @@ internal class ByTypedExpression(
     private val file: PsiFile,
     private val range: TextRange,
     val type: String,
+    /** The type laid out to be read, and the language it is written in; null from an older `by`. */
+    private val pretty: ByMarkedString? = null,
 ) : ByRangeElement(file, range) {
 
-    fun typeHtml(): String = StringUtil.escapeXmlEntities(type)
+    /**
+     * The hint: [pretty] as a code block highlighted the way Quick Documentation highlights code,
+     * where `by` sent it, and [type] as plain text otherwise. A `print` is two overloads of five
+     * parameters each; on one line that is a hint wider than the editor.
+     *
+     * `python` is highlighted as basedpython: it is the same syntax, the hint is asked from a `.by`
+     * editor and is coloured as that editor is, and the Python plugin may not be there at all. Any
+     * other language is highlighted as itself when the IDE has it, and shown as plain code otherwise.
+     */
+    fun typeHtml(): String {
+        val code = pretty?.value?.takeIf { it.isNotBlank() } ?: return StringUtil.escapeXmlEntities(type)
+        val language = when (val id = pretty.language) {
+            null -> null
+            "python" -> BasedPythonLanguage
+            else -> ByInjectedLanguages.find(id)
+        }
+        return QuickDocHighlightingHelper.getStyledCodeBlock(file.project, language, code)
+    }
 
     /** Whether this expression is one name, which its hover says more about. */
     fun isName(): Boolean {
@@ -187,7 +210,7 @@ internal class ByTypedExpression(
             val type = expression.type ?: return null
             val document = file.viewProvider.document ?: return null
             val range = expression.range?.let { getRangeInDocument(document, it) } ?: return null
-            return ByTypedExpression(file, range, type)
+            return ByTypedExpression(file, range, type, expression.pretty)
         }
     }
 }

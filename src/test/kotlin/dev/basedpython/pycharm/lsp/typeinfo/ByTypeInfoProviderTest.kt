@@ -12,6 +12,8 @@ import org.junit.jupiter.api.Test
 import com.intellij.openapi.util.TextRange
 import dev.basedpython.pycharm.lsp.ByAnswer
 import dev.basedpython.pycharm.lsp.ext.ByExpressionType
+import dev.basedpython.pycharm.lsp.ext.ByMarkedString
+import com.intellij.openapi.util.text.StringUtil
 import dev.basedpython.pycharm.lsp.ext.ByExpressionTypesParams
 import dev.basedpython.pycharm.testFramework.AnsweringClient
 import dev.basedpython.pycharm.testFramework.AnsweringClient.Companion.answered
@@ -117,6 +119,38 @@ class ByTypeInfoProviderTest {
             (inBackground as ByAnswer.Answer).value.first(),
             "a second press on the same expression is the same one, which asks for the advanced information",
         )
+    }
+
+    /**
+     * `by` lays a signature out one parameter to a line, as code in a language; the hint is that
+     * code highlighted, not the one-line type, which for `print` is two overloads wider than the
+     * editor.
+     */
+    @Test
+    fun `the hint is by's pretty type as highlighted code, and the one-line type without it`() = onEdt {
+        val source = "print(1)\n"
+        val file = fixture.configureByText("a.by", source)
+        val pretty = "def print(\n    *values: object,\n    sep: str | None = \" \"\n)"
+        val client = AnsweringClient(fixture.project) {
+            answered(
+                listOf(
+                    ByExpressionType(Range(Position(0, 0), Position(0, 5)), "(*values: object, sep: str | None = \" \") -> None", ByMarkedString("python", pretty)),
+                    ByExpressionType(Range(Position(0, 0), Position(0, 8)), "None"),
+                ),
+            )
+        }
+        val (call, whole) = (ByTypeInfoProvider.expressionsAround(client, file, TextRange(0, 5)) as ByAnswer.Answer).value
+        val hint = ByTypeInfoProvider().getInformationHint(call)
+        assertTrue(hint.startsWith("<pre><code>") && hint.endsWith("</code></pre>"), hint)
+        assertTrue("<span" in hint, "highlighted: $hint")
+        assertEquals(
+            pretty,
+            StringUtil.unescapeXmlEntities(
+                hint.replace(Regex("<br\\s*/?>"), "\n").replace(Regex("<[^>]+>"), "").replace("&#32;", " "),
+            ),
+            "the code as by laid it out, line breaks and all",
+        )
+        assertEquals("None", ByTypeInfoProvider().getInformationHint(whole), "an older by: the type, as before")
     }
 
     @Test
