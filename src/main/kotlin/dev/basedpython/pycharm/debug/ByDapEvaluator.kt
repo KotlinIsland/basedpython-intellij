@@ -8,13 +8,18 @@ import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.TextRange
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.platform.dap.DapEvaluationContext
+import com.intellij.platform.dap.DapEvaluationResult
+import com.intellij.platform.dap.DapExpressionEvaluator
 import com.intellij.platform.dap.DapInlineValueLocator
+import com.intellij.platform.dap.DapSessionContext
 import com.intellij.platform.dap.DapPresentationSupport
 import com.intellij.platform.dap.DapSessionExecutor
 import com.intellij.platform.dap.DapStackFrame
 import com.intellij.platform.dap.DapThread
 import com.intellij.platform.dap.DapVariable
 import com.intellij.platform.dap.xdebugger.DapXDebuggerPresentationFactory
+import com.intellij.platform.dap.xdebugger.DefaultDapXDebuggerEvaluator
 import com.intellij.platform.dap.xdebugger.DefaultDapXDebuggerPresentationFactory
 import com.intellij.platform.dap.xdebugger.DefaultDapXStackFrame
 import com.intellij.platform.lsp.api.LspClient
@@ -88,9 +93,25 @@ private class ByStackFrame(
     thread: DapThread,
     frame: DapStackFrame,
 ) : DefaultDapXStackFrame(factory, executor, thread, frame) {
-    private val byEvaluator: XDebuggerEvaluator by lazy { ByDapEvaluator(super.getEvaluator()) }
+    private val byEvaluator: XDebuggerEvaluator by lazy {
+        ByDapEvaluator(super.getEvaluator(), statements = DefaultDapXDebuggerEvaluator(executor, factory, ByReplEvaluator(frame)))
+    }
 
     override fun getEvaluator(): XDebuggerEvaluator = byEvaluator
+}
+
+/**
+ * A frame's evaluations in DAP's `repl` context, whatever context they were asked in: what the
+ * debug console sends ([ByDebugPrompt]), and what the Evaluate dialog's code fragment is sent as
+ * ([ByDapEvaluator]). bpd runs text that is not an expression as statements in that context alone —
+ * an expression first, else `exec`, answering `None` — and debugpy does the same.
+ */
+internal class ByReplEvaluator(private val frame: DapStackFrame) : DapExpressionEvaluator {
+    override suspend fun DapSessionContext.evaluate(expression: String): DapEvaluationResult =
+        with(frame) { evaluate(expression, DapEvaluationContext.Repl) }
+
+    override suspend fun DapSessionContext.evaluate(expression: String, context: DapEvaluationContext): DapEvaluationResult =
+        with(frame) { evaluate(expression, DapEvaluationContext.Repl) }
 }
 
 /**
@@ -103,7 +124,12 @@ private class ByStackFrame(
  * identifiers and dots and gives up at the `]`. Where a reference starts is a fact about the
  * syntax tree, which is `by`'s ([ByServerExtensions.evaluatableExpression]).
  *
- * Evaluating is untouched: everything but the position question goes to [platform].
+ * Evaluating is the platform's, but for the Evaluate dialog's *code fragment*, which goes to
+ * [statements]. The platform sends the dialog's evaluation with no context at all, and bpd runs
+ * statements only in the `repl` context, so `y = 7` there was `SyntaxError: invalid syntax
+ * (<bpd evaluation>, line 1)`. PyCharm's own evaluator runs a code fragment as statements, and the
+ * dialog's two modes are its way of asking for one or the other: an expression keeps the platform's
+ * context, so Quick Evaluate, a watch or a hover never runs a statement.
  *
  * A `by` from before the request answers `MethodNotFound`, and then the position is answered as the
  * platform answers it, which is what the session did before this existed. A `null` from `by` is an
@@ -112,6 +138,8 @@ private class ByStackFrame(
  */
 internal class ByDapEvaluator(
     private val platform: XDebuggerEvaluator,
+    /** Where a code fragment is evaluated: [platform]'s session in the `repl` context. */
+    private val statements: XDebuggerEvaluator = platform,
     /** The `by` that answers for a file; a test's stands in for the project's. */
     private val serverFor: (Project, VirtualFile) -> LspClient? = ::byServerFor,
 ) : XDebuggerEvaluator() {
@@ -120,7 +148,8 @@ internal class ByDapEvaluator(
         platform.evaluate(expression, callback, expressionPosition)
 
     override fun evaluate(expression: XExpression, callback: XEvaluationCallback, expressionPosition: XSourcePosition?) =
-        platform.evaluate(expression, callback, expressionPosition)
+        if (expression.mode == EvaluationMode.CODE_FRAGMENT) statements.evaluate(expression, callback, expressionPosition)
+        else platform.evaluate(expression, callback, expressionPosition)
 
     override fun isCodeFragmentEvaluationSupported(): Boolean = platform.isCodeFragmentEvaluationSupported
 
