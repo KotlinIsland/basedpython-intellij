@@ -1,0 +1,1647 @@
+{
+ "aliases": [],
+ "help": "an extremely fast Python type checker, with basedpython support",
+ "name": "by",
+ "options": [
+  {
+   "aliases": [],
+   "help": "Print help",
+   "long": "help",
+   "repeatable": false,
+   "short": "h",
+   "value": null
+  },
+  {
+   "aliases": [],
+   "help": "Print version",
+   "long": "version",
+   "repeatable": false,
+   "short": "V",
+   "value": null
+  }
+ ],
+ "positionals": [],
+ "subcommands": [
+  {
+   "aliases": [],
+   "help": "Check a project for type errors",
+   "name": "check",
+   "options": [
+    {
+     "aliases": [],
+     "help": "Apply fixes to resolve errors",
+     "long": "fix",
+     "repeatable": false,
+     "short": null,
+     "value": null
+    },
+    {
+     "aliases": [],
+     "help": "Adds `ty: ignore` comments to suppress all rule diagnostics",
+     "long": "add-ignore",
+     "repeatable": false,
+     "short": null,
+     "value": null
+    },
+    {
+     "aliases": [],
+     "help": "Run the command within the given project directory",
+     "long": "project",
+     "repeatable": false,
+     "short": null,
+     "value": {
+      "hint": "any",
+      "kind": "path",
+      "name": "PROJECT"
+     }
+    },
+    {
+     "aliases": [],
+     "help": "Path to your project's Python environment or interpreter",
+     "long": "python",
+     "repeatable": false,
+     "short": null,
+     "value": {
+      "hint": "any",
+      "kind": "path",
+      "name": "PATH"
+     }
+    },
+    {
+     "aliases": [],
+     "help": "Custom directory to use for stdlib typeshed stubs",
+     "long": "typeshed",
+     "repeatable": false,
+     "short": null,
+     "value": {
+      "hint": "any",
+      "kind": "path",
+      "name": "PATH"
+     }
+    },
+    {
+     "aliases": [],
+     "help": "Additional path to use as a module-resolution source (can be passed multiple times)",
+     "long": "extra-search-path",
+     "repeatable": true,
+     "short": null,
+     "value": {
+      "hint": "any",
+      "kind": "path",
+      "name": "PATH"
+     }
+    },
+    {
+     "aliases": [],
+     "help": "Python version to assume when resolving types",
+     "long": "python-version",
+     "repeatable": false,
+     "short": null,
+     "value": {
+      "choices": [
+       {
+        "help": null,
+        "name": "3.7"
+       },
+       {
+        "help": null,
+        "name": "3.8"
+       },
+       {
+        "help": null,
+        "name": "3.9"
+       },
+       {
+        "help": null,
+        "name": "3.10"
+       },
+       {
+        "help": null,
+        "name": "3.11"
+       },
+       {
+        "help": null,
+        "name": "3.12"
+       },
+       {
+        "help": null,
+        "name": "3.13"
+       },
+       {
+        "help": null,
+        "name": "3.14"
+       },
+       {
+        "help": null,
+        "name": "3.15"
+       }
+      ],
+      "kind": "choice",
+      "name": "VERSION"
+     }
+    },
+    {
+     "aliases": [],
+     "help": "Target platform to assume when resolving types",
+     "long": "python-platform",
+     "repeatable": false,
+     "short": null,
+     "value": {
+      "kind": "text",
+      "name": "PLATFORM"
+     }
+    },
+    {
+     "aliases": [],
+     "help": "The defaults that rules and analysis settings start from",
+     "long": "type-checking-preset",
+     "repeatable": false,
+     "short": null,
+     "value": {
+      "choices": [
+       {
+        "help": "Enable every diagnostic, and every analysis option that buys soundness (default)",
+        "name": "strict"
+       },
+       {
+        "help": "Use ty's own defaults, leaving basedpython's diagnostics and analysis options off",
+        "name": "ty-compatible"
+       }
+      ],
+      "kind": "choice",
+      "name": "PRESET"
+     }
+    },
+    {
+     "aliases": [],
+     "help": "Use verbose output (or `-vv` and `-vvv` for more verbose output)",
+     "long": "verbose",
+     "repeatable": true,
+     "short": "v",
+     "value": null
+    },
+    {
+     "aliases": [],
+     "help": "Use quiet output (or `-qq` for silent output)",
+     "long": "quiet",
+     "repeatable": true,
+     "short": "q",
+     "value": null
+    },
+    {
+     "aliases": [],
+     "help": "Treat the given rule as having severity 'error'. Can be specified multiple times. Use 'all' to apply to all rules.",
+     "long": "error",
+     "repeatable": true,
+     "short": null,
+     "value": {
+      "kind": "rule",
+      "name": "RULE"
+     }
+    },
+    {
+     "aliases": [],
+     "help": "Treat the given rule as having severity 'warn'. Can be specified multiple times. Use 'all' to apply to all rules.",
+     "long": "warn",
+     "repeatable": true,
+     "short": null,
+     "value": {
+      "kind": "rule",
+      "name": "RULE"
+     }
+    },
+    {
+     "aliases": [],
+     "help": "Disables the rule. Can be specified multiple times. Use 'all' to apply to all rules.",
+     "long": "ignore",
+     "repeatable": true,
+     "short": null,
+     "value": {
+      "kind": "rule",
+      "name": "RULE"
+     }
+    },
+    {
+     "aliases": [],
+     "help": "A TOML `<KEY> = <VALUE>` pair overriding a specific configuration option.",
+     "long": "config",
+     "repeatable": true,
+     "short": "c",
+     "value": {
+      "kind": "text",
+      "name": "CONFIG_OPTION"
+     }
+    },
+    {
+     "aliases": [],
+     "help": "The path to a `basedpython.toml` or `ty.toml` file to use for configuration",
+     "long": "config-file",
+     "repeatable": false,
+     "short": null,
+     "value": {
+      "hint": "any",
+      "kind": "path",
+      "name": "PATH"
+     }
+    },
+    {
+     "aliases": [],
+     "help": "The format to use for printing diagnostic messages",
+     "long": "output-format",
+     "repeatable": false,
+     "short": null,
+     "value": {
+      "choices": [
+       {
+        "help": "Print diagnostics verbosely, with context and helpful hints (default)",
+        "name": "full"
+       },
+       {
+        "help": "Print diagnostics concisely, one per line",
+        "name": "concise"
+       },
+       {
+        "help": "Print diagnostics in the JSON format expected by GitLab Code Quality reports",
+        "name": "gitlab"
+       },
+       {
+        "help": "Print diagnostics in the format used by GitHub Actions workflow error annotations",
+        "name": "github"
+       },
+       {
+        "help": "Print diagnostics as a JUnit-style XML report",
+        "name": "junit"
+       }
+      ],
+      "kind": "choice",
+      "name": "OUTPUT_FORMAT"
+     }
+    },
+    {
+     "aliases": [],
+     "help": "Use exit code 1 if there are any warning-level diagnostics",
+     "long": "error-on-warning",
+     "repeatable": false,
+     "short": null,
+     "value": {
+      "kind": "text",
+      "name": "ERROR_ON_WARNING"
+     }
+    },
+    {
+     "aliases": [],
+     "help": "Always use exit code 0, even when there are error-level diagnostics",
+     "long": "exit-zero",
+     "repeatable": false,
+     "short": null,
+     "value": null
+    },
+    {
+     "aliases": [],
+     "help": "Use exit code 0 if there are no error-level diagnostics",
+     "long": "exit-zero-on-warning",
+     "repeatable": false,
+     "short": null,
+     "value": null
+    },
+    {
+     "aliases": [],
+     "help": "Watch files for changes and recheck files related to the changed files",
+     "long": "watch",
+     "repeatable": false,
+     "short": "W",
+     "value": null
+    },
+    {
+     "aliases": [],
+     "help": "Check the project from scratch instead of asking a running language server",
+     "long": "no-server",
+     "repeatable": false,
+     "short": null,
+     "value": null
+    },
+    {
+     "aliases": [],
+     "help": "Respect file exclusions via `.gitignore` and other standard ignore files. Use `--no-respect-ignore-files` to disable",
+     "long": "respect-ignore-files",
+     "repeatable": false,
+     "short": null,
+     "value": {
+      "kind": "text",
+      "name": "RESPECT_IGNORE_FILES"
+     }
+    },
+    {
+     "aliases": [],
+     "help": "Enforce exclusions, even for paths passed to ty directly on the command-line. Use `--no-force-exclude` to disable",
+     "long": "force-exclude",
+     "repeatable": false,
+     "short": null,
+     "value": null
+    },
+    {
+     "aliases": [],
+     "help": "Exclude files containing PEP 723 inline script metadata unless passed explicitly. Use `--include-scripts` to disable",
+     "long": "exclude-scripts",
+     "repeatable": false,
+     "short": null,
+     "value": {
+      "kind": "text",
+      "name": "EXCLUDE_SCRIPTS"
+     }
+    },
+    {
+     "aliases": [],
+     "help": "Glob patterns for files to exclude from type checking",
+     "long": "exclude",
+     "repeatable": true,
+     "short": null,
+     "value": {
+      "kind": "text",
+      "name": "EXCLUDE"
+     }
+    },
+    {
+     "aliases": [],
+     "help": "Control when colored output is used",
+     "long": "color",
+     "repeatable": false,
+     "short": null,
+     "value": {
+      "choices": [
+       {
+        "help": "Display colors if the output goes to an interactive terminal",
+        "name": "auto"
+       },
+       {
+        "help": "Always display colors",
+        "name": "always"
+       },
+       {
+        "help": "Never display colors",
+        "name": "never"
+       }
+      ],
+      "kind": "choice",
+      "name": "WHEN"
+     }
+    },
+    {
+     "aliases": [],
+     "help": "Hide all progress outputs",
+     "long": "no-progress",
+     "repeatable": false,
+     "short": null,
+     "value": null
+    },
+    {
+     "aliases": [],
+     "help": "Print help (see more with '--help')",
+     "long": "help",
+     "repeatable": false,
+     "short": "h",
+     "value": null
+    }
+   ],
+   "positionals": [
+    {
+     "help": "List of files or directories to check [default: the project root]",
+     "repeatable": true,
+     "required": false,
+     "trailing": false,
+     "value": {
+      "hint": "any",
+      "kind": "path",
+      "name": "PATH"
+     }
+    }
+   ],
+   "subcommands": []
+  },
+  {
+   "aliases": [],
+   "help": "Start the language server",
+   "name": "server",
+   "options": [
+    {
+     "aliases": [],
+     "help": "Print help",
+     "long": "help",
+     "repeatable": false,
+     "short": "h",
+     "value": null
+    }
+   ],
+   "positionals": [],
+   "subcommands": []
+  },
+  {
+   "aliases": [],
+   "help": "Display ty's version",
+   "name": "version",
+   "options": [
+    {
+     "aliases": [],
+     "help": "The format in which to display the version information",
+     "long": "output-format",
+     "repeatable": false,
+     "short": null,
+     "value": {
+      "choices": [
+       {
+        "help": null,
+        "name": "text"
+       },
+       {
+        "help": null,
+        "name": "json"
+       }
+      ],
+      "kind": "choice",
+      "name": "OUTPUT_FORMAT"
+     }
+    },
+    {
+     "aliases": [],
+     "help": "Print help",
+     "long": "help",
+     "repeatable": false,
+     "short": "h",
+     "value": null
+    }
+   ],
+   "positionals": [],
+   "subcommands": []
+  },
+  {
+   "aliases": [],
+   "help": "Explain rules and other parts of ty",
+   "name": "explain",
+   "options": [
+    {
+     "aliases": [],
+     "help": "Print help",
+     "long": "help",
+     "repeatable": false,
+     "short": "h",
+     "value": null
+    }
+   ],
+   "positionals": [],
+   "subcommands": [
+    {
+     "aliases": [],
+     "help": "Explain a rule (or all rules)",
+     "name": "rule",
+     "options": [
+      {
+       "aliases": [],
+       "help": "Output format",
+       "long": "output-format",
+       "repeatable": false,
+       "short": null,
+       "value": {
+        "choices": [
+         {
+          "help": null,
+          "name": "text"
+         },
+         {
+          "help": null,
+          "name": "json"
+         }
+        ],
+        "kind": "choice",
+        "name": "OUTPUT_FORMAT"
+       }
+      },
+      {
+       "aliases": [],
+       "help": "Print help (see more with '--help')",
+       "long": "help",
+       "repeatable": false,
+       "short": "h",
+       "value": null
+      }
+     ],
+     "positionals": [
+      {
+       "help": "Rule to explain",
+       "repeatable": false,
+       "required": false,
+       "trailing": false,
+       "value": {
+        "kind": "rule",
+        "name": "RULE"
+       }
+      }
+     ],
+     "subcommands": []
+    },
+    {
+     "aliases": [],
+     "help": "Print this message or the help of the given subcommand(s)",
+     "name": "help",
+     "options": [],
+     "positionals": [],
+     "subcommands": [
+      {
+       "aliases": [],
+       "help": "Explain a rule (or all rules)",
+       "name": "rule",
+       "options": [],
+       "positionals": [],
+       "subcommands": []
+      },
+      {
+       "aliases": [],
+       "help": "Print this message or the help of the given subcommand(s)",
+       "name": "help",
+       "options": [],
+       "positionals": [],
+       "subcommands": []
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "aliases": [],
+   "help": "Transpile and run a module with `python -m <module>`",
+   "name": "run",
+   "options": [
+    {
+     "aliases": [],
+     "help": "minimum Python version the output must run on [default: the version of the interpreter that will run it]",
+     "long": "min-version",
+     "repeatable": false,
+     "short": null,
+     "value": {
+      "kind": "text",
+      "name": "VERSION"
+     }
+    },
+    {
+     "aliases": [],
+     "help": "The interpreter to run on, or the environment holding it. A bare name that is neither, like `python3.14`, is found on `PATH`",
+     "long": "python",
+     "repeatable": false,
+     "short": null,
+     "value": {
+      "hint": "any",
+      "kind": "path",
+      "name": "PATH"
+     }
+    },
+    {
+     "aliases": [],
+     "help": "A program to start the interpreter through, such as a debugger that has to be the process the program runs in",
+     "long": "launcher",
+     "repeatable": false,
+     "short": null,
+     "value": {
+      "hint": "any",
+      "kind": "path",
+      "name": "PATH"
+     }
+    },
+    {
+     "aliases": [],
+     "help": "which runtime type-soundness checks to insert: `default`, `all` (adds the opt-in `parameters` entry checks), `none`, or a comma-separated subset of `generic-calls`, `projections`, `iterations`, `assignments`, `returns`, `arguments`, `parameters`",
+     "long": "soundness",
+     "repeatable": false,
+     "short": null,
+     "value": {
+      "kind": "text",
+      "name": "SPEC"
+     }
+    },
+    {
+     "aliases": [],
+     "help": "wrap every function with a `raises` clause in a runtime guard that fails when it raises something the clause does not include",
+     "long": "runtime-raises-checks",
+     "repeatable": false,
+     "short": null,
+     "value": null
+    },
+    {
+     "aliases": [],
+     "help": "leave a closure made inside a loop sharing the loop's one binding, as python does, instead of binding the values of the iteration it was made in",
+     "long": "no-unique-loop-bindings",
+     "repeatable": false,
+     "short": null,
+     "value": null
+    },
+    {
+     "aliases": [],
+     "help": "supply a `build:` stamp, as `NAME=VALUE`. repeatable. overrides whatever this build could have worked out for itself, which is what a CI job that knows its own commit wants",
+     "long": "stamp",
+     "repeatable": true,
+     "short": null,
+     "value": {
+      "kind": "text",
+      "name": "NAME=VALUE"
+     }
+    },
+    {
+     "aliases": [],
+     "help": "Compile every imported module to a native extension first",
+     "long": "compiled",
+     "repeatable": false,
+     "short": null,
+     "value": null
+    },
+    {
+     "aliases": [],
+     "help": "Run in the tree this staged instead of in the current directory",
+     "long": "in-build",
+     "repeatable": false,
+     "short": null,
+     "value": null
+    },
+    {
+     "aliases": [],
+     "help": "Measure which lines run, with coverage.py, and write them to PATH as an LCOV report",
+     "long": "coverage",
+     "repeatable": false,
+     "short": null,
+     "value": {
+      "hint": "any",
+      "kind": "path",
+      "name": "PATH"
+     }
+    },
+    {
+     "aliases": [],
+     "help": "profile the program with cProfile and write the snapshot to PATH, as the `pstats` file `cProfile` writes (`.pstat`)",
+     "long": "profile",
+     "repeatable": false,
+     "short": null,
+     "value": {
+      "hint": "any",
+      "kind": "path",
+      "name": "PATH"
+     }
+    },
+    {
+     "aliases": [],
+     "help": "Print help (see more with '--help')",
+     "long": "help",
+     "repeatable": false,
+     "short": "h",
+     "value": null
+    }
+   ],
+   "positionals": [
+    {
+     "help": "module to run (e.g. `by run main` looks for main.by) [default: the `run.main` entry point configured for the project]",
+     "repeatable": false,
+     "required": false,
+     "trailing": false,
+     "value": {
+      "kind": "module",
+      "name": "MODULE"
+     }
+    },
+    {
+     "help": "arguments forwarded to the program, as `sys.argv[1:]`",
+     "repeatable": true,
+     "required": false,
+     "trailing": true,
+     "value": {
+      "kind": "text",
+      "name": "ARGS"
+     }
+    }
+   ],
+   "subcommands": []
+  },
+  {
+   "aliases": [],
+   "help": "start an interactive session in basedpython",
+   "name": "repl",
+   "options": [
+    {
+     "aliases": [],
+     "help": "minimum Python version the session's python must run on [default: the version of the interpreter that will run it]",
+     "long": "min-version",
+     "repeatable": false,
+     "short": null,
+     "value": {
+      "kind": "text",
+      "name": "VERSION"
+     }
+    },
+    {
+     "aliases": [],
+     "help": "the interpreter to run on, or the environment holding it, as `by run` takes it",
+     "long": "python",
+     "repeatable": false,
+     "short": null,
+     "value": {
+      "hint": "any",
+      "kind": "path",
+      "name": "PATH"
+     }
+    },
+    {
+     "aliases": [],
+     "help": "which runtime type-soundness checks to insert: `default`, `all` (adds the opt-in `parameters` entry checks), `none`, or a comma-separated subset of `generic-calls`, `projections`, `iterations`, `assignments`, `returns`, `arguments`, `parameters`",
+     "long": "soundness",
+     "repeatable": false,
+     "short": null,
+     "value": {
+      "kind": "text",
+      "name": "SPEC"
+     }
+    },
+    {
+     "aliases": [],
+     "help": "wrap every function with a `raises` clause in a runtime guard that fails when it raises something the clause does not include",
+     "long": "runtime-raises-checks",
+     "repeatable": false,
+     "short": null,
+     "value": null
+    },
+    {
+     "aliases": [],
+     "help": "leave a closure made inside a loop sharing the loop's one binding, as python does, instead of binding the values of the iteration it was made in",
+     "long": "no-unique-loop-bindings",
+     "repeatable": false,
+     "short": null,
+     "value": null
+    },
+    {
+     "aliases": [],
+     "help": "supply a `build:` stamp, as `NAME=VALUE`. repeatable. overrides whatever this build could have worked out for itself, which is what a CI job that knows its own commit wants",
+     "long": "stamp",
+     "repeatable": true,
+     "short": null,
+     "value": {
+      "kind": "text",
+      "name": "NAME=VALUE"
+     }
+    },
+    {
+     "aliases": [],
+     "help": "keep PATH holding the session's source: the inputs that ran, in order",
+     "long": "session-file",
+     "repeatable": false,
+     "short": null,
+     "value": {
+      "hint": "any",
+      "kind": "path",
+      "name": "PATH"
+     }
+    },
+    {
+     "aliases": [],
+     "help": "tell an editor what the session reads standard input for, on a connection of its own",
+     "long": "events",
+     "repeatable": false,
+     "short": null,
+     "value": {
+      "kind": "text",
+      "name": "PORT"
+     }
+    },
+    {
+     "aliases": [],
+     "help": "start in MODULE, a module of the project named as `by run` takes one: it runs first, as `__main__`, and the session goes on from it with its names",
+     "long": "module",
+     "repeatable": false,
+     "short": null,
+     "value": {
+      "kind": "module",
+      "name": "MODULE"
+     }
+    },
+    {
+     "aliases": [],
+     "help": "Print help (see more with '--help')",
+     "long": "help",
+     "repeatable": false,
+     "short": "h",
+     "value": null
+    }
+   ],
+   "positionals": [],
+   "subcommands": []
+  },
+  {
+   "aliases": [],
+   "help": "Start a new project",
+   "name": "init",
+   "options": [
+    {
+     "aliases": [],
+     "help": "The project's name [default: the directory's name]",
+     "long": "name",
+     "repeatable": false,
+     "short": null,
+     "value": {
+      "kind": "text",
+      "name": "NAME"
+     }
+    },
+    {
+     "aliases": [],
+     "help": "Create a library: no entry point, the same packaging",
+     "long": "lib",
+     "repeatable": false,
+     "short": null,
+     "value": null
+    },
+    {
+     "aliases": [],
+     "help": "Create an application, with an entry point `by run` uses. The default",
+     "long": "app",
+     "repeatable": false,
+     "short": null,
+     "value": null
+    },
+    {
+     "aliases": [],
+     "help": "The python version to target [default: the version of the project environment's interpreter]",
+     "long": "python-version",
+     "repeatable": false,
+     "short": null,
+     "value": {
+      "kind": "text",
+      "name": "VERSION"
+     }
+    },
+    {
+     "aliases": [],
+     "help": "Set up git's merges of the project, a new one or one already there: `by merge-driver` as the merge driver for its python and basedpython files and its `api.lock`, in its `.gitattributes` and the repository's git configuration. Asked on a terminal without this or `--no-git-merge`",
+     "long": "git-merge",
+     "repeatable": false,
+     "short": null,
+     "value": null
+    },
+    {
+     "aliases": [],
+     "help": "Leave git's merges of the project as they are",
+     "long": "no-git-merge",
+     "repeatable": false,
+     "short": null,
+     "value": null
+    },
+    {
+     "aliases": [],
+     "help": "Print help (see more with '--help')",
+     "long": "help",
+     "repeatable": false,
+     "short": "h",
+     "value": null
+    }
+   ],
+   "positionals": [
+    {
+     "help": "Where to create the project [default: the current directory]",
+     "repeatable": false,
+     "required": false,
+     "trailing": false,
+     "value": {
+      "hint": "any",
+      "kind": "path",
+      "name": "PATH"
+     }
+    }
+   ],
+   "subcommands": []
+  },
+  {
+   "aliases": [],
+   "help": "Build the project as python",
+   "name": "build",
+   "options": [
+    {
+     "aliases": [],
+     "help": "minimum Python version the output must run on [default: the project's configured python version]",
+     "long": "min-version",
+     "repeatable": false,
+     "short": null,
+     "value": {
+      "kind": "text",
+      "name": "VERSION"
+     }
+    },
+    {
+     "aliases": [],
+     "help": "Build one publishable wheel per python version, and a source distribution, into `dist/`",
+     "long": "wheels",
+     "repeatable": false,
+     "short": null,
+     "value": null
+    },
+    {
+     "aliases": [],
+     "help": "Where to write the output [default: `build` in the project root, or `dist` with `--wheels`]",
+     "long": "out",
+     "repeatable": false,
+     "short": "o",
+     "value": {
+      "hint": "any",
+      "kind": "path",
+      "name": "DIR"
+     }
+    },
+    {
+     "aliases": [],
+     "help": "Report what the build read and produced, as `<kind> <value>` lines",
+     "long": "print-manifest",
+     "repeatable": false,
+     "short": null,
+     "value": null
+    },
+    {
+     "aliases": [],
+     "help": "The format to print the build's diagnostics in, as `by check` takes it",
+     "long": "output-format",
+     "repeatable": false,
+     "short": null,
+     "value": {
+      "choices": [
+       {
+        "help": "Print diagnostics verbosely, with context and helpful hints (default)",
+        "name": "full"
+       },
+       {
+        "help": "Print diagnostics concisely, one per line",
+        "name": "concise"
+       },
+       {
+        "help": "Print diagnostics in the JSON format expected by GitLab Code Quality reports",
+        "name": "gitlab"
+       },
+       {
+        "help": "Print diagnostics in the format used by GitHub Actions workflow error annotations",
+        "name": "github"
+       },
+       {
+        "help": "Print diagnostics as a JUnit-style XML report",
+        "name": "junit"
+       }
+      ],
+      "kind": "choice",
+      "name": "OUTPUT_FORMAT"
+     }
+    },
+    {
+     "aliases": [],
+     "help": "which runtime type-soundness checks to insert: `default`, `all` (adds the opt-in `parameters` entry checks), `none`, or a comma-separated subset of `generic-calls`, `projections`, `iterations`, `assignments`, `returns`, `arguments`, `parameters`",
+     "long": "soundness",
+     "repeatable": false,
+     "short": null,
+     "value": {
+      "kind": "text",
+      "name": "SPEC"
+     }
+    },
+    {
+     "aliases": [],
+     "help": "wrap every function with a `raises` clause in a runtime guard that fails when it raises something the clause does not include",
+     "long": "runtime-raises-checks",
+     "repeatable": false,
+     "short": null,
+     "value": null
+    },
+    {
+     "aliases": [],
+     "help": "leave a closure made inside a loop sharing the loop's one binding, as python does, instead of binding the values of the iteration it was made in",
+     "long": "no-unique-loop-bindings",
+     "repeatable": false,
+     "short": null,
+     "value": null
+    },
+    {
+     "aliases": [],
+     "help": "supply a `build:` stamp, as `NAME=VALUE`. repeatable. overrides whatever this build could have worked out for itself, which is what a CI job that knows its own commit wants",
+     "long": "stamp",
+     "repeatable": true,
+     "short": null,
+     "value": {
+      "kind": "text",
+      "name": "NAME=VALUE"
+     }
+    },
+    {
+     "aliases": [],
+     "help": "Print help (see more with '--help')",
+     "long": "help",
+     "repeatable": false,
+     "short": "h",
+     "value": null
+    }
+   ],
+   "positionals": [],
+   "subcommands": []
+  },
+  {
+   "aliases": [],
+   "help": "Recompute the slots of a set of edited files in a build tree that already exists",
+   "name": "restage",
+   "options": [
+    {
+     "aliases": [],
+     "help": "Print help (see more with '--help')",
+     "long": "help",
+     "repeatable": false,
+     "short": "h",
+     "value": null
+    }
+   ],
+   "positionals": [
+    {
+     "help": "The build tree the program is running out of",
+     "repeatable": false,
+     "required": true,
+     "trailing": false,
+     "value": {
+      "hint": "any",
+      "kind": "path",
+      "name": "BUILD_DIR"
+     }
+    },
+    {
+     "help": "The files in the project that were edited. Name every file of one edit together: they share a sourcemap, and re-staging them one at a time answers with a map per file that each drop the others' entries",
+     "repeatable": true,
+     "required": true,
+     "trailing": false,
+     "value": {
+      "hint": "any",
+      "kind": "path",
+      "name": "FILE"
+     }
+    }
+   ],
+   "subcommands": []
+  },
+  {
+   "aliases": [],
+   "help": "Compile .by and .py files to native CPython extension modules",
+   "name": "compile",
+   "options": [
+    {
+     "aliases": [
+      "output"
+     ],
+     "help": "Where to write the generated C and the extension modules [default: `build` in the project root]",
+     "long": "out",
+     "repeatable": false,
+     "short": "o",
+     "value": {
+      "hint": "any",
+      "kind": "path",
+      "name": "DIR"
+     }
+    },
+    {
+     "aliases": [],
+     "help": "Report every function that was not lowered natively, with the reason",
+     "long": "verbose",
+     "repeatable": false,
+     "short": null,
+     "value": null
+    },
+    {
+     "aliases": [],
+     "help": "Emit the generated C without invoking the C compiler",
+     "long": "emit-c-only",
+     "repeatable": false,
+     "short": null,
+     "value": null
+    },
+    {
+     "aliases": [],
+     "help": "Fail the build when a function cannot be compiled because a type is gradual, instead of leaving it to its interpreted definition",
+     "long": "no-any",
+     "repeatable": false,
+     "short": null,
+     "value": null
+    },
+    {
+     "aliases": [],
+     "help": "Fail the build if *any* function is left to its interpreted definition, whatever the reason",
+     "long": "require-native",
+     "repeatable": false,
+     "short": null,
+     "value": null
+    },
+    {
+     "aliases": [],
+     "help": "Leave out the import-time check that every class reported as compiled is the class standing under its own name",
+     "long": "no-verify-install",
+     "repeatable": false,
+     "short": null,
+     "value": null
+    },
+    {
+     "aliases": [],
+     "help": "Write a `<module>.annotated` report next to the generated C: each function's BIR, whether it is infallible, and for every function left interpreted, the reason why",
+     "long": "annotate",
+     "repeatable": false,
+     "short": null,
+     "value": null
+    },
+    {
+     "aliases": [],
+     "help": "Have every call that skipped a lookup re-ask it at runtime, and abort naming the class and the member when the answer is not the body it was about to run",
+     "long": "licence-recheck",
+     "repeatable": false,
+     "short": null,
+     "value": null
+    },
+    {
+     "aliases": [],
+     "help": "which runtime type-soundness checks to insert: `default`, `all` (adds the opt-in `parameters` entry checks), `none`, or a comma-separated subset of `generic-calls`, `projections`, `iterations`, `assignments`, `returns`, `arguments`, `parameters`",
+     "long": "soundness",
+     "repeatable": false,
+     "short": null,
+     "value": {
+      "kind": "text",
+      "name": "SPEC"
+     }
+    },
+    {
+     "aliases": [],
+     "help": "wrap every function with a `raises` clause in a runtime guard that fails when it raises something the clause does not include",
+     "long": "runtime-raises-checks",
+     "repeatable": false,
+     "short": null,
+     "value": null
+    },
+    {
+     "aliases": [],
+     "help": "leave a closure made inside a loop sharing the loop's one binding, as python does, instead of binding the values of the iteration it was made in",
+     "long": "no-unique-loop-bindings",
+     "repeatable": false,
+     "short": null,
+     "value": null
+    },
+    {
+     "aliases": [],
+     "help": "supply a `build:` stamp, as `NAME=VALUE`. repeatable. overrides whatever this build could have worked out for itself, which is what a CI job that knows its own commit wants",
+     "long": "stamp",
+     "repeatable": true,
+     "short": null,
+     "value": {
+      "kind": "text",
+      "name": "NAME=VALUE"
+     }
+    },
+    {
+     "aliases": [],
+     "help": "Print help (see more with '--help')",
+     "long": "help",
+     "repeatable": false,
+     "short": "h",
+     "value": null
+    }
+   ],
+   "positionals": [
+    {
+     "help": "Files to compile. Defaults to every `.by` and `.py` file under the project root",
+     "repeatable": true,
+     "required": false,
+     "trailing": false,
+     "value": {
+      "hint": "any",
+      "kind": "path",
+      "name": "FILE"
+     }
+    }
+   ],
+   "subcommands": []
+  },
+  {
+   "aliases": [],
+   "help": "Merge a file as git's merge driver, which `by init --git-merge` sets up",
+   "name": "merge-driver",
+   "options": [
+    {
+     "aliases": [],
+     "help": "Print help (see more with '--help')",
+     "long": "help",
+     "repeatable": false,
+     "short": "h",
+     "value": null
+    }
+   ],
+   "positionals": [
+    {
+     "help": "The common ancestor's version (`%O`)",
+     "repeatable": false,
+     "required": true,
+     "trailing": false,
+     "value": {
+      "hint": "any",
+      "kind": "path",
+      "name": "BASE"
+     }
+    },
+    {
+     "help": "Our version, which the result is written over (`%A`)",
+     "repeatable": false,
+     "required": true,
+     "trailing": false,
+     "value": {
+      "hint": "any",
+      "kind": "path",
+      "name": "OURS"
+     }
+    },
+    {
+     "help": "Their version (`%B`)",
+     "repeatable": false,
+     "required": true,
+     "trailing": false,
+     "value": {
+      "hint": "any",
+      "kind": "path",
+      "name": "THEIRS"
+     }
+    },
+    {
+     "help": "The size of the conflict markers (`%L`)",
+     "repeatable": false,
+     "required": true,
+     "trailing": false,
+     "value": {
+      "kind": "text",
+      "name": "MARKER_SIZE"
+     }
+    },
+    {
+     "help": "The path in the work tree the result is for (`%P`)",
+     "repeatable": false,
+     "required": true,
+     "trailing": false,
+     "value": {
+      "hint": "any",
+      "kind": "path",
+      "name": "PATH"
+     }
+    },
+    {
+     "help": "The common ancestor's conflict label (`%S`)",
+     "repeatable": false,
+     "required": false,
+     "trailing": false,
+     "value": {
+      "kind": "text",
+      "name": "BASE_LABEL"
+     }
+    },
+    {
+     "help": "Our conflict label (`%X`)",
+     "repeatable": false,
+     "required": false,
+     "trailing": false,
+     "value": {
+      "kind": "text",
+      "name": "OURS_LABEL"
+     }
+    },
+    {
+     "help": "Their conflict label (`%Y`)",
+     "repeatable": false,
+     "required": false,
+     "trailing": false,
+     "value": {
+      "kind": "text",
+      "name": "THEIRS_LABEL"
+     }
+    }
+   ],
+   "subcommands": []
+  },
+  {
+   "aliases": [],
+   "help": "Generate an api lockfile (`api.lock`) summarising the public type-level surface of the project",
+   "name": "generate-api-file",
+   "options": [
+    {
+     "aliases": [],
+     "help": "Where to write the lockfile. Defaults to `api.lock` in the project root",
+     "long": "output",
+     "repeatable": false,
+     "short": "o",
+     "value": {
+      "hint": "any",
+      "kind": "path",
+      "name": "PATH"
+     }
+    },
+    {
+     "aliases": [],
+     "help": "Write the lockfile to stdout instead of a file",
+     "long": "stdout",
+     "repeatable": false,
+     "short": null,
+     "value": null
+    },
+    {
+     "aliases": [],
+     "help": "Run the command within the given project directory",
+     "long": "project",
+     "repeatable": false,
+     "short": null,
+     "value": {
+      "hint": "any",
+      "kind": "path",
+      "name": "PROJECT"
+     }
+    },
+    {
+     "aliases": [],
+     "help": "Path to your project's Python environment or interpreter",
+     "long": "python",
+     "repeatable": false,
+     "short": null,
+     "value": {
+      "hint": "any",
+      "kind": "path",
+      "name": "PATH"
+     }
+    },
+    {
+     "aliases": [],
+     "help": "Python version to assume when resolving types",
+     "long": "python-version",
+     "repeatable": false,
+     "short": null,
+     "value": {
+      "choices": [
+       {
+        "help": null,
+        "name": "3.7"
+       },
+       {
+        "help": null,
+        "name": "3.8"
+       },
+       {
+        "help": null,
+        "name": "3.9"
+       },
+       {
+        "help": null,
+        "name": "3.10"
+       },
+       {
+        "help": null,
+        "name": "3.11"
+       },
+       {
+        "help": null,
+        "name": "3.12"
+       },
+       {
+        "help": null,
+        "name": "3.13"
+       },
+       {
+        "help": null,
+        "name": "3.14"
+       },
+       {
+        "help": null,
+        "name": "3.15"
+       }
+      ],
+      "kind": "choice",
+      "name": "VERSION"
+     }
+    },
+    {
+     "aliases": [],
+     "help": "Print help (see more with '--help')",
+     "long": "help",
+     "repeatable": false,
+     "short": "h",
+     "value": null
+    }
+   ],
+   "positionals": [],
+   "subcommands": []
+  },
+  {
+   "aliases": [],
+   "help": "Transpile a file to stdout, or a whole directory in place (reads stdin if no path given)",
+   "name": "transpile",
+   "options": [
+    {
+     "aliases": [],
+     "help": "convert Python source into basedpython idioms (instead of the default by \u2192 py direction)",
+     "long": "reverse",
+     "repeatable": false,
+     "short": null,
+     "value": null
+    },
+    {
+     "aliases": [],
+     "help": "minimum Python version the output must run on [default: the project's configured python version]",
+     "long": "min-version",
+     "repeatable": false,
+     "short": null,
+     "value": {
+      "kind": "text",
+      "name": "VERSION"
+     }
+    },
+    {
+     "aliases": [],
+     "help": "which runtime type-soundness checks to insert: `default`, `all` (adds the opt-in `parameters` entry checks), `none`, or a comma-separated subset of `generic-calls`, `projections`, `iterations`, `assignments`, `returns`, `arguments`, `parameters`",
+     "long": "soundness",
+     "repeatable": false,
+     "short": null,
+     "value": {
+      "kind": "text",
+      "name": "SPEC"
+     }
+    },
+    {
+     "aliases": [],
+     "help": "wrap every function with a `raises` clause in a runtime guard that fails when it raises something the clause does not include",
+     "long": "runtime-raises-checks",
+     "repeatable": false,
+     "short": null,
+     "value": null
+    },
+    {
+     "aliases": [],
+     "help": "leave a closure made inside a loop sharing the loop's one binding, as python does, instead of binding the values of the iteration it was made in",
+     "long": "no-unique-loop-bindings",
+     "repeatable": false,
+     "short": null,
+     "value": null
+    },
+    {
+     "aliases": [],
+     "help": "supply a `build:` stamp, as `NAME=VALUE`. repeatable. overrides whatever this build could have worked out for itself, which is what a CI job that knows its own commit wants",
+     "long": "stamp",
+     "repeatable": true,
+     "short": null,
+     "value": {
+      "kind": "text",
+      "name": "NAME=VALUE"
+     }
+    },
+    {
+     "aliases": [],
+     "help": "Print help",
+     "long": "help",
+     "repeatable": false,
+     "short": "h",
+     "value": null
+    }
+   ],
+   "positionals": [
+    {
+     "help": "file to transpile to stdout, or a directory to transpile in place (every `.by` \u2192 `.py`, or with `--reverse` every `.py` \u2192 `.by`)",
+     "repeatable": false,
+     "required": false,
+     "trailing": false,
+     "value": {
+      "hint": "any",
+      "kind": "path",
+      "name": "FILE"
+     }
+    }
+   ],
+   "subcommands": []
+  },
+  {
+   "aliases": [],
+   "help": "Print this message or the help of the given subcommand(s)",
+   "name": "help",
+   "options": [],
+   "positionals": [],
+   "subcommands": [
+    {
+     "aliases": [],
+     "help": "Check a project for type errors",
+     "name": "check",
+     "options": [],
+     "positionals": [],
+     "subcommands": []
+    },
+    {
+     "aliases": [],
+     "help": "Start the language server",
+     "name": "server",
+     "options": [],
+     "positionals": [],
+     "subcommands": []
+    },
+    {
+     "aliases": [],
+     "help": "Display ty's version",
+     "name": "version",
+     "options": [],
+     "positionals": [],
+     "subcommands": []
+    },
+    {
+     "aliases": [],
+     "help": "Explain rules and other parts of ty",
+     "name": "explain",
+     "options": [],
+     "positionals": [],
+     "subcommands": [
+      {
+       "aliases": [],
+       "help": "Explain a rule (or all rules)",
+       "name": "rule",
+       "options": [],
+       "positionals": [],
+       "subcommands": []
+      }
+     ]
+    },
+    {
+     "aliases": [],
+     "help": "Transpile and run a module with `python -m <module>`",
+     "name": "run",
+     "options": [],
+     "positionals": [],
+     "subcommands": []
+    },
+    {
+     "aliases": [],
+     "help": "start an interactive session in basedpython",
+     "name": "repl",
+     "options": [],
+     "positionals": [],
+     "subcommands": []
+    },
+    {
+     "aliases": [],
+     "help": "Start a new project",
+     "name": "init",
+     "options": [],
+     "positionals": [],
+     "subcommands": []
+    },
+    {
+     "aliases": [],
+     "help": "Build the project as python",
+     "name": "build",
+     "options": [],
+     "positionals": [],
+     "subcommands": []
+    },
+    {
+     "aliases": [],
+     "help": "Recompute the slots of a set of edited files in a build tree that already exists",
+     "name": "restage",
+     "options": [],
+     "positionals": [],
+     "subcommands": []
+    },
+    {
+     "aliases": [],
+     "help": "Compile .by and .py files to native CPython extension modules",
+     "name": "compile",
+     "options": [],
+     "positionals": [],
+     "subcommands": []
+    },
+    {
+     "aliases": [],
+     "help": "Merge a file as git's merge driver, which `by init --git-merge` sets up",
+     "name": "merge-driver",
+     "options": [],
+     "positionals": [],
+     "subcommands": []
+    },
+    {
+     "aliases": [],
+     "help": "Generate an api lockfile (`api.lock`) summarising the public type-level surface of the project",
+     "name": "generate-api-file",
+     "options": [],
+     "positionals": [],
+     "subcommands": []
+    },
+    {
+     "aliases": [],
+     "help": "Transpile a file to stdout, or a whole directory in place (reads stdin if no path given)",
+     "name": "transpile",
+     "options": [],
+     "positionals": [],
+     "subcommands": []
+    },
+    {
+     "aliases": [],
+     "help": "Print this message or the help of the given subcommand(s)",
+     "name": "help",
+     "options": [],
+     "positionals": [],
+     "subcommands": []
+    }
+   ]
+  }
+ ]
+}

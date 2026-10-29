@@ -387,6 +387,15 @@ interface ByServerExtensions {
     fun rules(): CompletableFuture<List<ByRule>?>
 
     /**
+     * `by`'s whole command line, as data: every command with its options, positionals and
+     * subcommands, for completing `by` typed in a terminal ([dev.basedpython.pycharm.terminal.ByCommand]
+     * reads it). No parameters. It is the command line of the `by` the server is, so one server's
+     * answer never changes. A `by` from before the request answers `MethodNotFound`.
+     */
+    @JsonRequest("by/commandLine")
+    fun commandLine(): CompletableFuture<com.google.gson.JsonObject?>
+
+    /**
      * Every HTTP route the session's projects serve, FastAPI's and django's, ordered by path and
      * method. Takes `{}`. A `by` from before the request answers `MethodNotFound`.
      */
