@@ -254,12 +254,20 @@ internal class ByLspServerDescriptor(
    * `# language=javascript` string had JavaScript's background and none of its colours (measured
    * in PyCharm 263.7607 on `by` a110d7d8). With injection off nothing paints the fragment, and
    * `by` keeps the token.
+   *
+   * And `experimental.unreachableWithoutSemanticTokens`, always: it asks `by` to leave out the
+   * semantic tokens inside a range it reports as unreachable. The platform draws such a range,
+   * a hint tagged `Unnecessary`, as unused on the weak-warning layer, the same layer as every
+   * semantic token, where the narrower highlighter's colour wins: `print(1)` under a `return`
+   * greyed only its `(` and `)` (measured in PyCharm 263.7607 on `by` a110d7d8). Without tokens
+   * the range is grey over the lexer's colours, as PyCharm greys unreachable code in a `.py`.
    */
   override val clientCapabilities: ClientCapabilities
     get() = super.clientCapabilities.apply {
       textDocument.foldingRange.foldingRangeKind.valueSet = FOLDING_RANGE_KINDS
-      if (BasedPythonSettings.getInstance(project).byLanguageInjection) {
-        experimental = JsonObject().apply { addProperty("languageInjection", true) }
+      experimental = JsonObject().apply {
+        if (BasedPythonSettings.getInstance(project).byLanguageInjection) addProperty("languageInjection", true)
+        addProperty("unreachableWithoutSemanticTokens", true)
       }
     }
 

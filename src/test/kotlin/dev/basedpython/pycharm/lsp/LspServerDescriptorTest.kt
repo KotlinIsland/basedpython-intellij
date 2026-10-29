@@ -408,6 +408,16 @@ class LspServerDescriptorTest {
     assertEquals(null, sent())
   }
 
+  @Test
+  fun `by is asked to leave out the semantic tokens inside unreachable code`() = onEdt {
+    // under this name; with the tokens there the platform draws them over the unreachable grey
+    fun sent(): Any? = (byDescriptor().clientCapabilities.experimental as? JsonObject)
+      ?.get("unreachableWithoutSemanticTokens")?.asBoolean
+    assertEquals(true, sent())
+    BasedPythonSettings.getInstance(project).byLanguageInjection = false
+    assertEquals(true, sent(), "whatever the injection setting")
+  }
+
   @AfterEach
   fun resetSettings() = onEdt {
     BasedPythonSettings.getInstance(project).loadState(BasedPythonSettings.State())
