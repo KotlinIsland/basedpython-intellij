@@ -33,9 +33,9 @@ import kotlin.reflect.KMutableProperty0
  *  - **no `console`**. A terminal is the `runInTerminal` reverse request, refused the same way, and
  *    a `.by` program's console is the run configuration's own anyway ([ByDebugAdapterDescriptor])
  *
- * What is left: whether a stop holds every thread, whether library code is stepped and stopped in,
- * and how much of a value bpd reads. The value
- * bounds are worth a page of their own because bpd says when one bit — a value it cut short reads
+ * What is left: whether a stop no breakpoint decides holds every thread, whether library code is
+ * stepped and stopped in, and how much of a value bpd reads. The value bounds are worth a page of
+ * their own because bpd says when one bit — a value it cut short reads
  * `100 children, of which the request allowed 100. ask again with a larger children` — and a user
  * needs somewhere to give it a larger one.
  *
@@ -46,7 +46,12 @@ import kotlin.reflect.KMutableProperty0
 class ByDebuggerSettings : XDebuggerSettings<ByDebuggerSettings.State>(ID) {
 
     class State {
-        /** `stopTheWorld`: every thread is held for the length of a stop, not only the one that stopped. */
+        /**
+         * `stopTheWorld`: every thread is held for the length of a stop, not only the one that stopped.
+         * A stop no breakpoint's policy decides — an exception, a step, a pause — since a line
+         * breakpoint's own *Suspend* is sent as its policy ([ByBreakpointChannel]); every stop under a
+         * bpd without suspend policies.
+         */
         var stopTheWorld: Boolean = false
 
         /** `justMyCode`: step and stop only in the program's own code. On, as in bpd and debugpy. */

@@ -503,6 +503,20 @@ category system (DAP's own default), `stderr` and `important` prominent, `teleme
 an unrecognised category shown rather than dropped — an adapter may invent one, and silence is the
 only outcome nothing later can recover from.
 
+## What a breakpoint's hit holds
+
+A line breakpoint's *Suspend* — *All*, *Thread* or none — has no field in DAP's `SourceBreakpoint`,
+and the platform sends `setBreakpoints` itself, again whenever a file's set changes, with fresh ids.
+Under bpd it goes beside it, by the file and line both requests name: `suspendPolicies` in the
+`launch`, and `bpd/setSuspendPolicies` with the whole set once the launch is answered and on every
+change (`ByBreakpointChannel`). bpd holds `all` as it holds a stop-the-world stop, `thread` as it
+holds any other, and `none` not at all — the hit is counted and its log message written. So none is
+sent as `none` only for a breakpoint the IDE has nothing to do for on a hit; one that prints "Breakpoint
+hit", the stack, or removes itself, is sent as `thread`, and the platform logs and resumes it as it
+does any `NONE` breakpoint it is told of. *Stop every thread* on the debugger page decides what no
+breakpoint does: an exception, a step, a pause. A bpd without the request refuses it, and every stop
+holds what *Stop every thread* says, as before.
+
 ## Exception breakpoints
 
 *Breakpoints → basedpython Exceptions*, with **On raise** and **On termination** checkboxes.

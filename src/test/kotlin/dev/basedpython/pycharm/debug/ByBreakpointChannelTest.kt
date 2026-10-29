@@ -4,7 +4,9 @@ import com.intellij.icons.AllIcons
 import com.intellij.platform.dap.DapDebugSession
 import com.intellij.platform.dap.DapSessionContext
 import com.intellij.xdebugger.XDebugSession
+import com.intellij.xdebugger.breakpoints.SuspendPolicy
 import com.intellij.xdebugger.breakpoints.XBreakpoint
+import com.intellij.xdebugger.breakpoints.XLineBreakpoint
 import dev.basedpython.pycharm.debug.bpd.ByDebugBackend
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonObject
@@ -21,8 +23,9 @@ import org.junit.jupiter.api.Test
 import java.lang.reflect.Proxy
 
 /**
- * What a session's exception breakpoints say through bpd's own channel: classes, in the `launch` and
- * then as `bpd/setExceptionClasses`, and each class's verdict on its breakpoint.
+ * What a session's breakpoints say through bpd's own channel: exception classes and suspend
+ * policies, in the `launch` and then as `bpd/setExceptionClasses` and `bpd/setSuspendPolicies`, and
+ * each class's verdict on its breakpoint.
  */
 class ByBreakpointChannelTest {
 
@@ -64,6 +67,8 @@ class ByBreakpointChannelTest {
             this.ignoreLibraries = ignoreLibraries
         }.let { properties -> proxy<XBreakpoint<ByExceptionBreakpointProperties>> { n, _ -> if (n == "getProperties") properties else null } }
 
+    private val lineBreakpoint = proxy<XLineBreakpoint<*>> { _, _ -> null }
+
     private fun rule(breakpoint: XBreakpoint<ByExceptionBreakpointProperties>) = breakpoint.properties!!.rule()
 
     @Test
@@ -78,26 +83,29 @@ class ByBreakpointChannelTest {
     }
 
     @Test
-    fun `the launch carries every rule held before it, and nothing is sent until the session starts`() {
+    fun `the launch carries every rule and every policy held before it, and nothing is sent until the session starts`() {
         val channel = channel()
         channel.setClass(classBreakpoint("KeyError"), rule(classBreakpoint("KeyError")))
+        channel.setPolicy(lineBreakpoint, ByBreakpointChannel.Policy("/p/main.by", 3, "all"))
         assertEquals(
-            mapOf("exceptionClasses" to listOf(mapOf("name" to "KeyError", "raised" to false, "uncaught" to true, "libraries" to true))),
+            mapOf(
+                "exceptionClasses" to listOf(mapOf("name" to "KeyError", "raised" to false, "uncaught" to true, "libraries" to true)),
+                "suspendPolicies" to listOf(mapOf("path" to "/p/main.by", "line" to 3, "suspend" to "all")),
+            ),
             channel.launchArguments(),
         )
         assertTrue(sent.isEmpty(), "before the launch's answer, what is held goes in the launch alone")
     }
 
     @Test
-    fun `once started, the whole set is sent, and every change sends it again`() {
-        val breakpoint = classBreakpoint("KeyError")
+    fun `once started, the whole of each set is sent, and every change sends it again`() {
         val channel = channel()
-        channel.setClass(breakpoint, rule(breakpoint))
+        channel.setPolicy(lineBreakpoint, ByBreakpointChannel.Policy("/p/main.by", 3, "all"))
         channel.started()
-        assertEquals(listOf("bpd/setExceptionClasses"), sent.map { it.first })
+        assertEquals(listOf("bpd/setSuspendPolicies", "bpd/setExceptionClasses"), sent.map { it.first })
         sent.clear()
-        channel.setClass(breakpoint, null)
-        assertEquals("bpd/setExceptionClasses" to buildJsonObject { put("classes", buildJsonArray {}) }, sent.single())
+        channel.setPolicy(lineBreakpoint, null)
+        assertEquals("bpd/setSuspendPolicies" to buildJsonObject { put("policies", buildJsonArray {}) }, sent.single())
     }
 
     @Test
@@ -131,18 +139,19 @@ class ByBreakpointChannelTest {
     }
 
     @Test
-    fun `a bpd that refuses the request has no class rules, and is asked no more`() {
+    fun `a bpd that refuses the requests has neither feature, and is asked no more`() {
         val breakpoint = classBreakpoint("KeyError")
         answer = { command, _ -> refusal("bpd's DAP adapter does not implement `$command`, …") }
         val channel = channel()
         channel.setClass(breakpoint, rule(breakpoint))
+        channel.setPolicy(lineBreakpoint, ByBreakpointChannel.Policy("/p/main.by", 3, "thread"))
         channel.started()
-        assertEquals(1, sent.size)
+        assertEquals(2, sent.size)
         assertEquals(AllIcons.Debugger.Db_invalid_breakpoint, shown[breakpoint]?.first)
         assertTrue(shown[breakpoint]?.second.orEmpty().contains("bpd/setExceptionClasses"))
         sent.clear()
+        channel.setPolicy(lineBreakpoint, ByBreakpointChannel.Policy("/p/main.by", 3, "all"))
         channel.setClass(breakpoint, null)
-        channel.setClass(breakpoint, rule(breakpoint))
         assertTrue(sent.isEmpty(), "sent $sent")
     }
 
@@ -151,10 +160,30 @@ class ByBreakpointChannelTest {
         val breakpoint = classBreakpoint("KeyError")
         val channel = channel(ByDebugBackend.DEBUGPY)
         channel.setClass(breakpoint, rule(breakpoint))
+        channel.setPolicy(lineBreakpoint, ByBreakpointChannel.Policy("/p/main.by", 3, "all"))
         channel.started()
         assertEquals(emptyMap<String, Any>(), channel.launchArguments())
         assertTrue(sent.isEmpty())
         assertEquals(AllIcons.Debugger.Db_invalid_breakpoint, shown[breakpoint]?.first)
+    }
+
+    @Test
+    fun `a breakpoint's Suspend setting is what its hit holds, and none only when the IDE need not hear of the hit`() {
+        fun breakpoint(policy: SuspendPolicy, logMessage: Boolean = false, temporary: Boolean = false) =
+            proxy<XLineBreakpoint<*>> { name, _ ->
+                when (name) {
+                    "getSuspendPolicy" -> policy
+                    "isLogMessage" -> logMessage
+                    "isLogStack", "isTemporary" -> if (name == "isTemporary") temporary else false
+                    else -> null
+                }
+            }
+        assertEquals("all", ByBreakpointChannel.suspendOf(breakpoint(SuspendPolicy.ALL)))
+        assertEquals("thread", ByBreakpointChannel.suspendOf(breakpoint(SuspendPolicy.THREAD)))
+        assertEquals("none", ByBreakpointChannel.suspendOf(breakpoint(SuspendPolicy.NONE)))
+        // the IDE prints "Breakpoint hit" and removes a temporary one: it has to be told of the hit
+        assertEquals("thread", ByBreakpointChannel.suspendOf(breakpoint(SuspendPolicy.NONE, logMessage = true)))
+        assertEquals("thread", ByBreakpointChannel.suspendOf(breakpoint(SuspendPolicy.NONE, temporary = true)))
     }
 
     private inline fun <reified T> proxy(crossinline answer: (String, Array<Any?>) -> Any?): T =

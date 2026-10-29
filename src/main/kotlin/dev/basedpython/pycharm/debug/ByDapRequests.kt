@@ -83,6 +83,13 @@ internal object ByDapRequests {
      */
     val setExceptionClasses: RequestType<JsonObject, JsonElement?> = custom("bpd/setExceptionClasses")
 
+    /**
+     * What each line breakpoint's hit holds — `all`, `thread` or `none` — by the file and line
+     * `setBreakpoints` names, the whole set at once. Answers each policy with the breakpoint it applies
+     * to or `waiting`. bpd's alone, for the same reason; a bpd without it refuses it by name.
+     */
+    val setSuspendPolicies: RequestType<JsonObject, JsonElement?> = custom("bpd/setSuspendPolicies")
+
     private fun custom(command: String): RequestType<JsonObject, JsonElement?> =
         RequestType(command, JsonObject.serializer(), JsonElement.serializer().nullable)
 

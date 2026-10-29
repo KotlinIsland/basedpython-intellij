@@ -59,6 +59,13 @@ class ByLineBreakpointType : XLineBreakpointType<ByBreakpointProperties>(
         "${breakpoint.shortFilePath}:${breakpoint.line + 1}"
 
     /**
+     * *Suspend: All / Thread*, as PyCharm's python breakpoints have. bpd holds what each says
+     * ([ByBreakpointChannel]); under debugpy, whose DAP has no field for it, a stop holds what
+     * debugpy's stops hold.
+     */
+    override fun isSuspendThreadSupported(): Boolean = true
+
+    /**
      * Makes every expression field the IDE offers for one of these breakpoints a basedpython editor
      * rather than a plain text box — and is what lets the inter-line log point editor open at all.
      * See [ByDebuggerEditorsProvider].

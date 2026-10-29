@@ -25,10 +25,16 @@ import com.intellij.xdebugger.breakpoints.XLineBreakpoint
  * Replaces the platform's handler for [ByLineBreakpointType] in [ByDapXDebugProcess], as PyCharm's
  * Python debug process replaces it for its own type; which breakpoints are sent, where, and with which
  * condition is unchanged — the line and condition the platform's handler sends.
+ *
+ * And says what each breakpoint's hit holds, its Suspend setting ([ByBreakpointChannel.suspendOf]),
+ * by the file and line `setBreakpoints` names — which DAP's breakpoint has no field for. A change of
+ * setting, line or enabled state reaches here as the platform's unregistration and registration of
+ * the breakpoint, so each sends the session's whole set again.
  */
 internal class ByDapSourceBreakpointHandler(
     private val dapSession: DapDebugSession,
     private val session: XDebugSession,
+    private val policies: ByBreakpointChannel,
 ) : XBreakpointHandler<XLineBreakpoint<ByBreakpointProperties>>(ByLineBreakpointType::class.java) {
 
     /** Each breakpoint as the adapter was given it; read and written only on the session's own executor. */
@@ -38,6 +44,10 @@ internal class ByDapSourceBreakpointHandler(
         val file = breakpoint.sourcePosition?.file ?: return
         // DAP's lines count from 1; a `.by` breakpoint is a whole line, which column 0 says
         val position = SourcePosition(file, TextPosition(breakpoint.line + 1, 0))
+        // the path `setBreakpoints` sends the file under; a file it has none for is not sent at all
+        dapSession.virtualFileResolver.getAdapterPath(file)?.let { path ->
+            policies.setPolicy(breakpoint, ByBreakpointChannel.Policy(path, breakpoint.line + 1, ByBreakpointChannel.suspendOf(breakpoint)))
+        }
         dapSession.post {
             val condition = breakpoint.conditionExpression?.expression
             val dapBreakpoint = ByDapSourceBreakpoint(DapSourceBreakpoint.create(session, position, condition, breakpoint))
@@ -47,6 +57,7 @@ internal class ByDapSourceBreakpointHandler(
     }
 
     override fun unregisterBreakpoint(breakpoint: XLineBreakpoint<ByBreakpointProperties>, temporary: Boolean) {
+        policies.setPolicy(breakpoint, null)
         dapSession.post {
             val dapBreakpoint = sent.remove(breakpoint) ?: return@post
             with(dapSession.breakpointManager) { removeSourceBreakpoint(dapBreakpoint) }
