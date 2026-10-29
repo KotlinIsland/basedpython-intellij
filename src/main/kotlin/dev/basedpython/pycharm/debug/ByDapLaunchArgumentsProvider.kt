@@ -68,6 +68,13 @@ class ByDapLaunchArgumentsProvider : DapLaunchArgumentsProvider {
                     // The IDE stops on its own breakpoints. Holding at the first statement of a
                     // runner shim nobody wrote would be a stop with no question behind it
                     "stopOnEntry" to false,
+                    // The program reads the run console, as it does in a run. The wrapper `exec`s
+                    // `bpd dap --listen` in `by run`'s place, so bpd's standard input is the run's
+                    // process input, which is what the console writes what is typed into it to.
+                    // bpd gives a program an empty one unless told the stream is the program's —
+                    // only the client knows whose it is — and `input()` raised `EOFError`. A bpd
+                    // from before the key ignores it, and the program reads the empty one
+                    "inheritStdin" to true,
                 ),
             )
         }

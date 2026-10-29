@@ -108,6 +108,8 @@ class ByDebuggerSettingsTest {
                 assertEquals(false, arguments["stopOnEntry"])
                 assertEquals(false, arguments["stopTheWorld"])
                 assertEquals(true, arguments["justMyCode"])
+                // `by run` hands bpd the run console's input, and the program reads it
+                assertEquals(true, arguments["inheritStdin"])
                 assertEquals(1, (arguments["variables"] as Map<*, *>)["depth"])
             }
         } finally {
