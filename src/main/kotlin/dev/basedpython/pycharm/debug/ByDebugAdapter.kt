@@ -14,7 +14,6 @@ import com.intellij.execution.ui.ExecutionConsole
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
 import com.intellij.platform.dap.DapBreakpointsDescription
-import com.intellij.platform.dap.DapBreakpointsSupport
 import com.intellij.platform.dap.DapCustomization
 import com.intellij.platform.dap.DapDebugSession
 import com.intellij.platform.dap.DapExceptionBreakpoint
@@ -30,6 +29,10 @@ import com.intellij.platform.dap.DebugAdapterSupportProvider
 import com.intellij.platform.dap.connection.DebugAdapterHandle
 import com.intellij.platform.dap.connection.DebugAdapterSocketConnection
 import com.intellij.platform.dap.xdebugger.DapXDebugProcess
+import com.intellij.platform.dap.xdebugger.DapXDebugSessionState
+import com.intellij.xdebugger.XDebugSessionListener
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import com.intellij.util.PathUtil
 import com.intellij.xdebugger.XDebugSession
 import com.intellij.xdebugger.breakpoints.XBreakpointHandler
@@ -112,7 +115,6 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
     private var recompositionLink: ByRecompositionRequests? = null
 
     override val customization: DapCustomization = object : DapCustomization() {
-        override val breakpointsSupport: DapBreakpointsSupport = ByBreakpointsSupport
         override val executionUiSupport: DapExecutionUiSupport = ByOutputSupport { setup?.backend }
 
         /** *Evaluate Expression*, Watches and *Quick Evaluate* edit `.by`: [BySessionEditorsProvider]. */
@@ -160,20 +162,6 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
             exceptionInfo: DapExceptionInfo,
             breakpoint: DapExceptionBreakpoint,
         ): Boolean = breakpoint.ideBreakpoint.type is ByExceptionBreakpointType
-    }
-
-    /**
-     * The handler that sends exception breakpoints.
-     *
-     * `DapXDebugProcess` makes a handler for the source breakpoint type and, when there is one, the
-     * function breakpoint type; everything else it takes from here. Without
-     * [ByExceptionBreakpointHandler] the exception type would be a checkbox that changed nothing.
-     */
-    private object ByBreakpointsSupport : DapBreakpointsSupport() {
-        override fun createAdditionalBreakpointHandlers(
-            dapSession: DapDebugSession,
-            session: XDebugSession,
-        ): List<XBreakpointHandler<*>> = listOf(ByExceptionBreakpointHandler(dapSession))
     }
 
     /**
@@ -376,7 +364,9 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
      *
      * The launch also says what this plugin reads of bpd's events and whether to stream the
      * recompositions ([ByBpdRecord.Ready.launchArguments]). The watch is read from the preference
-     * here, when the platform builds the `launch`.
+     * here, when the platform builds the `launch`. And the exception classes the session's
+     * breakpoints hold, which the handler registered before the adapter was reached
+     * ([ByBreakpointChannel]), so they are in force before the program runs a line.
      */
     private fun startArguments(provided: Map<String, Any?>): Map<String, Any?> = when (setup?.backend) {
         ByDebugBackend.BPD -> ByRecordedArguments {
@@ -384,7 +374,7 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
             record.launchArguments(
                 provided,
                 watchRecompositions = ByRecompositionSession.getInstance(project).watchesFromTheStart,
-            )
+            ) + process?.breakpoints?.launchArguments().orEmpty()
         }
 
         // the runner the bootstrap was loaded into is only known once it has reported, which is
@@ -555,13 +545,32 @@ internal class ByDapXDebugProcess(
     override fun doGetProcessHandler(): ProcessHandler? = result?.processHandler ?: super.doGetProcessHandler()
 
     /**
+     * What the session's breakpoints say beside DAP's requests: their exception classes, bpd's own
+     * channel ([ByBreakpointChannel]). Sent whole once the platform has the
+     * launch's answer — its state leaves `Connecting` — and on every change after.
+     */
+    internal val breakpoints = ByBreakpointChannel(dapDebugSession, session, backend)
+
+    init {
+        xDebugProcessScope.launch {
+            sessionState.first { it == DapXDebugSessionState.Running || it == DapXDebugSessionState.Paused }
+            breakpoints.started()
+        }
+        session.addSessionListener(object : XDebugSessionListener {
+            override fun sessionPaused() = breakpoints.paused()
+        })
+    }
+
+    /**
      * The platform's handlers, with [ByDapSourceBreakpointHandler] in place of its own for `.by` line
-     * breakpoints: the one that decides which of them the adapter only logs.
+     * breakpoints — the one that decides which of them the adapter only logs — and [ByExceptionBreakpointHandler] for the exception breakpoints, which
+     * `DapXDebugProcess` has no handler for: without it the exception type would be a checkbox that
+     * changed nothing.
      */
     private val handlers: Array<XBreakpointHandler<*>> by lazy {
-        super.getBreakpointHandlers()
+        val platform = super.getBreakpointHandlers()
             .map { if (it.breakpointTypeClass == ByLineBreakpointType::class.java) ByDapSourceBreakpointHandler(dapDebugSession, session) else it }
-            .toTypedArray()
+        (platform + ByExceptionBreakpointHandler(dapDebugSession, breakpoints)).toTypedArray()
     }
 
     override fun getBreakpointHandlers(): Array<XBreakpointHandler<*>> = handlers

@@ -519,6 +519,20 @@ everything, and a `KeyError` from a dict lookup compiles happily and dies at run
 breakpoint stops on the right `.by` line. So the PyCharm default carries over: **On termination**
 on, **On raise** off.
 
+**A class of its own, under bpd.** *+* adds a breakpoint for one exception class and its subclasses,
+as PyCharm's python exception breakpoints are added, with *Ignore library files* beside the two
+boxes. It cannot go where *Any exception* goes: the platform's DAP client sends
+`setExceptionBreakpoints` itself, with `filters` and never `exceptionOptions`, and a request of the
+plugin's own would replace the platform's and could only arrive after `configurationDone` had let the
+program run. So a class is bpd's own rule, sent through bpd's own channel (`ByBreakpointChannel`):
+`exceptionClasses` in the `launch` — which is built after the handlers have registered every
+breakpoint, so the rules are armed before the program's first line — and `bpd/setExceptionClasses`,
+which replaces the rules alone, once the platform has the launch's answer and on every change after.
+bpd answers each rule `verified`, `pending` (the program does not have the class yet; the rule is
+held) or `failed` (an alias, not an exception class, or shadowed), and the plugin draws that on the
+breakpoint. A bpd without the request refuses it by name, which is the feature being absent, and
+debugpy is sent nothing.
+
 ## What this plugin used to do instead of the platform's DAP client
 
 Until 2026.3 `ByDapXDebugProcess` overrode `sessionInitialized` without calling `super`, for two

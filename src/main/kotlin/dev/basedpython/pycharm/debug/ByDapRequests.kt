@@ -74,6 +74,15 @@ internal object ByDapRequests {
      */
     val watchRecompositions: RequestType<JsonObject, JsonElement?> = custom("bpd/watchRecompositions")
 
+    /**
+     * The rules per exception class, replacing the ones set before and leaving the platform's
+     * filters alone. Answers `{"classes": [{name, verified, reason?, message?}]}`, one per rule in
+     * the order asked. bpd's alone, beside `setExceptionBreakpoints` because the platform owns that
+     * request and never sends its `exceptionOptions`; a bpd without it refuses it by name, which is
+     * the feature being absent. See [ByBreakpointChannel].
+     */
+    val setExceptionClasses: RequestType<JsonObject, JsonElement?> = custom("bpd/setExceptionClasses")
+
     private fun custom(command: String): RequestType<JsonObject, JsonElement?> =
         RequestType(command, JsonObject.serializer(), JsonElement.serializer().nullable)
 

@@ -4,7 +4,9 @@ import com.intellij.platform.dap.DapBreakpointManager
 import com.intellij.platform.dap.DapDebugSession
 import com.intellij.platform.dap.DapExceptionBreakpoint
 import com.intellij.platform.dap.DapSessionContext
+import com.intellij.xdebugger.XDebugSession
 import com.intellij.xdebugger.breakpoints.XBreakpoint
+import dev.basedpython.pycharm.debug.bpd.ByDebugBackend
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
@@ -51,7 +53,9 @@ class ByExceptionBreakpointHandlerTest {
         }
     }
 
-    private val handler = ByExceptionBreakpointHandler(session)
+    private val channel = ByBreakpointChannel(session, proxy<XDebugSession> { _, _, _ -> null }, ByDebugBackend.BPD)
+
+    private val handler = ByExceptionBreakpointHandler(session, channel)
 
     private fun filters(): Set<String?> = sent.map { it.filter }.toSet()
 
@@ -92,6 +96,20 @@ class ByExceptionBreakpointHandlerTest {
         properties.notifyOnRaise = false
         handler.registerBreakpoint(breakpoint)
         assertEquals(setOf("uncaught"), filters())
+    }
+
+    /** A class goes beside the platform's request, which can carry none: never to its filters. */
+    @Test
+    fun `a class breakpoint is bpd's rule, not a filter`() {
+        properties.exceptionClass = "KeyError"
+        handler.registerBreakpoint(breakpoint)
+        assertEquals(emptySet<String?>(), filters())
+        assertEquals(
+            listOf(mapOf("name" to "KeyError", "raised" to false, "uncaught" to true, "libraries" to true)),
+            channel.launchArguments()["exceptionClasses"],
+        )
+        handler.unregisterBreakpoint(breakpoint, false)
+        assertEquals(emptyList<Any>(), channel.launchArguments()["exceptionClasses"])
     }
 
     @Test
