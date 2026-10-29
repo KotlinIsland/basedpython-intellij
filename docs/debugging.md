@@ -312,6 +312,17 @@ back as the `launch` request. The IDE never names an interpreter: it used to put
 `--python`'s place, which switched `by run`'s discovery off and left the IDE guessing which
 interpreter the run would have used.
 
+The program it names is `_by_runner.py`, and the launch does not say `"launcher": true`. bpd treats
+a launcher's frames as how the program was started — off every stack, never stepped into, and an
+uncaught exception stopped in the program's outermost frame — and since `by` f566374c the build's
+map names the runner as `LAUNCHER`, which bpd reads itself. Only the latest `by` is supported, so
+the field would say again what the map already does; measured against `by` caabe9cac, the stacks
+are the same with it and without it.
+
+What the wrapper `exec`s is `bpd dap --listen` with `by run`'s standard input, which is what the
+run console writes typed lines to, so the launch says `inheritStdin` and `input()` reads the
+console.
+
 Which `bpd`: the one beside the `by` the run starts, else the one beside the interpreter `by run`
 chose (a uv project's `.venv/bin`), else the one on `PATH`. The middle one is only knowable once
 `by run` has chosen, so the wrapper applies the order; with none at all it records that and exits
