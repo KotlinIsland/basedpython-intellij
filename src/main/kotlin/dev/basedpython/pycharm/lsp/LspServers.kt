@@ -261,6 +261,13 @@ internal class ByLspServerDescriptor(
    * semantic token, where the narrower highlighter's colour wins: `print(1)` under a `return`
    * greyed only its `(` and `)` (measured in PyCharm 263.7607 on `by` a110d7d8). Without tokens
    * the range is grey over the lexer's colours, as PyCharm greys unreachable code in a `.py`.
+   *
+   * And `experimental.unreachableSemanticTokenModifier`, always, which a `by` that knows it puts
+   * first: the tokens inside an unreachable range are sent after all, every lexical token of it,
+   * each with the `unreachable` modifier, and the hint gets the code `unreachable-code`. The tokens
+   * are then drawn in their kinds' faded colours ([dev.basedpython.pycharm.editor.colors.ByUnreachableColors])
+   * and the hint draws none of its own. A `by` that knows only the first leaves the tokens out, and
+   * the range is grey, as before.
    */
   override val clientCapabilities: ClientCapabilities
     get() = super.clientCapabilities.apply {
@@ -268,6 +275,7 @@ internal class ByLspServerDescriptor(
       experimental = JsonObject().apply {
         if (BasedPythonSettings.getInstance(project).byLanguageInjection) addProperty("languageInjection", true)
         addProperty("unreachableWithoutSemanticTokens", true)
+        addProperty("unreachableSemanticTokenModifier", true)
       }
     }
 

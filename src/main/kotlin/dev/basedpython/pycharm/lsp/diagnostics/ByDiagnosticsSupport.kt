@@ -1,6 +1,7 @@
 package dev.basedpython.pycharm.lsp.diagnostics
 
 import com.intellij.codeInsight.daemon.HighlightDisplayKey
+import com.intellij.openapi.editor.markup.TextAttributes
 import com.intellij.psi.PsiDocumentManager
 import dev.basedpython.pycharm.inspections.rules.ByRuleInspection
 import dev.basedpython.pycharm.inspections.rules.ByRuleInspections
@@ -50,6 +51,7 @@ internal class ByDiagnosticsSupport : LspDiagnosticsSupport() {
         textRange: TextRange,
         quickFixes: List<IntentionAction>,
     ) {
+        if (ExplainRuleFix.codeOf(diagnostic) == UNREACHABLE_CODE) return unreachable(holder, diagnostic, textRange, quickFixes)
         val code = ExplainRuleFix.codeOf(diagnostic)?.takeIf { ByRuleInspections.getInstance().mayBeRule(it) }
             ?: return super.createAnnotation(holder, diagnostic, textRange, quickFixes)
         val file = holder.currentAnnotationSession.file
@@ -69,5 +71,28 @@ internal class ByDiagnosticsSupport : LspDiagnosticsSupport() {
         val explain = builder.newFix(ExplainRuleFix(code))
         builder = (if (key != null) explain.key(key) else explain).registerFix()
         builder.create()
+    }
+
+    /**
+     * Code `by` says is unreachable, from a `by` that colours it itself: each of its tokens carries
+     * the `unreachable` modifier, mapped to its kind's faded colour ([dev.basedpython.pycharm.editor.colors.ByUnreachableColors]).
+     * So the hint draws no colour of its own, where an unused symbol's grey would be drawn over those
+     * colours; it keeps its severity, its row in the Problems view and its fixes. `by` gives these
+     * hints the code [UNREACHABLE_CODE] only for a client that asks for the modifier; any other
+     * `Unnecessary` hint is still drawn grey.
+     */
+    private fun unreachable(holder: AnnotationHolder, diagnostic: Diagnostic, textRange: TextRange, quickFixes: List<IntentionAction>) {
+        val severity = getHighlightSeverity(diagnostic) ?: return
+        var builder = holder.newAnnotation(severity, getMessage(diagnostic))
+            .tooltip(getTooltip(diagnostic))
+            .range(textRange)
+            .enforcedTextAttributes(TextAttributes())
+        for (fix in quickFixes) builder = builder.withFix(fix)
+        builder.create()
+    }
+
+    companion object {
+        /** The code `by` gives a hint over unreachable code whose tokens it marks `unreachable`. */
+        const val UNREACHABLE_CODE: String = "unreachable-code"
     }
 }

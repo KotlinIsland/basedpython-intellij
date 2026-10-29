@@ -528,6 +528,12 @@ tasks {
       jvmTemp.deleteRecursively()
       jvmTemp.mkdirs()
     }
+    // `-Pbasedpython.regenerateUnreachableColors` makes ByUnreachableColorsTest write the unreachable
+    // colours shipped for each bundled scheme afresh from the schemes, instead of checking them.
+    if (providers.gradleProperty("basedpython.regenerateUnreachableColors").isPresent) {
+      systemProperty("basedpython.regenerateUnreachableColors", "true")
+      outputs.upToDateWhen { false }
+    }
   }
 
   // No `publishPlugin { dependsOn(patchChangelog) }`. It reads like housekeeping and is not: a

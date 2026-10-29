@@ -776,6 +776,17 @@
         <!-- ===== Wave 8: buff format service, color presets, LSP lifecycle ===== -->
         <formattingService
             implementation="dev.basedpython.pycharm.editor.format.BuffFormattingService"/>
+        <!-- The faded colours of unreachable code in each bundled scheme, generated from the scheme by
+             ByUnreachableColorsTest; see ByUnreachableColors. Any other scheme falls back to the
+             unused-code grey. -->
+        <additionalTextAttributes scheme="Default" file="colorSchemes/unreachable/Default.xml"/>
+        <additionalTextAttributes scheme="Darcula" file="colorSchemes/unreachable/Darcula.xml"/>
+        <additionalTextAttributes scheme="Light" file="colorSchemes/unreachable/Light.xml"/>
+        <additionalTextAttributes scheme="Dark" file="colorSchemes/unreachable/Dark.xml"/>
+        <additionalTextAttributes scheme="Darcula Contrast" file="colorSchemes/unreachable/DarculaContrast.xml"/>
+        <additionalTextAttributes scheme="Islands Dark" file="colorSchemes/unreachable/IslandsDark.xml"/>
+        <additionalTextAttributes scheme="basedpython dark" file="colorSchemes/unreachable/BasedPythonDark.xml"/>
+        <additionalTextAttributes scheme="basedpython Light" file="colorSchemes/unreachable/BasedPythonLight.xml"/>
         <bundledColorScheme path="/colorSchemes/BasedPythonDark"/>
         <bundledColorScheme path="/colorSchemes/BasedPythonLight"/>
         <postStartupActivity

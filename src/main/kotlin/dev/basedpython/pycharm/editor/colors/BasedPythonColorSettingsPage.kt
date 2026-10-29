@@ -92,7 +92,11 @@ class BasedPythonColorSettingsPage : RainbowColorSettingsPage {
             // Inlay hints from `by`. Undefined in a scheme, the colour is derived from that
             // scheme's own text and background instead — see ByInlayColors.
             AttributesDescriptor("Inlay hint", ByInlayColors.HINT),
-        )
+        ).let { descriptors ->
+            // each token kind again, as unreachable code shows it: see ByUnreachableColors
+            descriptors + descriptors.filter { it.key in ByUnreachableColors.BASES }
+                .map { AttributesDescriptor("Unreachable code//" + it.displayName.replace("//", ": "), ByUnreachableColors.variant(it.key)) }
+        }
 
         /**
          * The trim margin drawn down a multiline string. A colour rather than text attributes:

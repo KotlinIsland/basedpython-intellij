@@ -418,6 +418,13 @@ class LspServerDescriptorTest {
     assertEquals(true, sent(), "whatever the injection setting")
   }
 
+  @Test
+  fun `by is asked to mark the tokens of unreachable code, which a by that knows it puts first`() = onEdt {
+    val experimental = byDescriptor().clientCapabilities.experimental as JsonObject
+    assertEquals(true, experimental.get("unreachableSemanticTokenModifier")?.asBoolean)
+    assertEquals(true, experimental.get("unreachableWithoutSemanticTokens")?.asBoolean, "for a by that knows only that")
+  }
+
   @AfterEach
   fun resetSettings() = onEdt {
     BasedPythonSettings.getInstance(project).loadState(BasedPythonSettings.State())

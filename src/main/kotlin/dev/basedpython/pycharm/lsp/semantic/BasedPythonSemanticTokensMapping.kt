@@ -4,6 +4,7 @@ import com.intellij.openapi.editor.DefaultLanguageHighlighterColors
 import com.intellij.openapi.editor.colors.TextAttributesKey
 import dev.basedpython.pycharm.highlight.BasedPythonHighlightKeys
 import dev.basedpython.pycharm.lang.BasedPythonColors
+import dev.basedpython.pycharm.editor.colors.ByUnreachableColors
 
 /**
  * Pure, testable mapping from LSP semantic-token *types* (and *modifiers*) to basedpython's own
@@ -98,6 +99,10 @@ object BasedPythonSemanticTokensMapping {
     const val MOD_ANNOTATION = "annotation"
     const val MOD_DUNDER = "dunder"
     const val MOD_KEYWORD_ARGUMENT = "keywordArgument"
+    /** On every token of code `by` reports unreachable, for a client that asks for it. */
+    const val MOD_UNREACHABLE = "unreachable"
+    /** A bracket, which `by` colours as a token only in unreachable code. */
+    const val TYPE_PUNCTUATION = "punctuation"
     // endregion
 
     /**
@@ -123,6 +128,8 @@ object BasedPythonSemanticTokensMapping {
      */
     @JvmStatic
     fun keyFor(tokenType: String, modifiers: List<String> = emptyList()): TextAttributesKey? {
+        // unreachable code: the colour it would have, faded
+        if (MOD_UNREACHABLE in modifiers) return ByUnreachableColors.variant(keyFor(tokenType, modifiers - MOD_UNREACHABLE))
         val defined = MOD_DEFINITION in modifiers || MOD_DECLARATION in modifiers
         if (MOD_DUNDER in modifiers && tokenType in NAMES) {
             return if (defined) BasedPythonHighlightKeys.DUNDER_DEFINITION else BasedPythonHighlightKeys.DUNDER_USAGE
@@ -176,6 +183,7 @@ object BasedPythonSemanticTokensMapping {
             TYPE_REGEXP -> BasedPythonColors.STRING
             TYPE_NUMBER -> BasedPythonColors.NUMBER
             TYPE_OPERATOR -> BasedPythonColors.OPERATOR
+            TYPE_PUNCTUATION -> BasedPythonColors.PARENTHESES
 
             else -> null
         }
