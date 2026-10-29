@@ -60,21 +60,19 @@ class ByScopeEndsTest {
     }
 
     @Test
-    fun `every scope but a one-line one echoes its header after its last line, innermost first`() = onEdt {
+    fun `every scope but a one-line one or a definition echoes its header after its last line`() = onEdt {
         fixture.configureByText("a.by", morgans)
         assertEquals(
             listOf(
                 Triple(8, 12, "for x in [1, 2]"),
                 Triple(9, 8, "if coin()"),
-                Triple(10, 4, "def f(self)"),
-                Triple(10, 0, "class A"),
             ),
             echoes(),
         )
     }
 
     @Test
-    fun `an if with elif and else is one scope named by its if, and a decorated def by its def line`() = onEdt {
+    fun `an if with elif and else is one scope named by its if, and the def around it has none`() = onEdt {
         val text = """
             |@cache
             |def g(a,
@@ -89,7 +87,7 @@ class ByScopeEndsTest {
         fixture.configureByText("b.by", text)
         val document = fixture.editor.document
         val outline = OutlineSpec.outline(document) {
-            compound(decorators = "@cache") {
+            compound(decorators = "@cache", name = "g") {
                 clause("def g(a,\n            b):", keyword = "def") {
                     compound {
                         clause("if a:") { simple("pass") }
@@ -100,29 +98,32 @@ class ByScopeEndsTest {
             }
         }
         assertEquals(
-            listOf("if a" to 8, "def g(a, b)" to 8),
+            listOf("if a" to 8),
             ByScopeEnds.of(outline, document.immutableCharSequence).map { it.text to document.getLineNumber(it.end) },
         )
     }
 
     @Test
-    fun `async before def on the header's line belongs to the header`() = onEdt {
-        fixture.configureByText("c.by", "async def g():\n    pass\n")
+    fun `a decorated async def gets no echo, nor does a decorated class`() = onEdt {
+        fixture.configureByText("e.by", "@cache\nasync def g():\n    pass\n@frozen\nclass C:\n    pass\n")
         val document = fixture.editor.document
         val outline = OutlineSpec.outline(document) {
-            compound(modifiers = listOf("async" to "async")) { clause("def g():") { simple("pass") } }
+            compound(decorators = "@cache", name = "g") {
+                clause("async def g():", keyword = "def") { simple("pass") }
+            }
+            compound(decorators = "@frozen", name = "C") { clause("class C:") { simple("pass") } }
         }
-        assertEquals(listOf("async def g()"), ByScopeEnds.of(outline, document.immutableCharSequence).map { it.text })
+        assertEquals(emptyList<String>(), ByScopeEnds.of(outline, document.immutableCharSequence).map { it.text })
     }
 
     @Test
-    fun `a decorated async def is echoed from its async, where by starts its clause`() = onEdt {
-        fixture.configureByText("e.by", "@cache\nasync def g():\n    pass\n")
+    fun `async before for belongs to the header`() = onEdt {
+        fixture.configureByText("c.by", "async for x in xs:\n    pass\n")
         val document = fixture.editor.document
         val outline = OutlineSpec.outline(document) {
-            compound(decorators = "@cache") { clause("async def g():", keyword = "def") { simple("pass") } }
+            compound { clause("async for x in xs:", keyword = "for") { simple("pass") } }
         }
-        assertEquals(listOf("async def g()"), ByScopeEnds.of(outline, document.immutableCharSequence).map { it.text })
+        assertEquals(listOf("async for x in xs"), ByScopeEnds.of(outline, document.immutableCharSequence).map { it.text })
     }
 
     @Test
@@ -133,6 +134,6 @@ class ByScopeEndsTest {
         val drawn = fixture.editor.inlayModel.getBlockElementsInRange(0, fixture.editor.document.textLength)
             .filter { !it.properties.isShownAbove }
             .map { fixture.editor.document.getLineNumber(it.offset) to it.heightInPixels / fixture.editor.lineHeight }
-        assertEquals(listOf(8 to 1, 9 to 1, 10 to 2), drawn.sortedBy { it.first })
+        assertEquals(listOf(8 to 1, 9 to 1), drawn.sortedBy { it.first })
     }
 }

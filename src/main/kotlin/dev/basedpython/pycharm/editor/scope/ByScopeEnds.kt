@@ -15,8 +15,12 @@ data class ByScopeEnd(val end: Int, val header: Int, val column: Int, val text: 
 
 /**
  * The scope ends of a document, read off `by`'s outline of it ([ByOutline]): one for every compound
- * statement whose body is not on its header's line — a `def`, a `class`, an `if`, `for`, `while`,
- * `with`, `try` or `match`.
+ * statement whose body is not on its header's line — an `if`, `for`, `while`, `with`, `try` or
+ * `match`.
+ *
+ * A `def` or a `class`, a statement the outline gives a name, gets none: the editor already says
+ * which definition a line is in, in the breadcrumbs and the structure view, and an echo after every
+ * function and class would be a line of noise under each.
  *
  * A statement with several clauses is one scope: an `if` with its `elif`s and `else`, a `try` with
  * its handlers, a loop with its `else`, a `match` with its `case`s. Its echo comes after the last
@@ -34,12 +38,13 @@ object ByScopeEnds {
             for (statement in statements) {
                 val first = statement.clauses.firstOrNull() ?: continue
                 for (clause in statement.clauses) visit(clause.body, depth + 1)
+                if (statement.name != null) continue
                 // a trailing lambda's clause has no keyword and no header line of its own
                 if (first.keyword == null) continue
                 val colon = first.colon ?: continue
                 val end = statement.range.endOffset
                 if (onSameLine(text, colon.startOffset, end)) continue
-                val start = headerStart(text, statement, first)
+                val start = first.range.startOffset
                 val lineStart = lineStart(text, start)
                 val header = text.subSequence(start, colon.startOffset).toString()
                 found += ByScopeEnd(
@@ -53,19 +58,6 @@ object ByScopeEnds {
         }
         visit(outline.statements, 0)
         return found.sortedWith(compareBy({ it.end }, { -it.depth }))
-    }
-
-    /**
-     * Where the header of [statement] starts. `by` starts the statement at its first token, which on
-     * a decorated definition is the first decorator, lines above, and the first clause at its
-     * header, `async` included. So the statement's start where it is on the header's line, which
-     * keeps anything written before the clause on that line in the header, and the clause's
-     * otherwise.
-     */
-    private fun headerStart(text: CharSequence, statement: ByOutline.Statement, first: ByOutline.Clause): Int {
-        val statementStart = statement.range.startOffset
-        val clauseStart = first.range.startOffset
-        return if (onSameLine(text, statementStart, clauseStart)) statementStart else clauseStart
     }
 
     private fun onSameLine(text: CharSequence, from: Int, to: Int): Boolean =
