@@ -1,5 +1,6 @@
 package dev.basedpython.pycharm.debug
 
+import com.intellij.icons.AllIcons
 import com.intellij.openapi.application.readAction
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
@@ -26,6 +27,8 @@ import com.intellij.platform.lsp.api.LspClient
 import com.intellij.platform.lsp.util.getLsp4jPosition
 import com.intellij.platform.lsp.util.getOffsetInDocument
 import com.intellij.psi.PsiFile
+import com.intellij.ui.ColoredTextContainer
+import com.intellij.ui.SimpleTextAttributes
 import com.intellij.xdebugger.XExpression
 import com.intellij.xdebugger.XSourcePosition
 import com.intellij.xdebugger.evaluation.EvaluationMode
@@ -43,6 +46,7 @@ import dev.basedpython.pycharm.lsp.ext.ByEvaluatableExpression
 import dev.basedpython.pycharm.lsp.ext.ByEvaluatableExpressionParams
 import dev.basedpython.pycharm.lsp.ext.ByServerExtensions
 import dev.basedpython.pycharm.lsp.isMethodNotFound
+import dev.basedpython.pycharm.util.BasedPythonBundle
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import org.jetbrains.concurrency.AsyncPromise
@@ -98,6 +102,26 @@ private class ByStackFrame(
     }
 
     override fun getEvaluator(): XDebuggerEvaluator = byEvaluator
+
+    /**
+     * A frame at line 0 is at no line: DAP's lines start at 1, and bpd reports code `by` wrote with
+     * no line of its own — a helper pasted into `by repl` — at line 0, its source a name with no path
+     * and `origin` saying why. The platform drew it as `Unknown source`, or as `main.by:0:0` with a
+     * position one line above the file's first when it had a path, and keeps neither the name nor
+     * the reason of a source with no path, so the file is named only when there is one.
+     */
+    private val noLine: Boolean get() = frame.startPosition.line == 0
+
+    override fun getSourcePosition(): XSourcePosition? = if (noLine) null else super.getSourcePosition()
+
+    override fun customizePresentation(component: ColoredTextContainer) {
+        if (!noLine) return super.customizePresentation(component)
+        component.append(frame.name, SimpleTextAttributes.REGULAR_ATTRIBUTES)
+        frame.source?.let { component.append(", ${it.name}:", SimpleTextAttributes.REGULAR_ATTRIBUTES) }
+        val separator = if (frame.source == null) ", " else " "
+        component.append(separator + BasedPythonBundle.message("debug.frame.noLine"), SimpleTextAttributes.GRAYED_ATTRIBUTES)
+        component.setIcon(AllIcons.Debugger.Frame)
+    }
 }
 
 /**
