@@ -110,7 +110,7 @@ private fun VirtualFile.isBasedPythonSource(): Boolean = extension in SUPPORTED_
  * edit. Every file of that name goes, since only `by` knows which project root it belongs to; one
  * that is no project's lockfile gets nothing.
  */
-private fun VirtualFile.isByServerFile(): Boolean =
+internal fun VirtualFile.isByServerFile(): Boolean =
   isBasedPythonSource() || ByTemplateFiles.isTemplate(this) || name == API_LOCK
 
 /** The name `by` writes a project's API lockfile under, at the project's root. */
