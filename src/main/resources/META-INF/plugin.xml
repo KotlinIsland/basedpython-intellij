@@ -787,6 +787,9 @@
         <additionalTextAttributes scheme="Islands Dark" file="colorSchemes/unreachable/IslandsDark.xml"/>
         <additionalTextAttributes scheme="basedpython dark" file="colorSchemes/unreachable/BasedPythonDark.xml"/>
         <additionalTextAttributes scheme="basedpython Light" file="colorSchemes/unreachable/BasedPythonLight.xml"/>
+        <!-- by's Information and Hint diagnostics drawn as PyCharm's ty draws them; see ByDiagnosticColors. -->
+        <additionalTextAttributes scheme="Default" file="colorSchemes/diagnostics/Default.xml"/>
+        <additionalTextAttributes scheme="Darcula" file="colorSchemes/diagnostics/Darcula.xml"/>
         <bundledColorScheme path="/colorSchemes/BasedPythonDark"/>
         <bundledColorScheme path="/colorSchemes/BasedPythonLight"/>
         <postStartupActivity

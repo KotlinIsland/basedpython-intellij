@@ -14,6 +14,10 @@ import com.intellij.platform.lsp.api.customization.LspDiagnosticsSupport
 import dev.basedpython.pycharm.inspections.explain.ExplainRuleFix
 import dev.basedpython.pycharm.markup.ByCodeSpans
 import org.eclipse.lsp4j.Diagnostic
+import org.eclipse.lsp4j.DiagnosticSeverity
+import org.eclipse.lsp4j.DiagnosticTag
+import com.intellij.lang.annotation.HighlightSeverity
+import com.intellij.openapi.editor.colors.TextAttributesKey
 
 /**
  * Renders a server diagnostic's tooltip as the HTML a tooltip actually is.
@@ -53,7 +57,7 @@ internal class ByDiagnosticsSupport : LspDiagnosticsSupport() {
     ) {
         if (ExplainRuleFix.codeOf(diagnostic) == UNREACHABLE_CODE) return unreachable(holder, diagnostic, textRange, quickFixes)
         val code = ExplainRuleFix.codeOf(diagnostic)?.takeIf { ByRuleInspections.getInstance().mayBeRule(it) }
-            ?: return super.createAnnotation(holder, diagnostic, textRange, quickFixes)
+            ?: return plain(holder, diagnostic, textRange, quickFixes)
         val file = holder.currentAnnotationSession.file
         val drawn = ByRuleLevels.forDiagnostic(file.project, code, file)
         if (drawn == ByRuleLevels.Drawn.Hidden) return
@@ -67,11 +71,54 @@ internal class ByDiagnosticsSupport : LspDiagnosticsSupport() {
             }
         }
         getSpecialHighlightType(diagnostic)?.let { builder = builder.highlightType(it) }
+        // drawn as by reported it: as its kind of diagnostic is; at a severity of the profile's, as that severity is
+        if (drawn !is ByRuleLevels.Drawn.At) attributesKey(diagnostic)?.let { builder = builder.textAttributes(it) }
         for (fix in quickFixes) builder = builder.withFix(fix)
         val explain = builder.newFix(ExplainRuleFix(code))
         builder = (if (key != null) explain.key(key) else explain).registerFix()
         builder.create()
     }
+
+    /**
+     * A diagnostic that is no rule of `by`'s, drawn as the platform draws one, except that an
+     * Information or Hint is drawn as [attributesKey] says.
+     */
+    private fun plain(holder: AnnotationHolder, diagnostic: Diagnostic, textRange: TextRange, quickFixes: List<IntentionAction>) {
+        val severity = getHighlightSeverity(diagnostic) ?: return
+        var builder = holder.newAnnotation(severity, getMessage(diagnostic)).tooltip(getTooltip(diagnostic)).range(textRange)
+        if (textRange.isEmpty) {
+            val file = holder.currentAnnotationSession.file
+            val document = PsiDocumentManager.getInstance(file.project).getDocument(file)
+            if (document != null && textRange.startOffset == document.getLineEndOffset(document.getLineNumber(textRange.startOffset))) {
+                builder = builder.afterEndOfLine()
+            }
+        }
+        getSpecialHighlightType(diagnostic)?.let { builder = builder.highlightType(it) }
+        attributesKey(diagnostic)?.let { builder = builder.textAttributes(it) }
+        for (fix in quickFixes) builder = builder.withFix(fix)
+        builder.create()
+    }
+
+    /**
+     * Information and an untagged Hint as PyCharm's ty integration has them: an Information at the
+     * platform's weak-warning severity, a Hint at `INFORMATION`, which neither the Problems view nor
+     * the inspection widget counts. A Hint tagged `Unnecessary` or `Deprecated` keeps the platform's
+     * weak warning, whose layer its grey or strikethrough needs to be drawn over the code's colours.
+     */
+    override fun getHighlightSeverity(diagnostic: Diagnostic): HighlightSeverity? =
+        if (diagnostic.severity == DiagnosticSeverity.Hint && !isTagged(diagnostic)) HighlightSeverity.INFORMATION
+        else super.getHighlightSeverity(diagnostic)
+
+    /** The look of an untagged Information or Hint ([ByDiagnosticColors]); null for every other diagnostic. */
+    private fun attributesKey(diagnostic: Diagnostic): TextAttributesKey? = when {
+        isTagged(diagnostic) -> null
+        diagnostic.severity == DiagnosticSeverity.Information -> ByDiagnosticColors.INFORMATION
+        diagnostic.severity == DiagnosticSeverity.Hint -> ByDiagnosticColors.HINT
+        else -> null
+    }
+
+    private fun isTagged(diagnostic: Diagnostic): Boolean =
+        diagnostic.tags.orEmpty().any { it == DiagnosticTag.Unnecessary || it == DiagnosticTag.Deprecated }
 
     /**
      * Code `by` says is unreachable, from a `by` that colours it itself: each of its tokens carries

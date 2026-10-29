@@ -1,0 +1,17 @@
+<?xml version='1.0'?>
+<!-- How by's Information and Hint diagnostics are drawn: as PyCharm's ty integration draws them
+     (JBColor.BLUE wave, JBColor.GRAY bold dotted line); see ByDiagnosticColors. -->
+<list>
+  <option name="BASEDPYTHON_DIAGNOSTIC_HINT">
+    <value>
+      <option name="EFFECT_COLOR" value="808080"/>
+      <option name="EFFECT_TYPE" value="5"/>
+    </value>
+  </option>
+  <option name="BASEDPYTHON_DIAGNOSTIC_INFORMATION">
+    <value>
+      <option name="EFFECT_COLOR" value="589df6"/>
+      <option name="EFFECT_TYPE" value="2"/>
+    </value>
+  </option>
+</list>

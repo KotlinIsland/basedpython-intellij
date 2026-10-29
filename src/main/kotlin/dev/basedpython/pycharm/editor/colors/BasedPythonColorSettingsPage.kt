@@ -1,5 +1,6 @@
 package dev.basedpython.pycharm.editor.colors
 
+import dev.basedpython.pycharm.lsp.diagnostics.ByDiagnosticColors
 import com.intellij.codeHighlighting.RainbowHighlighter
 import com.intellij.lang.Language
 import com.intellij.openapi.editor.colors.TextAttributesKey
@@ -92,6 +93,8 @@ class BasedPythonColorSettingsPage : RainbowColorSettingsPage {
             // Inlay hints from `by`. Undefined in a scheme, the colour is derived from that
             // scheme's own text and background instead — see ByInlayColors.
             AttributesDescriptor("Inlay hint", ByInlayColors.HINT),
+            AttributesDescriptor("Diagnostics//Information", ByDiagnosticColors.INFORMATION),
+            AttributesDescriptor("Diagnostics//Hint", ByDiagnosticColors.HINT),
         ).let { descriptors ->
             // each token kind again, as unreachable code shows it: see ByUnreachableColors
             descriptors + descriptors.filter { it.key in ByUnreachableColors.BASES }
