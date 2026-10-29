@@ -1,5 +1,6 @@
 package dev.basedpython.pycharm.lsp.outline
 
+import com.intellij.util.messages.Topic
 import com.intellij.codeInsight.daemon.DaemonCodeAnalyzer
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ApplicationManager
@@ -171,6 +172,7 @@ internal class ByOutlines(private val project: Project) : Disposable {
     fun remember(document: Document, outline: ByOutline) {
         val file = FileDocumentManager.getInstance().getFile(document) ?: return
         answers[file] = outline
+        project.messageBus.syncPublisher(ByOutlineListener.TOPIC).outlineArrived(file)
     }
 
     /**
@@ -199,6 +201,7 @@ internal class ByOutlines(private val project: Project) : Disposable {
             ByAnswer.Failed -> return null
         }
         answers[virtualFile] = outline
+        project.messageBus.syncPublisher(ByOutlineListener.TOPIC).outlineArrived(virtualFile)
         return outline
     }
 
@@ -275,5 +278,18 @@ internal class ByOutlines(private val project: Project) : Disposable {
         private const val TIMEOUT_MS = 2_000
 
         fun getInstance(project: Project): ByOutlines = project.service()
+    }
+}
+
+/**
+ * Told when `by`'s outline of a file comes in, on whichever thread asked for it, so that what is
+ * drawn on the EDT from [ByOutlines.current] can be drawn again from the new one.
+ */
+internal fun interface ByOutlineListener {
+    fun outlineArrived(file: VirtualFile)
+
+    companion object {
+        @Topic.ProjectLevel
+        val TOPIC: Topic<ByOutlineListener> = Topic(ByOutlineListener::class.java, Topic.BroadcastDirection.NONE)
     }
 }

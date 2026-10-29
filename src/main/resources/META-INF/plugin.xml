@@ -810,6 +810,9 @@
             language="basedpython"
             isEnabledByDefault="true"
             implementationClass="dev.basedpython.pycharm.lsp.inlay.ByInlayHintsProvider"/>
+        <!-- Highlight on Caret Movement | Current scope for .by, which the platform finds only from
+             brace tokens; the block is by's outline. See ByCurrentScope. -->
+        <editorFactoryListener implementation="dev.basedpython.pycharm.editor.scope.ByCurrentScope$Editors"/>
         <!-- A dimmed "╰ for x in [1, 2]" line after each scope's last line, naming the header it
              closes; the scopes are by's outline. Its own entry under Inlay Hints, on by default. -->
         <codeInsight.inlayProvider
