@@ -3,10 +3,14 @@ package dev.basedpython.pycharm.editor
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import com.intellij.ui.breadcrumbs.BreadcrumbsProvider
 import com.intellij.psi.PsiElement
+import com.intellij.psi.PsiManager
+import com.intellij.psi.util.PsiUtilCore
+import com.intellij.util.FileContentUtilCore
 import dev.basedpython.pycharm.lsp.outline.OutlineSpec
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
 import dev.basedpython.pycharm.testFramework.onEdt
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNotSame
 import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -102,6 +106,29 @@ class ByBreadcrumbsProviderTest {
             provider.getParent(fixture.file.findElementAt(source.indexOf("return 0"))!!),
             provider.getParent(fixture.file.findElementAt(source.indexOf("0\n"))!!),
         )
+    }
+
+    /**
+     * A file's PSI made afresh over the same text — a reparse, a file type re-detected as a project
+     * opens — gets blocks of its own. The blocks used to be kept per outline alone, and the outline
+     * is the same for the same text, so the new file was handed the old file's blocks: invalid, and
+     * the platform's breadcrumbs collector reported "Invalid PSI Element: ByBlock … different
+     * providers" making a crumb of one.
+     */
+    @Test
+    fun `a file whose PSI is made again is given blocks of its own`() = onEdt {
+        configure()
+        val provider = ByBreadcrumbsProvider()
+        val before = provider.getParent(fixture.file.findElementAt(source.indexOf("return 0"))!!)!!
+        assertTrue(before.isValid)
+
+        FileContentUtilCore.reparseFiles(fixture.file.virtualFile)
+        val file = PsiManager.getInstance(fixture.project).findFile(fixture.file.virtualFile)!!
+        assertNotSame(before.containingFile, file, "the reparse made a new PSI file")
+        val after = provider.getParent(file.findElementAt(source.indexOf("return 0"))!!)!!
+        assertSame(file, after.containingFile)
+        assertTrue(after.isValid)
+        PsiUtilCore.ensureValid(after)
     }
 
     @Test

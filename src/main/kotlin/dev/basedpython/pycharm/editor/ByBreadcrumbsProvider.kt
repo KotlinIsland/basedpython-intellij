@@ -81,13 +81,25 @@ internal class ByBlock(
 @Service(Service.Level.PROJECT)
 internal class ByBlocks(private val project: Project) {
 
-    /** Weak keys: an outline replaced by a newer one takes its blocks with it. */
-    private val blocks: MutableMap<ByOutline, List<ByBlock>> = ContainerUtil.createConcurrentWeakMap()
+    /**
+     * The blocks made from each outline, and the file they were made for. Weak keys: an outline
+     * replaced by a newer one takes its blocks with it.
+     *
+     * The file is kept beside them because an outline is the text's, not the file's: when the
+     * platform makes a file's PSI again over the same text — a reparse, a file type re-detected as
+     * a project opens — the outline stays, and blocks made for the old file are invalid elements
+     * of a file that no longer exists. Handed out to the new file, the platform's breadcrumbs
+     * collector failed on one with *Invalid PSI Element: ByBlock … different providers*.
+     */
+    private val blocks: MutableMap<ByOutline, Built> = ContainerUtil.createConcurrentWeakMap()
+
+    private class Built(val file: PsiFile, val roots: List<ByBlock>)
 
     /** The innermost block holding [offset] in [file], or null outside any or with no outline. */
     fun innermost(file: BasedPythonFile, offset: Int): ByBlock? {
         val outline = ByOutlines.getInstance(project).forFile(file) ?: return null
-        val roots = blocks.getOrPut(outline) { build(file, outline) }
+        val roots = blocks[outline]?.takeIf { it.file === file }?.roots
+            ?: build(file, outline).also { blocks[outline] = Built(file, it) }
         var found: ByBlock? = null
         var level: List<ByBlock> = roots
         while (true) {
