@@ -41,14 +41,19 @@ class ByDebuggerSettingsTest {
         val settings = ByDebuggerSettings.getInstance()
         assertEquals(1, settings.createConfigurables(DebuggerSettingsCategory.GENERAL).size)
         assertEquals(1, settings.createConfigurables(DebuggerSettingsCategory.DATA_VIEWS).size)
-        assertTrue(settings.createConfigurables(DebuggerSettingsCategory.STEPPING).isEmpty(), "bpd has no step filters")
+        // just my code: bpd has no step filters, and that is the one stepping choice it has
+        assertEquals(1, settings.createConfigurables(DebuggerSettingsCategory.STEPPING).size)
     }
 
     @Test
     fun `untouched, only bpd's own defaults for the two switches are said and no bound is`() = onEdt {
         withSettings({}) { settings ->
             assertEquals(
-                mapOf("stopTheWorld" to false, "variables" to mapOf("attributes" to true, "repr" to false)),
+                mapOf(
+                    "stopTheWorld" to false,
+                    "justMyCode" to true,
+                    "variables" to mapOf("attributes" to true, "repr" to false),
+                ),
                 settings.launchArguments(),
             )
         }
@@ -58,6 +63,7 @@ class ByDebuggerSettingsTest {
     fun `every bound set is sent under bpd's name for it`() = onEdt {
         withSettings({
             stopTheWorld = true
+            justMyCode = false
             depth = 1
             children = 5
             text = 12
@@ -68,6 +74,7 @@ class ByDebuggerSettingsTest {
             assertEquals(
                 mapOf(
                     "stopTheWorld" to true,
+                    "justMyCode" to false,
                     "variables" to mapOf(
                         "depth" to 1, "children" to 5, "text" to 12, "budget" to 64,
                         "attributes" to false, "repr" to true,
@@ -75,6 +82,13 @@ class ByDebuggerSettingsTest {
                 ),
                 settings.launchArguments(),
             )
+        }
+    }
+
+    @Test
+    fun `just my code is the page's own checkbox, off when it is cleared`() = onEdt {
+        withSettings({ justMyCode = false }) { settings ->
+            assertEquals(false, settings.launchArguments()["justMyCode"])
         }
     }
 
@@ -93,6 +107,7 @@ class ByDebuggerSettingsTest {
                 val arguments = provider.getLaunchArguments(project, configuration).arguments
                 assertEquals(false, arguments["stopOnEntry"])
                 assertEquals(false, arguments["stopTheWorld"])
+                assertEquals(true, arguments["justMyCode"])
                 assertEquals(1, (arguments["variables"] as Map<*, *>)["depth"])
             }
         } finally {

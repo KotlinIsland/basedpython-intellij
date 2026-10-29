@@ -260,7 +260,10 @@ not.
   transpiled program lives in a temp directory pydevd does not count as project code, and setting
   `IDE_PROJECT_ROOTS` to that directory does not change the verdict. Both filters are offered
   without it. This does mean **On raise** stops on exceptions the program catches deliberately,
-  which is why it is off by default.
+  which is why it is off by default. Under **bpd** the session's `justMyCode` is the library choice
+  for every exception stop — a library's raise stops where it reaches the program's code — and it
+  is the basedpython checkbox under *Debugger | Stepping*, on by default. PyCharm's own *Do not
+  step into library scripts* is not read: `PyDebuggerSettings` is internal API.
 - **Local only.** The bootstrap resolves paths on the machine that runs the interpreter.
 - **Paths have to agree.** A breakpoint's file comes from `VirtualFile.path`; the map's comes from
   `_by_sourcemap.py`. pydevd matches them after `normcase` and `absolute_path`, which is not

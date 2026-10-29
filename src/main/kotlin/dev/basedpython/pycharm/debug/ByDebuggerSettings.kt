@@ -21,8 +21,11 @@ import kotlin.reflect.KMutableProperty0
  * Only what `bpd_dap::Configuration` reads, and only what can work from this IDE. That leaves out
  * more than it might seem to:
  *
- *  - **no step filters, no "step into my code"**. bpd has neither: nothing in its launch
- *    configuration filters stepping, so a checkbox for it would be one bpd never reads
+ *  - **no step filters**. bpd has none: what it steps through is library code, and whether it does
+ *    is `justMyCode`, the one stepping setting here. It is this page's rather than PyCharm's *Do not
+ *    step into library scripts*, which PyCharm sends as `justMyCode` to its own DAP python
+ *    sessions: `PyDebuggerSettings` is internal API, which the plugin verifier refuses, and the
+ *    platform has no setting of its own for it
  *  - **no `debugChildren`**. bpd refuses it at `launch` unless the client says in `initialize`
  *    that it answers the `startDebugging` reverse request, and the platform's client says so only
  *    when a customization supplies that support, which this plugin's does not — so turning it on
@@ -30,7 +33,8 @@ import kotlin.reflect.KMutableProperty0
  *  - **no `console`**. A terminal is the `runInTerminal` reverse request, refused the same way, and
  *    a `.by` program's console is the run configuration's own anyway ([ByDebugAdapterDescriptor])
  *
- * What is left: whether a stop holds every thread, and how much of a value bpd reads. The value
+ * What is left: whether a stop holds every thread, whether library code is stepped and stopped in,
+ * and how much of a value bpd reads. The value
  * bounds are worth a page of their own because bpd says when one bit — a value it cut short reads
  * `100 children, of which the request allowed 100. ask again with a larger children` — and a user
  * needs somewhere to give it a larger one.
@@ -44,6 +48,9 @@ class ByDebuggerSettings : XDebuggerSettings<ByDebuggerSettings.State>(ID) {
     class State {
         /** `stopTheWorld`: every thread is held for the length of a stop, not only the one that stopped. */
         var stopTheWorld: Boolean = false
+
+        /** `justMyCode`: step and stop only in the program's own code. On, as in bpd and debugpy. */
+        var justMyCode: Boolean = true
 
         /**
          * `variables.depth`, or null for bpd's own. What an evaluated value — Evaluate, a watch, a
@@ -86,13 +93,16 @@ class ByDebuggerSettings : XDebuggerSettings<ByDebuggerSettings.State>(ID) {
     override fun createConfigurables(category: DebuggerSettingsCategory): Collection<Configurable> = when (category) {
         DebuggerSettingsCategory.GENERAL -> listOf(GeneralConfigurable(state))
         DebuggerSettingsCategory.DATA_VIEWS -> listOf(DataViewsConfigurable(state))
+        DebuggerSettingsCategory.STEPPING -> listOf(SteppingConfigurable(state))
         else -> emptyList()
     }
 
     /**
-     * What bpd's `launch` gets from these settings: `stopTheWorld`, and a `variables` object naming
-     * only the bounds that are set. Every key is one `bpd_dap::Configuration` reads, and bpd refuses
-     * a misspelled one rather than ignoring it.
+     * What bpd's `launch` gets from these settings: `stopTheWorld`, `justMyCode`, and a `variables`
+     * object naming only the bounds that are set. Every key is one `bpd_dap::Configuration` reads,
+     * and bpd refuses a misspelled bound rather than ignoring it. A bpd from before `justMyCode`
+     * ignores the key, as it ignores every top-level key it does not read, and stops and steps in
+     * everything, as it always did.
      */
     fun launchArguments(): Map<String, Any> {
         val variables = buildMap<String, Any> {
@@ -103,7 +113,19 @@ class ByDebuggerSettings : XDebuggerSettings<ByDebuggerSettings.State>(ID) {
             put("attributes", state.attributes)
             put("repr", state.repr)
         }
-        return mapOf("stopTheWorld" to state.stopTheWorld, "variables" to variables)
+        return mapOf("stopTheWorld" to state.stopTheWorld, "justMyCode" to state.justMyCode, "variables" to variables)
+    }
+
+    /** *Stepping | basedpython*: just my code. */
+    private class SteppingConfigurable(private val state: State) :
+        BoundConfigurable(BasedPythonBundle.message("debug.settings.displayName")) {
+        override fun createPanel(): DialogPanel = panel {
+            row {
+                checkBox(BasedPythonBundle.message("debug.settings.justMyCode"))
+                    .bindSelected(state::justMyCode)
+                    .comment(BasedPythonBundle.message("debug.settings.justMyCode.comment"))
+            }
+        }
     }
 
     private class GeneralConfigurable(private val state: State) :
