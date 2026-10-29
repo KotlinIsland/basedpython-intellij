@@ -810,6 +810,12 @@
             language="basedpython"
             isEnabledByDefault="true"
             implementationClass="dev.basedpython.pycharm.lsp.inlay.ByInlayHintsProvider"/>
+        <!-- A dimmed "╰ for x in [1, 2]" line after each scope's last line, naming the header it
+             closes; the scopes are by's outline. Its own entry under Inlay Hints, on by default. -->
+        <codeInsight.inlayProvider
+            language="basedpython"
+            isEnabledByDefault="true"
+            implementationClass="dev.basedpython.pycharm.editor.scope.ByScopeEndInlayProvider"/>
         <!-- basedpython on Settings | Editor | Inlay Hints: the language's switch, and a checkbox for each
              kind of hint by computes, reading and writing the same modes as Settings | basedpython. -->
         <config.inlaySettingsProvider implementation="dev.basedpython.pycharm.lsp.inlay.ByInlaySettingsProvider"/>
