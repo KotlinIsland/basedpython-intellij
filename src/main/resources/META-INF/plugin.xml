@@ -337,9 +337,6 @@
             enabledByDefault="true"
             level="ERROR"
             implementationClass="dev.basedpython.pycharm.lsp.diagnostics.ByDiagnosticsInspection"/>
-        <!-- A range by tags Unnecessary is grey throughout: the platform draws it on the same layer
-             as the semantic tokens inside it, which win; see ByUnnecessaryShading. -->
-        <editorFactoryListener implementation="dev.basedpython.pycharm.lsp.diagnostics.ByUnnecessaryShading$Editors"/>
         <localInspection
             language="basedpython"
             groupName="basedpython"
