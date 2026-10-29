@@ -116,6 +116,16 @@ class ByScopeEndsTest {
     }
 
     @Test
+    fun `a decorated async def is echoed from its async, where by starts its clause`() = onEdt {
+        fixture.configureByText("e.by", "@cache\nasync def g():\n    pass\n")
+        val document = fixture.editor.document
+        val outline = OutlineSpec.outline(document) {
+            compound(decorators = "@cache") { clause("async def g():", keyword = "def") { simple("pass") } }
+        }
+        assertEquals(listOf("async def g()"), ByScopeEnds.of(outline, document.immutableCharSequence).map { it.text })
+    }
+
+    @Test
     fun `the editor draws one line per echo below the scope's last line`() = onEdt {
         fixture.configureByText("d.by", morgans)
         OutlineSpec.remember(fixture.project, fixture.editor.document, morgansOutline)

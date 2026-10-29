@@ -56,10 +56,11 @@ object ByScopeEnds {
     }
 
     /**
-     * Where the header of [statement] starts. `by` starts the first clause at its keyword, after an
-     * `async` or a basedpython modifier written before it on the same line, and starts the
-     * statement at its first token, which on a decorated definition is the first decorator, lines
-     * above. So the statement's start where it is on the header's line, and the clause's otherwise.
+     * Where the header of [statement] starts. `by` starts the statement at its first token, which on
+     * a decorated definition is the first decorator, lines above, and the first clause at its
+     * header, `async` included. So the statement's start where it is on the header's line, which
+     * keeps anything written before the clause on that line in the header, and the clause's
+     * otherwise.
      */
     private fun headerStart(text: CharSequence, statement: ByOutline.Statement, first: ByOutline.Clause): Int {
         val statementStart = statement.range.startOffset
