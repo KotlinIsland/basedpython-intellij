@@ -24,10 +24,10 @@ enum class PyFileHandling(val id: String, val display: String) {
     AUTO("auto", "Only when no Python plugin is installed"),
 
     /** Never re-type `.py`. Leave them to the Python plugin, or to plain text. */
-    NEVER("never", "Never — leave .py to the Python plugin"),
+    NEVER("never", "Never: leave .py to the Python plugin"),
 
     /** Always re-type `.py` in a basedpython project, Python plugin or not. */
-    ALWAYS("always", "Always — treat .py as basedpython"),
+    ALWAYS("always", "Always"),
     ;
 
     companion object {

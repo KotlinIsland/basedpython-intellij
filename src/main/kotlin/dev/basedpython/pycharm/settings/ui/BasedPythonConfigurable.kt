@@ -171,7 +171,7 @@ internal class BasedPythonConfigurable(private val project: Project) : Configura
                     .comment("Hold this key to see the hints set to show while it is held.")
             }
             group("Python interop") {
-                row("Treat .py as basedpython:") { cell(pyFileHandlingCombo) }
+                row("Apply to .py files:") { cell(pyFileHandlingCombo) }
                     .comment(
                         "Only affects who owns the .py file type. The by server still checks .py " +
                             "files in a basedpython project either way.",
