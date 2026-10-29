@@ -1,5 +1,6 @@
 package dev.basedpython.pycharm.lsp
 
+import com.google.gson.JsonObject
 import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.execution.process.BaseProcessHandler
 import com.intellij.execution.process.ProcessEvent
@@ -245,10 +246,21 @@ internal class ByLspServerDescriptor(
    * kind of its own — a docstring, a function's body, a long string — only to a client that lists
    * it, and the folding builder folds each by default under its own option. The platform lists
    * `imports` and `region` only.
+   *
+   * And `experimental.languageInjection` while *Language injection* is on: it tells `by` that this
+   * client injects the fragments `by/injections` reports, so `by` leaves such a string without its
+   * `string` semantic token. The platform draws every semantic token above an injected fragment's
+   * own highlighting, so with the token there the fragment was drawn in the string's green: a
+   * `# language=javascript` string had JavaScript's background and none of its colours (measured
+   * in PyCharm 263.7607 on `by` a110d7d8). With injection off nothing paints the fragment, and
+   * `by` keeps the token.
    */
   override val clientCapabilities: ClientCapabilities
     get() = super.clientCapabilities.apply {
       textDocument.foldingRange.foldingRangeKind.valueSet = FOLDING_RANGE_KINDS
+      if (BasedPythonSettings.getInstance(project).byLanguageInjection) {
+        experimental = JsonObject().apply { addProperty("languageInjection", true) }
+      }
     }
 
   override fun createInitializationOptions(): Any =

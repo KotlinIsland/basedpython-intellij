@@ -1,5 +1,6 @@
 package dev.basedpython.pycharm.lsp
 
+import com.google.gson.JsonObject
 import com.intellij.platform.lsp.api.customization.LspCallHierarchyDisabled
 import com.intellij.platform.lsp.api.customization.LspCodeActionsSupport
 import com.intellij.platform.lsp.api.customization.LspCodeLensDisabled
@@ -394,6 +395,17 @@ class LspServerDescriptorTest {
       ),
       hints.keys,
     )
+  }
+
+  @Test
+  fun `by is told this client injects the fragments it reports while language injection is on`() = onEdt {
+    // `by` leaves a fragment's string without its `string` semantic token only for a client that
+    // says so, under this name; with the token there it is drawn over the injected highlighting
+    fun sent(): Any? = (byDescriptor().clientCapabilities.experimental as? JsonObject)
+      ?.get("languageInjection")?.asBoolean
+    assertEquals(true, sent())
+    BasedPythonSettings.getInstance(project).byLanguageInjection = false
+    assertEquals(null, sent())
   }
 
   @AfterEach
