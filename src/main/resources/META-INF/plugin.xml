@@ -494,6 +494,9 @@
              says they are written in, as .py's are. See lsp.usages.ByStructureGroupingRule. -->
         <fileStructureGroupRuleProvider
             implementation="dev.basedpython.pycharm.lsp.usages.ByStructureGroupRuleProvider"/>
+        <!-- Show Import Statements for .by usages: off, the ones by says are in an import are
+             hidden. See lsp.usages.ByImportFilteringRule. -->
+        <importFilteringRule implementation="dev.basedpython.pycharm.lsp.usages.ByImportFilteringRule"/>
         <!-- The gutter's R after a declared name is edited in place, renaming its uses through by's
              textDocument/rename; the processor is the rename it runs. -->
         <suggestedRefactoringSupport

@@ -26,7 +26,12 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
+import com.intellij.usageView.UsageInfo
+import com.intellij.usages.UsageInfo2UsageAdapter
+import com.intellij.usages.UsageTarget
+import com.intellij.usages.impl.rules.ImportUsageFilteringRule
 import com.intellij.usages.impl.rules.UsageType
+import com.intellij.usages.impl.rules.UsageWithType
 import dev.basedpython.pycharm.lsp.ext.ByReference
 import org.junit.jupiter.api.Test
 
@@ -100,6 +105,39 @@ class ByFindUsagesTest {
             found.map { it as PsiUsage }.map { "${it.range.substring(usesSource)}@${it.range.startOffset}" to it.usageType },
         )
         assertEquals(UsageType.READ, (found.last() as PsiUsage).createPointer().dereference()!!.usageType, "a pointer keeps the type")
+    }
+
+    /**
+     * With *Show Import Statements* off, the platform's rule asks every `importFilteringRule` of each
+     * usage in the view, which carries the type `by` gave it — as the platform's own adapter of a
+     * `PsiUsage`, `Psi2UsageInfo2UsageAdapter`, does. Python's rule and Java's look for an import in
+     * their own PSI, so before this a `.by` import was listed with the toggle off.
+     */
+    @Test
+    fun `with Show Import Statements off, a usage by says is in an import is hidden, and no other`() = onEdt {
+        val psi = fixture.configureByText("shapes.by", usesSource) as BasedPythonFile
+        val target = BySearchTarget.at(psi, psi.virtualFile, usesSource.indexOf("Circle"))!!
+        val client = client(psi.virtualFile) {
+            answered(
+                listOf(
+                    ByReference(URI, Range(Position(3, 19), Position(3, 25)), "import"),
+                    ByReference(URI, Range(Position(4, 3), Position(4, 9)), "typeHint"),
+                    ByReference(URI, Range(Position(4, 12), Position(4, 18)), "read"),
+                    ByReference(URI, Range(Position(4, 12), Position(4, 18)), null),
+                ),
+            )
+        }
+        val found = mutableListOf<Usage>()
+        withContext(Dispatchers.Default) { ByUsageSearcher().usages(client, target) { found += it; true } }
+        val inView = found.map { it as PsiUsage }.map { usage ->
+            object : UsageInfo2UsageAdapter(UsageInfo(psi, usage.range.startOffset, usage.range.endOffset)), UsageWithType {
+                override fun getUsageType(): UsageType? = usage.usageType
+            }
+        }
+        assertEquals(
+            listOf(false, true, true, true),
+            inView.map { ImportUsageFilteringRule.isVisible(it, UsageTarget.EMPTY_ARRAY) },
+        )
     }
 
     @Test
