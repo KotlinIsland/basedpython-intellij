@@ -5,6 +5,7 @@ import com.intellij.openapi.actionSystem.CommonShortcuts
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
+import com.intellij.openapi.components.serviceIfCreated
 import com.intellij.openapi.editor.Inlay
 import com.intellij.openapi.editor.event.DocumentEvent
 import com.intellij.openapi.editor.event.DocumentListener
@@ -143,7 +144,7 @@ class ByLogpointField private constructor(
     fun close() {
         if (closed) return
         closed = true
-        fieldsIn(hostEditor)?.let { open -> if (open[breakpoint] === this) open.remove(breakpoint) }
+        openIn(hostEditor)?.let { open -> if (open[breakpoint] === this) open.remove(breakpoint) }
         Disposer.dispose(this)
     }
 
@@ -235,7 +236,7 @@ class ByLogpointField private constructor(
         }
 
         /** The box showing for [breakpoint] in [editor], if any. */
-        fun of(editor: EditorEx, breakpoint: XLineBreakpoint<*>): ByLogpointField? = fieldsIn(editor)?.get(breakpoint)
+        fun of(editor: EditorEx, breakpoint: XLineBreakpoint<*>): ByLogpointField? = openIn(editor)?.get(breakpoint)
 
         /**
          * The boxes open in [editor], keyed by their log point.
@@ -252,6 +253,21 @@ class ByLogpointField private constructor(
          */
         private fun fieldsIn(editor: EditorEx): MutableMap<XLineBreakpoint<*>, ByLogpointField>? =
             editor.project?.service<ByLogpointFieldRegistry>()?.fieldsIn(editor)
+
+        /**
+         * The boxes open in [editor], for looking one up or taking it away: never brings the
+         * registry into being, which only [show] has a reason to do.
+         *
+         * Which is what lets the plugin unload. The platform unregisters this plugin's services and
+         * only then removes the breakpoint type, removing every `.by` breakpoint with it — and
+         * [ByLogpointFields] hears each removal and asks for its box. Asking with `service` then,
+         * after the registry has been unregistered and closed every box, logged *"Cannot find service
+         * ByLogpointFieldRegistry"* as a SEVERE when a project with a `.by` breakpoint in it
+         * unloaded the plugin. A registry that does not exist has no boxes, which is the true answer
+         * then and the true answer in a project that has never shown one.
+         */
+        private fun openIn(editor: EditorEx): MutableMap<XLineBreakpoint<*>, ByLogpointField>? =
+            editor.project?.serviceIfCreated<ByLogpointFieldRegistry>()?.openIn(editor)
 
         private fun expressionOf(text: String) = ByLogpoints.expressionOf(text)
 
@@ -571,6 +587,10 @@ internal class ByLogpointFieldRegistry : Disposable {
 
     fun fieldsIn(editor: EditorEx): MutableMap<XLineBreakpoint<*>, ByLogpointField> =
         synchronized(byEditor) { byEditor.getOrPut(editor) { mutableMapOf() } }
+
+    /** The boxes open in [editor], without starting an entry for an editor that has none. */
+    fun openIn(editor: EditorEx): MutableMap<XLineBreakpoint<*>, ByLogpointField>? =
+        synchronized(byEditor) { byEditor[editor] }
 
     override fun dispose() {
         // Copied out first: closing a box removes it from the map it was found in.
