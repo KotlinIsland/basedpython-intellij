@@ -1,6 +1,7 @@
 package dev.basedpython.pycharm.testFramework
 
 import com.intellij.openapi.editor.Document
+import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.platform.lsp.api.LspClient
@@ -91,7 +92,11 @@ class RecordingByClient(project: Project) : LspClient {
 
     override fun getDocumentIdentifier(file: VirtualFile) = TextDocumentIdentifier(descriptor.getFileUri(file))
 
-    override fun getDocumentVersion(document: Document): Int = -1
+    /** Files the platform's own client stands in as having open: their version reads as the one it sent. */
+    val platformOpened: MutableSet<VirtualFile> = mutableSetOf()
+
+    override fun getDocumentVersion(document: Document): Int =
+        if (FileDocumentManager.getInstance().getFile(document) in platformOpened) 1 else 0
 
     override fun nextDocumentVersion(document: Document): Int = -1
 

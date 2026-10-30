@@ -104,7 +104,66 @@ class ByServerDocumentsTest {
     }
 
     @Test
-    fun `closing the last editor on a file closes it, and asking again opens it again`() = onEdt {
+    fun `a file outside the content roots open in an editor is the platform's to sync`() = onEdt {
+        val client = RecordingByClient(fixture.project)
+        val file = outside("stub.pyi", "x: int\n")
+        fixture.openFileInEditor(file)
+
+        ensureOpen(client, file)
+        edit(file, "y: int\n")
+
+        assertEquals(emptyList<String>(), client.sent)
+    }
+
+    @Test
+    fun `a file the platform still has open, with no editor on it, is the platform's to sync`() = onEdt {
+        val client = RecordingByClient(fixture.project)
+        val file = outside("unsaved.by", "x = 1\n")
+        client.platformOpened += file
+
+        ensureOpen(client, file)
+
+        assertEquals(emptyList<String>(), client.sent)
+    }
+
+    @Test
+    fun `a file opened here is closed when an editor opens it, before the platform opens it`() = onEdt {
+        val client = RecordingByClient(fixture.project)
+        val file = outside("handed.by", "x = 1\n")
+        ensureOpen(client, file)
+
+        fixture.openFileInEditor(file)
+        ensureOpen(client, file)
+        edit(file, "y = 2\n")
+
+        assertEquals(listOf("open handed.by v1 x = 1", "close handed.by"), client.sent)
+    }
+
+    @Test
+    fun `an excluded file stays this one's when an editor opens it, since the platform never opens it`() = onEdt {
+        val client = RecordingByClient(fixture.project)
+        val root = fixture.tempDirFixture.findOrCreateDir("excluded")
+        val file = WriteAction.computeAndWait<VirtualFile, Exception> {
+            root.createChildData(this, "ignored.by").also { it.setBinaryContent("x = 1\n".toByteArray()) }
+        }
+        PsiTestUtil.addExcludedRoot(fixture.module, root)
+        try {
+            fixture.openFileInEditor(file)
+            ensureOpen(client, file)
+            edit(file, "y = 2\n")
+        } finally {
+            PsiTestUtil.removeExcludedRoot(fixture.module, root)
+        }
+
+        // The last close is the roots changing back, which hands every file over.
+        assertEquals(
+            listOf("open ignored.by v1 x = 1", "change ignored.by v2 y = 2\nx = 1", "close ignored.by"),
+            client.sent,
+        )
+    }
+
+    @Test
+    fun `closing the last editor on a file hands it back, and asking again opens it here`() = onEdt {
         val client = RecordingByClient(fixture.project)
         val file = outside("closed.by", "x = 1\n")
         fixture.openFileInEditor(file)
@@ -113,7 +172,7 @@ class ByServerDocumentsTest {
         FileEditorManager.getInstance(fixture.project).closeFile(file)
         ensureOpen(client, file)
 
-        assertEquals(listOf("open closed.by v1 x = 1", "close closed.by", "open closed.by v1 x = 1"), client.sent)
+        assertEquals(listOf("open closed.by v1 x = 1"), client.sent)
     }
 
     @Test

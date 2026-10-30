@@ -38,33 +38,27 @@ import java.util.WeakHashMap
  *
  * `by` answers no document request — hover, semantic tokens, symbols — for a file it has not been
  * sent `textDocument/didOpen` for; the reply is *"Document … is not open in the session"*. The
- * platform normally handles that, but it declines for a whole class of files:
+ * platform's client opens a file only while it is open in an editor, and never one under an
+ * excluded directory (`LspOpenedFilesService`, `LspDocumentSyncManager.getFilesToClose`). A
+ * feature asks about others too: a file a rename or an override search reaches, one a debugger
+ * evaluates in, an excluded file being edited.
  *
- * ```java
- * // LspClientImpl.isSupportedFile
- * if (!ProjectFileIndex.getInstance(project).isInContent(file)) return false;
- * ```
- *
- * *Content*, not *project*. A stdlib stub is a library file — `isInLibrary` is true, which is what
- * Reader Mode asks — but it is not under a module content root, so the client never syncs it and
- * every request about it comes back empty. That is why goto-definition lands you in a typeshed stub
- * where nothing else works, and no amount of registering that root as a library changes it: library
- * and content are different questions, and the client asks the other one. Nor can a descriptor
- * change the answer — the check runs before `isSupportedFile` is consulted, and the one widening the
- * API has (`isSupportedLibraryFile`) is for files inside archives. The same goes for a scratch file
- * and for anything under an excluded directory, and those can be edited.
- *
- * The protocol has no such restriction, and neither does `by`. So for a file the client has ruled
- * out, this does the client's job itself, and the whole of it rather than the first step:
+ * Each file has one owner on a server, or `by` is told twice: a second `didOpen` replaces the
+ * first, and the second `didClose` is an error (*"document not found for key"*). The platform owns
+ * a file it has open — [LspClient.getDocumentVersion] is above zero from its `didOpen` until its
+ * `didClose` — or is about to open: one in an editor and not excluded, whose `didOpen` it sends
+ * later, from the EDT. A file under a content root is left to the platform as well, as it always has
+ * been. Everything else is this one's, and this does the client's job for it, the whole of it rather
+ * than the first step:
  *
  *  - **open** once, the first time a feature asks about the file ([ensureOpen]);
  *  - **change** on every edit to the file's document, with the version counting up, so the server
  *    reads the text the offsets in the next request are counted in — a snapshot that stopped at the
  *    open would put every answer about an edited scratch file in the wrong place;
- *  - **close** when the file stops being open in any editor, when it is moved, renamed or deleted
- *    (its URI is about to stop meaning anything), and *before* the project's roots change — because
- *    a file that becomes content is one the platform is about to open itself, and a server that
- *    still had it open from here would be told twice.
+ *  - **close** when the file stops being open in any editor; when an editor opens it, before the
+ *    platform's `didOpen` for it goes out, which is the platform taking it over; when it is moved,
+ *    renamed or deleted (its URI is about to stop meaning anything); and *before* the project's roots
+ *    change, because a file that becomes content or stops being excluded is the platform's.
  *
  * A closed file is opened again the next time something asks about it, so a close is never a
  * feature switched off, only a snapshot let go.
@@ -96,6 +90,10 @@ internal class ByServerDocuments(private val project: Project) : Disposable {
         connection.subscribe(
             FileEditorManagerListener.FILE_EDITOR_MANAGER,
             object : FileEditorManagerListener {
+                override fun fileOpened(source: FileEditorManager, file: VirtualFile) {
+                    if (!isExcluded(file)) close(file)
+                }
+
                 override fun fileClosed(source: FileEditorManager, file: VirtualFile) {
                     if (!source.isFileOpen(file)) close(file)
                 }
@@ -130,20 +128,30 @@ internal class ByServerDocuments(private val project: Project) : Disposable {
      * about a file that may sit outside the project's content roots.
      */
     fun ensureOpen(client: LspClient, file: VirtualFile) {
-        // Under a content root the platform syncs the file, including edits; nothing to do, and
-        // opening it a second time is an error on the server.
-        if (ProjectFileIndex.getInstance(project).isInContent(file)) return
         val document = FileDocumentManager.getInstance().getDocument(file) ?: return
 
         synchronized(lock) {
             val files = opened.getOrPut(client) { HashMap() }
             if (file in files) return
+            // Asked under the lock that [close] takes when an editor opens the file, so either this
+            // sees the editor, or its open is recorded in time for that close.
+            if (isPlatforms(client, file, document)) return
             val uri = client.descriptor.getFileUri(file)
             val item = TextDocumentItem(uri, client.descriptor.getLanguageId(file), 1, document.text)
             files[file] = Opened(uri, 1)
             client.sendNotification { it.textDocumentService.didOpen(DidOpenTextDocumentParams(item)) }
         }
     }
+
+    /** Whether the platform's client has [file] open on [client], or is about to (see the class's comment). */
+    private fun isPlatforms(client: LspClient, file: VirtualFile, document: Document): Boolean =
+        ProjectFileIndex.getInstance(project).isInContent(file) ||
+            client.getDocumentVersion(document) > 0 ||
+            (FileEditorManager.getInstance(project).isFileOpen(file) && !isExcluded(file))
+
+    /** A file the platform never opens, as `LspDocumentSyncManager.getFilesToClose` says. */
+    private fun isExcluded(file: VirtualFile): Boolean =
+        file.isInLocalFileSystem && ProjectFileIndex.getInstance(project).isExcluded(file)
 
     /** Sends [document]'s whole new text to every server this opened its file on. */
     private fun changed(document: Document) {
