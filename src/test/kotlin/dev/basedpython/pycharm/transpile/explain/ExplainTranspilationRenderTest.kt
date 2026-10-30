@@ -16,13 +16,27 @@ class ExplainTranspilationRenderTest {
     private fun render(note: ByTranspilationNote) =
         ExplainTranspilationAction.renderHtml("main.by", listOf(note))
 
-    private fun note(explanation: String, snippet: String = "a ?? b") =
+    private fun note(explanation: String, snippet: String = "a ?? b", line: Int = 1) =
         ByTranspilationNote(
             construct = "null-coalescing",
             snippet = snippet,
             explanation = explanation,
-            line = 1,
+            line = line,
         )
+
+    @Test
+    fun `the report names the file and each construct's line`() {
+        val html = render(note("plain text", line = 1234))
+        assertTrue(html.contains("<b>Explain Transpilation: main.by</b>"), html)
+        // A line number is not a quantity: 1234, never MessageFormat's 1,234.
+        assertTrue(html.contains("<b>null-coalescing</b> (line 1234)<br/>"), html)
+    }
+
+    @Test
+    fun `a file with nothing to explain says so`() {
+        val html = ExplainTranspilationAction.renderHtml("main.by", emptyList())
+        assertTrue(html.contains("<i>No basedpython-specific constructs were recognized.</i>"), html)
+    }
 
     @Test
     fun `code spans in explanations render as code elements`() {

@@ -17,6 +17,7 @@ import com.intellij.openapi.vfs.VirtualFile
 import dev.basedpython.pycharm.actions.ByCli
 import dev.basedpython.pycharm.lang.BasedPythonFileType
 import dev.basedpython.pycharm.lsp.build.ByBuildOutputs
+import dev.basedpython.pycharm.util.BasedPythonBundle
 import java.nio.file.Path
 import java.nio.file.Paths
 
@@ -41,7 +42,7 @@ class GoToGeneratedPyAction : AnAction() {
         val file = e.getData(CommonDataKeys.VIRTUAL_FILE) ?: return
 
         ProgressManager.getInstance().run(
-            object : Task.Backgroundable(project, "Finding the generated .py…", true) {
+            object : Task.Backgroundable(project, BasedPythonBundle.message("transpile.goToGenerated.progress"), true) {
                 override fun run(indicator: ProgressIndicator) {
                     val answer = ByBuildOutputs.getInstance(project).of(file)
                     val generated = answer?.generated
@@ -49,8 +50,8 @@ class GoToGeneratedPyAction : AnAction() {
                     if (generated == null || root == null) {
                         ByCli.notifyError(
                             project,
-                            "Go to Generated .py",
-                            "`by` did not say where ${file.name} is built to. Is the `by` language server running?",
+                            BasedPythonBundle.message("transpile.goToGenerated.title"),
+                            BasedPythonBundle.message("transpile.noBuildOutput", file.name),
                         )
                         return
                     }
@@ -66,8 +67,8 @@ class GoToGeneratedPyAction : AnAction() {
     private fun offerBuild(project: Project, root: Path, generated: Path) {
         val choice = Messages.showYesNoDialog(
             project,
-            "Generated file not found:\n$generated\n\nRun by build to generate it?",
-            "Go to Generated .py",
+            BasedPythonBundle.message("transpile.goToGenerated.offerBuild", generated),
+            BasedPythonBundle.message("transpile.goToGenerated.title"),
             Messages.getQuestionIcon(),
         )
         if (choice == Messages.YES) runBuildThenOpen(project, root, generated)
@@ -75,12 +76,16 @@ class GoToGeneratedPyAction : AnAction() {
 
     private fun runBuildThenOpen(project: Project, root: Path, generated: Path) {
         ProgressManager.getInstance().run(
-            object : Task.Backgroundable(project, "Running by build…", true) {
+            object : Task.Backgroundable(project, BasedPythonBundle.message("transpile.goToGenerated.building"), true) {
                 override fun run(indicator: ProgressIndicator) {
                     indicator.isIndeterminate = true
-                    val out = buildAt(project, root, "Running by build…") ?: return
+                    val out = buildAt(project, root, BasedPythonBundle.message("transpile.goToGenerated.building")) ?: return
                     if (out.exitCode != 0) {
-                        ByCli.notifyError(project, "by build failed", out.stderr.ifBlank { "exit ${out.exitCode}" })
+                        ByCli.notifyError(
+                            project,
+                            BasedPythonBundle.message("transpile.buildFailed.title"),
+                            out.stderr.ifBlank { BasedPythonBundle.message("notification.exitCode", out.exitCode) },
+                        )
                         return
                     }
 
@@ -92,8 +97,8 @@ class GoToGeneratedPyAction : AnAction() {
                     if (file == null) {
                         ByCli.notifyError(
                             project,
-                            "Go to Generated .py",
-                            "by build succeeded but did not write $generated.",
+                            BasedPythonBundle.message("transpile.goToGenerated.title"),
+                            BasedPythonBundle.message("transpile.buildDidNotWrite", generated),
                         )
                         return
                     }

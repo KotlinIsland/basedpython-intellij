@@ -293,6 +293,31 @@ class BasedPythonBundleTest {
             "runConfig.buildBeforeRun.failed",
             "runConfig.buildBeforeRun.launchFailed",
             "runConfig.buildBeforeRun.failed.title",
+            // The transpile actions' progress titles, notifications, dialogs and popups.
+            "convert.toPy.progress",
+            "convert.toPy.title",
+            "convert.toBy.progress",
+            "convert.toBy.title",
+            "transpile.noBuildOutput",
+            "transpile.buildFailed.title",
+            "transpile.buildDidNotWrite",
+            "transpile.goToGenerated.title",
+            "transpile.goToGenerated.progress",
+            "transpile.goToGenerated.offerBuild",
+            "transpile.goToGenerated.building",
+            "transpile.pdb.title",
+            "transpile.pdb.progress",
+            "transpile.pdb.noPython",
+            "transpile.pdb.console",
+            "transpile.diff.title",
+            "transpile.diff.generated",
+            "transpile.selection.progress",
+            "transpile.selection.popup",
+            "transpile.selection.copy",
+            "transpile.explain.progress",
+            "transpile.explain.heading",
+            "transpile.explain.none",
+            "transpile.explain.line",
         )
         val missing = required.filter { props.getProperty(it) == null }
         assertTrue(missing.isEmpty(), "missing bundle keys: $missing")
@@ -347,6 +372,20 @@ class BasedPythonBundleTest {
     fun `file-name placeholders format`() {
         assertEquals("Transpiling foo.by", msg("progress.transpiling", "foo.by"))
         assertEquals("Reverse-transpiling foo.by", msg("progress.reverseTranspiling", "foo.by"))
+        assertEquals("Converting foo.by → .py", msg("convert.toPy.progress", "foo.by"))
+        assertEquals("Converting foo.py → .by", msg("convert.toBy.progress", "foo.py"))
+        assertEquals("Explaining transpilation of foo.by", msg("transpile.explain.progress", "foo.by"))
+        assertEquals("Transpiled: foo.by ↔ foo.py", msg("transpile.diff.title", "foo.by", "foo.py"))
+        assertEquals("foo.py (generated)", msg("transpile.diff.generated", "foo.py"))
+        assertEquals("Debug (pdb): foo", msg("transpile.pdb.console", "foo"))
+        assertEquals(
+            "by did not say where foo.by is built to. Is the by language server running?",
+            msg("transpile.noBuildOutput", "foo.by"),
+        )
+        assertEquals(
+            "Generated file not found:\n/p/build/foo.py\n\nRun by build to generate it?",
+            msg("transpile.goToGenerated.offerBuild", "/p/build/foo.py"),
+        )
     }
 
     @Test

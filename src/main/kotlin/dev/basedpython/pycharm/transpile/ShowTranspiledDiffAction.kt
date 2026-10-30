@@ -62,7 +62,7 @@ class ShowTranspiledDiffAction : AnAction() {
         val project = e.project ?: return
         val file = e.getData(CommonDataKeys.VIRTUAL_FILE) ?: return
         ProgressManager.getInstance().run(
-            object : Task.Backgroundable(project, "Transpiling ${file.name}", true) {
+            object : Task.Backgroundable(project, BasedPythonBundle.message("progress.transpiling", file.name), true) {
                 override fun run(indicator: ProgressIndicator) {
                     indicator.isIndeterminate = true
                     val pythonSource = ByTranspile.sourceOrNotify(
@@ -104,7 +104,7 @@ internal class TranspiledPythonDiff private constructor(
     private val transpile: (Project, VirtualFile) -> String?,
     private val debounce: Duration,
 ) : SimpleDiffRequest(
-    "Transpiled: ${byFile.name} ↔ ${byFile.nameWithoutExtension}.py",
+    BasedPythonBundle.message("transpile.diff.title", byFile.name, "${byFile.nameWithoutExtension}.py"),
     DiffContentFactory.getInstance().create(project, byFile),
     DiffContentFactory.getInstance().create(
         project,
@@ -112,7 +112,7 @@ internal class TranspiledPythonDiff private constructor(
         FileTypeManager.getInstance().getFileTypeByExtension("py"),
     ),
     byFile.name,
-    "${byFile.nameWithoutExtension}.py (generated)",
+    BasedPythonBundle.message("transpile.diff.generated", "${byFile.nameWithoutExtension}.py"),
 ) {
 
     private var assignments = 0

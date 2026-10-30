@@ -20,6 +20,7 @@ import dev.basedpython.pycharm.actions.ByCli
 import dev.basedpython.pycharm.lang.BasedPythonFileType
 import dev.basedpython.pycharm.lsp.ext.ByTranspilationNote
 import dev.basedpython.pycharm.markup.ByCodeSpans
+import dev.basedpython.pycharm.util.BasedPythonBundle
 
 /**
  * Action: "Explain Transpilation" (FEATURES.md §185).
@@ -49,7 +50,7 @@ class ExplainTranspilationAction : AnAction() {
         val editor = e.getData(CommonDataKeys.EDITOR)
 
         ProgressManager.getInstance().run(
-            object : Task.Backgroundable(project, "Explaining transpilation of ${file.name}", true) {
+            object : Task.Backgroundable(project, BasedPythonBundle.message("transpile.explain.progress", file.name), true) {
                 override fun run(indicator: ProgressIndicator) {
                     indicator.isIndeterminate = true
                     val notes = ByTranspilationNotes.of(project, file) ?: return
@@ -89,15 +90,16 @@ class ExplainTranspilationAction : AnAction() {
         /** Build the HTML report for [notes]. Exposed for reuse/testing of the rendering. */
         fun renderHtml(fileName: String, notes: List<ByTranspilationNote>): String = buildString {
             append("<html><body style='font-family:sans-serif'>")
-            append("<b>Explain Transpilation: ").append(escape(fileName)).append("</b><br/>")
+            append("<b>").append(BasedPythonBundle.message("transpile.explain.heading", escape(fileName))).append("</b><br/>")
             if (notes.isEmpty()) {
-                append("<i>No basedpython-specific constructs were recognized.</i>")
+                append("<i>").append(BasedPythonBundle.message("transpile.explain.none")).append("</i>")
             } else {
                 append("<ul>")
                 for (note in notes) {
                     append("<li>")
                     append("<b>").append(escape(note.construct.orEmpty())).append("</b>")
-                    append(" (line ").append(note.line).append(")<br/>")
+                    // a string, so that MessageFormat does not group the digits of line 1234 as a number
+                    append(" ").append(BasedPythonBundle.message("transpile.explain.line", note.line.toString())).append("<br/>")
                     append("<code>").append(escape(note.snippet.orEmpty())).append("</code><br/>")
                     append(ByCodeSpans.toHtml(note.explanation.orEmpty()))
                     append("</li>")

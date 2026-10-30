@@ -53,7 +53,7 @@ class ConvertByToPyAction : AnAction() {
         val file = e.getData(CommonDataKeys.VIRTUAL_FILE) ?: return
 
         ProgressManager.getInstance().run(
-            object : Task.Backgroundable(project, "Converting ${file.name} → .py", true) {
+            object : Task.Backgroundable(project, BasedPythonBundle.message("convert.toPy.progress", file.name), true) {
                 override fun run(indicator: ProgressIndicator) {
                     indicator.isIndeterminate = true
                     val pyContent = ByTranspile.sourceOrNotify(
@@ -64,14 +64,14 @@ class ConvertByToPyAction : AnAction() {
                     val outPath = ByBuildOutputs.getInstance(project).of(file)?.generated?.let { Paths.get(it) } ?: run {
                         ByCli.notifyError(
                             project,
-                            "Convert .by → .py",
-                            "`by` did not say where ${file.name} is built to. Is the `by` language server running?",
+                            BasedPythonBundle.message("convert.toPy.title"),
+                            BasedPythonBundle.message("transpile.noBuildOutput", file.name),
                         )
                         return
                     }
 
                     ApplicationManager.getApplication().invokeLater({
-                        writeConvertedAndOpen(project, outPath, pyContent, "Convert .by → .py")
+                        writeConvertedAndOpen(project, outPath, pyContent, BasedPythonBundle.message("convert.toPy.title"))
                     }, project.disposed)
                 }
             },
@@ -111,7 +111,7 @@ class ConvertPyToByAction : AnAction() {
         val filePath = file.toNioPath()
 
         ProgressManager.getInstance().run(
-            object : Task.Backgroundable(project, "Converting ${file.name} → .by", true) {
+            object : Task.Backgroundable(project, BasedPythonBundle.message("convert.toBy.progress", file.name), true) {
                 override fun run(indicator: ProgressIndicator) {
                     indicator.isIndeterminate = true
                     val byContent = ByTranspile.sourceOrNotify(
@@ -123,7 +123,7 @@ class ConvertPyToByAction : AnAction() {
                     val byPath = filePath.parent.resolve(file.nameWithoutExtension + ".by")
 
                     ApplicationManager.getApplication().invokeLater({
-                        writeConvertedAndOpen(project, byPath, byContent, "Convert .py → .by")
+                        writeConvertedAndOpen(project, byPath, byContent, BasedPythonBundle.message("convert.toBy.title"))
                     }, project.disposed)
                 }
             },

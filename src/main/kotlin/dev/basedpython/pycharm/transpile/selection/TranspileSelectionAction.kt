@@ -57,7 +57,7 @@ class TranspileSelectionAction : AnAction() {
         if (selection.isBlank()) return
 
         ProgressManager.getInstance().run(
-            object : Task.Backgroundable(project, "Transpiling selection", true) {
+            object : Task.Backgroundable(project, BasedPythonBundle.message("transpile.selection.progress"), true) {
                 override fun run(indicator: ProgressIndicator) {
                     indicator.isIndeterminate = true
 
@@ -92,7 +92,7 @@ class TranspileSelectionAction : AnAction() {
             add(scroll, BorderLayout.CENTER)
         }
 
-        val copyButton = JButton("Copy").apply {
+        val copyButton = JButton(BasedPythonBundle.message("transpile.selection.copy")).apply {
             addActionListener {
                 CopyPasteManager.getInstance().setContents(StringSelection(python))
             }
@@ -106,7 +106,7 @@ class TranspileSelectionAction : AnAction() {
         val content: JComponent = panel
         JBPopupFactory.getInstance()
             .createComponentPopupBuilder(content, textArea)
-            .setTitle("Transpiled Python")
+            .setTitle(BasedPythonBundle.message("transpile.selection.popup"))
             .setResizable(true)
             .setMovable(true)
             .setRequestFocus(true)

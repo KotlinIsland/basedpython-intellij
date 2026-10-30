@@ -19,6 +19,7 @@ import dev.basedpython.pycharm.env.ByEnvironments
 import com.intellij.openapi.vfs.VirtualFile
 import dev.basedpython.pycharm.lang.BasedPythonFileType
 import dev.basedpython.pycharm.lsp.build.ByBuildOutputs
+import dev.basedpython.pycharm.util.BasedPythonBundle
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -51,7 +52,7 @@ class DebugWithPdbAction : AnAction() {
         val project = e.project ?: return
         val file = e.getData(CommonDataKeys.VIRTUAL_FILE) ?: return
 
-        ProgressManager.getInstance().run(object : Task.Backgroundable(project, "Building for debug…", true) {
+        ProgressManager.getInstance().run(object : Task.Backgroundable(project, BasedPythonBundle.message("transpile.pdb.progress"), true) {
             override fun run(indicator: ProgressIndicator) {
                 indicator.isIndeterminate = true
                 // Where the build writes this file, and where it has to run to write there: `by`'s
@@ -62,20 +63,24 @@ class DebugWithPdbAction : AnAction() {
                 if (generated == null || cwd == null) {
                     ByCli.notifyError(
                         project,
-                        "Debug .by (pdb)",
-                        "`by` did not say where ${file.name} is built to. Is the `by` language server running?",
+                        BasedPythonBundle.message("transpile.pdb.title"),
+                        BasedPythonBundle.message("transpile.noBuildOutput", file.name),
                     )
                     return
                 }
-                val out = buildAt(project, cwd, "Building for debug…") ?: return
+                val out = buildAt(project, cwd, BasedPythonBundle.message("transpile.pdb.progress")) ?: return
                 if (out.exitCode != 0) {
-                    ByCli.notifyError(project, "by build failed", out.stderr.ifBlank { "exit ${out.exitCode}" })
+                    ByCli.notifyError(
+                        project,
+                        BasedPythonBundle.message("transpile.buildFailed.title"),
+                        out.stderr.ifBlank { BasedPythonBundle.message("notification.exitCode", out.exitCode) },
+                    )
                     return
                 }
                 LocalFileSystem.getInstance().refreshAndFindFileByNioFile(generated.parent ?: cwd)
                     ?.let { VfsUtil.markDirtyAndRefresh(false, true, true, it) }
                 if (!Files.exists(generated)) {
-                    ByCli.notifyError(project, "Debug .by (pdb)", "by build succeeded but did not write $generated.")
+                    ByCli.notifyError(project, BasedPythonBundle.message("transpile.pdb.title"), BasedPythonBundle.message("transpile.buildDidNotWrite", generated))
                     return
                 }
                 ApplicationManager.getApplication().invokeLater {
@@ -88,8 +93,8 @@ class DebugWithPdbAction : AnAction() {
     private fun launchPdb(project: Project, cwd: Path, outPath: Path, label: String) {
         val python = ByEnvironments.resolvePython(project) ?: run {
             ByCli.notifyError(
-                project, "Debug .by (pdb)",
-                "No Python interpreter found — create a .venv, configure a Python interpreter, or put python3 on PATH.",
+                project, BasedPythonBundle.message("transpile.pdb.title"),
+                BasedPythonBundle.message("transpile.pdb.noPython"),
             )
             return
         }
@@ -100,7 +105,7 @@ class DebugWithPdbAction : AnAction() {
             .withEnvironment(python.env)
         val handler = OSProcessHandler(cmd)
         RunContentExecutor(project, handler)
-            .withTitle("Debug (pdb): $label")
+            .withTitle(BasedPythonBundle.message("transpile.pdb.console", label))
             .withActivateToolWindow(true)
             .withStop({ handler.destroyProcess() }, { !handler.isProcessTerminated })
             .run()
