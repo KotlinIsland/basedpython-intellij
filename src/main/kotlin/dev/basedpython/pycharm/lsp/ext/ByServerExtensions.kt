@@ -360,6 +360,26 @@ interface ByServerExtensions {
     fun typeDeclaration(args: ByTypeDeclarationParams): CompletableFuture<ByDeclaration?>
 
     /**
+     * Whether `textDocument/rename` would take [ByValidateRenameNameParams.newName] for the symbol at
+     * a position, and if not the reason it would give: a python name is an identifier that is not a
+     * keyword, a django name any text, and a symbol that cannot be renamed at all, such as a builtin,
+     * is refused whatever the name. `null` where there is nothing to rename, as `prepareRename` is.
+     * Asked by [dev.basedpython.pycharm.lsp.refactor.ByRenameNames]; a `by` from before the request
+     * answers `MethodNotFound`.
+     */
+    @JsonRequest("by/validateRenameName")
+    fun validateRenameName(args: ByValidateRenameNameParams): CompletableFuture<ByRenameNameVerdict?>
+
+    /**
+     * Names the symbol at a position could be renamed to, best first: after the class of what it holds
+     * and what its value is computed by, as extracting a variable names one. Every one is a name the
+     * rename takes, and none is the name it has. A `by` from before the request answers
+     * `MethodNotFound`.
+     */
+    @JsonRequest("by/renameNameSuggestions")
+    fun renameNameSuggestions(args: ByRenameNameSuggestionsParams): CompletableFuture<List<String>?>
+
+    /**
      * `textDocument/references` with what each reference does with the name: the same references in
      * the same order, each with its [ByReference.kind]. `null` where `textDocument/references` is. A
      * `by` from before the request answers `MethodNotFound`.
@@ -1287,6 +1307,20 @@ class ByNamedDocumentSymbolParams(textDocument: TextDocumentIdentifier, val text
 /** `textDocument/implementation` at a position in one text of the document, as [ByNamedSemanticTokensParams]. */
 class ByNamedImplementationParams(textDocument: TextDocumentIdentifier, position: Position, val textHash: String) :
     ImplementationParams(textDocument, position)
+
+/** The symbol at a position in one text of the document, and the name a rename would give it. */
+data class ByValidateRenameNameParams(
+    val textDocument: TextDocumentIdentifier,
+    val position: Position,
+    val newName: String,
+    val textHash: String,
+)
+
+/** `by/validateRenameName`'s answer: [message] says why when the name is not [valid]. */
+data class ByRenameNameVerdict(val valid: Boolean = false, val message: String? = null)
+
+/** The symbol at a position in one text of the document, to suggest names for. */
+data class ByRenameNameSuggestionsParams(val textDocument: TextDocumentIdentifier, val position: Position, val textHash: String)
 
 /** A position on a class's name in one text of the document, for `by/mro`. */
 data class ByMroParams(val textDocument: TextDocumentIdentifier, val position: Position, val textHash: String)

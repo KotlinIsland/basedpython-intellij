@@ -483,6 +483,9 @@
         <!-- Rename (Shift+F6) in a .by file: by's name and occurrences, edited in place or in the
              Rename dialog as Specify refactoring options says, renamed by by's textDocument/rename. -->
         <renameHandler implementation="dev.basedpython.pycharm.lsp.refactor.ByRenameHandler"/>
+        <!-- The Rename dialog's suggested names for a .by symbol, after the name it has: by's
+             (by/renameNameSuggestions). -->
+        <nameSuggestionProvider implementation="dev.basedpython.pycharm.lsp.refactor.ByRenameNameSuggestionProvider"/>
         <!-- Code | Unwrap/Remove (Ctrl+Shift+Delete): the options and their edits are by/unwrap's. -->
         <lang.unwrapDescriptor
             language="basedpython"

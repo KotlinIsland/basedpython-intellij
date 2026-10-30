@@ -6,9 +6,11 @@ import com.intellij.codeInsight.template.TemplateManager
 import com.intellij.codeInsight.template.impl.ConstantNode
 import com.intellij.codeInsight.template.impl.TemplateState
 import com.intellij.codeInsight.template.impl.Variable
+import com.intellij.codeInsight.lookup.LookupFocusDegree
 import com.intellij.ide.TitledHandler
 import com.intellij.openapi.actionSystem.CommonDataKeys
 import com.intellij.openapi.actionSystem.DataContext
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.readAction
 import com.intellij.openapi.command.CommandProcessor
 import com.intellij.openapi.command.WriteCommandAction
@@ -18,6 +20,7 @@ import com.intellij.openapi.editor.Document
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.RangeMarker
 import com.intellij.openapi.editor.ex.EditorSettingsExternalizable
+import com.intellij.openapi.options.ConfigurationException
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.TextRange
 import com.intellij.platform.ide.progress.runWithModalProgressBlocking
@@ -35,7 +38,11 @@ import com.intellij.refactoring.rename.RenameProcessor
 import com.intellij.refactoring.util.CommonRefactoringUtil
 import dev.basedpython.pycharm.lang.BasedPythonFile
 import dev.basedpython.pycharm.lsp.ByServerDocuments
+import dev.basedpython.pycharm.lsp.ByTextHash
+import dev.basedpython.pycharm.lsp.awaitBy
 import dev.basedpython.pycharm.lsp.byServerFor
+import dev.basedpython.pycharm.lsp.ext.ByRenameNameSuggestionsParams
+import dev.basedpython.pycharm.lsp.ext.ByServerExtensions
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import dev.basedpython.pycharm.util.BasedPythonBundle
 import org.eclipse.lsp4j.DocumentHighlight
@@ -121,7 +128,8 @@ internal object ByRename {
         val document = editor.document
         val stamp = document.modificationStamp
 
-        val found = runWithModalProgressBlocking(project, title) { find(server, project, file, document, offset) }
+        val inPlace = EditorSettingsExternalizable.getInstance().isVariableInplaceRenameEnabled
+        val found = runWithModalProgressBlocking(project, title) { find(server, project, file, document, offset, suggest = inPlace) }
 
         when (found) {
             is Found.Refused -> error(project, editor, found.reason)
@@ -130,8 +138,8 @@ internal object ByRename {
                 if (document.modificationStamp != stamp) {
                     return error(project, editor, BasedPythonBundle.message("refactoring.by.changed"))
                 }
-                if (EditorSettingsExternalizable.getInstance().isVariableInplaceRenameEnabled) {
-                    ByInplaceRename(project, editor, file, found.sites).start()
+                if (inPlace) {
+                    ByInplaceRename(project, editor, file, found.sites, found.suggestions).start()
                 } else {
                     ByRenameDialog(project, ByRenamedName(file, document, found.sites.primary), editor).show()
                 }
@@ -139,7 +147,12 @@ internal object ByRename {
         }
     }
 
-    private suspend fun find(server: LspClient, project: Project, file: PsiFile, document: Document, offset: Int): Found {
+    /**
+     * Where `by` would rename at [offset], and — when [suggest] says the name is about to be typed
+     * in place — the names it suggests for the symbol, asked now, while the text still holds the
+     * name being renamed. (The Rename dialog asks for its own, through [ByRenameNameSuggestionProvider].)
+     */
+    private suspend fun find(server: LspClient, project: Project, file: PsiFile, document: Document, offset: Int, suggest: Boolean): Found {
         val virtualFile = file.virtualFile
         val (identifier, position) = readAction {
             ByServerDocuments.ensureOpen(server, project, virtualFile)
@@ -161,12 +174,20 @@ internal object ByRename {
         } catch (_: ResponseErrorException) {
             null
         }.orEmpty()
+        val suggestions = if (suggest) {
+            val params = readAction {
+                ByRenameNameSuggestionsParams(identifier, position, ByTextHash.of(document.immutableCharSequence))
+            }
+            server.awaitBy("by/renameNameSuggestions") { (it as ByServerExtensions).renameNameSuggestions(params) }.value.orEmpty()
+        } else {
+            emptyList()
+        }
         return readAction {
             val primary = getRangeInDocument(document, range) ?: return@readAction Found.Nothing
             val name = prepared.second?.placeholder ?: document.getText(primary)
             // a placeholder that is not the text in the range is not a name the template can edit
             if (document.getText(primary) != name) return@readAction Found.Nothing
-            Found.Sites(ByRenameSites.of(document, name, primary, highlights))
+            Found.Sites(ByRenameSites.of(document, name, primary, highlights), suggestions.filter { it != name })
         }
     }
 
@@ -175,7 +196,7 @@ internal object ByRename {
     }
 
     private sealed interface Found {
-        data class Sites(val sites: ByRenameSites) : Found
+        data class Sites(val sites: ByRenameSites, val suggestions: List<String>) : Found
         data class Refused(val reason: String) : Found
         data object Nothing : Found
     }
@@ -203,6 +224,25 @@ private class ByRenameDialog(project: Project, name: ByRenamedName, editor: Edit
 
     override fun createSearchScopePanel(): JComponent? = null
 
+    /**
+     * Checked as it is typed, by `by` ([ByRenameNames]): the rule a new name must follow is the one
+     * `textDocument/rename` refuses it by, and the reason shown is the one it would give. Asked off
+     * the EDT, in the platform's cancellable non-blocking read action, so typing never waits for
+     * `by`; the constructor's own first check goes the same way.
+     */
+    override fun validateButtons() = validateButtonsAsync()
+
+    override fun processNewNameChanged() = validateButtonsAsync()
+
+    override fun canRun() {
+        val newName = newName
+        if (newName.isEmpty()) throw ConfigurationException(null)
+        // never asked on the EDT once validateButtons is the async one; nothing to wait for there
+        if (ApplicationManager.getApplication().isDispatchThread) return
+        val verdict = ByRenameNames.validate(psiElement as ByRenamedName, newName)
+        if (verdict is ByNameVerdict.Invalid) throw ConfigurationException(verdict.reason)
+    }
+
     /** What the processor is handed in place of a chosen scope; `by` renames across the project regardless. */
     override fun getRefactoringScope(): SearchScope = GlobalSearchScope.projectScope(project)
 }
@@ -217,6 +257,8 @@ internal class ByInplaceRename(
     private val editor: Editor,
     private val file: PsiFile,
     private val sites: ByRenameSites,
+    /** `by`'s names for the symbol, offered in a lookup under the name, as `.py`'s in-place rename offers its own. */
+    private val suggestions: List<String> = emptyList(),
 ) {
     private val document = editor.document
     private val commandName = RefactoringBundle.message("renaming.command.name", sites.name)
@@ -267,8 +309,14 @@ internal class ByInplaceRename(
             template.addVariableSegment(if (range == sites.primary) PRIMARY else "$OTHER$index")
             at = range.endOffset
         }
-        // the name typed at the caret; every other occurrence repeats it and is never a stop
-        template.addVariable(Variable(PRIMARY, ConstantNode(sites.name), ConstantNode(sites.name), true, false))
+        // the name typed at the caret; every other occurrence repeats it and is never a stop. by's
+        // suggestions, if it has any, are a lookup under it that typing goes past: unfocused, so
+        // Enter takes what was typed, as the platform's in-place rename offers its names
+        val named = ConstantNode(sites.name).let {
+            if (suggestions.isEmpty()) it
+            else it.withLookupStrings(listOf(sites.name) + suggestions).withLookupFocusDegree(LookupFocusDegree.UNFOCUSED)
+        }
+        template.addVariable(Variable(PRIMARY, named, ConstantNode(sites.name), true, false))
         all.indices.filter { all[it] != sites.primary }.forEach { template.addVariable(Variable("$OTHER$it", PRIMARY, PRIMARY, false)) }
         return template
     }
@@ -291,7 +339,16 @@ internal class ByInplaceRename(
             try {
                 if (typed != null && typed.isNotBlank() && typed != sites.name && markers[primaryIndex].isValid) {
                     val name = ByRenamedName(file, document, markers[primaryIndex].textRange)
-                    RenameProcessor(project, name, typed, false, false).run()
+                    // Asked once the old name is back, which is the text by can say anything about:
+                    // while the name was being typed, the symbol at its position was what was typed.
+                    val verdict = runWithModalProgressBlocking(project, commandName) {
+                        readAction { ByRenameNames.validate(name, typed) }
+                    }
+                    if (verdict is ByNameVerdict.Invalid) {
+                        CommonRefactoringUtil.showErrorHint(project, editor, verdict.reason, commandName, null)
+                    } else {
+                        RenameProcessor(project, name, typed, false, false).run()
+                    }
                 }
             } finally {
                 finish()
