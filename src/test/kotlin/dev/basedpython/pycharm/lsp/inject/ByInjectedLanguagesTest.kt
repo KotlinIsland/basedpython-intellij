@@ -1,10 +1,12 @@
 package dev.basedpython.pycharm.lsp.inject
 
+import com.intellij.lang.Language
 import com.intellij.openapi.fileTypes.PlainTextLanguage
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
 import dev.basedpython.pycharm.testFramework.onEdt
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
 
@@ -47,6 +49,19 @@ class ByInjectedLanguagesTest {
     @Test
     fun `surrounding space is not part of the id`() = onEdt {
         assertEquals(plainText, ByInjectedLanguages.find("  ${plainText.id} "))
+    }
+
+    /**
+     * The test IDE is IntelliJ IDEA without the Python plugin, so it has the platform's `RegExp` and
+     * not the Python plugin's `PythonRegExp`, which is the id `by` marks a pattern handed to `re` with.
+     */
+    @Test
+    fun `Python's dialect of regular expressions is read as RegExp where the dialect is not`() = onEdt {
+        assertNull(Language.findLanguageByID("PythonRegExp"), "the test IDE has the Python plugin after all")
+        val regExp = Language.findLanguageByID("RegExp")
+        assertNotNull(regExp, "the platform's RegExp language is missing")
+        assertEquals(regExp, ByInjectedLanguages.find("PythonRegExp"))
+        assertEquals(regExp, ByInjectedLanguages.find("pythonregexp"))
     }
 
     @Test

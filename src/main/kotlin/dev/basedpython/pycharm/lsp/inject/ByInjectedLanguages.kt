@@ -26,7 +26,18 @@ object ByInjectedLanguages {
             ?: byIdIgnoringCase(trimmed)
             ?: byDisplayName(trimmed)
             ?: byFileExtension(trimmed)
+            ?: DIALECT_OF[trimmed.lowercase()]?.let(Language::findLanguageByID)
     }
+
+    /**
+     * The language a dialect is written in, for a dialect only some IDEs register, by lowercased id.
+     *
+     * `by` marks the pattern handed to `re` as `PythonRegExp`, which is the Python plugin's: PyCharm
+     * has it, and so does IntelliJ IDEA with that plugin installed. Without it the pattern is still a
+     * regular expression, and the platform's own `RegExp` reads one, Python's `(?P<name>…)` and
+     * `(?P=name)` groups included. Asked last, so the dialect itself wins wherever it is.
+     */
+    private val DIALECT_OF = mapOf("pythonregexp" to "RegExp")
 
     private fun byIdIgnoringCase(id: String): Language? =
         Language.getRegisteredLanguages().firstOrNull { it.id.equals(id, ignoreCase = true) }

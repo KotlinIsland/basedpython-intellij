@@ -74,6 +74,19 @@ class LanguageInjectionTest {
         assertEquals("<b>hi</b>", injected.text)
     }
 
+    /**
+     * What `by` reports for a pattern handed to `re`, in an IDE without the Python plugin that
+     * provides `PythonRegExp`: the test IDE is one. See [ByInjectedLanguagesTest].
+     */
+    @Test
+    fun `a pattern marked as Python's dialect of regular expressions is RegExp without the Python plugin`() = onEdt {
+        val file = inject("p = \"[a-z]+(\\\\d)\"\n", language = "PythonRegExp")
+        val injected = injectedAt(file, contentRange(file, 0).startOffset + 1)
+
+        assertEquals("RegExp", injected?.language?.id)
+        assertEquals("[a-z]+(\\d)", injected?.let(manager::getUnescapedText))
+    }
+
     @Test
     fun `the injected language reads the text the string stands for, not the way it is spelled`() = onEdt {
         val file = inject("a = \"<a href=\\\"/\\\">\"\n")
