@@ -1,17 +1,183 @@
 ## [Unreleased]
 
+## [0.0.5]
+
 ### Added
 
+- `by run` configurations run on Docker, SSH and WSL run targets: a basedpython runtime on the
+  target says where `by` is, the project is uploaded there, and paths in the output link back to
+  the project. Only Run is supported on a target, not Debug.
+- *Build | Build Project*, *Build Module* and *Rebuild* run `by build` in a basedpython project,
+  reported in the Build tool window with each diagnostic at its `.by` line. What `by build` writes
+  is treated as generated: a banner links the `.by` it came from, and the first edit asks first.
+- *Run with Coverage* for `by run` and test configurations, through `by run --coverage`, shown in
+  the gutter, the Project view and the Coverage tool window.
+- A *basedpython Console* tool window that runs `by repl` an input at a time: Enter runs a
+  complete input or continues an incomplete one indented, completion knows the session's names,
+  *Interrupt* raises `KeyboardInterrupt`, and Alt+Shift+E sends a `.by` selection or line to it.
+  *Run with basedpython Console*, under a `by run` configuration's *Modify options*, runs the
+  module there and leaves the console open on its names. Run Anything runs `by run`, `by run
+  pytest`, `by check`, `by build` and `by repl` (Shift to debug), completing subcommands, modules
+  and tests.
+- Test runs read `by`'s TeamCity reporter: a failure shows pytest's whole report at its `.by`
+  lines, a failed `==` its expected and actual with a diff link, and each test its captured output.
+  *Rerun Failed Tests* and *Rerun Automatically* are in the run window, Ctrl+Shift+R in a test runs
+  it as a test rather than with `by run`, a directory in the Project view runs every test file
+  under it, and a file's suite is named after the `.by` file.
+- Refactorings in `.by` files, with `by`'s reason shown when it refuses: *Move* (F6) on a top-level
+  function, class or variable moves it to another module, creating it if needed; *Pull Members
+  Up*, *Push Members Down* and *Extract Superclass*; *Change Signature* (Ctrl+F6) for parameters
+  (add, remove, reorder, rename, how each is passed, its default, the value calls pass), name,
+  return type and annotations; *Introduce Parameter* (Ctrl+Alt+P) and *Introduce Field*
+  (Ctrl+Alt+F). Editing a def, class or parameter name in place offers to rename its uses, and
+  editing a def's parameters in place offers *Change Signature* for its calls.
+- *Override Methods* (Ctrl+O) and *Implement Methods* (Ctrl+I) in a `.by` class, *Go to Test* and
+  *Go to Test Subject* (Ctrl+Shift+T) with *Create New Test* where `by` says the test goes, and
+  *Method Hierarchy* (Ctrl+Shift+H) from the topmost declaration of a member down to every
+  override. *Copy Reference* copies the dotted name of what the caret's name declares or refers
+  to, `shapes.base.Circle.area`, and of a module or package in the Project view.
+- Usage, inheritor, override and implementation counts above each `.by` declaration, in the
+  *Usages* and *Inheritors* code vision groups, listing what they count when clicked, and the code
+  author above each declaration. The gutter's subclassed and overridden icons name the classes in
+  their tooltips.
+- Typing assistance in `.by` files: the colon of an `else`, `elif`, `except`, `finally` or `case`
+  moves it out to the statement it continues; `(` after a method's name writes `self` or `cls`;
+  Enter in an empty docstring writes a stub (in PyCharm's *Docstring format* where the Python
+  plugin is installed); Enter in the middle of a header's expression wraps it in parentheses
+  instead of adding a backslash; a brace in an f-string or t-string is paired; prefixed and triple
+  quotes are closed as they are typed; text pasted into a string literal is escaped for it.
+- Editing actions in `.by` files: *Complete Current Statement* (Ctrl+Shift+Enter), *Join Lines*
+  the way the code means, *Move Element Left/Right* (Ctrl+Alt+Shift+Left/Right) for arguments,
+  parameters and elements, *Unwrap/Remove* (Ctrl+Shift+Delete), *Next/Previous Method*, *Move
+  Caret to Code Block Start/End*, method separators and *Fill Paragraph*.
+- Imports and completion: *Add unambiguous imports on the fly* and *Insert imports on paste* on
+  the *Auto Import* page apply to `.by` files; *Import a name with* on the basedpython settings
+  page chooses `from module import name` or `import module`; *Suggest importable names* under
+  *Code Completion | basedpython* switches off offering names the file does not import yet; and
+  smart completion (Ctrl+Shift+Space) offers what fits the type the position expects.
+- basedpython is on *Settings | Editor | Inspections*, each of `by`'s rules an inspection under
+  *basedpython | by rules* whose switch and severity are sent to `by`, and on *Settings | Editor |
+  Inlay Hints*, with an option for each kind of hint `by` computes.
+- A *Scope ends* inlay hint, on by default, puts a dimmed line naming a block's header after its
+  last line (functions and classes get none); clicking it goes to the header. *Highlight on Caret
+  Movement | Current scope* marks the block the caret is in, and focus mode dims all but the
+  definition the caret is in.
+- The colour page lists every semantic token `by` sends under a key of its own (calls,
+  declarations, docstrings, `self` and `cls`, builtins, dunders, keyword arguments, annotations,
+  locals, modules), with a *Semantic highlighting* checkbox that gives each parameter and local a
+  rainbow colour of its own. An f-string's or t-string's prefix, braces, field code, conversion
+  and format spec are coloured apart, and its braces match.
+- Unreachable code is drawn in each token's own colour, faded, under *Unreachable code* keys on the
+  colour page. It needs a `by` that sends its unreachable token modifier.
+- `api.lock` support: a *Before Commit* option, *Check api.lock is up to date*, on by default,
+  stops a commit whose `api.lock` is stale and offers to regenerate it, and an open `api.lock`
+  shows `by`'s stale-api-lock warning with a *Regenerate api.lock* fix. *Generate api.lock* and
+  the diff ask `by`'s language server, so unsaved edits count.
+- Merging: *Resolve Simple Conflicts* in the merge window resolves what `by` can, a `.by` diff can
+  *Ignore imports and formatting*, and the *Before Commit* option *Reconcile imports of merged
+  files* fixes the imports of files both sides of a merge, cherry-pick or rebase changed. *Tools |
+  Set Up Git Merge Integration*, also offered in the New Project wizard and to a git project
+  without it, has git merge python files and `api.lock` with `by merge-driver`.
+- The terminal starts in a basedpython project with its `by` and `buff` on `PATH` (their venv
+  activated), and completes `by` command lines. Git commands the IDE runs get the same `PATH`, so
+  a pre-commit or prek hook that calls `by` works from the commit dialog.
+- Under `bpd`: debugger settings for *Stop every thread at a stop no breakpoint decides*
+  (*Debugger*), how much of a value is read (*Debugger | Data Views | basedpython*) and *Step and
+  stop only in the program's own code*, on by default (*Debugger | Stepping*); exception
+  breakpoints for one class, its name completed, with *On raise*, *On termination* and *Ignore
+  library files*, each showing whether `bpd` could arm it; and a line breakpoint's *Suspend*
+  setting, *All* holding every thread where every breakpoint held only the thread that hit it.
+- In a `.by` debug session, the value tooltip, *Evaluate Expression* and *Quick Evaluate* start
+  from the whole expression at the caret, `a.b[c].d` rather than `d`; the debug console has a
+  prompt that evaluates basedpython in the selected frame; and *Jump to Type Source* opens the
+  class a variable is an instance of.
 - In a `.by` debug session, *Evaluate Expression* and the Variables view's evaluate-or-watch field
   are basedpython editors, highlighted as code where they were plain text, and complete from the
   debugger where it offers completion (debugpy does; bpd does not yet). Picking a completion after
   a dot keeps the dot: `sys.vers` completed to `sysversion_info` in the plain-text field.
+- With their plugins installed: the *Endpoints* tool window lists a basedpython project's FastAPI
+  and Django routes, the IDE's MCP server offers agents `by`'s transpile, rule explanations, tests,
+  whole-project check and entry points, the Copyright plugin writes its notice in `.by` files, and
+  Grazie checks the grammar of `.by` comments and docstrings.
 
 ### Changed
 
 - **The minimum IDE is build 263.7307**, the latest 2026.3 EAP, where it was 263.5153. Only the
   latest build is supported: older EAPs stop at "EAP Build Expired" on start. The plugin now compiles
   and tests against IU-263.7307.44.
+- Bundles `by` and `buff` from basedpython 0.0.1b2 and `bpd` from basedpython-debugger 0.0.1a3.
+  Much of this release asks `by` for its answer; with an older `by`, a feature says `by` needs
+  updating rather than doing nothing.
+- Indentation in `.by` files follows the code: Enter after `return` leaves the suite, inside
+  brackets it aligns or hangs, and *Auto-Indent Lines* works. Lines pasted at the start of a line
+  keep their shape as a block. Ctrl+/ comments a line at its indent with `# `.
+- Folding comes from `by`'s ranges with real placeholder text, and *Fold by default* applies:
+  imports, docstrings and method bodies under the platform's options, long strings, long
+  collections, comment runs and type annotations under a basedpython section of *Code Folding*.
+  `# region` is left to custom folding, so *Custom Folding* navigates to it.
+- Breadcrumbs show the classes, functions and control clauses the caret is in, and sticky lines
+  pin classes, functions and `with` statements, as for `.py`, instead of every document symbol.
+  basedpython is listed on the *Breadcrumbs* and *Sticky Lines* pages.
+- *Rename* (Shift+F6) renames every occurrence in place as the name is typed, or in the dialog
+  with Preview when *Specify refactoring options* says so, where only the occurrence at the caret
+  changed. *Introduce Variable* and *Introduce Constant* let you choose the expression and name it
+  in place, and an extracted function is renamed in place at its call.
+- *Find Usages* names the target as the class or function it is, placed in what declares it,
+  groups usages by the class or function they are in and by what they do (import, `isinstance`,
+  type hint, superclass list, read, write), and no longer lists the declaration as its own usage.
+- *Type Info* (Ctrl+Shift+P) chooses among the expressions around the caret, each with its type,
+  shown as `by`'s highlighted pretty type. *Surround With* offers statement surrounders for whole
+  statements and expression surrounders only for an expression.
+- *Reformat Code* on a selection formats only the statements it covers, through `buff`. The *buff*
+  tab of *Code Style* shows the line length, indent, quote style and line endings `buff` resolves
+  for the open file and where they come from, and a `.by` editor's right margin and indent follow
+  them, instead of options nothing read.
+- The *Structure* view and *File Structure* popup have the *Alphabetical* sorter, *Show Fields*
+  and *Show Inherited*. *Go to Class* and *Go to Symbol* show where a symbol is declared,
+  `shapes.base.Circle`, and match `Shape.desc`. *Go to Super* on a class lists its whole method
+  resolution order, not only its direct bases.
+- Alt+Enter lists each kind of `by`'s code actions as an intention of its own under *Settings |
+  Editor | Intentions | basedpython*, with a description, an example and a switch, including the
+  new *Put elements on separate lines* and *Put elements on one line*.
+- Postfix templates come from `by` alone, switched with *Postfix templates* under *Code Completion
+  | basedpython*, where the plugin's own provider listed a second `.for`. `by` follows *Insert
+  parentheses automatically when applicable*.
+- A `by run` configuration is edited in the fragments editor, with before-launch tasks, *Allow
+  multiple instances*, `.env` files, *Redirect input from* and *Emulate terminal in output console*.
+- Spellchecking checks a `.by` identifier only where it is defined, not at every use. A string is
+  injected only where `by` says a `# language=` comment marks it, and a regular expression's error
+  is reported once.
+- A line breakpoint can be set only on a line holding code, as in `.py`; one on a blank line used
+  to move to the next `def` and stop at import time.
+- `by`'s Information diagnostics are drawn with a blue wave and untagged hints with a grey dotted
+  line, as PyCharm draws ty's, under *Diagnostics* keys on the colour page.
+- basedpython stays out of a plain Python project: *Inspect Code* runs `by`'s diagnostics only
+  where `by` serves the project, and the basedpython, Tasks and Environment tool windows appear
+  only in a basedpython project.
+- The `.py` setting is labelled *Apply to .py files*. A `.py` it applies to also gets scope ends,
+  current scope, sticky lines and unreachable-code fading.
+- In IntelliJ IDEA, basedpython is in the *New Project* language list once, not also as a
+  generator, and the new project gets a module.
+
+### Fixed
+
+- Under debugpy, a `.by` breakpoint never stopped; it now does, and the stack and stepping leave
+  out `by run`'s runner frames.
+- Under `bpd`, `input()` failed with `EOFError`, and *Evaluate Expression*'s code fragment mode
+  answered `SyntaxError` for a statement such as `y = 7`. A frame at line 0 shows as at no line
+  instead of *Unknown source*.
+- A `.by` debug run that finished ended with exit code 137; it now ends with the program's own.
+- A breakpoint that logs a message, the stack trace and an expression logs all three, where any
+  expression made it a log point that dropped the rest. A `.by` log point has its *Log:* box and
+  Ctrl+Alt+F8 in every IDE.
+- Completion inside an f-string's or t-string's replacement field offered nothing.
+- A language injected with Alt+Enter into a dedented triple-quoted string gets the text the
+  program holds, not everything between the quotes.
+- *Move Statement* keeps the lines between two statements in place, and right after an edit waits
+  for `by` rather than doing nothing.
+- A variable named `out` was coloured as the variance keyword.
+- After the servers restart or crash, the old server's hints, code vision and gutter icons no
+  longer stay until the next edit.
 
 ## [0.0.4]
 
