@@ -318,7 +318,10 @@ internal class ByConsoleSession private constructor(
             }
             val handler = KillableColoredProcessHandler(commandLine)
             // `by repl` ignores SIGINT, so the soft kill would interrupt the input running rather than
-            // stop anything; and the interpreter is its child, which a stop has to reach too
+            // stop anything; and the interpreter is its child, which a stop has to reach too. Not a
+            // SIGTERM to `by` alone, as a `by run` gets (see ByProcessHandler): `by repl` does not
+            // pass one on — measured against `by` 71c3caaac36b, it exited 143 and left its
+            // `_by_repl.py` interpreter running
             handler.setShouldKillProcessSoftly(false)
             handler.setShouldDestroyProcessRecursively(true)
             ProcessTerminatedListener.attach(handler)

@@ -208,13 +208,6 @@ abstract class ByCommandLineState(
         )
         inputFile?.let(cmd::withInput)
         val handler = ByProcessHandler(if (emulateTerminal) PtyCommandLine(cmd).withConsoleMode(false) else cmd, finishesOnItsOwn)
-        // Stop has to reach the program, not just the launcher. `by run` is a Rust parent that
-        // spawns `python _by_runner.py` and then blocks waiting for it, and a SIGINT to `by`
-        // demonstrably kills neither — both survive, and under a debugger the orphaned interpreter
-        // keeps holding its port. So: no soft kill (it achieves nothing here but a delay), and
-        // destroy the whole tree rather than the one process the IDE happens to hold.
-        handler.setShouldKillProcessSoftly(false)
-        handler.setShouldDestroyProcessRecursively(true)
         infrastructureListeners.forEach(handler::addProcessListener)
         ProcessTerminatedListener.attach(handler)
         return handler

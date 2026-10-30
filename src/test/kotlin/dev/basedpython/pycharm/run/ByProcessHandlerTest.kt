@@ -3,6 +3,7 @@ package dev.basedpython.pycharm.run
 import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.execution.process.ProcessEvent
 import com.intellij.execution.process.ProcessListener
+import com.intellij.openapi.util.Key
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -10,6 +11,9 @@ import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.io.TempDir
+import java.nio.file.Path
+import kotlin.io.path.writeText
 
 /**
  * Ending `by`'s process kills it, except when what it ran has already ended — the debug session the
@@ -71,6 +75,58 @@ class ByProcessHandlerTest {
         handler.destroyProcess()
 
         assertTrue(handler.waitFor(10_000), "Stop left the program running")
+    }
+
+    @TempDir
+    lateinit var dir: Path
+
+    /**
+     * `by run` as its contract has it: it passes a SIGTERM on to the program it started and exits
+     * with the program's status. The program counts what reaches it and ends a moment after the
+     * first, so a second signal, sent to it directly, would be counted too.
+     */
+    @Test
+    fun `Stop is one SIGTERM to by alone, which by passes on, and the exit code is the program's`() {
+        val program = dir.resolve("program.sh").apply {
+            writeText(
+                """
+                n=0
+                trap 'n=${'$'}((n+1)); echo "program got TERM ${'$'}n"' TERM
+                echo ready
+                while [ "${'$'}n" -eq 0 ]; do sleep 0.05; done
+                sleep 1
+                exit 5
+                """.trimIndent() + "\n",
+            )
+        }
+        val by = dir.resolve("by.sh").apply {
+            writeText(
+                """
+                sh '${'$'}program' &
+                child=${'$'}!
+                trap 'echo "by got TERM"; kill -TERM "${'$'}child"; wait "${'$'}child"; exit ${'$'}?' TERM
+                wait "${'$'}child"
+                """.trimIndent().replace("${'$'}program", program.toString()) + "\n",
+            )
+        }
+        val output = StringBuffer()
+        val handler = ByProcessHandler(GeneralCommandLine("sh", by.toString())) { false }
+        handler.addProcessListener(object : ProcessListener {
+            override fun onTextAvailable(event: ProcessEvent, outputType: Key<*>) {
+                output.append(event.text)
+            }
+        })
+        handler.startNotify()
+        val deadline = System.currentTimeMillis() + 10_000
+        while ("ready" !in output && System.currentTimeMillis() < deadline) Thread.sleep(20)
+
+        handler.destroyProcess()
+
+        assertTrue(handler.waitFor(10_000), "Stop left the program running: $output")
+        val lines = output.lines()
+        assertEquals(1, lines.count { it == "by got TERM" }, "exit ${handler.exitCode}: $output")
+        assertEquals(listOf("program got TERM 1"), lines.filter { it.startsWith("program got") }, output.toString())
+        assertEquals(5, handler.exitCode, output.toString())
     }
 
     private fun started(script: String, finishesOnItsOwn: () -> Boolean): ByProcessHandler =

@@ -2,10 +2,11 @@ package dev.basedpython.pycharm.run
 
 import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.execution.process.KillableColoredProcessHandler
+import com.intellij.openapi.util.SystemInfo
 
 /**
- * `by`'s own process, killed — tree and all — when the IDE ends it, unless what it ran has already
- * ended without it.
+ * `by`'s own process, ended with a SIGTERM to it alone when the IDE ends it — which `by run`
+ * passes on to the program — unless what it ran has already ended without it.
  *
  * A debug session hands the platform this process as the one it debugs
  * ([dev.basedpython.pycharm.debug.ByDapXDebugProcess]), and the platform ends a debug session's
@@ -26,6 +27,32 @@ internal class ByProcessHandler(
     commandLine: GeneralCommandLine,
     private val finishesOnItsOwn: () -> Boolean,
 ) : KillableColoredProcessHandler(commandLine) {
+
+    init {
+        // Windows has no signals: there `by` alone would be terminated and its interpreter left
+        // running, so the first Stop destroys the tree, as it did everywhere before `by run` passed
+        // a signal on.
+        setShouldKillProcessSoftly(!SystemInfo.isWindows)
+        setShouldDestroyProcessRecursively(true)
+    }
+
+    /**
+     * Stop: a SIGTERM to `by` alone, which `by run` passes on to the program it started before
+     * exiting with the program's status — so the program's own handler runs, once, and the exit
+     * code is the program's. A program that does not end on it is killed, tree and all, by the
+     * second Stop, which is [killProcess].
+     *
+     * Measured with a program that counts the signals it gets and prints as it ends: before, the
+     * soft kill was off and the tree destroyed, a SIGKILL to every process, and the program heard
+     * nothing and ended in 137. The platform's own soft kill is a SIGINT to every process of the
+     * tree, which would reach the program twice, once from `by` passing it on. And `Process.destroy`,
+     * the platform's default for one process, sends the SIGTERM but then closes the pipes the
+     * process writes to, so whatever it printed on the way out was lost and the next write killed
+     * it with SIGPIPE (exit 141). This sends the signal and leaves the pipes to close when the
+     * process has ended.
+     */
+    override fun destroyProcessGracefully(): Boolean =
+        ProcessHandle.of(process.pid()).map(ProcessHandle::destroy).orElse(false)
 
     /** Set, and never cleared, once a request to end the process came after what it ran had ended. */
     @Volatile
