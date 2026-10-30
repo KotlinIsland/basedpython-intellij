@@ -202,11 +202,13 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
             ByDebugBackend.BPD -> {
                 commandLine.infrastructureArgs += listOf(BY_LAUNCHER_FLAG, setup.wrapper.toString())
                 commandLine.infrastructureEnv[ByBpdWrapper.ENV_PORT] = setup.port.toString()
-                // What `by run` starts is bpd, and bpd does not pass a SIGTERM on to the program it
-                // debugs: measured against bpd 0.0.1-a3 (3928961), it exited on one and left the
-                // program running with no parent, where Stop of a plain run ends the program through
-                // `by`. So Stop destroys the whole tree, as it always did, until bpd passes it on.
-                commandLine.signalReachesProgram = false
+                // What `by run` starts is bpd, so Stop's SIGTERM to `by` reaches the program only if
+                // bpd passes it on. A bpd that does says so by answering DAP's `terminate`
+                // (`supportsTerminateRequest`): that request asks it for the same graceful end, and it
+                // came with the same change (bpd be235a4). One that does not — bpd 0.0.1-a3 — exited
+                // on the signal and left the program running with no parent (measured), so Stop
+                // destroys the whole tree for it, as before; as it does before the adapter has said.
+                commandLine.signalReachesProgram = { process?.adapterEndsGracefully == true }
                 commandLine.infrastructureEnv[ByBpdWrapper.ENV_RECORD] = setup.infoFile.toString()
                 // empty rather than absent, so a variable of the same name in the IDE's own
                 // environment cannot stand in for an answer the IDE did not give
@@ -556,10 +558,23 @@ internal class ByDapXDebugProcess(
      */
     internal val breakpoints = ByBreakpointChannel(dapDebugSession, session, backend)
 
+    /**
+     * Whether the adapter answers DAP's `terminate`, which asks it to end the debuggee gracefully —
+     * for bpd, also that it passes a SIGTERM it is sent on to the program. Read by Stop, through
+     * [dev.basedpython.pycharm.run.ByCommandLineState.signalReachesProgram]; false until the adapter
+     * has said.
+     */
+    @Volatile
+    var adapterEndsGracefully: Boolean = false
+        private set
+
     init {
         xDebugProcessScope.launch {
             sessionState.first { it == DapXDebugSessionState.Running || it == DapXDebugSessionState.Paused }
             breakpoints.started()
+        }
+        xDebugProcessScope.launch {
+            dapDebugSession.capabilities.collect { adapterEndsGracefully = it.supportsTerminateRequest == true }
         }
         session.addSessionListener(object : XDebugSessionListener {
             override fun sessionPaused() = breakpoints.paused()

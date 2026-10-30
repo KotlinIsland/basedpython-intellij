@@ -146,7 +146,7 @@ class ByProcessHandlerTest {
                 """.trimIndent() + "\n",
             )
         }
-        val handler = ByProcessHandler(GeneralCommandLine("sh", by.toString()), signalReachesProgram = false) { false }
+        val handler = ByProcessHandler(GeneralCommandLine("sh", by.toString()), signalReachesProgram = { false }) { false }
         handler.startNotify()
         val deadline = System.currentTimeMillis() + 10_000
         while (!java.nio.file.Files.isRegularFile(pidFile) && System.currentTimeMillis() < deadline) Thread.sleep(20)
@@ -157,6 +157,22 @@ class ByProcessHandlerTest {
 
         assertTrue(handler.waitFor(10_000), "Stop left the launcher running")
         assertTrue(program.onExit().completeOnTimeout(program, 10, java.util.concurrent.TimeUnit.SECONDS).get().let { !it.isAlive }, "Stop left the program running")
+    }
+
+    /**
+     * Under a debugger whether the signal reaches the program is the adapter's answer, which comes
+     * after `by` has started: it is asked when Stop is pressed, not when the process starts.
+     */
+    @Test
+    fun `whether a SIGTERM reaches the program is asked at Stop`() {
+        var reaches = false
+        val handler = ByProcessHandler(GeneralCommandLine("sh", "-c", "sleep 600"), signalReachesProgram = { reaches }) { false }
+        assertFalse(handler.shouldKillProcessSoftly(), "before the adapter has said, the tree")
+        reaches = true
+        assertTrue(handler.shouldKillProcessSoftly(), "once it has said, the signal")
+        handler.startNotify()
+        handler.destroyProcess()
+        assertTrue(handler.waitFor(10_000))
     }
 
     private fun started(script: String, finishesOnItsOwn: () -> Boolean): ByProcessHandler =

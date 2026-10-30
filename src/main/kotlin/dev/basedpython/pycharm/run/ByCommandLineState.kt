@@ -127,9 +127,10 @@ abstract class ByCommandLineState(
      * Whether Stop's SIGTERM to `by` reaches the program — written by the same hook as
      * [infrastructureEnv], and read by [ByProcessHandler], which destroys the whole tree on Stop
      * when it does not. `by run` passes the signal on to what it started, which is the program
-     * unless a debugger's launcher stands in front of it.
+     * unless a debugger's launcher stands in front of it. Asked when Stop is pressed, since what a
+     * debugger does with the signal is something it says once it has started.
      */
-    var signalReachesProgram: Boolean = true
+    var signalReachesProgram: () -> Boolean = { true }
 
     /**
      * Variables the configuration sets for whatever reads the run's output, here or on a run target:

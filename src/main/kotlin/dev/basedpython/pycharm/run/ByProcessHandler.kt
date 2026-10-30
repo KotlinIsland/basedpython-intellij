@@ -29,17 +29,21 @@ internal class ByProcessHandler(
      * Whether a SIGTERM to `by` reaches the program; when it does not, the first Stop destroys the
      * tree, as it did before `by run` passed one on. See [ByCommandLineState.signalReachesProgram].
      */
-    signalReachesProgram: Boolean = true,
+    private val signalReachesProgram: () -> Boolean = { true },
     private val finishesOnItsOwn: () -> Boolean,
 ) : KillableColoredProcessHandler(commandLine) {
 
     init {
-        // Windows has no signals: there `by` alone would be terminated and its interpreter left
-        // running, so the first Stop destroys the tree, as it did everywhere before `by run` passed
-        // a signal on.
-        setShouldKillProcessSoftly(signalReachesProgram && !SystemInfo.isWindows)
         setShouldDestroyProcessRecursively(true)
     }
+
+    /**
+     * Asked as Stop ends the process, not when it starts: under a debugger whether the signal reaches
+     * the program is the adapter's answer, given once it has started. Windows has no signals: there
+     * `by` alone would be terminated and its interpreter left running, so the first Stop destroys
+     * the tree, as it did everywhere before `by run` passed a signal on.
+     */
+    override fun shouldKillProcessSoftly(): Boolean = signalReachesProgram() && !SystemInfo.isWindows
 
     /**
      * Stop: a SIGTERM to `by` alone, which `by run` passes on to the program it started before
