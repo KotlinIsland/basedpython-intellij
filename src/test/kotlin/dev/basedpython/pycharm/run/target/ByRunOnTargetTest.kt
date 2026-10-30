@@ -19,6 +19,7 @@ import com.intellij.execution.target.TargetProgressIndicator
 import com.intellij.execution.target.java.JavaLanguageRuntimeConfiguration
 import com.intellij.execution.target.local.LocalTargetEnvironmentRequest
 import com.intellij.icons.AllIcons
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.BaseState
 import com.intellij.openapi.components.PersistentStateComponent
 import com.intellij.openapi.options.Configurable
@@ -28,7 +29,13 @@ import com.intellij.testFramework.junit5.TestApplication
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import com.intellij.testFramework.junit5.fixture.projectFixture
 import dev.basedpython.pycharm.run.BasedPythonRunConfigurationType
+import dev.basedpython.pycharm.run.ByBuildConfiguration
+import dev.basedpython.pycharm.run.ByCheckConfiguration
 import dev.basedpython.pycharm.run.ByRunConfiguration
+import dev.basedpython.pycharm.run.ByTargetAwareConfiguration
+import dev.basedpython.pycharm.run.test.ByTestConfiguration
+import dev.basedpython.pycharm.run.test.ByTestConfigurationType
+import com.intellij.execution.configurations.RunConfiguration
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -141,6 +148,111 @@ class ByRunOnTargetTest {
         assertTrue("args=run pkg.main" in lines, output.stdout)
         assertTrue(lines.any { it == "pythonpath=$onTarget" || it == "pythonpath=${dir.resolve("target/project")}" }, output.stdout)
         assertTrue("copied=print('hi')" in lines, output.stdout)
+    }
+
+    /** A `by` on the target that says where it ran and with what. */
+    private fun fakeBy(): Path = dir.resolve("bin/by").also {
+        it.parent.createDirectories()
+        it.writeText(
+            """
+            #!/bin/sh
+            echo "cwd=${'$'}(pwd -P)"
+            echo "args=${'$'}*"
+            echo "reporter=${'$'}BY_TEST_REPORTER"
+            """.trimIndent() + "\n",
+        )
+        it.setPosixFilePermissions(java.nio.file.attribute.PosixFilePermissions.fromString("rwxr-xr-x"))
+    }
+
+    /** Runs [configuration] with Run, as the IDE does, and answers what its `by` printed. */
+    private fun runOnTarget(configuration: RunConfiguration): ProcessOutput {
+        val environment = ExecutionEnvironmentBuilder.create(project, DefaultRunExecutor.getRunExecutorInstance(), configuration).build()
+        assertInstanceOf(ByTargetProgramRunner::class.java, environment.runner)
+        val state = environment.state!!
+        environment.prepareTargetEnvironment(state, TargetProgressIndicator.EMPTY)
+        val result = state.execute(environment.executor, environment.runner)!!
+        val output = ProcessOutput()
+        try {
+            val handler = result.processHandler!!
+            handler.addProcessListener(object : CapturingProcessAdapter(output) {})
+            handler.startNotify()
+            assertTrue(handler.waitFor(TimeUnit.SECONDS.toMillis(30)), "by on the target did not finish")
+        } finally {
+            // a test console, like the run tab it is shown in, is the EDT's to dispose
+            result.executionConsole?.let { ApplicationManager.getApplication().invokeAndWait { Disposer.dispose(it) } }
+        }
+        return output
+    }
+
+    @Test
+    fun `tests, by build and by check run on the target, each as its own subcommand`() {
+        Path.of(project.basePath!!).createDirectories()
+        withRuntime(fakeBy().toString())
+        val onTarget = dir.resolve("target/project").let { it.createDirectories(); it.toRealPath().toString() }
+        val type = BasedPythonRunConfigurationType()
+        val configurations = mapOf(
+            "args=run --in-build pytest -v tests/test_a.py" to ByTestConfiguration(project, ByTestConfigurationType().testFactory, "tests")
+                .apply { options.paths = "tests/test_a.py" },
+            "args=build" to ByBuildConfiguration(project, type.buildFactory, "build"),
+            "args=check pkg" to ByCheckConfiguration(project, type.checkFactory, "check").apply { options.paths = "pkg" },
+        )
+        for ((args, configuration) in configurations) {
+            (configuration as ByTargetAwareConfiguration<*>).defaultTargetName = target.displayName
+            configuration.checkConfiguration()
+            val lines = runOnTarget(configuration).stdout.lines()
+            assertTrue(args in lines, "$args: $lines")
+            assertTrue("cwd=$onTarget" in lines, "$args: $lines")
+        }
+    }
+
+    @Test
+    fun `a test run on the target still reports to the test tree`() {
+        Path.of(project.basePath!!).createDirectories()
+        withRuntime(fakeBy().toString())
+        val configuration = ByTestConfiguration(project, ByTestConfigurationType().testFactory, "tests")
+            .apply { defaultTargetName = target.displayName }
+
+        assertTrue("reporter=teamcity" in runOnTarget(configuration).stdout.lines())
+    }
+
+    @Test
+    fun `debugging or coverage is refused on a target for every by configuration`() {
+        withRuntime("by")
+        val type = BasedPythonRunConfigurationType()
+        val configurations = listOf(
+            ByTestConfiguration(project, ByTestConfigurationType().testFactory, "tests"),
+            ByBuildConfiguration(project, type.buildFactory, "build"),
+            ByCheckConfiguration(project, type.checkFactory, "check"),
+        )
+        for (configuration in configurations) {
+            configuration.defaultTargetName = target.displayName
+            // build and check have no debug runner at all; the configuration refuses before any runner matters
+            val environment = ExecutionEnvironmentBuilder(project, DefaultDebugExecutor.getDebugExecutorInstance())
+                .runProfile(configuration)
+                .runner(ProgramRunner.getRunner(DefaultRunExecutor.EXECUTOR_ID, configuration)!!)
+                .build()
+            val e = assertThrows<CantRunException> { configuration.getState(environment.executor, environment) }
+            assertTrue(e.message!!.contains("dir target"), e.message)
+        }
+    }
+
+    @Test
+    fun `plain pytest, which runs this machine's python, is refused on a target`() {
+        withRuntime("by")
+        val configuration = ByTestConfiguration(project, ByTestConfigurationType().testFactory, "tests").apply {
+            defaultTargetName = target.displayName
+            options.plainPytest = true
+        }
+        assertThrows<RuntimeConfigurationError> { configuration.checkConfiguration() }
+        val environment = ExecutionEnvironmentBuilder.create(project, DefaultRunExecutor.getRunExecutorInstance(), configuration).build()
+        assertThrows<CantRunException> { configuration.getState(environment.executor, environment) }
+    }
+
+    @Test
+    fun `a test configuration on this machine keeps the default runner`() {
+        val configuration = ByTestConfiguration(project, ByTestConfigurationType().testFactory, "tests")
+        val runner = ProgramRunner.getRunner(DefaultRunExecutor.EXECUTOR_ID, configuration)
+        assertFalse(runner is ByTargetProgramRunner, "a local run must not go through the target runner: $runner")
     }
 
     @Test

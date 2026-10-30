@@ -1,9 +1,7 @@
 package dev.basedpython.pycharm.run
 
-import dev.basedpython.pycharm.lsp.BasedPythonBinaries
 import com.intellij.execution.Executor
 import com.intellij.execution.configurations.ConfigurationFactory
-import com.intellij.execution.configurations.RuntimeConfigurationException
 import com.intellij.execution.configurations.RunConfigurationBase
 import com.intellij.execution.configurations.RunProfileState
 import com.intellij.execution.runners.ExecutionEnvironment
@@ -12,20 +10,15 @@ import com.intellij.openapi.project.Project
 import com.intellij.util.execution.ParametersListUtil
 
 class ByCheckConfiguration(project: Project, factory: ConfigurationFactory, name: String) :
-    RunConfigurationBase<ByCheckOptions>(project, factory, name), ByConfiguration {
-
-    public override fun getOptions(): ByCheckOptions = super.getOptions() as ByCheckOptions
+    ByTargetAwareConfiguration<ByCheckOptions>(project, factory, name) {
 
     override fun getConfigurationEditor(): SettingsEditor<out RunConfigurationBase<ByCheckOptions>> =
         ByCheckSettingsEditor(project)
 
-    override fun checkConfiguration() {
-        if (!BasedPythonBinaries.isByAvailable(project)) {
-            throw RuntimeConfigurationException("by binary not found — set path in Settings | basedpython")
-        }
-    }
+    override fun checkConfiguration() = checkBy()
 
     override fun getState(executor: Executor, environment: ExecutionEnvironment): RunProfileState {
+        refuseOnTarget(executor)
         val opts = options
         return object : ByCommandLineState(project, opts, environment) {
             override val subcommand = "check"

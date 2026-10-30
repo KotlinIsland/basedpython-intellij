@@ -13,11 +13,14 @@ import com.intellij.execution.ui.RunContentDescriptor
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.fileEditor.FileDocumentManager
-import dev.basedpython.pycharm.run.ByRunConfiguration
+import dev.basedpython.pycharm.run.ByTargetAwareConfiguration
+import com.intellij.execution.configurations.WrappingRunConfiguration
+import com.intellij.execution.target.TargetEnvironmentAwareRunProfile
 import org.jetbrains.concurrency.Promise
 
 /**
- * Runs a `by run` configuration on the run target it names.
+ * Runs a `by` configuration — `by run`, the tests, `by build`, `by check` — on the run target it
+ * names.
  *
  * The platform's default Run runner executes a state on the EDT and never prepares a target, and
  * preparing one is slow — pulling or starting a container, connecting and uploading over SSH. So
@@ -33,13 +36,20 @@ class ByTargetProgramRunner : AsyncProgramRunner<RunnerSettings>() {
 
     override fun getRunnerId(): String = "basedpython.target"
 
-    override fun canRun(executorId: String, profile: RunProfile): Boolean =
-        executorId == DefaultRunExecutor.EXECUTOR_ID &&
-            profile is ByRunConfiguration &&
-            profile.getEffectiveTargetName(profile.project) != null
+    /**
+     * A `by` configuration with a target, or what runs one again — *Rerun Failed Tests* wraps the test
+     * configuration in a profile of the platform's, which says the same target.
+     */
+    override fun canRun(executorId: String, profile: RunProfile): Boolean {
+        if (executorId != DefaultRunExecutor.EXECUTOR_ID || profile !is TargetEnvironmentAwareRunProfile) return false
+        val configuration = profile as? ByTargetAwareConfiguration<*>
+            ?: (profile as? WrappingRunConfiguration<*>)?.peer as? ByTargetAwareConfiguration<*>
+            ?: return false
+        return profile.getEffectiveTargetName(configuration.project) != null
+    }
 
     override fun execute(environment: ExecutionEnvironment, state: RunProfileState): Promise<RunContentDescriptor?> {
-        // [canRun] admits only a `by run` configuration, whose state is a target-aware ByCommandLineState
+        // [canRun] admits only a `by` configuration, whose state on a target is a ByCommandLineState
         val targetState = checkNotNull(state as? TargetEnvironmentAwareRunProfileState) { "not a target-aware state: $state" }
         // a container mounts the project and an SSH target copies it, and both read it from disk
         FileDocumentManager.getInstance().saveAllDocuments()

@@ -167,6 +167,14 @@ abstract class ByCommandLineState(
     private var targetPaths: ByTargetPaths? = null
 
     /**
+     * Translates a path the run target printed into the project's file, once the target exists, so
+     * what a run prints there can link to the project; null for a run on this machine, whose paths
+     * need no translating.
+     */
+    protected val fromTarget: ((String) -> Path?)?
+        get() = targetPaths?.let { paths -> paths::toLocal }
+
+    /**
      * Whether the configuration asked for a run target rather than this machine.
      *
      * Read from the configuration rather than from whether a target was prepared, so a launch path

@@ -1,9 +1,15 @@
 package dev.basedpython.pycharm.run.test
 
-import dev.basedpython.pycharm.lsp.BasedPythonBinaries
 import dev.basedpython.pycharm.run.ByCommandLineState
 import dev.basedpython.pycharm.run.ByCommonOptions
-import dev.basedpython.pycharm.run.ByConfiguration
+import dev.basedpython.pycharm.run.ByTargetAwareConfiguration
+import dev.basedpython.pycharm.run.ergonomics.ByConsoleFilter
+import dev.basedpython.pycharm.run.test.tree.ByTargetTestLocator
+import dev.basedpython.pycharm.util.BasedPythonBundle
+import com.intellij.execution.CantRunException
+import com.intellij.openapi.application.ApplicationManager
+import com.intellij.execution.configurations.RuntimeConfigurationError
+import java.nio.file.Path
 import dev.basedpython.pycharm.run.test.tree.ByTestEventsConverter
 import dev.basedpython.pycharm.run.test.tree.ByTestLocator
 import com.intellij.execution.DefaultExecutionResult
@@ -13,7 +19,6 @@ import com.intellij.execution.configurations.CommandLineState
 import com.intellij.execution.configurations.ConfigurationFactory
 import com.intellij.execution.configurations.RunConfigurationBase
 import com.intellij.execution.configurations.RunProfileState
-import com.intellij.execution.configurations.RuntimeConfigurationException
 import com.intellij.execution.runners.ExecutionEnvironment
 import com.intellij.execution.runners.ProgramRunner
 import com.intellij.execution.testframework.TestConsoleProperties
@@ -49,26 +54,28 @@ class ByTestOptions : ByCommonOptions() {
 }
 
 class ByTestConfiguration(project: Project, factory: ConfigurationFactory, name: String) :
-    RunConfigurationBase<ByTestOptions>(project, factory, name), ByConfiguration {
-
-    public override fun getOptions(): ByTestOptions = super.getOptions() as ByTestOptions
+    ByTargetAwareConfiguration<ByTestOptions>(project, factory, name) {
 
     override fun getConfigurationEditor(): SettingsEditor<out RunConfigurationBase<ByTestOptions>> =
         ByTestSettingsEditor(project)
 
     override fun checkConfiguration() {
-        if (!BasedPythonBinaries.isByAvailable(project)) {
-            throw RuntimeConfigurationException("by binary not found — set path in Settings | basedpython")
+        checkBy()
+        if (options.plainPytest && targetName != null) {
+            throw RuntimeConfigurationError(BasedPythonBundle.message("target.error.plainPytest"))
         }
     }
 
     override fun getState(executor: Executor, environment: ExecutionEnvironment): RunProfileState {
+        refuseOnTarget(executor)
         val opts = options
         val config = this
         if (opts.plainPytest) {
+            // the interpreter it starts is this machine's, in the project here
+            if (targetName != null) throw CantRunException(BasedPythonBundle.message("target.error.plainPytest"))
             return PlainPytestCommandLineState(project, opts, environment) { handler, exec ->
                 SMTestRunnerConnectionUtil.createAndAttachConsole(
-                    FRAMEWORK_NAME, handler, testConsoleProperties(config, exec),
+                    FRAMEWORK_NAME, handler, testConsoleProperties(config, exec, fromTarget = null),
                 )
             }.also { it.paths = opts.paths }
         }
@@ -96,19 +103,34 @@ class ByTestConfiguration(project: Project, factory: ConfigurationFactory, name:
              */
             override fun execute(executor: Executor, runner: ProgramRunner<*>): ExecutionResult {
                 val handler = startProcess()
-                val console = SMTestRunnerConnectionUtil.createAndAttachConsole(
-                    FRAMEWORK_NAME, handler, testConsoleProperties(config, executor),
-                )
-                return DefaultExecutionResult(console, handler, *createActions(console, handler, executor))
-                    .withTestRestartActions(console)
+                val fromTarget = fromTarget
+                // The test console is the EDT's to build, and on a run target this runs on the thread
+                // the target was prepared on (see ByTargetProgramRunner), which is where the process is
+                // started and stays; on this machine it is the EDT already, and this runs inline.
+                var result: ExecutionResult? = null
+                ApplicationManager.getApplication().invokeAndWait {
+                    val console = SMTestRunnerConnectionUtil.createAndAttachConsole(
+                        FRAMEWORK_NAME, handler, testConsoleProperties(config, executor, fromTarget),
+                    )
+                    // built here rather than by the state, so the filter linking the target's paths,
+                    // which the state adds to a console of its own, is added here
+                    fromTarget?.let { console.addMessageFilter(ByConsoleFilter(project, it)) }
+                    result = DefaultExecutionResult(console, handler, *createActions(console, handler, executor))
+                        .withTestRestartActions(console)
+                }
+                return checkNotNull(result)
             }
         }
     }
 
-    /** Wires the `by`-specific output parser and source locator into the SM test runner. */
+    /**
+     * Wires the `by`-specific output parser and source locator into the SM test runner; [fromTarget]
+     * translates the paths a run on a run target reports, null for a run on this machine.
+     */
     private fun testConsoleProperties(
         config: ByTestConfiguration,
         executor: Executor,
+        fromTarget: ((String) -> Path?)?,
     ): SMTRunnerConsoleProperties =
         object : SMTRunnerConsoleProperties(config, FRAMEWORK_NAME, executor), SMCustomMessagesParsing {
             override fun createTestEventsConverter(
@@ -117,7 +139,7 @@ class ByTestConfiguration(project: Project, factory: ConfigurationFactory, name:
             ): OutputToGeneralTestEventsConverter =
                 ByTestEventsConverter(testFrameworkName, consoleProperties)
 
-            override fun getTestLocator(): SMTestLocator = ByTestLocator
+            override fun getTestLocator(): SMTestLocator = fromTarget?.let(::ByTargetTestLocator) ?: ByTestLocator
 
             override fun createRerunFailedTestsAction(consoleView: ConsoleView): AbstractRerunFailedTestsAction =
                 ByRerunFailedTestsAction(consoleView, this)

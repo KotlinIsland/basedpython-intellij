@@ -1,5 +1,8 @@
 package dev.basedpython.pycharm.run.test
 
+import com.intellij.execution.target.LanguageRuntimeType
+import com.intellij.execution.target.TargetEnvironmentAwareRunProfile
+import com.intellij.execution.target.TargetEnvironmentConfiguration
 import com.intellij.execution.DefaultExecutionResult
 import com.intellij.execution.Executor
 import com.intellij.execution.configurations.RunProfileState
@@ -41,8 +44,15 @@ internal class ByRerunFailedTestsAction(console: ComponentContainer, properties:
         if (failed.isEmpty()) return null
         val rerun = configuration.clone() as ByTestConfiguration
         rerun.options.paths = ParametersListUtil.join(failed)
-        return object : MyRunProfile(rerun) {
+        // on the configuration's run target too: a profile that does not say so is run on this machine
+        return object : MyRunProfile(rerun), TargetEnvironmentAwareRunProfile {
             override fun getState(executor: Executor, env: ExecutionEnvironment): RunProfileState = rerun.getState(executor, env)
+            override fun canRunOn(target: TargetEnvironmentConfiguration): Boolean = rerun.canRunOn(target)
+            override fun getDefaultLanguageRuntimeType(): LanguageRuntimeType<*> = rerun.defaultLanguageRuntimeType
+            override fun getDefaultTargetName(): String? = rerun.defaultTargetName
+            override fun setDefaultTargetName(targetName: String?) {
+                rerun.defaultTargetName = targetName
+            }
         }
     }
 }

@@ -2,7 +2,6 @@ package dev.basedpython.pycharm.run
 
 import dev.basedpython.pycharm.console.ByConsoleRunState
 
-import dev.basedpython.pycharm.lsp.BasedPythonBinaries
 import dev.basedpython.pycharm.run.main.ByMainArguments
 import dev.basedpython.pycharm.run.main.ByMissingArgumentsHint
 import dev.basedpython.pycharm.run.main.promptForArguments
@@ -22,26 +21,17 @@ import com.intellij.execution.configurations.RunConfigurationBase
 import com.intellij.execution.configurations.RunProfileState
 import com.intellij.execution.process.ProcessHandler
 import com.intellij.execution.runners.ExecutionEnvironment
-import com.intellij.execution.target.LanguageRuntimeType
-import com.intellij.execution.target.TargetEnvironmentAwareRunProfile
-import com.intellij.execution.target.TargetEnvironmentConfiguration
-import com.intellij.execution.target.getEffectiveConfiguration
-import com.intellij.execution.target.getEffectiveTargetName
 import com.intellij.execution.ui.ConsoleView
 import com.intellij.execution.util.ProgramParametersConfigurator
 import com.intellij.execution.util.configureEnvsFromFiles
 import com.intellij.openapi.options.SettingsEditor
 import com.intellij.openapi.project.Project
 import com.intellij.util.execution.ParametersListUtil
-import dev.basedpython.pycharm.run.target.ByLanguageRuntimeType
 import dev.basedpython.pycharm.util.BasedPythonBundle
 import java.io.File
 
 class ByRunConfiguration(project: Project, factory: ConfigurationFactory, name: String) :
-    RunConfigurationBase<ByRunOptions>(project, factory, name), ByConfiguration, TargetEnvironmentAwareRunProfile,
-    EnvFilesOptions, InputRedirectAware {
-
-    public override fun getOptions(): ByRunOptions = super.getOptions() as ByRunOptions
+    ByTargetAwareConfiguration<ByRunOptions>(project, factory, name), EnvFilesOptions, InputRedirectAware {
 
     override fun getConfigurationEditor(): SettingsEditor<out RunConfigurationBase<ByRunOptions>> =
         ByRunFragmentedEditor(this)
@@ -73,22 +63,6 @@ class ByRunConfiguration(project: Project, factory: ConfigurationFactory, name: 
     }
 
     /**
-     * A target this configuration can run on: one with a basedpython runtime, which says where its
-     * `by` is. The "Run on" box offers only these, and its "new target" wizard adds the runtime.
-     */
-    override fun canRunOn(target: TargetEnvironmentConfiguration): Boolean =
-        ByLanguageRuntimeType.runtimeOf(target) != null
-
-    override fun getDefaultLanguageRuntimeType(): LanguageRuntimeType<*> = ByLanguageRuntimeType.getInstance()
-
-    /** Stored where the platform's own configurations keep it, `<target name="…"/>`. */
-    override fun getDefaultTargetName(): String? = options.remoteTarget
-
-    override fun setDefaultTargetName(targetName: String?) {
-        options.remoteTarget = targetName
-    }
-
-    /**
      * A blank module is `by run` with no module, which runs the project's configured `run.main`.
      *
      * So it is only an error where `by run` would refuse it: when the server has said the project
@@ -114,35 +88,15 @@ class ByRunConfiguration(project: Project, factory: ConfigurationFactory, name: 
             if (!file.isFile) throw RuntimeConfigurationException(BasedPythonBundle.message("run.error.inputFile", file.path))
         }
         checkEnvFiles()
-        if (getEffectiveTargetName(project) != null) {
-            checkTarget()
-        } else if (!BasedPythonBinaries.isByAvailable(project)) {
-            throw RuntimeConfigurationException("by binary not found — set path in Settings | basedpython")
-        }
+        checkBy()
         if (options.runWithConsole) checkConsole()
     }
 
     /** What [ByRunOptions.runWithConsole] leaves out of a run, said before it starts rather than silently. */
     internal fun checkConsole() {
-        if (getEffectiveTargetName(project) != null) throw RuntimeConfigurationError(BasedPythonBundle.message("run.error.consoleOnTarget"))
+        if (targetName != null) throw RuntimeConfigurationError(BasedPythonBundle.message("run.error.consoleOnTarget"))
         if (options.programArgs.isNotBlank()) throw RuntimeConfigurationWarning(BasedPythonBundle.message("run.warning.consoleArguments"))
         if (options.emulateTerminal || options.redirectInput) throw RuntimeConfigurationWarning(BasedPythonBundle.message("run.warning.consoleTerminal"))
-    }
-
-    /**
-     * On a run target the `by` that matters is the target's, so whether one is installed here says
-     * nothing: what has to hold is that the target exists, is valid, and says where its `by` is.
-     *
-     * The platform's validation checks each runtime the target has (so a basedpython runtime with no
-     * `by` path is caught there) but not that it has *this* one: a target set up for Java alone
-     * passes it.
-     */
-    private fun checkTarget() {
-        validateRunTarget(project)
-        val target = getEffectiveConfiguration(this, project) ?: return
-        if (ByLanguageRuntimeType.runtimeOf(target) == null) {
-            throw RuntimeConfigurationError(BasedPythonBundle.message("target.error.noRuntime", target.displayName))
-        }
     }
 
     /**
@@ -151,16 +105,10 @@ class ByRunConfiguration(project: Project, factory: ConfigurationFactory, name: 
      * should do.
      */
     override fun getState(executor: Executor, environment: ExecutionEnvironment): RunProfileState? {
-        // Debugging needs the debuggee to reach a port and files on this machine; on a target it
-        // could reach neither (see ByCommandLineState.startOnTarget), so it is refused here, before
-        // the debugger has started a session to wait for it.
-        val target = getEffectiveTargetName(project)
-        if (target != null && executor.id != DefaultRunExecutor.EXECUTOR_ID) {
-            throw CantRunException(BasedPythonBundle.message("target.error.executor", executor.actionName, target))
-        }
+        refuseOnTarget(executor)
         // Run only: a debug session needs `by run`'s process to attach to, which a console has not got
         if (options.runWithConsole && executor.id == DefaultRunExecutor.EXECUTOR_ID) {
-            if (target != null) throw CantRunException(BasedPythonBundle.message("run.error.consoleOnTarget"))
+            if (targetName != null) throw CantRunException(BasedPythonBundle.message("run.error.consoleOnTarget"))
             return ByConsoleRunState(this)
         }
         if (!askForArguments(executor)) return null
