@@ -124,6 +124,14 @@ abstract class ByCommandLineState(
     var finishesOnItsOwn: () -> Boolean = { false }
 
     /**
+     * Whether Stop's SIGTERM to `by` reaches the program — written by the same hook as
+     * [infrastructureEnv], and read by [ByProcessHandler], which destroys the whole tree on Stop
+     * when it does not. `by run` passes the signal on to what it started, which is the program
+     * unless a debugger's launcher stands in front of it.
+     */
+    var signalReachesProgram: Boolean = true
+
+    /**
      * Variables the configuration sets for whatever reads the run's output, here or on a run target:
      * a test run's `BY_TEST_REPORTER`, which has `by run pytest` report to the IDE's test tree. Applied
      * after [ByCommonOptions.envVars], since the console is built for this output and no other.
@@ -207,7 +215,7 @@ abstract class ByCommandLineState(
             fileEnvironment = fileEnvironment(),
         )
         inputFile?.let(cmd::withInput)
-        val handler = ByProcessHandler(if (emulateTerminal) PtyCommandLine(cmd).withConsoleMode(false) else cmd, finishesOnItsOwn)
+        val handler = ByProcessHandler(if (emulateTerminal) PtyCommandLine(cmd).withConsoleMode(false) else cmd, signalReachesProgram, finishesOnItsOwn)
         infrastructureListeners.forEach(handler::addProcessListener)
         ProcessTerminatedListener.attach(handler)
         return handler

@@ -25,6 +25,11 @@ import com.intellij.openapi.util.SystemInfo
  */
 internal class ByProcessHandler(
     commandLine: GeneralCommandLine,
+    /**
+     * Whether a SIGTERM to `by` reaches the program; when it does not, the first Stop destroys the
+     * tree, as it did before `by run` passed one on. See [ByCommandLineState.signalReachesProgram].
+     */
+    signalReachesProgram: Boolean = true,
     private val finishesOnItsOwn: () -> Boolean,
 ) : KillableColoredProcessHandler(commandLine) {
 
@@ -32,7 +37,7 @@ internal class ByProcessHandler(
         // Windows has no signals: there `by` alone would be terminated and its interpreter left
         // running, so the first Stop destroys the tree, as it did everywhere before `by run` passed
         // a signal on.
-        setShouldKillProcessSoftly(!SystemInfo.isWindows)
+        setShouldKillProcessSoftly(signalReachesProgram && !SystemInfo.isWindows)
         setShouldDestroyProcessRecursively(true)
     }
 

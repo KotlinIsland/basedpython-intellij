@@ -202,6 +202,11 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
             ByDebugBackend.BPD -> {
                 commandLine.infrastructureArgs += listOf(BY_LAUNCHER_FLAG, setup.wrapper.toString())
                 commandLine.infrastructureEnv[ByBpdWrapper.ENV_PORT] = setup.port.toString()
+                // What `by run` starts is bpd, and bpd does not pass a SIGTERM on to the program it
+                // debugs: measured against bpd 0.0.1-a3 (3928961), it exited on one and left the
+                // program running with no parent, where Stop of a plain run ends the program through
+                // `by`. So Stop destroys the whole tree, as it always did, until bpd passes it on.
+                commandLine.signalReachesProgram = false
                 commandLine.infrastructureEnv[ByBpdWrapper.ENV_RECORD] = setup.infoFile.toString()
                 // empty rather than absent, so a variable of the same name in the IDE's own
                 // environment cannot stand in for an answer the IDE did not give

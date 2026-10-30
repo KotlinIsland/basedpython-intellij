@@ -129,6 +129,36 @@ class ByProcessHandlerTest {
         assertEquals(5, handler.exitCode, output.toString())
     }
 
+    /**
+     * What `by run` starts under bpd is bpd, which ends on a SIGTERM without passing it on (measured
+     * against bpd 0.0.1-a3): a SIGTERM to `by` would leave the program running with no parent. So
+     * when the signal does not reach the program, Stop destroys the tree.
+     */
+    @Test
+    fun `when a SIGTERM would not reach the program, Stop leaves nothing of the tree running`() {
+        val pidFile = dir.resolve("program.pid")
+        // the launcher in front of the program: it ends on a SIGTERM and passes nothing on
+        val by = dir.resolve("by.sh").apply {
+            writeText(
+                """
+                sh -c 'trap "" TERM; echo ${'$'}${'$'} > "$pidFile"; while :; do sleep 0.05; done' &
+                wait
+                """.trimIndent() + "\n",
+            )
+        }
+        val handler = ByProcessHandler(GeneralCommandLine("sh", by.toString()), signalReachesProgram = false) { false }
+        handler.startNotify()
+        val deadline = System.currentTimeMillis() + 10_000
+        while (!java.nio.file.Files.isRegularFile(pidFile) && System.currentTimeMillis() < deadline) Thread.sleep(20)
+        Thread.sleep(100)
+        val program = ProcessHandle.of(pidFile.toFile().readText().trim().toLong()).get()
+
+        handler.destroyProcess()
+
+        assertTrue(handler.waitFor(10_000), "Stop left the launcher running")
+        assertTrue(program.onExit().completeOnTimeout(program, 10, java.util.concurrent.TimeUnit.SECONDS).get().let { !it.isAlive }, "Stop left the program running")
+    }
+
     private fun started(script: String, finishesOnItsOwn: () -> Boolean): ByProcessHandler =
-        ByProcessHandler(GeneralCommandLine("sh", "-c", script), finishesOnItsOwn).also { it.startNotify() }
+        ByProcessHandler(GeneralCommandLine("sh", "-c", script), finishesOnItsOwn = finishesOnItsOwn).also { it.startNotify() }
 }
