@@ -240,6 +240,10 @@
                                       implementationClass="dev.basedpython.pycharm.navigation.ByStructureViewFactory"/>
         <!-- Qualified names for by's workspace symbols, so Go to Class and Go to Symbol match a dotted
              query, Shape.desc, against shapes.base.Shape.describe. See navigation.ByWorkspaceSymbols. -->
+        <!-- A target in a Go to popup (Choose Implementation, …) named and placed by by/declaration,
+             ahead of the platform LSP's file name; see navigation.ByGotoTargetPresentationProvider. -->
+        <gotoTargetPresentationProvider order="first"
+            implementation="dev.basedpython.pycharm.navigation.ByGotoTargetPresentationProvider"/>
         <gotoClassContributor implementation="dev.basedpython.pycharm.navigation.ByQualifiedSymbolNames"/>
         <gotoSymbolContributor implementation="dev.basedpython.pycharm.navigation.ByQualifiedSymbolNames"/>
 
