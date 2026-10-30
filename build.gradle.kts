@@ -24,7 +24,7 @@ plugins {
 //
 // `verifyPlugin` also checks the newest 263 snapshot (see `ides { }`), and
 // `-PplatformVersion=263.+` — or any build — compiles and tests against it.
-val platformVersion: String = providers.gradleProperty("platformVersion").getOrElse("263.7307.44-EAP-CANDIDATE")
+val platformVersion: String = providers.gradleProperty("platformVersion").getOrElse("263.7307.112-EAP-CANDIDATE")
 
 dependencies {
   // JUnit 6: the platform's JUnit 5 test framework calls `ExtensionContext.Store.computeIfAbsent`,

@@ -30,7 +30,7 @@ class ByBreakpointPropertiesTest {
         val loaded = type.createProperties()
         assertNotNull(loaded, "the manager has nothing to read <properties> into")
         // What `ComponentSerializationUtil.loadComponentState` does with it.
-        loaded!!.loadState(XmlSerializer.deserialize(saved, ByBreakpointProperties.State::class.java))
+        loaded.loadState(XmlSerializer.deserialize(saved, ByBreakpointProperties.State::class.java))
 
         assertTrue(loaded.isLogpoint)
     }

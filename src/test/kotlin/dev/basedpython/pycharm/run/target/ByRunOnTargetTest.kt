@@ -197,7 +197,7 @@ class ByRunOnTargetTest {
             "args=check pkg" to ByCheckConfiguration(project, type.checkFactory, "check").apply { options.paths = "pkg" },
         )
         for ((args, configuration) in configurations) {
-            (configuration as ByTargetAwareConfiguration<*>).defaultTargetName = target.displayName
+            configuration.defaultTargetName = target.displayName
             configuration.checkConfiguration()
             val lines = runOnTarget(configuration).stdout.lines()
             assertTrue(args in lines, "$args: $lines")
@@ -238,7 +238,7 @@ class ByRunOnTargetTest {
             override fun getHelpId(): String? = null
         }
         for (configuration in configurations) {
-            (configuration as ByTargetAwareConfiguration<*>).defaultTargetName = target.displayName
+            configuration.defaultTargetName = target.displayName
             val environment = ExecutionEnvironmentBuilder(project, coverage)
                 .runProfile(configuration)
                 .runner(ProgramRunner.getRunner(DefaultRunExecutor.EXECUTOR_ID, configuration)!!)
