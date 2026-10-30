@@ -517,6 +517,17 @@
         <renamePsiElementProcessor
             implementation="dev.basedpython.pycharm.lsp.refactor.ByRenamedNameProcessor"
             order="first"/>
+        <!-- The renames by offers beside a rename (by/renameOffers): overriding methods, their
+             parameters, the module named after a class, one automatic-renaming dialog per kind, in
+             this order, applied in the rename's command. See lsp.refactor.ByRenameOffers. -->
+        <automaticRenamerFactory implementation="dev.basedpython.pycharm.lsp.refactor.ByRenameOverridesFactory"/>
+        <automaticRenamerFactory implementation="dev.basedpython.pycharm.lsp.refactor.ByRenameParametersFactory"/>
+        <automaticRenamerFactory implementation="dev.basedpython.pycharm.lsp.refactor.ByRenameModuleFactory"/>
+        <renamePsiElementProcessor
+            implementation="dev.basedpython.pycharm.lsp.refactor.ByRenameOfferProcessor"
+            order="first"/>
+        <renameInputValidator implementation="dev.basedpython.pycharm.lsp.refactor.ByRenameOfferNameValidator"/>
+        <elementDescriptionProvider implementation="dev.basedpython.pycharm.lsp.refactor.ByRenameOfferDescriptionProvider"/>
         <!-- Renaming or moving a .by module or package also rewrites the imports that name it, as
              by works them out (workspace/willRenameFiles) before anything moves. Ahead of the
              platform's own file rename and move, which these extend and which keep everything else. -->

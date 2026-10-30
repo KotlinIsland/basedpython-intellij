@@ -47,6 +47,7 @@ import dev.basedpython.pycharm.lsp.ext.ByAnnotationEdit
 import dev.basedpython.pycharm.lsp.ext.ByChangeSignatureParams
 import dev.basedpython.pycharm.lsp.ext.ByChangedParameter
 import dev.basedpython.pycharm.lsp.ext.ByNamedRenameParams
+import dev.basedpython.pycharm.lsp.ext.ByRenameOffer
 import dev.basedpython.pycharm.lsp.ext.BySignature
 import dev.basedpython.pycharm.lsp.outline.ByOutline
 import dev.basedpython.pycharm.lsp.outline.ByOutlines
@@ -428,6 +429,13 @@ internal class ByChangeSignatureExecution(support: SuggestedRefactoringSupport) 
  */
 internal class ByRenamedName(private val file: PsiFile, private val document: Document, range: TextRange) : FakePsiElement() {
 
+    /**
+     * What `by` offers to rename beside this name ([ByRenameOffers]), read when the rename finds its
+     * uses and handed to the platform's automatic renamers straight after, on the same thread.
+     */
+    @Volatile
+    var offers: List<ByRenameOffer> = emptyList()
+
     private val marker: RangeMarker = document.createRangeMarker(range).apply {
         isGreedyToLeft = true
         isGreedyToRight = true
@@ -499,7 +507,10 @@ class ByRenamedNameProcessor : RenamePsiElementProcessor() {
             ByTextHash.of(document.immutableCharSequence),
         )
         when (val answer = server.askBy("textDocument/rename") { it.textDocumentService.rename(params) }) {
-            is ByAnswer.Answer -> result += ByImportEdit.of(project, answer.value, element)
+            is ByAnswer.Answer -> {
+                result += ByImportEdit.of(project, answer.value, element)
+                element.offers = ByRenameOffers.ask(server, project, file, document, element.textOffset, newName)
+            }
             ByAnswer.None, ByAnswer.Failed ->
                 result += ByRenameUnknown(element, BasedPythonBundle.message("rename.by.suggested.failed", element.name, newName))
         }

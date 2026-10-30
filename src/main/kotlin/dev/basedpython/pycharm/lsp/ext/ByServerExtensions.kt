@@ -380,6 +380,19 @@ interface ByServerExtensions {
     fun renameNameSuggestions(args: ByRenameNameSuggestionsParams): CompletableFuture<List<String>?>
 
     /**
+     * The renames offered beside a rename — the methods that override a renamed method, the
+     * same-named parameter of each, the module a renamed class is named after — each as an edit of
+     * its own, for the user to choose. `textDocument/rename` gives the same offers as change
+     * annotations, whose ids lsp4j does not keep, so this is how they are read; the rename itself is
+     * still `textDocument/rename`'s, and no offer repeats an edit of it. Refused, with the rename's
+     * reason, where the rename would refuse the name; `[]` where there is nothing to offer. Asked by
+     * [dev.basedpython.pycharm.lsp.refactor.ByRenamedNameProcessor]; a `by` from before the request
+     * answers `MethodNotFound`.
+     */
+    @JsonRequest("by/renameOffers")
+    fun renameOffers(args: ByRenameOffersParams): CompletableFuture<List<ByRenameOffer>?>
+
+    /**
      * `textDocument/references` with what each reference does with the name: the same references in
      * the same order, each with its [ByReference.kind]. `null` where `textDocument/references` is. A
      * `by` from before the request answers `MethodNotFound`.
@@ -1321,6 +1334,27 @@ data class ByRenameNameVerdict(val valid: Boolean = false, val message: String? 
 
 /** The symbol at a position in one text of the document, to suggest names for. */
 data class ByRenameNameSuggestionsParams(val textDocument: TextDocumentIdentifier, val position: Position, val textHash: String)
+
+/** `textDocument/rename`'s params, for `by/renameOffers`, in one text of the document. */
+data class ByRenameOffersParams(
+    val textDocument: TextDocumentIdentifier,
+    val position: Position,
+    val newName: String,
+    val textHash: String,
+)
+
+/**
+ * One rename offered beside a rename. [id] is `override:<n>`, `parameter:<n>` or `module:<n>`;
+ * [label] the kind, shared by every offer of it (*Rename overriding methods*); [description] what
+ * this one renames (`` `dog.Dog.speak` ``); and [edit] makes it and nothing else — plain `changes`, or
+ * for a module the import rewrites as `documentChanges` followed by the `RenameFile`.
+ */
+data class ByRenameOffer(
+    val id: String = "",
+    val label: String = "",
+    val description: String = "",
+    val edit: org.eclipse.lsp4j.WorkspaceEdit? = null,
+)
 
 /** A position on a class's name in one text of the document, for `by/mro`. */
 data class ByMroParams(val textDocument: TextDocumentIdentifier, val position: Position, val textHash: String)
