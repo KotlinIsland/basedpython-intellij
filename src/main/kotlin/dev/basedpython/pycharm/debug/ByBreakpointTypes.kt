@@ -44,6 +44,19 @@ class ByLineBreakpointType : XLineBreakpointType<ByBreakpointProperties>(
         ByBreakpointProperties()
 
     /**
+     * What the breakpoint manager reads a saved breakpoint's `<properties>` into, when it loads the
+     * workspace at startup and when this plugin is loaded again after an unload.
+     *
+     * Not the same hook as [createBreakpointProperties], which is only for a breakpoint being made.
+     * The type's default answers null, and the manager then drops the saved properties and loads the
+     * breakpoint with none — so every log point came back from a restart without
+     * [ByBreakpointProperties.isLogpoint]. One with an expression still read as a log point by
+     * behaviour; one with nothing to log yet came back an ordinary breakpoint that does not suspend,
+     * with no `Log:` box. Measured in PyCharm 263.7649: saved with the flag, loaded without it.
+     */
+    override fun createProperties(): ByBreakpointProperties = ByBreakpointProperties()
+
+    /**
      * On a line that holds code — see [ByBreakableLines]. It used to be every line of an owned file,
      * blank and comment lines included, and a breakpoint on a blank line inside a function was moved
      * by the debugger to the next line with code, which was the module-level `def` after it: the
