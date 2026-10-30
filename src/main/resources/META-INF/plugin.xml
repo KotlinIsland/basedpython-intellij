@@ -667,6 +667,9 @@
         <lang.formatter
             language="basedpython"
             implementationClass="dev.basedpython.pycharm.editor.indent.ByIndentFormattingModelBuilder"/>
+        <!-- Backspace straight after typing `"""` takes back the closing `"""` it wrote, too. -->
+        <backspaceHandlerDelegate
+            implementation="dev.basedpython.pycharm.editor.smart.ByTripleQuoteBackspaceDelegate"/>
         <editor.backspaceModeOverride
             language="basedpython"
             implementationClass="dev.basedpython.pycharm.editor.smart.BasedPythonBackspaceModeOverride"/>
