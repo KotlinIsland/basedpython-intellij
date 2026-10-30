@@ -63,6 +63,23 @@ object ByBpdWrapper {
     /** The `bpd` on the IDE's `PATH`, for when there is none beside `by` or the interpreter. */
     const val ENV_BPD_FALLBACK: String = "BASEDPYTHON_BPD_FALLBACK"
 
+    /**
+     * Where `bpd dap --connect` dials the IDE, `HOST:PORT`, for a session on a run target: there
+     * the IDE listens and `bpd` connects out, since a container's published port does not reach
+     * `bpd dap --listen`, which binds loopback alone (measured on Docker). Empty for a session on
+     * this machine, which `bpd dap --listen` serves.
+     */
+    const val ENV_CONNECT: String = "BASEDPYTHON_BPD_CONNECT"
+
+    /**
+     * The token `bpd dap --connect` presents on its first message, chosen by the IDE. `bpd` reads it
+     * from this variable, never from its command line, and does not hand it to the program.
+     */
+    const val ENV_TOKEN: String = "BPD_DAP_TOKEN"
+
+    /** The header `bpd dap --connect` carries [ENV_TOKEN]'s value on. */
+    const val TOKEN_HEADER: String = "x-bpd-token"
+
     /** The prefix on the line naming the interpreter `by run` chose. */
     const val PYTHON_PREFIX: String = "python "
 
@@ -91,6 +108,7 @@ object ByBpdWrapper {
         .replace("@CWD@", CWD_PREFIX.trim())
         .replace("@ARG@", ARG_PREFIX.trim())
         .replace("@NOBPD@", NO_BPD_PREFIX.trim())
+        .replace("@CONNECT@", ENV_CONNECT)
 
     /**
      * Whether this operating system can start a shell script as the launcher.
@@ -148,6 +166,11 @@ object ByBpdWrapper {
         } > "${'$'}@RECORD@"
 
         # bpd's announcement lands on the line below. Appending is what keeps both.
+        # On a run target the IDE listens and bpd dials it: nothing is announced, and the token is
+        # the IDE's, in the environment.
+        if [ -n "${'$'}@CONNECT@" ]; then
+          exec "${'$'}bpd" dap --connect "${'$'}@CONNECT@"
+        fi
         exec "${'$'}bpd" dap --listen "${'$'}@PORT@" >> "${'$'}@RECORD@"
     """.trimIndent() + "\n"
 }

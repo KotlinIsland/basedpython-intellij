@@ -216,23 +216,59 @@ class ByRunOnTargetTest {
     }
 
     @Test
-    fun `debugging or coverage is refused on a target for every by configuration`() {
+    fun `coverage is refused on a target for every by configuration`() {
         withRuntime("by")
         val type = BasedPythonRunConfigurationType()
         val configurations = listOf(
+            configuration(),
             ByTestConfiguration(project, ByTestConfigurationType().testFactory, "tests"),
             ByBuildConfiguration(project, type.buildFactory, "build"),
             ByCheckConfiguration(project, type.checkFactory, "check"),
         )
+        val coverage = object : com.intellij.execution.Executor() {
+            override fun getToolWindowId() = "Run"
+            override fun getToolWindowIcon() = AllIcons.General.RunWithCoverage
+            override fun getIcon() = AllIcons.General.RunWithCoverage
+            override fun getDisabledIcon() = AllIcons.General.RunWithCoverage
+            override fun getDescription() = "coverage"
+            override fun getActionName() = "Coverage"
+            override fun getId() = "Coverage"
+            override fun getStartActionText() = "Run with Coverage"
+            override fun getContextActionId() = "RunCoverage"
+            override fun getHelpId(): String? = null
+        }
         for (configuration in configurations) {
-            configuration.defaultTargetName = target.displayName
-            // build and check have no debug runner at all; the configuration refuses before any runner matters
-            val environment = ExecutionEnvironmentBuilder(project, DefaultDebugExecutor.getDebugExecutorInstance())
+            (configuration as ByTargetAwareConfiguration<*>).defaultTargetName = target.displayName
+            val environment = ExecutionEnvironmentBuilder(project, coverage)
                 .runProfile(configuration)
                 .runner(ProgramRunner.getRunner(DefaultRunExecutor.EXECUTOR_ID, configuration)!!)
                 .build()
             val e = assertThrows<CantRunException> { configuration.getState(environment.executor, environment) }
             assertTrue(e.message!!.contains("dir target"), e.message)
+        }
+    }
+
+    @Test
+    fun `debugging on a target goes through the runner that prepares it, and only with bpd`() {
+        withRuntime("by")
+        val configuration = configuration().apply { defaultTargetName = target.displayName }
+        assertInstanceOf(
+            dev.basedpython.pycharm.debug.ByTargetDebugRunner::class.java,
+            ProgramRunner.getRunner(DefaultDebugExecutor.EXECUTOR_ID, configuration),
+        )
+        val local = configuration()
+        assertFalse(ProgramRunner.getRunner(DefaultDebugExecutor.EXECUTOR_ID, local) is dev.basedpython.pycharm.debug.ByTargetDebugRunner)
+
+        val settings = dev.basedpython.pycharm.settings.BasedPythonSettings.getInstance(project)
+        val backend = settings.debugBackend
+        try {
+            settings.debugBackend = dev.basedpython.pycharm.debug.bpd.ByDebugBackend.DEBUGPY
+            val e = assertThrows<com.intellij.execution.ExecutionException> {
+                dev.basedpython.pycharm.debug.ByDapLaunchArgumentsProvider().getLaunchArguments(project, configuration)
+            }
+            assertTrue("bpd" in e.message!!, e.message)
+        } finally {
+            settings.debugBackend = backend
         }
     }
 
@@ -259,18 +295,6 @@ class ByRunOnTargetTest {
     fun `a configuration left on this machine keeps the default runner`() {
         val runner = ProgramRunner.getRunner(DefaultRunExecutor.EXECUTOR_ID, configuration())
         assertFalse(runner is ByTargetProgramRunner, "a local run must not go through the target runner: $runner")
-    }
-
-    @Test
-    fun `debugging on a target is refused before the debugger starts`() {
-        withRuntime("by")
-        val configuration = configuration().apply { defaultTargetName = target.displayName }
-        val environment = ExecutionEnvironmentBuilder.create(project, DefaultDebugExecutor.getDebugExecutorInstance(), configuration)
-            .runner(ProgramRunner.getRunner(DefaultRunExecutor.EXECUTOR_ID, configuration)!!)
-            .build()
-
-        val e = assertThrows<CantRunException> { configuration.getState(environment.executor, environment) }
-        assertTrue(e.message!!.contains("dir target"), e.message)
     }
 
     /**
@@ -339,7 +363,27 @@ class ByRunOnTargetTest {
 
         assertEquals("", ByLanguageRuntimeType().createIntrospector(config)!!.introspect(subject).get(10, TimeUnit.SECONDS).byPath)
         config.byPath = "/opt/by"
-        assertEquals(null, ByLanguageRuntimeType().createIntrospector(config), "a configured path is not second-guessed")
+        config.bpdPath = "/opt/bpd"
+        assertEquals(null, ByLanguageRuntimeType().createIntrospector(config), "configured paths are not second-guessed")
+    }
+
+    @Test
+    fun `the runtime finds bpd on the target's PATH too, and leaves a configured by alone`() {
+        val config = ByLanguageRuntimeConfiguration().apply { byPath = "/opt/by" }
+        val subject = object : LanguageRuntimeType.Introspectable() {
+            override val targetPlatform = CompletableFuture.completedFuture(TargetPlatform())
+            override fun promiseExecuteScript(script: List<String>) = CompletableFuture.completedFuture(
+                when (script) {
+                    listOf("sh", "-c", "command -v by") -> ProcessOutput("/usr/local/bin/by\n", "", 0, false, false)
+                    listOf("sh", "-c", "command -v bpd") -> ProcessOutput("/usr/local/bin/bpd\n", "", 0, false, false)
+                    else -> ProcessOutput("", "", 127, false, false)
+                },
+            )
+        }
+
+        val found = ByLanguageRuntimeType().createIntrospector(config)!!.introspect(subject).get(10, TimeUnit.SECONDS)
+        assertEquals("/opt/by", found.byPath)
+        assertEquals("/usr/local/bin/bpd", found.bpdPath)
     }
 
     @Test

@@ -118,6 +118,9 @@
         <executionTargetLanguageRuntimeType
             implementation="dev.basedpython.pycharm.run.target.ByLanguageRuntimeType"/>
         <programRunner implementation="dev.basedpython.pycharm.run.target.ByTargetProgramRunner"/>
+        <!-- Debug on a run target: bpd there dials the IDE. First, ahead of the platform's DAP runner,
+             which never prepares a target; see debug.ByTargetDebugRunner. -->
+        <programRunner order="first" implementation="dev.basedpython.pycharm.debug.ByTargetDebugRunner"/>
         <!-- The pytest producer is in basedpython-testrunner.xml: its configuration is built on the
              SM test runner. -->
 

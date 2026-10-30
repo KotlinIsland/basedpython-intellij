@@ -14,6 +14,7 @@ import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.util.io.FileUtil
 import com.intellij.util.net.NetUtils
 import dev.basedpython.pycharm.debug.bpd.ByBpdExecutable
+import dev.basedpython.pycharm.debug.bpd.ByBpdOnTarget
 import dev.basedpython.pycharm.debug.bpd.ByBpdWrapper
 import dev.basedpython.pycharm.debug.bpd.ByProcessTail
 import dev.basedpython.pycharm.debug.bpd.ByDebugBackend
@@ -38,7 +39,7 @@ import kotlin.time.Duration.Companion.minutes
  * place that knows the port early enough to put it in the `attach` arguments) and handed to
  * `ByDebugAdapterDescriptor` through [ByDebugSetups], which also owns its directory.
  */
-class ByDebugSetup(
+class ByDebugSetup internal constructor(
     val port: Int,
     val bootstrapDir: Path,
     val infoFile: Path,
@@ -58,6 +59,11 @@ class ByDebugSetup(
      * interpreter `by run` picks, which is not known until `by run` has picked it.
      */
     val bpd: ByBpdExecutable.Found? = null,
+    /**
+     * For a [ByDebugBackend.BPD] session on a run target: what the target is handed, and the IDE's
+     * end of the connection `bpd` dials. Null for a session on this machine.
+     */
+    internal val onTarget: ByBpdOnTarget? = null,
 ) {
     /**
      * The end of what `by run` wrote, kept from its first byte for a [ByDebugBackend.BPD] session:
@@ -78,6 +84,7 @@ class ByDebugSetup(
 
     /** Remove [bootstrapDir] and everything the session wrote into it. */
     fun delete() {
+        onTarget?.close()
         if (!FileUtil.delete(bootstrapDir.toFile())) LOG.info("could not delete the debug session's directory $bootstrapDir")
     }
 
@@ -136,6 +143,24 @@ class ByDebugSetup(
                 infoFile = dir.resolve("bpd-record"),
                 backend = ByDebugBackend.BPD,
                 bpd = bpd,
+            )
+        }
+
+        /**
+         * Prepare a `bpd` session on a run target: the wrapper and a record directory to hand the
+         * target, and a loopback listener for `bpd dap --connect` to dial — see [ByBpdOnTarget].
+         * The `bpd` is the target's, so nothing of this machine's is looked for.
+         */
+        @Throws(ExecutionException::class)
+        fun forBpdOnTarget(): ByDebugSetup {
+            val dir = tempDir()
+            val onTarget = ByBpdOnTarget.create(dir)
+            return ByDebugSetup(
+                port = onTarget.server.localPort,
+                bootstrapDir = dir,
+                infoFile = onTarget.recordDir.resolve("bpd-record"),
+                backend = ByDebugBackend.BPD,
+                onTarget = onTarget,
             )
         }
 
@@ -219,6 +244,9 @@ internal class ByDebugSetups : Disposable {
 
     /** The setup [offer]ed for [profile], which is the caller's to [releaseWith] from here. */
     fun take(profile: RunProfile): ByDebugSetup? = synchronized(lock) { waiting.remove(profile) }
+
+    /** The setup offered for [profile], left for [take]: what a runner that prepares a target reads first. */
+    fun peek(profile: RunProfile): ByDebugSetup? = synchronized(lock) { waiting[profile] }
 
     /**
      * Delete [setup]'s directory when [process] ends, or at once if it already has. A session with

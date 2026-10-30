@@ -52,7 +52,7 @@ private val POLL_INTERVAL: Duration = 100.milliseconds
 class ByBpdConnection private constructor(
     private val socket: Socket,
     /** What the wrapper and `bpd` recorded, which is also what the session is launched with. */
-    val record: ByBpdRecord.Ready,
+    val record: ByBpdRecord.Launch,
 ) : DebugAdapterHandle {
 
     override val input: InputStream = socket.getInputStream()
@@ -70,6 +70,107 @@ class ByBpdConnection private constructor(
     }
 
     companion object {
+
+        /**
+         * Wait for `bpd dap --connect` to dial [onTarget]'s listener from the run target, check the
+         * token on its first message, then read back what the wrapper recorded.
+         *
+         * `bpd`'s first message is a `bpd/connected` event carrying the token on the
+         * [ByBpdWrapper.TOKEN_HEADER] header. It is read here, byte by byte so that nothing after
+         * it is taken from the stream, compared in constant time, and not passed on: what follows
+         * is the session, which the platform's DAP client begins with its `initialize`. A
+         * connection with another token, or none, is closed and the wait goes on — whoever reached
+         * the port first is not served for having done so.
+         *
+         * A `by run` that ends first says why, as for [open]: a `bpd` without `--connect`
+         * (0.0.1-a3) refused the flag and exited 2 with clap's own sentence, which is what the user
+         * reads rather than a wait that never ends.
+         */
+        @Throws(ExecutionException::class)
+        internal suspend fun accept(
+            onTarget: ByBpdOnTarget,
+            debuggee: ProcessHandler?,
+            said: ByProcessTail? = null,
+            timeout: Duration = READY_TIMEOUT,
+        ): ByBpdConnection {
+            val server = onTarget.server
+            var waited = Duration.ZERO
+            while (true) {
+                val socket = withContext(Dispatchers.IO) {
+                    server.soTimeout = POLL_INTERVAL.inWholeMilliseconds.toInt()
+                    try {
+                        server.accept()
+                    } catch (_: java.net.SocketTimeoutException) {
+                        null
+                    }
+                }
+                if (socket != null) {
+                    val presented = withContext(Dispatchers.IO) { presentedToken(socket) }
+                    if (presented != null && java.security.MessageDigest.isEqual(
+                            presented.toByteArray(StandardCharsets.US_ASCII),
+                            onTarget.token.toByteArray(StandardCharsets.US_ASCII),
+                        )
+                    ) {
+                        onTarget.close()
+                        val record = withContext(Dispatchers.IO) { onTarget.readRecord() }
+                            ?.let { ByBpdRecord.parse(it, announced = false) }
+                        val launch = record as? ByBpdRecord.Launch
+                        if (launch == null) {
+                            socket.close()
+                            val why = (record as? ByBpdRecord.Incomplete)?.why ?: NOTHING_WRITTEN
+                            throw ExecutionException(BasedPythonBundle.message("debug.bpd.error.exited", why))
+                        }
+                        return ByBpdConnection(socket, launch)
+                    }
+                    LOG.warn("a connection to the debug listener presented no token or the wrong one; closed")
+                    runCatching { socket.close() }
+                }
+                if (debuggee?.isProcessTerminated == true) {
+                    onTarget.close()
+                    throw ExecutionException(exited(debuggee.exitCode, said?.text().orEmpty(), NOTHING_DIALLED))
+                }
+                waited += POLL_INTERVAL
+                if (waited >= timeout) {
+                    onTarget.close()
+                    throw ExecutionException(BasedPythonBundle.message("debug.bpd.error.timeout", timeout.toString(), NOTHING_DIALLED))
+                }
+            }
+        }
+
+        /**
+         * The token on the first message of [socket], read to the end of that message and no
+         * further; null when the message is not one, or has no token. Bounded, so a peer that sends
+         * nothing or too much cannot hold the wait.
+         */
+        internal fun presentedToken(socket: Socket): String? {
+            socket.soTimeout = FIRST_MESSAGE_TIMEOUT_MS
+            val input = socket.getInputStream()
+            val headers = StringBuilder()
+            try {
+                while (!headers.endsWith("\r\n\r\n")) {
+                    val byte = input.read()
+                    if (byte < 0 || headers.length > MAX_HEADERS) return null
+                    headers.append(byte.toChar())
+                }
+                var length = -1
+                var token: String? = null
+                for (line in headers.lines()) {
+                    val colon = line.indexOf(':')
+                    if (colon < 0) continue
+                    val name = line.substring(0, colon).trim()
+                    val value = line.substring(colon + 1).trim()
+                    if (name.equals("Content-Length", ignoreCase = true)) length = value.toIntOrNull() ?: -1
+                    if (name.equals(ByBpdWrapper.TOKEN_HEADER, ignoreCase = true)) token = value
+                }
+                if (length !in 0..MAX_FIRST_MESSAGE) return null
+                // the `bpd/connected` event itself, which is bpd's and not the session's
+                if (input.readNBytes(length).size != length) return null
+                socket.soTimeout = 0
+                return token
+            } catch (_: IOException) {
+                return null
+            }
+        }
 
         /**
          * Wait for the record, then connect to what it names.
@@ -142,6 +243,8 @@ class ByBpdConnection private constructor(
                 val ended = debuggee?.isProcessTerminated == true
                 when (val parsed = read(record)) {
                     is ByBpdRecord.Ready -> return parsed
+                    // what a record without an announcement reads as, which is not this one
+                    is ByBpdRecord.Chosen -> Unit
                     is ByBpdRecord.Incomplete -> last = parsed.why
                     // the wrapper has exited and said why; waiting on would only wait out the clock
                     is ByBpdRecord.NoBpd -> throw ExecutionException(
@@ -177,7 +280,7 @@ class ByBpdConnection private constructor(
         fun endedBeforeAttaching(record: Path, said: ByProcessTail): String? {
             val code = said.endedOnItsOwnWith ?: return null
             return when (val parsed = read(record)) {
-                is ByBpdRecord.Ready -> null
+                is ByBpdRecord.Launch -> null
                 is ByBpdRecord.NoBpd -> BasedPythonBundle.message("debug.bpd.error.notFound", parsed.python)
                 is ByBpdRecord.Incomplete -> exited(code, said.text(), parsed.why)
                 null -> exited(code, said.text(), NOTHING_WRITTEN)
@@ -196,6 +299,10 @@ class ByBpdConnection private constructor(
             }
 
         private const val NOTHING_WRITTEN = "the wrapper has not written anything yet"
+        private const val NOTHING_DIALLED = "bpd has not connected to the IDE yet"
+        private const val FIRST_MESSAGE_TIMEOUT_MS = 10_000
+        private const val MAX_HEADERS = 4_096
+        private const val MAX_FIRST_MESSAGE = 65_536
 
         /** The record as it stands, or `null` when there is not a file there yet. */
         private fun read(record: Path): ByBpdRecord? = try {

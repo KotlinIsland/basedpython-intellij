@@ -17,6 +17,7 @@ import com.intellij.ui.dsl.builder.bindText
 import com.intellij.ui.dsl.builder.panel
 import dev.basedpython.pycharm.BasedPythonIcons
 import dev.basedpython.pycharm.run.ByRunConfiguration
+import dev.basedpython.pycharm.run.ByTargetAwareConfiguration
 import dev.basedpython.pycharm.util.BasedPythonBundle
 import java.util.concurrent.CompletableFuture
 import java.util.function.Supplier
@@ -48,7 +49,7 @@ class ByLanguageRuntimeType : LanguageRuntimeType<ByLanguageRuntimeConfiguration
         get() = BasedPythonBundle.message("target.runtime.launchDescription")
 
     override fun isApplicableTo(runConfig: RunnerAndConfigurationSettings): Boolean =
-        runConfig.configuration is ByRunConfiguration
+        runConfig.configuration is ByTargetAwareConfiguration<*>
 
     override fun createDefaultConfig(): ByLanguageRuntimeConfiguration = ByLanguageRuntimeConfiguration()
 
@@ -75,18 +76,25 @@ class ByLanguageRuntimeType : LanguageRuntimeType<ByLanguageRuntimeConfiguration
      * `command -v` rather than `which`: it is POSIX `sh`, and slim images ship no `which`.
      */
     override fun createIntrospector(config: ByLanguageRuntimeConfiguration): Introspector<ByLanguageRuntimeConfiguration>? {
-        if (config.byPath.isNotBlank()) return null
+        if (config.byPath.isNotBlank() && config.bpdPath.isNotBlank()) return null
         return object : Introspector<ByLanguageRuntimeConfiguration> {
             override fun introspect(subject: Introspectable): CompletableFuture<ByLanguageRuntimeConfiguration> =
-                subject.promiseExecuteScript(listOf("sh", "-c", "command -v by"))
-                    .handle { output, _ ->
-                        val found = output?.takeIf { it.exitCode == 0 }?.stdout?.lineSequence()
-                            ?.map(String::trim)?.firstOrNull(String::isNotEmpty)
-                        if (found != null && config.byPath.isBlank()) config.byPath = found
-                        config
-                    }
+                find(subject, "by").thenCompose { by ->
+                    if (by != null && config.byPath.isBlank()) config.byPath = by
+                    find(subject, "bpd")
+                }.thenApply { bpd ->
+                    if (bpd != null && config.bpdPath.isBlank()) config.bpdPath = bpd
+                    config
+                }
         }
     }
+
+    /** Where the target's `PATH` finds [name], or null when it finds none. */
+    private fun find(subject: Introspectable, name: String): CompletableFuture<String?> =
+        subject.promiseExecuteScript(listOf("sh", "-c", "command -v $name"))
+            .handle { output, _ ->
+                output?.takeIf { it.exitCode == 0 }?.stdout?.lineSequence()?.map(String::trim)?.firstOrNull(String::isNotEmpty)
+            }
 
     companion object {
         const val TYPE_ID: String = "BasedPythonLanguageRuntime"
@@ -110,10 +118,21 @@ class ByLanguageRuntimeConfiguration :
      */
     var byPath: String = ""
 
-    override fun getState(): State = State().also { it.byPath = byPath }
+    /**
+     * `bpd` on the target, for debugging there, as the target's shell would spell it; blank for the
+     * one beside the interpreter `by run` chooses, which is where `pip install basedpython-debugger`
+     * puts it.
+     */
+    var bpdPath: String = ""
+
+    override fun getState(): State = State().also {
+        it.byPath = byPath
+        it.bpdPath = bpdPath
+    }
 
     override fun loadState(state: State) {
         byPath = state.byPath.orEmpty()
+        bpdPath = state.bpdPath.orEmpty()
     }
 
     override fun validateConfiguration() {
@@ -125,6 +144,7 @@ class ByLanguageRuntimeConfiguration :
 
     class State : BaseState() {
         var byPath: String? by string()
+        var bpdPath: String? by string()
     }
 }
 
@@ -137,6 +157,12 @@ private class ByLanguageRuntimeConfigurable(private val config: ByLanguageRuntim
                 .bindText(config::byPath)
                 .align(AlignX.FILL)
                 .comment(BasedPythonBundle.message("target.runtime.byPath.comment"))
+        }
+        row(BasedPythonBundle.message("target.runtime.bpdPath")) {
+            textField()
+                .bindText(config::bpdPath)
+                .align(AlignX.FILL)
+                .comment(BasedPythonBundle.message("target.runtime.bpdPath.comment"))
         }
     }
 }

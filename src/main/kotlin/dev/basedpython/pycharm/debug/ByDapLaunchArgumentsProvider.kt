@@ -13,6 +13,8 @@ import dev.basedpython.pycharm.env.ByEnvironmentKind
 import dev.basedpython.pycharm.lsp.BasedPythonBinaries
 import dev.basedpython.pycharm.run.ByConfiguration
 import dev.basedpython.pycharm.run.ByRunConfiguration
+import dev.basedpython.pycharm.run.ByTargetAwareConfiguration
+import dev.basedpython.pycharm.util.BasedPythonBundle
 import dev.basedpython.pycharm.run.test.ByTestConfiguration
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 
@@ -97,6 +99,14 @@ class ByDapLaunchArgumentsProvider : DapLaunchArgumentsProvider {
     @Throws(ExecutionException::class)
     private fun prepare(project: Project, profile: RunProfile): ByDebugSetup {
         val settings = BasedPythonSettings.getInstance(project)
+        // On a run target only bpd: it dials the IDE from there. debugpy would need its bootstrap
+        // and `debugpy` itself on the target, and a port the IDE could reach
+        if ((profile as? ByTargetAwareConfiguration<*>)?.targetName != null) {
+            if (settings.debugBackend != ByDebugBackend.BPD) {
+                throw ExecutionException(BasedPythonBundle.message("debug.target.error.debugpy"))
+            }
+            return ByDebugSetup.forBpdOnTarget()
+        }
         return when (settings.debugBackend) {
             ByDebugBackend.DEBUGPY -> ByDebugSetup.create()
             ByDebugBackend.BPD -> ByDebugSetup.forBpd(

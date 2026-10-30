@@ -51,6 +51,7 @@ class ByBpdWrapperExecutionTest {
         args: List<String>,
         besideBy: Path? = null,
         onPath: Path? = null,
+        connect: String = "",
     ): Pair<Int, String> {
         val process = ProcessBuilder(listOf(script.toString()) + args)
             .directory(dir.toFile())
@@ -60,6 +61,7 @@ class ByBpdWrapperExecutionTest {
                 environment()[ByBpdWrapper.ENV_BPD_FALLBACK] = onPath?.toString().orEmpty()
                 environment()[ByBpdWrapper.ENV_PORT] = "51234"
                 environment()[ByBpdWrapper.ENV_RECORD] = record.toString()
+                environment()[ByBpdWrapper.ENV_CONNECT] = connect
             }
             .start()
         val output = process.inputStream.bufferedReader().readText()
@@ -123,6 +125,26 @@ class ByBpdWrapperExecutionTest {
             written.contains("PWD ${ready.cwd}"),
             "bpd was started somewhere other than the directory recorded for it: $written",
         )
+    }
+
+    @Test
+    fun `on a run target bpd dials the IDE, and only what by run chose is recorded`(@TempDir dir: Path) {
+        // there the IDE listens: bpd connects out to the address it was given, with the token in
+        // its environment, and announces nothing for the record to carry
+        val script = wrapper(dir)
+        val bpd = stub(dir.resolve("toolchain/bpd"), """echo "ARGS $*"""")
+        val record = dir.resolve("record")
+
+        val (_, output) = run(
+            dir, script, record, listOf("python3", "_by_runner.py", "demo"),
+            besideBy = bpd, connect = "host.docker.internal:51241",
+        )
+
+        assertTrue(output.contains("ARGS dap --connect host.docker.internal:51241"), "bpd was started as: $output")
+        val chosen = assertInstanceOf(ByBpdRecord.Chosen::class.java, ByBpdRecord.parse(Files.readString(record), announced = false))
+        assertEquals("python3", chosen.python)
+        assertEquals(listOf("_by_runner.py", "demo"), chosen.argv)
+        assertEquals(dir.toRealPath().toString(), Path.of(chosen.cwd).toRealPath().toString())
     }
 
     @Test

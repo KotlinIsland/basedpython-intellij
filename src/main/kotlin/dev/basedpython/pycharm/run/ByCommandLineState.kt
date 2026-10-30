@@ -133,6 +133,13 @@ abstract class ByCommandLineState(
     var signalReachesProgram: () -> Boolean = { true }
 
     /**
+     * What a debugger needs of the run target and adds to the command there, in the place of
+     * [infrastructureEnv] and [infrastructureArgs], which name this machine's files and ports. Set
+     * before the target is requested, by the runner that debugs on one.
+     */
+    internal var targetInfrastructure: ByTargetInfrastructure? = null
+
+    /**
      * Variables the configuration sets for whatever reads the run's output, here or on a run target:
      * a test run's `BY_TEST_REPORTER`, which has `by run pytest` report to the IDE's test tree. Applied
      * after [ByCommonOptions.envVars], since the console is built for this output and no other.
@@ -198,10 +205,13 @@ abstract class ByCommandLineState(
         val target = request.configuration ?: return
         val root = project.basePath ?: throw ExecutionException(BasedPythonBundle.message("target.error.noProjectDir"))
         targetLaunch = ByTargetLaunch(target, Path.of(root)).also { it.prepare(request) }
+        targetInfrastructure?.prepare(request)
     }
 
     override fun handleCreatedTargetEnvironment(targetEnvironment: TargetEnvironment, targetProgressIndicator: TargetProgressIndicator) {
-        targetPaths = targetLaunch?.created(targetEnvironment, targetProgressIndicator)
+        val paths = targetLaunch?.created(targetEnvironment, targetProgressIndicator) ?: return
+        targetPaths = paths
+        targetInfrastructure?.created(targetEnvironment, targetProgressIndicator, paths)
     }
 
     override fun startProcess(): ProcessHandler {
@@ -226,10 +236,11 @@ abstract class ByCommandLineState(
      * Starts `by` on the run target [handleCreatedTargetEnvironment] was given, with the arguments a
      * local run would have, in the working directory's counterpart there.
      *
-     * The debugger's additions are refused rather than carried over: [infrastructureEnv],
+     * The debugger's local additions are refused rather than carried over: [infrastructureEnv],
      * [infrastructureArgs] and [pythonPathPrefix] name files and ports on this machine — a bootstrap
      * directory, a wrapper script, a port only `localhost` listens on — none of which exist on the
-     * target, so a program started with them would wait for a debugger that can never reach it.
+     * target, so a program started with them would wait for a debugger that can never reach it. What
+     * a debugger needs there comes through [targetInfrastructure], in the target's terms.
      */
     private fun startOnTarget(): ProcessHandler {
         if (infrastructureEnv.isNotEmpty() || infrastructureArgs.isNotEmpty() || pythonPathPrefix.isNotEmpty()) {
@@ -249,10 +260,10 @@ abstract class ByCommandLineState(
         val commandLine = byTargetCommandLine(
             request = target.request,
             byPath = launch.byPath,
-            arguments = buildCommand(),
+            arguments = buildCommand(targetInfrastructure?.arguments().orEmpty()),
             workDirectory = workDir,
             environment = byTargetEnvironment(options, workDir, startsProgram, paths.platform.pathSeparator, fileEnvironment()) +
-                runnerEnvironment,
+                runnerEnvironment + targetInfrastructure?.environment().orEmpty(),
         )
         val process = target.createProcess(commandLine, EmptyProgressIndicator())
         val handler = KillableColoredProcessHandler(process, commandLine.getCommandPresentation(target), commandLine.charset)
@@ -279,7 +290,7 @@ abstract class ByCommandLineState(
         if (emulateTerminal) TerminalExecutionConsoleBuilder(project).build() else super.createConsole(executor)
 
     /** Everything after the executable, as [byArguments] assembles it. */
-    internal fun buildCommand(): List<String> = byArguments(
+    internal fun buildCommand(infrastructureArgs: List<String> = this.infrastructureArgs): List<String> = byArguments(
         subcommand = subcommand,
         pythonVersionFlag = pythonVersionFlag,
         pythonVersion = options.pythonVersion,

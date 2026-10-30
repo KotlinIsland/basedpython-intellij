@@ -22,7 +22,9 @@ import com.intellij.platform.dap.DapExecutionUiContext
 import com.intellij.platform.dap.DapExecutionUiSupport
 import com.intellij.platform.dap.DapExpressionSupport
 import com.intellij.platform.dap.DapPresentationSupport
+import com.intellij.platform.dap.DapSourcesSupport
 import com.intellij.platform.dap.DapStartRequest
+import com.intellij.platform.dap.DapVirtualFileResolver
 import com.intellij.platform.dap.DebugAdapterDescriptor
 import com.intellij.platform.dap.DebugAdapterId
 import com.intellij.platform.dap.DebugAdapterSupportProvider
@@ -103,7 +105,7 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
 
     /** What a bpd session's wrapper recorded, once [launchDebugAdapter] has read it. */
     @Volatile
-    private var bpdRecord: ByBpdRecord.Ready? = null
+    private var bpdRecord: ByBpdRecord.Launch? = null
 
     /**
      * This session's link to bpd's compose runtime: the identity every recomposition call of this
@@ -116,6 +118,15 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
 
     override val customization: DapCustomization = object : DapCustomization() {
         override val executionUiSupport: DapExecutionUiSupport = ByOutputSupport { setup?.backend }
+
+        /**
+         * A session on a run target reports the target's paths — `by run`'s source maps name the
+         * files where it ran — and is given breakpoints in them; translated through where the
+         * project is there ([ByBpdOnTarget.paths]). A session here is the platform's own.
+         */
+        override val sourcesSupport: DapSourcesSupport = object : DapSourcesSupport() {
+            override fun createVirtualFileResolver(): DapVirtualFileResolver = ByTargetFileResolver { setup?.onTarget?.paths }
+        }
 
         /** *Evaluate Expression*, Watches and *Quick Evaluate* edit `.by`: [BySessionEditorsProvider]. */
         override val expressionSupport: DapExpressionSupport = ByExpressionSupport
@@ -200,21 +211,31 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
             // would for a plain run and hands it to the wrapper in front of the program. See
             // `ByBpdWrapper` for why that is the only place a debugger fits.
             ByDebugBackend.BPD -> {
-                commandLine.infrastructureArgs += listOf(BY_LAUNCHER_FLAG, setup.wrapper.toString())
-                commandLine.infrastructureEnv[ByBpdWrapper.ENV_PORT] = setup.port.toString()
-                // What `by run` starts is bpd, so Stop's SIGTERM to `by` reaches the program only if
-                // bpd passes it on. A bpd that does says so by answering DAP's `terminate`
-                // (`supportsTerminateRequest`): that request asks it for the same graceful end, and it
-                // came with the same change (bpd be235a4). One that does not — bpd 0.0.1-a3 — exited
-                // on the signal and left the program running with no parent (measured), so Stop
-                // destroys the whole tree for it, as before; as it does before the adapter has said.
-                commandLine.signalReachesProgram = { process?.adapterEndsGracefully == true }
-                commandLine.infrastructureEnv[ByBpdWrapper.ENV_RECORD] = setup.infoFile.toString()
-                // empty rather than absent, so a variable of the same name in the IDE's own
-                // environment cannot stand in for an answer the IDE did not give
-                commandLine.infrastructureEnv[ByBpdWrapper.ENV_BPD] = setup.bpd?.besideBy?.toString().orEmpty()
-                commandLine.infrastructureEnv[ByBpdWrapper.ENV_BPD_FALLBACK] =
-                    setup.bpd?.onPath?.toString().orEmpty()
+                val onTarget = setup.onTarget
+                if (onTarget != null) {
+                    // On a run target what `by run` is handed comes in the target's terms, through the
+                    // infrastructure the runner that prepared the target gave the state
+                    // (ByTargetDebugRunner); none of the paths and ports below exist there
+                    if (commandLine.targetInfrastructure !== onTarget) {
+                        throw ExecutionException(BasedPythonBundle.message("target.error.notPrepared"))
+                    }
+                } else {
+                    commandLine.infrastructureArgs += listOf(BY_LAUNCHER_FLAG, setup.wrapper.toString())
+                    commandLine.infrastructureEnv[ByBpdWrapper.ENV_PORT] = setup.port.toString()
+                    // What `by run` starts is bpd, so Stop's SIGTERM to `by` reaches the program only if
+                    // bpd passes it on. A bpd that does says so by answering DAP's `terminate`
+                    // (`supportsTerminateRequest`): that request asks it for the same graceful end, and it
+                    // came with the same change (bpd be235a4). One that does not — bpd 0.0.1-a3 — exited
+                    // on the signal and left the program running with no parent (measured), so Stop
+                    // destroys the whole tree for it, as before; as it does before the adapter has said.
+                    commandLine.signalReachesProgram = { process?.adapterEndsGracefully == true }
+                    commandLine.infrastructureEnv[ByBpdWrapper.ENV_RECORD] = setup.infoFile.toString()
+                    // empty rather than absent, so a variable of the same name in the IDE's own
+                    // environment cannot stand in for an answer the IDE did not give
+                    commandLine.infrastructureEnv[ByBpdWrapper.ENV_BPD] = setup.bpd?.besideBy?.toString().orEmpty()
+                    commandLine.infrastructureEnv[ByBpdWrapper.ENV_BPD_FALLBACK] =
+                        setup.bpd?.onPath?.toString().orEmpty()
+                }
                 // what `by run` says when it ends before the wrapper has recorded anything — a
                 // refused interpreter, a transpile error — is in no record, and a start that fails
                 // there never shows the console it went to
@@ -242,7 +263,9 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
             // the filesystem the program is on, holds a `.by` breakpoint set before then as
             // `pending`, and reports `.by` locations from the agent
             val connection = try {
-                ByBpdConnection.open(setup.infoFile, processHandler, setup.said)
+                val onTarget = setup.onTarget
+                if (onTarget != null) ByBpdConnection.accept(onTarget, processHandler, setup.said)
+                else ByBpdConnection.open(setup.infoFile, processHandler, setup.said)
             } catch (e: ExecutionException) {
                 // Every one of these is a sentence written for the user — no bpd found, the wrapper
                 // exited, the record never completed — and the platform shows none of them: it

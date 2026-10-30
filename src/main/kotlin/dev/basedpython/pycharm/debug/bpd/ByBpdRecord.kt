@@ -18,21 +18,17 @@ import dev.basedpython.pycharm.debug.ByBpdEvents
  */
 sealed interface ByBpdRecord {
 
-    /** Everything is here and the session can start. */
-    data class Ready(
+    /**
+     * What `by run` chose, which the `launch` request sends back: everything a session needs of the
+     * record once it is connected.
+     */
+    sealed interface Launch : ByBpdRecord {
         /** The interpreter `by run` chose, which bpd starts the program on. */
-        val python: String,
+        val python: String
         /** The directory `by run` transpiled into, and the program's working directory. */
-        val cwd: String,
+        val cwd: String
         /** `_by_runner.py`, the module, and whatever the user passed after it. */
-        val argv: List<String>,
-        /** Where `bpd dap` is listening. */
-        val host: String,
-        val port: Int,
-        /** The header a client must present on its first message, and its value. */
-        val tokenHeader: String,
-        val token: String,
-    ) : ByBpdRecord {
+        val argv: List<String>
 
         /**
          * The `launch` request's arguments: [base], with the interpreter, the program and its
@@ -60,6 +56,29 @@ sealed interface ByBpdRecord {
     }
 
     /**
+     * What `by run` chose, for a session `bpd dap --connect` dials into: there is no announcement,
+     * since the IDE chose the address and the token itself.
+     */
+    data class Chosen(
+        override val python: String,
+        override val cwd: String,
+        override val argv: List<String>,
+    ) : Launch
+
+    /** Everything is here and the session can start. */
+    data class Ready(
+        override val python: String,
+        override val cwd: String,
+        override val argv: List<String>,
+        /** Where `bpd dap` is listening. */
+        val host: String,
+        val port: Int,
+        /** The header a client must present on its first message, and its value. */
+        val tokenHeader: String,
+        val token: String,
+    ) : Launch
+
+    /**
      * The file exists and is not finished, or is not what this reads.
      *
      * [why] is written for the user rather than for a log: it is what a failed debug start puts in
@@ -77,7 +96,7 @@ sealed interface ByBpdRecord {
 
         private val LOG = Logger.getInstance(ByBpdRecord::class.java)
 
-        /** The `bpd_dap::Configuration` keys [Ready.launchArguments] fills in. */
+        /** The `bpd_dap::Configuration` keys [Launch.launchArguments] fills in. */
         const val PYTHON: String = "python"
         const val PROGRAM: String = "program"
         const val ARGS: String = "args"
@@ -116,9 +135,11 @@ sealed interface ByBpdRecord {
          *
          * The wrapper writes its lines and `bpd` appends its announcement, so a file with only the
          * first half is the ordinary state a moment after the program starts — that is
-         * [Incomplete] and the caller polls again, not a failure.
+         * [Incomplete] and the caller polls again, not a failure. A record of a session `bpd dap
+         * --connect` dials into has no announcement, and is complete without one when [announced]
+         * is false.
          */
-        fun parse(text: String): ByBpdRecord {
+        fun parse(text: String, announced: Boolean = true): ByBpdRecord {
             var python: String? = null
             var cwd: String? = null
             val argv = mutableListOf<String>()
@@ -154,6 +175,7 @@ sealed interface ByBpdRecord {
             if (argv.isEmpty()) {
                 return Incomplete("the wrapper recorded no program to run")
             }
+            if (!announced) return Chosen(python = python, cwd = cwd, argv = argv)
             val listening = announcement
                 ?: return Incomplete("`bpd dap` has not said where it is listening yet")
 

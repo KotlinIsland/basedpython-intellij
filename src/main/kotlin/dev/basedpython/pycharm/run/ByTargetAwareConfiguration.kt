@@ -6,6 +6,7 @@ import com.intellij.execution.configurations.ConfigurationFactory
 import com.intellij.execution.configurations.RunConfigurationBase
 import com.intellij.execution.configurations.RuntimeConfigurationError
 import com.intellij.execution.configurations.RuntimeConfigurationException
+import com.intellij.execution.executors.DefaultDebugExecutor
 import com.intellij.execution.executors.DefaultRunExecutor
 import com.intellij.execution.target.LanguageRuntimeType
 import com.intellij.execution.target.TargetEnvironmentAwareRunProfile
@@ -81,14 +82,16 @@ abstract class ByTargetAwareConfiguration<O : ByCommonOptions>(project: Project,
     }
 
     /**
-     * Refuses any executor but Run on a target, before it has started anything to wait for the run.
+     * Refuses any executor but Run and Debug on a target, before it has started anything to wait for
+     * the run.
      *
-     * Debugging needs the debuggee to reach a port and files on this machine, and coverage a data file
-     * written here; on a target it could reach neither (see [ByCommandLineState]'s `startOnTarget`).
+     * Coverage needs a data file written here, which a target cannot write. Debug is let through:
+     * [dev.basedpython.pycharm.debug.ByTargetDebugRunner] runs it there, with bpd dialling the IDE;
+     * which backend can is the debugger's to say ([dev.basedpython.pycharm.debug.ByDapLaunchArgumentsProvider]).
      */
     protected fun refuseOnTarget(executor: Executor) {
         val target = targetName ?: return
-        if (executor.id != DefaultRunExecutor.EXECUTOR_ID) {
+        if (executor.id != DefaultRunExecutor.EXECUTOR_ID && executor.id != DefaultDebugExecutor.EXECUTOR_ID) {
             throw CantRunException(BasedPythonBundle.message("target.error.executor", executor.actionName, target))
         }
     }
