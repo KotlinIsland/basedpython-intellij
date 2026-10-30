@@ -27,6 +27,7 @@ import dev.basedpython.pycharm.lsp.ByCommandFlags
 import dev.basedpython.pycharm.lsp.ByLspServerSupportProvider
 import dev.basedpython.pycharm.lsp.awaitByServer
 import dev.basedpython.pycharm.run.ByCommonOptions
+import dev.basedpython.pycharm.run.ByProcessHandler
 import dev.basedpython.pycharm.run.byCommandLine
 import java.nio.file.Files
 import java.nio.file.Path
@@ -45,8 +46,8 @@ private val LOG = Logger.getInstance(ByConsoleSession::class.java)
  * two apart by ([ByReplEvents]). What the program prints, the values the session shows and its
  * tracebacks are the process's output. Enter is [ByConsoleExecuteHandler]'s.
  *
- * Interrupting sends `SIGINT` to the process tree, as a terminal sends it to the process group: `by
- * repl` ignores it, and the interpreter running the input raises `KeyboardInterrupt` and carries on.
+ * Interrupting sends `SIGINT` to `by repl` alone, which passes it on to the interpreter: the input
+ * running raises `KeyboardInterrupt` and the session carries on.
  *
  * Every input `by repl` reads is numbered, run or refused, and its tracebacks and diagnostics name it
  * `<by-input-N>`; the console keeps where each one is in its history, so those names link there.
@@ -219,18 +220,21 @@ internal class ByConsoleSession private constructor(
     /** Interrupts the input running with a `KeyboardInterrupt`; the session carries on. */
     fun interrupt() {
         if (!canInterrupt) return
-        // every process of the tree, as a terminal signals the whole process group: `by repl` itself
-        // ignores it, and the interpreter it runs the session in is its child
-        val root = handler.process.toHandle()
-        for (process in sequenceOf(root) + root.descendants().iterator().asSequence()) {
-            // SIGINT, on Unix
-            OSProcessUtil.terminateProcessGracefully(process.pid().toInt())
-        }
+        // `by repl` alone, which passes it on to the interpreter it runs the session in. Sent to every
+        // process of the tree, as a terminal signals its whole process group, it reached the
+        // interpreter twice: measured against `by` c71e71d65f07, an input that caught one
+        // KeyboardInterrupt died of a second
+        // SIGINT, on Unix
+        OSProcessUtil.terminateProcessGracefully(handler.process.pid().toInt())
     }
 
-    /** Ends the session: its process tree, and what it was holding. */
+    /**
+     * Ends the session: a SIGTERM to `by repl`, which passes it on to the interpreter, and — for an
+     * interpreter still running when Stop is pressed again — the whole tree killed, as the run
+     * window's Stop does for a process that is slow to end.
+     */
     fun stop() {
-        handler.destroyProcess()
+        if (handler.isProcessTerminating) handler.killProcess() else handler.destroyProcess()
     }
 
     /** Prints a line of the console's own, not the program's. */
@@ -244,7 +248,8 @@ internal class ByConsoleSession private constructor(
             .firstOrNull { it.state == LspServerState.Running }
 
     override fun dispose() {
-        if (!handler.isProcessTerminated) handler.destroyProcess()
+        // nothing is left to show the session, or to Stop it again: the tree, not a signal it may ignore
+        if (!handler.isProcessTerminated) handler.killProcess()
         events?.close()
         document.close()
         input.shutdown()
@@ -316,14 +321,10 @@ internal class ByConsoleSession private constructor(
                 events?.close()
                 throw e
             }
-            val handler = KillableColoredProcessHandler(commandLine)
-            // `by repl` ignores SIGINT, so the soft kill would interrupt the input running rather than
-            // stop anything; and the interpreter is its child, which a stop has to reach too. Not a
-            // SIGTERM to `by` alone, as a `by run` gets (see ByProcessHandler): `by repl` does not
-            // pass one on — measured against `by` 71c3caaac36b, it exited 143 and left its
-            // `_by_repl.py` interpreter running
-            handler.setShouldKillProcessSoftly(false)
-            handler.setShouldDestroyProcessRecursively(true)
+            // Stop as for `by run`: a SIGTERM to `by repl` alone, which passes it on to the
+            // interpreter and exits with its status, and the tree killed by a second Stop. Before,
+            // the tree was killed on the first: the session ended in 137
+            val handler = ByProcessHandler(commandLine) { false }
             ProcessTerminatedListener.attach(handler)
             return Started(handler, sessionFile, events)
         }
