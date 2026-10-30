@@ -827,6 +827,8 @@
         <!-- Highlight on Caret Movement | Current scope for .by, which the platform finds only from
              brace tokens; the block is by's outline. See ByCurrentScope. -->
         <editorFactoryListener implementation="dev.basedpython.pycharm.editor.scope.ByCurrentScope$Editors"/>
+        <!-- basedpython.ContextInfo ahead of the platform's Context Info on their shared shortcut. -->
+        <actionPromoter implementation="dev.basedpython.pycharm.editor.scope.ByContextInfoPromoter"/>
         <!-- A dimmed "╰ for x in [1, 2]" line after each scope's last line, naming the header it
              closes; the scopes are by's outline. Its own entry under Inlay Hints, on by default. -->
         <codeInsight.inlayProvider
@@ -954,6 +956,14 @@
              platform's action unchanged. See navigation.ByCopyReferenceAction. -->
         <action id="CopyReference" overrides="true"
                 class="dev.basedpython.pycharm.navigation.ByCopyReferenceAction"/>
+
+        <!-- View | Context Info's shortcut in a .by editor: the header of the class or function the
+             caret is in, from by's outline, where the platform's action finds nothing in a model of
+             document symbols. Put first by ByContextInfoPromoter and disabled outside .by, so the
+             keystroke is the platform's everywhere else. See editor.scope.ByContextInfoAction. -->
+        <action id="basedpython.ContextInfo"
+                class="dev.basedpython.pycharm.editor.scope.ByContextInfoAction"
+                use-shortcut-of="EditorContextInfo"/>
 
         <!-- ===== Stream B ===== -->
         <action id="basedpython.RestartLsp"
