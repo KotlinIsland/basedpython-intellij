@@ -52,8 +52,8 @@ editing, undo, persistence and debugging all behave exactly as before.
 hovering any more — you have to know the shortcut or the menu item. That is a real loss for a
 feature whose whole point is being easy to reach.
 
-**How to get it back, if it stays internal.** Rebuild the gap from public API rather than
-registering into the platform's. Everything needed exists and is public:
+**The plan to get it back while it stays internal, and why it does not work.** Rebuild the gap
+from public API rather than registering into the platform's. Every piece of that is public:
 
 | Need | Public API |
 | --- | --- |
@@ -86,13 +86,32 @@ out which line boundary the pointer is nearest. And the gap need not be an inlay
 inlay, added at the boundary under the pointer and removed when it leaves, is the same gesture for a
 fraction of the cost, with `Animator` growing its height if the shift should slide rather than jump.
 
-So the discovery gesture is buildable. **What it still could not do is put the log point's icon
-where the gap is** — see the next entry: the icon this plugin would add to the inlay is a *second*
-icon, and the platform's own would stay on the line below it.
+That made the gesture look buildable, and every piece above does work. **It is not, measured in
+PyCharm 263.7649 on 2026-10-30**, because the line-number column of a `.by` file is not empty space
+to build in: the platform already owns all of it. With the IDE's own log points on (they ship in
+both IDEs) and breakpoints over the line numbers, hovering between two numbers in a `.by` file shows
+the platform's own *Add Breakpoint* for the line above or below, and a click there adds an ordinary
+suspending breakpoint on the line below. The IDE's inter-line zone exists in every editor; it offers
+a log point only when a breakpoint type of the file says `supportsInterLinePlacement()`, and
+otherwise falls back to the line. So a gap of the plugin's own would sit under the platform's
+*Add Breakpoint* and take clicks the platform had just offered as a breakpoint. Consuming the press
+does stop the platform's click (it toggles on `mouseClicked`, which a consumed press never reaches),
+but nothing public stops its hover: `BreakpointPromoterEditorListener` ignores a consumed motion
+event, and which part of a line counts as "between" is decided by internal API
+(`EditorUtil.yToLogicalLineWithInterLineDetection`, `InterLineBreakpointConfiguration`) and a
+registry key of the logpoints module. Two offers for the same pixels, one of them wrong, is not the
+feature.
 
-**Better outcome:** the platform makes the inter-line breakpoint API public, and
-`ByInterLineLogpointProvider` comes back roughly as it was. Worth asking for in IJPL before building
-the replacement.
+The same measurement with `ByLineBreakpointType.supportsInterLinePlacement() = true` (branch
+`claude/logpoint-gutter-gap`, 7a96cd0, never landed) shows how small the missing piece is: the same
+hover shows *Add Logpoint* between the lines, and the same click adds an `INTER_LINE`, non-suspending
+log point and opens the IDE's own log point box. No provider or animator of the plugin's is needed
+any more, because the IDE's logpoints module registers one for every editor.
+
+**The only route:** IJPL-254670, asking for `XLineBreakpointType.supportsInterLinePlacement()`,
+`XLineBreakpointVerticalPlacement` and `XLineBreakpoint.getPlacement()` to be public. That one
+override then brings back the gesture, the icon in the gap (next entry) and the IDE's own *Add
+Logpoint*.
 
 ### The log point's gutter icon sits on the wrong line
 
