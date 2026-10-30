@@ -6,6 +6,7 @@ import com.intellij.execution.process.BaseProcessHandler
 import com.intellij.execution.process.ProcessEvent
 import com.intellij.execution.process.ProcessListener
 import com.intellij.execution.process.ProcessOutputTypes
+import com.intellij.injected.editor.VirtualFileWindow
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.editor.ex.EditorSettingsExternalizable
 import com.intellij.openapi.project.Project
@@ -95,7 +96,13 @@ private val SUPPORTED_EXTENSIONS = setOf("by", "byi", "py", "pyi")
 /** Extensions that are basedpython's own, whatever the surrounding project looks like. */
 private val OWN_EXTENSIONS = setOf("by", "byi")
 
-private fun VirtualFile.isBasedPythonSource(): Boolean = extension in SUPPORTED_EXTENSIONS
+/**
+ * A fragment injected into a string is not a source: the platform names it after its host with the
+ * language's extension (`main.by.by`), but the servers know only the host file, and an offset in the
+ * fragment is not one in the host. Their features are asked about the host instead, which the
+ * platform falls back to when the fragment has nobody to ask.
+ */
+private fun VirtualFile.isBasedPythonSource(): Boolean = this !is VirtualFileWindow && extension in SUPPORTED_EXTENSIONS
 
 /**
  * What the `by` server is given: python-ish sources, plus django templates, plus `api.lock`.
@@ -111,7 +118,7 @@ private fun VirtualFile.isBasedPythonSource(): Boolean = extension in SUPPORTED_
  * that is no project's lockfile gets nothing.
  */
 internal fun VirtualFile.isByServerFile(): Boolean =
-  isBasedPythonSource() || ByTemplateFiles.isTemplate(this) || name == API_LOCK
+  this !is VirtualFileWindow && (isBasedPythonSource() || ByTemplateFiles.isTemplate(this) || name == API_LOCK)
 
 /** The name `by` writes a project's API lockfile under, at the project's root. */
 internal const val API_LOCK = "api.lock"
