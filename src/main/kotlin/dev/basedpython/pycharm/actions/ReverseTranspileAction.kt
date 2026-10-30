@@ -15,7 +15,7 @@ import dev.basedpython.pycharm.lang.BasedPythonFileType
 import dev.basedpython.pycharm.transpile.ByTranspile
 import dev.basedpython.pycharm.util.BasedPythonBundle
 
-/** Right-click a `.py` file → `by transpile --reverse <file>` → open as scratch `.by`. */
+/** Right-click a `.py` file → `by/transpile` with `reverse`, asked of the running `by` → open as scratch `.by`. */
 class ReverseTranspileAction : AnAction() {
 
     override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
