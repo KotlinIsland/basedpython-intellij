@@ -35,12 +35,14 @@ class ByCodeActionIntentionsTest {
                 action("Convert to a single-quoted string", "refactor.rewrite.flipQuotes"),
                 action("Convert the other string", "refactor.rewrite.flipQuotes"),
                 action("Something new", "refactor.rewrite.somethingNew"),
+                action("Invert `ready`", "refactor.rewrite.invertBoolean"),
                 action("Extract variable", "refactor.extract.variable", disabled = true),
             ),
         ) { LspIntentionAction(client, it) }
 
         assertEquals("Invert `if` condition", ByInvertIfIntention().pick(offered)?.text)
         assertEquals("Convert to a single-quoted string", ByFlipQuotesIntention().pick(offered)?.text)
+        assertEquals("Invert `ready`", ByInvertBooleanIntention().pick(offered)?.text)
         assertNull(ByExtractVariableIntention().pick(offered))
         assertEquals("Convert the other string", ByOtherCodeAction0Intention().pick(offered)?.text)
         assertEquals("Something new", ByOtherCodeAction1Intention().pick(offered)?.text)

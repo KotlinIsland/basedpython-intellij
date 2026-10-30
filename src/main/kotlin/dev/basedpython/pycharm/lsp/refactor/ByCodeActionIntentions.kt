@@ -48,6 +48,7 @@ enum class ByCodeActionKind(val kind: String, private val familyKey: String) {
     DeMorgan("refactor.rewrite.deMorgan", "intention.by.deMorgan"),
     FlipQuotes("refactor.rewrite.flipQuotes", "intention.by.flipQuotes"),
     LoopToComprehension("refactor.rewrite.loopToComprehension", "intention.by.loopToComprehension"),
+    InvertBoolean("refactor.rewrite.invertBoolean", "intention.by.invertBoolean"),
     ;
 
     val familyName: String get() = BasedPythonBundle.message(familyKey)
@@ -209,6 +210,7 @@ class ByInvertIfIntention : ByNamedCodeActionIntention(ByCodeActionKind.InvertIf
 class ByDeMorganIntention : ByNamedCodeActionIntention(ByCodeActionKind.DeMorgan)
 class ByFlipQuotesIntention : ByNamedCodeActionIntention(ByCodeActionKind.FlipQuotes)
 class ByLoopToComprehensionIntention : ByNamedCodeActionIntention(ByCodeActionKind.LoopToComprehension)
+class ByInvertBooleanIntention : ByNamedCodeActionIntention(ByCodeActionKind.InvertBoolean)
 class ByOtherCodeAction0Intention : ByOtherCodeActionIntention(0)
 class ByOtherCodeAction1Intention : ByOtherCodeActionIntention(1)
 class ByOtherCodeAction2Intention : ByOtherCodeActionIntention(2)
