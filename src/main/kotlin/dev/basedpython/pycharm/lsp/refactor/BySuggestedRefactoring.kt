@@ -12,6 +12,8 @@ import com.intellij.openapi.util.TextRange
 import com.intellij.platform.lsp.util.getLsp4jPosition
 import com.intellij.psi.PsiDocumentManager
 import com.intellij.psi.PsiCodeFragment
+import com.intellij.psi.ElementDescriptionLocation
+import com.intellij.psi.ElementDescriptionProvider
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
 import com.intellij.psi.PsiReference
@@ -36,6 +38,9 @@ import com.intellij.refactoring.suggested.SuggestedRefactoringUI
 import com.intellij.refactoring.suggested.SuggestedRenameData
 import com.intellij.refactoring.util.CommonRefactoringUtil
 import com.intellij.usageView.UsageInfo
+import com.intellij.usageView.UsageViewLongNameLocation
+import com.intellij.usageView.UsageViewShortNameLocation
+import com.intellij.usageView.UsageViewTypeLocation
 import dev.basedpython.pycharm.lang.BasedPythonCodeFragment
 import dev.basedpython.pycharm.lang.BasedPythonFile
 import dev.basedpython.pycharm.lang.BasedPythonTokenTypes
@@ -436,6 +441,16 @@ internal class ByRenamedName(private val file: PsiFile, private val document: Do
     @Volatile
     var offers: List<ByRenameOffer> = emptyList()
 
+    /**
+     * What `by` says the name is — `method`, `class`, `parameter`, `variable`, `module`, … from
+     * `by/declaration` — which is what the rename is called by in its undo step, its dialog and its
+     * preview ([ByRenamedNameDescriptionProvider]). Asked where the rename starts, off the EDT;
+     * `null` where it could not be, such as the gutter's suggested rename, which the platform makes
+     * on the EDT.
+     */
+    @Volatile
+    var kind: String? = null
+
     private val marker: RangeMarker = document.createRangeMarker(range).apply {
         isGreedyToLeft = true
         isGreedyToRight = true
@@ -553,5 +568,23 @@ internal class BySuggestedRenameReset(private val project: Project) : Disposable
         // an unload runs on the EDT; a project closing takes the provider with it anyway
         if (project.isDisposed || !ApplicationManager.getApplication().isDispatchThread) return
         project.serviceIfCreated<SuggestedRefactoringProvider>()?.reset()
+    }
+}
+
+/**
+ * What the platform calls a [ByRenamedName] wherever it names what is renamed — the undo step and
+ * local history (*Renaming method speak to talk*), the Rename dialog (*Rename method 'speak' and
+ * its usages to:*) and the usage preview (*Method to be renamed to talk*) — as `.py`'s are called.
+ * The kind is `by`'s, never read off the text; without one it is a neutral *symbol*, where the
+ * platform's own default would spell out the class standing for it, *By Renamed Name*.
+ */
+class ByRenamedNameDescriptionProvider : ElementDescriptionProvider {
+    override fun getElementDescription(element: PsiElement, location: ElementDescriptionLocation): String? {
+        if (element !is ByRenamedName) return null
+        return when (location) {
+            is UsageViewTypeLocation -> element.kind ?: BasedPythonBundle.message("rename.by.kind.unknown")
+            is UsageViewShortNameLocation, is UsageViewLongNameLocation -> element.name
+            else -> null
+        }
     }
 }

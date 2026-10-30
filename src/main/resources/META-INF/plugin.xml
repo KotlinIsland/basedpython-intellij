@@ -528,6 +528,8 @@
             order="first"/>
         <renameInputValidator implementation="dev.basedpython.pycharm.lsp.refactor.ByRenameOfferNameValidator"/>
         <elementDescriptionProvider implementation="dev.basedpython.pycharm.lsp.refactor.ByRenameOfferDescriptionProvider"/>
+        <!-- What a .by rename is called in its undo step, dialog and preview: by's kind of the name. -->
+        <elementDescriptionProvider implementation="dev.basedpython.pycharm.lsp.refactor.ByRenamedNameDescriptionProvider"/>
         <!-- Renaming or moving a .by module or package also rewrites the imports that name it, as
              by works them out (workspace/willRenameFiles) before anything moves. Ahead of the
              platform's own file rename and move, which these extend and which keep everything else. -->

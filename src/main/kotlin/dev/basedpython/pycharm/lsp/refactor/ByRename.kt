@@ -43,6 +43,8 @@ import dev.basedpython.pycharm.lsp.awaitBy
 import dev.basedpython.pycharm.lsp.byServerFor
 import dev.basedpython.pycharm.lsp.ext.ByRenameNameSuggestionsParams
 import dev.basedpython.pycharm.lsp.ext.ByServerExtensions
+import dev.basedpython.pycharm.navigation.ByDeclarations
+import com.intellij.usageView.UsageViewUtil
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import dev.basedpython.pycharm.util.BasedPythonBundle
 import org.eclipse.lsp4j.DocumentHighlight
@@ -139,9 +141,10 @@ internal object ByRename {
                     return error(project, editor, BasedPythonBundle.message("refactoring.by.changed"))
                 }
                 if (inPlace) {
-                    ByInplaceRename(project, editor, file, found.sites, found.suggestions).start()
+                    ByInplaceRename(project, editor, file, found.sites, found.suggestions, found.kind).start()
                 } else {
-                    ByRenameDialog(project, ByRenamedName(file, document, found.sites.primary), editor).show()
+                    val name = ByRenamedName(file, document, found.sites.primary).apply { kind = found.kind }
+                    ByRenameDialog(project, name, editor).show()
                 }
             }
         }
@@ -169,6 +172,8 @@ internal object ByRename {
             prepared.isSecond -> prepared.second.range
             else -> return Found.Nothing
         }
+        // what the name is, for what the rename is called: by's kind of it, as `.py` names it
+        val kind = ByDeclarations.await(server, virtualFile, document, offset, LspClient.DEFAULT_REQUEST_TIMEOUT_MS).value?.kind
         val highlights = try {
             server.sendRequest { it.textDocumentService.documentHighlight(DocumentHighlightParams(identifier, position)) }
         } catch (_: ResponseErrorException) {
@@ -187,7 +192,7 @@ internal object ByRename {
             val name = prepared.second?.placeholder ?: document.getText(primary)
             // a placeholder that is not the text in the range is not a name the template can edit
             if (document.getText(primary) != name) return@readAction Found.Nothing
-            Found.Sites(ByRenameSites.of(document, name, primary, highlights), suggestions.filter { it != name })
+            Found.Sites(ByRenameSites.of(document, name, primary, highlights), suggestions.filter { it != name }, kind)
         }
     }
 
@@ -196,7 +201,7 @@ internal object ByRename {
     }
 
     private sealed interface Found {
-        data class Sites(val sites: ByRenameSites, val suggestions: List<String>) : Found
+        data class Sites(val sites: ByRenameSites, val suggestions: List<String>, val kind: String?) : Found
         data class Refused(val reason: String) : Found
         data object Nothing : Found
     }
@@ -212,9 +217,11 @@ internal object ByRename {
 private class ByRenameDialog(project: Project, name: ByRenamedName, editor: Editor) :
     RenameDialog(project, name, null, editor) {
 
-    /** The name alone: `by` says what it is, the platform's description would name the class standing for it. */
-    // asked while the dialog is built in RenameDialog's constructor, so from the element it was given
-    override fun getFullName(): String = "'${(psiElement as ByRenamedName).name}'"
+    /**
+     * `method 'speak'`, as `.py`'s dialog says it: the kind `by` gave the name ([ByRenamedNameDescriptionProvider]).
+     * Asked while the dialog is built in RenameDialog's constructor, so from the element it was given.
+     */
+    override fun getFullName(): String = "${UsageViewUtil.getType(psiElement)} '${(psiElement as ByRenamedName).name}'"
 
     override fun createCheckboxes(panel: JPanel, gbConstraints: GridBagConstraints) {
         // the dialog reads and saves its own checkbox, so it is made and not shown
@@ -259,6 +266,8 @@ internal class ByInplaceRename(
     private val sites: ByRenameSites,
     /** `by`'s names for the symbol, offered in a lookup under the name, as `.py`'s in-place rename offers its own. */
     private val suggestions: List<String> = emptyList(),
+    /** What `by` says the name is, for what the rename is called; see [ByRenamedName.kind]. */
+    private val kind: String? = null,
 ) {
     private val document = editor.document
     private val commandName = RefactoringBundle.message("renaming.command.name", sites.name)
@@ -338,7 +347,7 @@ internal class ByInplaceRename(
             restore()
             try {
                 if (typed != null && typed.isNotBlank() && typed != sites.name && markers[primaryIndex].isValid) {
-                    val name = ByRenamedName(file, document, markers[primaryIndex].textRange)
+                    val name = ByRenamedName(file, document, markers[primaryIndex].textRange).also { it.kind = kind }
                     // Asked once the old name is back, which is the text by can say anything about:
                     // while the name was being typed, the symbol at its position was what was typed.
                     val verdict = runWithModalProgressBlocking(project, commandName) {

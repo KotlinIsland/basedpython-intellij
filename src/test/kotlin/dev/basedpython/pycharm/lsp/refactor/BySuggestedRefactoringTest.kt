@@ -1,5 +1,8 @@
 package dev.basedpython.pycharm.lsp.refactor
 
+import com.intellij.refactoring.rename.RenameViewDescriptor
+import com.intellij.refactoring.rename.RenameProcessor
+import com.intellij.usageView.UsageViewUtil
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.util.TextRange
 import com.intellij.psi.PsiDocumentManager
@@ -259,6 +262,24 @@ class BySuggestedRefactoringTest {
             processor.renameElement(declaration, "surface", usages.toTypedArray(), null)
         }
         assertEquals("def surface(width, height):\n    return width * height\n\nsurface(1, 2)\n", fixture.editor.document.text)
+    }
+
+    /**
+     * What the rename is called — the undo step, the preview — is the kind `by` gave the name, as a
+     * `.py` rename says *method*; with none known, *symbol*, never the class standing for it.
+     */
+    @Test
+    fun `a rename is called by the kind by gave the name`() = onEdt {
+        configure()
+        val method = ByRenamedName(fixture.file, fixture.editor.document, TextRange(4, 8)).apply { kind = "method" }
+        val unknown = ByRenamedName(fixture.file, fixture.editor.document, TextRange(4, 8))
+
+        assertEquals("method", UsageViewUtil.getType(method))
+        assertEquals("Renaming method area to surface", object : RenameProcessor(fixture.project, method, "surface", false, false) {
+            val name get() = commandName
+        }.name)
+        assertEquals("Method to be renamed to surface", RenameViewDescriptor(linkedMapOf<PsiElement, String>(method to "surface")).processedElementsHeader)
+        assertEquals("symbol", UsageViewUtil.getType(unknown))
     }
 
     /**
