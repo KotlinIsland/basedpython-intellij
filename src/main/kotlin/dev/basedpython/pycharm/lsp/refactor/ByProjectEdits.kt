@@ -52,6 +52,9 @@ internal sealed interface ByAsked<out R : Any> {
      */
     data class Rejected(val message: String) : ByAsked<Nothing>
 
+    /** The server refused the request, `RequestFailed`, and [message] is its reason, to show as it is. */
+    data class Refused(val message: String) : ByAsked<Nothing>
+
     /** The request failed, timed out, or was never sent. */
     data object Failed : ByAsked<Nothing>
 }
@@ -67,12 +70,14 @@ internal suspend fun <R : Any> LspClient.awaitByExtension(
 ): ByAsked<R> {
     var unknownRequest = false
     var rejected: String? = null
+    var refused: String? = null
     val answer = awaitingAgain<R>(what, timeoutMs) { sent ->
         try {
             sendRequest { (it as ByServerExtensions).let(request).also(sent) }
         } catch (e: Exception) {
             if (isMethodNotFound(e)) unknownRequest = true
             rejected = invalidParams(e)
+            refused = errorMessage(e, ResponseErrorCode.RequestFailed)
             throw e
         }
     }
@@ -82,15 +87,19 @@ internal suspend fun <R : Any> LspClient.awaitByExtension(
         ByAnswer.Failed -> when {
             unknownRequest -> ByAsked.Unsupported
             rejected != null -> ByAsked.Rejected(rejected!!)
+            refused != null -> ByAsked.Refused(refused!!)
             else -> ByAsked.Failed
         }
     }
 }
 
 /** The message of [error], when it is the server refusing a request's params; `null` otherwise. */
-private fun invalidParams(error: Throwable): String? =
+private fun invalidParams(error: Throwable): String? = errorMessage(error, ResponseErrorCode.InvalidParams)
+
+/** The message of [error], when it is the server's error answer with [code]; `null` otherwise. */
+private fun errorMessage(error: Throwable, code: ResponseErrorCode): String? =
     generateSequence(error) { it.cause }.filterIsInstance<ResponseErrorException>()
-        .firstOrNull { it.responseError.code == ResponseErrorCode.InvalidParams.value }?.responseError?.message
+        .firstOrNull { it.responseError.code == code.value }?.responseError?.message
 
 /** What `by` said to a refactoring that edits the project. */
 internal sealed interface ByProjectEdit {
@@ -119,6 +128,7 @@ internal sealed interface ByProjectEdit {
             ByAsked.None -> Failed(BasedPythonBundle.message("refactoring.by.project.declined", what))
             ByAsked.Unsupported -> Failed(BasedPythonBundle.message("refactoring.by.project.unsupported", what))
             is ByAsked.Rejected -> Failed(BasedPythonBundle.message("refactoring.by.project.rejected", what, asked.message))
+            is ByAsked.Refused -> Refused(asked.message, emptyList())
             ByAsked.Failed -> Failed(BasedPythonBundle.message("refactoring.by.project.failed", what))
         }
     }
@@ -202,6 +212,7 @@ internal object ByProjectRefactorings {
         ByAsked.None -> notHere
         ByAsked.Unsupported -> BasedPythonBundle.message("refactoring.by.project.unsupported", what)
         is ByAsked.Rejected -> BasedPythonBundle.message("refactoring.by.project.rejected", what, asked.message)
+        is ByAsked.Refused -> asked.message
         ByAsked.Failed -> BasedPythonBundle.message("refactoring.by.project.failed", what)
     }
 
@@ -241,7 +252,7 @@ internal object ByProjectRefactorings {
      * How long `by` gets to work out an edit to the project: longer than an editor request, since it
      * reads every file that could refer to what changes, and bounded, since the user is waiting.
      */
-    private const val EDIT_TIMEOUT_MS = 30_000L
+    const val EDIT_TIMEOUT_MS = 30_000L
 }
 
 /**

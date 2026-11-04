@@ -521,6 +521,12 @@
         <renamePsiElementProcessor
             implementation="dev.basedpython.pycharm.lsp.refactor.ByRenamedNameProcessor"
             order="first"/>
+        <!-- Refactor | Invert Boolean in a .by file: by/prepareInvertBoolean, a name checked by
+             by/checkName, and by/invertBoolean's edit. The platform's action and handler take only
+             this delegate from a language; see lsp.refactor.ByInvertBooleanDelegate. -->
+        <refactoring.invertBoolean
+            language="basedpython"
+            implementationClass="dev.basedpython.pycharm.lsp.refactor.ByInvertBooleanDelegate"/>
         <!-- What a .by rename is called in its undo step, dialog and preview: by's kind of the name. -->
         <elementDescriptionProvider implementation="dev.basedpython.pycharm.lsp.refactor.ByRenamedNameDescriptionProvider"/>
         <!-- Renaming or moving a .by module or package also rewrites the imports that name it, as

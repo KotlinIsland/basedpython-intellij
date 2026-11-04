@@ -58,7 +58,7 @@ internal class ByTypeSource(
                 LOG.info("by/typeDeclaration: this by does not know the request")
                 return null
             }
-            is ByAsked.Rejected, ByAsked.Failed -> return null
+            is ByAsked.Rejected, is ByAsked.Refused, ByAsked.Failed -> return null
         }
         return readAction { position(client, declaration) }
     }

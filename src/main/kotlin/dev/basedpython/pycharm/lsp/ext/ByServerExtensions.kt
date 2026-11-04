@@ -392,6 +392,23 @@ interface ByServerExtensions {
     fun nameSuggestions(args: ByNameSuggestionsParams): CompletableFuture<ByNameSuggestionsResult?>
 
     /**
+     * The boolean variable, parameter or function at a position that Invert Boolean would invert:
+     * its [ByPreparedInvertBoolean.name], the [ByPreparedInvertBoolean.range] of that name and the
+     * name `by` proposes for the inverted one; `null` where there is nothing to invert. Asked by
+     * [dev.basedpython.pycharm.lsp.refactor.ByInvertBoolean] of a `by` that advertises
+     * `experimental.invertBoolean`.
+     */
+    @JsonRequest("by/prepareInvertBoolean")
+    fun prepareInvertBoolean(args: ByPrepareInvertBooleanParams): CompletableFuture<ByPreparedInvertBoolean?>
+
+    /**
+     * The edit that inverts the boolean at a position and renames it to [ByInvertBooleanParams.newName]:
+     * every assignment and `return` negated, every read too. Refused with the reason where it cannot.
+     */
+    @JsonRequest("by/invertBoolean")
+    fun invertBoolean(args: ByInvertBooleanParams): CompletableFuture<org.eclipse.lsp4j.WorkspaceEdit?>
+
+    /**
      * `textDocument/references` with what each reference does with the name: the same references in
      * the same order, each with its [ByReference.kind]. `null` where `textDocument/references` is. A
      * `by` from before the request answers `MethodNotFound`.
@@ -1336,6 +1353,20 @@ data class ByNameSuggestionsParams(val textDocument: TextDocumentIdentifier, val
 
 /** `by/nameSuggestions`' answer, best first. */
 data class ByNameSuggestionsResult(val names: List<String> = emptyList())
+
+/** A position in one text of the document, for `by/prepareInvertBoolean`. */
+data class ByPrepareInvertBooleanParams(val textDocument: TextDocumentIdentifier, val position: Position, val textHash: String)
+
+/** What Invert Boolean would invert: the name, where it is, and the name `by` proposes for it inverted. */
+data class ByPreparedInvertBoolean(val name: String = "", val range: Range? = null, val newName: String = "")
+
+/** A position in one text of the document, and the name the inverted boolean takes, for `by/invertBoolean`. */
+data class ByInvertBooleanParams(
+    val textDocument: TextDocumentIdentifier,
+    val position: Position,
+    val newName: String,
+    val textHash: String,
+)
 
 /** A position on a class's name in one text of the document, for `by/mro`. */
 data class ByMroParams(val textDocument: TextDocumentIdentifier, val position: Position, val textHash: String)

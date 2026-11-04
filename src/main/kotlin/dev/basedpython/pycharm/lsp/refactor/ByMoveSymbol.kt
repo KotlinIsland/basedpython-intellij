@@ -71,7 +71,7 @@ class ByMoveSymbolHandler : MoveHandlerDelegate() {
             is ByAsked.Answer -> asked.value
             // nothing here to move: the platform's handlers go on to the file
             ByAsked.None, ByAsked.Unsupported -> return false
-            ByAsked.Failed, is ByAsked.Rejected -> {
+            ByAsked.Failed, is ByAsked.Rejected, is ByAsked.Refused -> {
                 ByProjectRefactorings.error(project, editor, title, ByProjectRefactorings.unanswered(asked, "by/prepareMoveSymbol", "")!!)
                 return true
             }
