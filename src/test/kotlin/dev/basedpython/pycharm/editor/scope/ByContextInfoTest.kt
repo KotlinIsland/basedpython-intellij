@@ -3,12 +3,12 @@ package dev.basedpython.pycharm.editor.scope
 import com.intellij.ide.DataManager
 import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.ActionPlaces
-import com.intellij.openapi.actionSystem.ActionPromoter
+import com.intellij.openapi.actionSystem.DefaultActionGroup
+import com.intellij.openapi.components.service
 import com.intellij.openapi.actionSystem.ActionUiKind
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.ex.ActionUtil
 import com.intellij.openapi.editor.LogicalPosition
-import com.intellij.openapi.extensions.ExtensionPointName
 import com.intellij.openapi.util.TextRange
 import com.intellij.testFramework.EditorTestUtil
 import com.intellij.testFramework.junit5.fixture.TestFixtures
@@ -18,6 +18,7 @@ import dev.basedpython.pycharm.testFramework.onEdt
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
@@ -107,24 +108,39 @@ class ByContextInfoTest {
     }
 
     @Test
-    fun `the action is enabled in a by editor only, and put ahead of the platform's on the shortcut`() = onEdt {
-        val action = ActionManager.getInstance().getAction("basedpython.ContextInfo")
+    fun `the platform's action is wrapped in place, in its menu, acting in a by editor and handing anything else to the platform's`() = onEdt {
+        val actions = ActionManager.getInstance()
+        val install = service<ByContextInfoInstall>()
+        install.install()
+        val action = actions.getAction(ByContextInfoAction.ID)
         assertTrue(action is ByContextInfoAction)
-        val platform = ActionManager.getInstance().getAction("EditorContextInfo")
-        fun enabledIn(name: String, text: String): Boolean {
+        val platform = (action as ByContextInfoAction).delegate
+        assertFalse(platform is ByContextInfoAction)
+        // View | Context Info is the platform's reference to it in this group of the View menu, which
+        // the menu resolves by id
+        val viewMenu = actions.getAction("CodeEditorViewGroup") as DefaultActionGroup
+        assertTrue(viewMenu.getChildren(actions).any { it === action }, "the View menu's item is the wrapper")
+        fun updated(name: String, text: String): AnActionEvent {
             fixture.configureByText(name, text)
             val event = AnActionEvent.createEvent(
                 action, DataManager.getInstance().getDataContext(fixture.editor.contentComponent), null,
-                ActionPlaces.KEYBOARD_SHORTCUT, ActionUiKind.NONE, null,
+                ActionPlaces.MAIN_MENU, ActionUiKind.NONE, null,
             )
             ActionUtil.updateAction(action, event)
-            return event.presentation.isEnabled
+            return event
         }
-        assertTrue(enabledIn("c.by", "x = 1\n"))
-        assertFalse(enabledIn("c.txt", "x = 1\n"))
+        assertTrue(updated("c.by", "x = 1\n").presentation.isEnabledAndVisible)
+        // a plain text file has no structure, and the platform's action says so itself
+        val plain = updated("c.txt", "x = 1\n").presentation
+        val direct = AnActionEvent.createEvent(
+            platform, DataManager.getInstance().getDataContext(fixture.editor.contentComponent), null,
+            ActionPlaces.MAIN_MENU, ActionUiKind.NONE, null,
+        ).also { ActionUtil.updateAction(platform, it) }.presentation
+        assertEquals(direct.isEnabled to direct.isVisible, plain.isEnabled to plain.isVisible)
 
-        val promoter = ExtensionPointName<ActionPromoter>("com.intellij.actionPromoter").extensionList
-            .single { it is ByContextInfoPromoter }
-        assertEquals(listOf(action), promoter.promote(listOf(platform, action), DataManager.getInstance().getDataContext(fixture.editor.contentComponent)))
+        install.dispose()
+        assertSame(platform, actions.getAction(ByContextInfoAction.ID), "unloading puts the platform's back")
+        assertTrue(viewMenu.getChildren(actions).any { it === platform })
+        install.install()
     }
 }

@@ -1,17 +1,18 @@
 package dev.basedpython.pycharm.editor.scope
 
 import com.intellij.codeInsight.hint.EditorFragmentComponent
-import com.intellij.openapi.actionSystem.ActionPromoter
-import com.intellij.openapi.actionSystem.ActionUpdateThread
+import com.intellij.openapi.Disposable
+import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
+import com.intellij.openapi.actionSystem.AnActionWrapper
 import com.intellij.openapi.actionSystem.CommonDataKeys
-import com.intellij.openapi.actionSystem.DataContext
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
 import com.intellij.openapi.editor.Editor
-import com.intellij.openapi.project.DumbAwareAction
+import com.intellij.openapi.project.Project
+import com.intellij.openapi.startup.ProjectActivity
 import com.intellij.openapi.util.TextRange
 import com.intellij.psi.PsiDocumentManager
 import com.intellij.ui.LightweightHint
@@ -23,19 +24,25 @@ import java.util.WeakHashMap
 /**
  * *View | Context Info* (Ctrl+Shift+Q on macOS, Alt+Q elsewhere) in a `.by` editor: the header of the
  * class or function the caret is in, shown over the top of the editor when it has scrolled out of
- * sight, as PyCharm shows a `.py`'s.
+ * sight, as PyCharm shows a `.py`'s. A `.py` that *Apply to .py files* makes basedpython is a `.by`
+ * here too.
  *
- * ## Why an action of its own
+ * ## Why the platform's action, wrapped
  *
- * The platform's action (`EditorContextInfo`, internal) finds the container as the structure view
- * model's current element, and goes on only when that is a `PsiElement` whose parents a
- * `declarationRangeHandler` gives a header. The structure of a `.by` file is the platform's LSP
- * model of `by`'s document symbols, whose current element is a `DocumentSymbol`, so for `.by` it
- * did nothing; and handing it a `PsiElement` instead would leave the Structure view's selection,
- * which matches the current element against the symbols, selecting nothing. The action takes no
- * per-language handler. So this is a second action on the same shortcut ([ByContextInfoPromoter]),
- * enabled only in a `.by` editor; elsewhere the keystroke stays the platform's. The menu item is
- * still the platform's, and in `.by` still does nothing.
+ * The platform's action (`EditorContextInfo`, `ShowContainerInfoAction`, internal) finds the
+ * container as the structure view model's current element, and goes on only when that is a
+ * `PsiElement` whose parents a `declarationRangeHandler` gives a header. The structure of a `.by`
+ * file is the platform's LSP model of `by`'s document symbols, whose current element is a
+ * `DocumentSymbol`, so for `.by` it did nothing; and handing it a `PsiElement` instead would leave
+ * the Structure view's selection, which matches the current element against the symbols, selecting
+ * nothing. It takes no per-language handler, and has no extension point to give one.
+ *
+ * An action of the plugin's own on the shortcut, put first by an `actionPromoter`, answered the
+ * keystroke but not the *View* menu item, which stayed the platform's and did nothing. So the
+ * platform's action is wrapped in place ([ByContextInfoInstall]): this wrapper is registered under
+ * its id, and so in its menus and on its shortcut, and hands every event that is not about a `.by`
+ * editor to the platform's own instance, unchanged ([AnActionWrapper]). Taken back out when the
+ * plugin unloads.
  *
  * ## What is shown
  *
@@ -50,35 +57,71 @@ import java.util.WeakHashMap
  * The outline is the one [ByOutlines] holds for the text on screen; without one, nothing is shown,
  * and one is asked for.
  */
-class ByContextInfoAction : DumbAwareAction() {
-
-    override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
+internal class ByContextInfoAction(platform: AnAction) : AnActionWrapper(platform) {
 
     override fun update(e: AnActionEvent) {
-        e.presentation.isEnabledAndVisible = editor(e) != null
+        if (byEditor(e) != null) {
+            e.presentation.isEnabledAndVisible = true
+        } else {
+            super.update(e)
+        }
     }
 
     override fun actionPerformed(e: AnActionEvent) {
-        val editor = editor(e) ?: return
+        val editor = byEditor(e) ?: return super.actionPerformed(e)
         ByContextInfo.getInstance().show(editor)
     }
 
     /** The editor of a `.by` file this acts on, as the platform's action finds its editor. */
-    private fun editor(e: AnActionEvent): Editor? {
+    private fun byEditor(e: AnActionEvent): Editor? {
         val project = e.project ?: return null
         val editor = e.getData(CommonDataKeys.EDITOR_EVEN_IF_INACTIVE) ?: return null
         val file = PsiDocumentManager.getInstance(project).getPsiFile(editor.document)
         return editor.takeIf { file is BasedPythonFile }
     }
+
+    companion object {
+        /** The platform's Context Info. */
+        const val ID: String = "EditorContextInfo"
+    }
 }
 
 /**
- * Puts [ByContextInfoAction] first among the actions of a keystroke. It is disabled outside a `.by`
- * editor, so there the keystroke goes on to the platform's Context Info.
+ * Puts [ByContextInfoAction] in place of the platform's Context Info, wrapping it, once per IDE —
+ * asked as each project opens, which a plugin loaded without a restart is asked too — and puts the
+ * platform's back when the plugin unloads, as this service is disposed with it.
+ *
+ * `ActionManager.replaceAction` swaps the action in every group that holds it, the *View* menu among
+ * them, and the keymap binds the shortcut by id, so both reach the wrapper.
  */
-class ByContextInfoPromoter : ActionPromoter {
-    override fun promote(actions: List<AnAction>, context: DataContext): List<AnAction> =
-        actions.filterIsInstance<ByContextInfoAction>()
+@Service(Service.Level.APP)
+internal class ByContextInfoInstall : Disposable {
+
+    private var platform: AnAction? = null
+
+    @Synchronized
+    fun install() {
+        if (platform != null) return
+        val actions = ActionManager.getInstance()
+        // resolved first, so what is wrapped is the action itself rather than the stub it is registered as
+        val current = actions.getAction(ByContextInfoAction.ID) ?: return
+        if (current is ByContextInfoAction) return
+        actions.replaceAction(ByContextInfoAction.ID, ByContextInfoAction(current))
+        platform = current
+    }
+
+    @Synchronized
+    override fun dispose() {
+        val original = platform ?: return
+        platform = null
+        val actions = ActionManager.getInstance()
+        if (actions.getAction(ByContextInfoAction.ID) is ByContextInfoAction) actions.replaceAction(ByContextInfoAction.ID, original)
+    }
+
+    /** Installs the wrapper as a project opens. */
+    class Activity : ProjectActivity {
+        override suspend fun execute(project: Project) = service<ByContextInfoInstall>().install()
+    }
 }
 
 /**
