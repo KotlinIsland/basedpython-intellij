@@ -1,4 +1,0 @@
-<spot>ready</spot> = True
-if ready and queue:
-    ready = check()
-print(not ready)

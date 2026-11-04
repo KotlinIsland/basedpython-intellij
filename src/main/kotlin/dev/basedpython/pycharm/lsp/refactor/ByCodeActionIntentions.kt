@@ -10,6 +10,7 @@ import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.platform.lsp.api.LspClient
 import com.intellij.platform.lsp.api.customization.LspIntentionAction
 import com.intellij.platform.lsp.util.getLsp4jRange
 import com.intellij.psi.PsiFile
@@ -18,7 +19,6 @@ import dev.basedpython.pycharm.lsp.ByServerDocuments
 import dev.basedpython.pycharm.lsp.askBy
 import dev.basedpython.pycharm.lsp.byServerFor
 import dev.basedpython.pycharm.util.BasedPythonBundle
-import dev.basedpython.pycharm.lsp.ByExperimental
 import org.eclipse.lsp4j.CodeAction
 import org.eclipse.lsp4j.CodeActionContext
 import org.eclipse.lsp4j.CodeActionKind
@@ -32,8 +32,11 @@ import org.eclipse.lsp4j.jsonrpc.messages.Either
  * The code actions `by` offers at a caret or a selection — its refactorings, each under its own code
  * action kind — by the kind each is offered under, as the intention that shows it in Alt+Enter and
  * lists it under *Settings | Editor | Intentions | basedpython*, where it can be switched off.
+ *
+ * A kind that is not [asIntention] has no intention: it is a refactoring of the IDE's own menu, and
+ * one `by` offers it under is shown nowhere rather than among the other actions.
  */
-enum class ByCodeActionKind(val kind: String, private val familyKey: String) {
+enum class ByCodeActionKind(val kind: String, private val familyKey: String, val asIntention: Boolean = true) {
     InlineVariable("refactor.inline.variable", "intention.by.inlineVariable"),
     ExtractVariable("refactor.extract.variable", "intention.by.extractVariable"),
     IntroduceConstant("refactor.extract.constant", "intention.by.introduceConstant"),
@@ -49,7 +52,16 @@ enum class ByCodeActionKind(val kind: String, private val familyKey: String) {
     DeMorgan("refactor.rewrite.deMorgan", "intention.by.deMorgan"),
     FlipQuotes("refactor.rewrite.flipQuotes", "intention.by.flipQuotes"),
     LoopToComprehension("refactor.rewrite.loopToComprehension", "intention.by.loopToComprehension"),
-    InvertBoolean("refactor.rewrite.invertBoolean", "intention.by.invertBoolean"),
+    /**
+     * *Refactor | Invert Boolean* ([ByInvertBoolean]), not an intention. Alt+Enter and the light bulb
+     * ask `by` the same question, as the light bulb asks it — `triggerKind` `Automatic`, which the
+     * platform has no way to tell from Alt+Enter when it asks an intention — and `by` leaves out a
+     * refactoring that reads the whole project, invert boolean the one, unless it is `Invoked`:
+     * working one out costs its whole rewrite, on every move of the caret. Measured against `by`
+     * fb8274cd5: at `not_ready = False`, `Automatic` answered nothing and `Invoked` invert boolean,
+     * while flip quotes, invert `if`, split list and inline variable were answered either way.
+     */
+    InvertBoolean("refactor.rewrite.invertBoolean", "intention.by.invertBoolean", asIntention = false),
     ;
 
     val familyName: String get() = BasedPythonBundle.message(familyKey)
@@ -70,7 +82,8 @@ internal class ByOfferedActions(
         /**
          * [actions], `by`'s reply, as the intentions that show them: quick fixes left out — they are
          * the platform's, attached to the diagnostic they fix — and so are actions `by` offers
-         * disabled. [intention] makes each one's intention.
+         * disabled, and those of a kind that is a refactoring of the menu rather than an intention
+         * ([ByCodeActionKind.asIntention]). [intention] makes each one's intention.
          */
         fun of(actions: List<CodeAction>, intention: (CodeAction) -> LspIntentionAction): ByOfferedActions {
             val named = LinkedHashMap<ByCodeActionKind, LspIntentionAction>()
@@ -78,7 +91,11 @@ internal class ByOfferedActions(
             for (action in actions) {
                 if (action.disabled != null || action.kind?.startsWith(CodeActionKind.QuickFix) == true) continue
                 val kind = ByCodeActionKind.of(action.kind)
-                if (kind != null && kind !in named) named[kind] = intention(action) else others += intention(action)
+                when {
+                    kind != null && !kind.asIntention -> continue
+                    kind != null && kind !in named -> named[kind] = intention(action)
+                    else -> others += intention(action)
+                }
             }
             return ByOfferedActions(named, others)
         }
@@ -107,9 +124,13 @@ internal class ByCodeActionIntentions(private val project: Project) {
 
     /**
      * `by`'s actions at [editor]'s caret or selection. Asked off the EDT only, in the read action the
-     * platform asks intentions in; on the EDT, only what was asked already.
+     * platform asks intentions in; on the EDT, only what was asked already. [client] is the
+     * project's `by` for the file but in a test.
+     *
+     * Asked as the light bulb asks, `triggerKind` `Automatic`: Alt+Enter asks every intention the
+     * same way, and the platform says nothing to tell the two apart by.
      */
-    fun at(editor: Editor): ByOfferedActions {
+    fun at(editor: Editor, client: LspClient? = null): ByOfferedActions {
         val document = editor.document
         val file = FileDocumentManager.getInstance().getFile(document) ?: return ByOfferedActions.NONE
         val caret = editor.caretModel.primaryCaret
@@ -117,7 +138,7 @@ internal class ByCodeActionIntentions(private val project: Project) {
         last?.let { (key, offered) -> if (key == asked) return offered }
         if (ApplicationManager.getApplication().isDispatchThread) return ByOfferedActions.NONE
 
-        val server = byServerFor(project, file) ?: return ByOfferedActions.NONE
+        val server = client ?: byServerFor(project, file) ?: return ByOfferedActions.NONE
         ByServerDocuments.ensureOpen(server, project, file)
         val params = CodeActionParams(
             server.getDocumentIdentifier(file),
@@ -211,22 +232,6 @@ class ByInvertIfIntention : ByNamedCodeActionIntention(ByCodeActionKind.InvertIf
 class ByDeMorganIntention : ByNamedCodeActionIntention(ByCodeActionKind.DeMorgan)
 class ByFlipQuotesIntention : ByNamedCodeActionIntention(ByCodeActionKind.FlipQuotes)
 class ByLoopToComprehensionIntention : ByNamedCodeActionIntention(ByCodeActionKind.LoopToComprehension)
-/**
- * Alt+Enter's *Invert boolean*, offered where `by` offers its `refactor.rewrite.invertBoolean`, and
- * run as *Refactor | Invert Boolean* ([ByInvertBoolean]) by a `by` that answers that — the dialog
- * asking for the new name, with its preview — so the two surfaces are one refactoring rather than
- * two that differ in whether the name is asked. A `by` without it applies its code action, as before.
- */
-class ByInvertBooleanIntention : ByNamedCodeActionIntention(ByCodeActionKind.InvertBoolean) {
-    override fun invoke(project: Project, editor: Editor, psiFile: PsiFile) {
-        val server = psiFile.virtualFile?.let { byServerFor(project, it) }
-        if (server != null && ByExperimental.advertises(server, ByExperimental.INVERT_BOOLEAN)) {
-            ByInvertBoolean.start(project, editor, psiFile)
-        } else {
-            super.invoke(project, editor, psiFile)
-        }
-    }
-}
 class ByOtherCodeAction0Intention : ByOtherCodeActionIntention(0)
 class ByOtherCodeAction1Intention : ByOtherCodeActionIntention(1)
 class ByOtherCodeAction2Intention : ByOtherCodeActionIntention(2)

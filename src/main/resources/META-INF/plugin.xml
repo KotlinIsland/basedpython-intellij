@@ -437,11 +437,6 @@
         </intentionAction>
         <intentionAction>
             <language>basedpython</language>
-            <className>dev.basedpython.pycharm.lsp.refactor.ByInvertBooleanIntention</className>
-            <category>basedpython</category>
-        </intentionAction>
-        <intentionAction>
-            <language>basedpython</language>
             <className>dev.basedpython.pycharm.lsp.refactor.ByOtherCodeAction0Intention</className>
             <category>basedpython</category>
         </intentionAction>

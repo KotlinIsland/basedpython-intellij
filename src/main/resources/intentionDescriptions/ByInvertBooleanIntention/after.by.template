@@ -1,4 +1,0 @@
-not_ready = False
-if not not_ready and queue:
-    not_ready = not check()
-print(not_ready)
