@@ -1357,8 +1357,11 @@ data class ByNameSuggestionsResult(val names: List<String> = emptyList())
 /** A position in one text of the document, for `by/prepareInvertBoolean`. */
 data class ByPrepareInvertBooleanParams(val textDocument: TextDocumentIdentifier, val position: Position, val textHash: String)
 
-/** What Invert Boolean would invert: the name, where it is, and the name `by` proposes for it inverted. */
-data class ByPreparedInvertBoolean(val name: String = "", val range: Range? = null, val newName: String = "")
+/**
+ * What Invert Boolean would invert: the name, where it is, the name `by` proposes for it inverted,
+ * and what it is — `variable`, `parameter`, `function`, … — as the dialog names it.
+ */
+data class ByPreparedInvertBoolean(val name: String = "", val range: Range? = null, val newName: String = "", val kind: String? = null)
 
 /** A position in one text of the document, and the name the inverted boolean takes, for `by/invertBoolean`. */
 data class ByInvertBooleanParams(

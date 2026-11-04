@@ -18,6 +18,7 @@ import dev.basedpython.pycharm.lsp.ByServerDocuments
 import dev.basedpython.pycharm.lsp.askBy
 import dev.basedpython.pycharm.lsp.byServerFor
 import dev.basedpython.pycharm.util.BasedPythonBundle
+import dev.basedpython.pycharm.lsp.ByExperimental
 import org.eclipse.lsp4j.CodeAction
 import org.eclipse.lsp4j.CodeActionContext
 import org.eclipse.lsp4j.CodeActionKind
@@ -210,7 +211,22 @@ class ByInvertIfIntention : ByNamedCodeActionIntention(ByCodeActionKind.InvertIf
 class ByDeMorganIntention : ByNamedCodeActionIntention(ByCodeActionKind.DeMorgan)
 class ByFlipQuotesIntention : ByNamedCodeActionIntention(ByCodeActionKind.FlipQuotes)
 class ByLoopToComprehensionIntention : ByNamedCodeActionIntention(ByCodeActionKind.LoopToComprehension)
-class ByInvertBooleanIntention : ByNamedCodeActionIntention(ByCodeActionKind.InvertBoolean)
+/**
+ * Alt+Enter's *Invert boolean*, offered where `by` offers its `refactor.rewrite.invertBoolean`, and
+ * run as *Refactor | Invert Boolean* ([ByInvertBoolean]) by a `by` that answers that — the dialog
+ * asking for the new name, with its preview — so the two surfaces are one refactoring rather than
+ * two that differ in whether the name is asked. A `by` without it applies its code action, as before.
+ */
+class ByInvertBooleanIntention : ByNamedCodeActionIntention(ByCodeActionKind.InvertBoolean) {
+    override fun invoke(project: Project, editor: Editor, psiFile: PsiFile) {
+        val server = psiFile.virtualFile?.let { byServerFor(project, it) }
+        if (server != null && ByExperimental.advertises(server, ByExperimental.INVERT_BOOLEAN)) {
+            ByInvertBoolean.start(project, editor, psiFile)
+        } else {
+            super.invoke(project, editor, psiFile)
+        }
+    }
+}
 class ByOtherCodeAction0Intention : ByOtherCodeActionIntention(0)
 class ByOtherCodeAction1Intention : ByOtherCodeActionIntention(1)
 class ByOtherCodeAction2Intention : ByOtherCodeActionIntention(2)

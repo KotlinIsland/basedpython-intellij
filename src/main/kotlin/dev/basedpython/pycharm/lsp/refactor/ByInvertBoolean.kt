@@ -153,7 +153,9 @@ internal class ByInvertBooleanDialog(
     }
 
     override fun createNorthPanel(): JComponent = panel {
-        row(UIUtil.removeMnemonic(RefactoringBundle.message("invert.boolean.name.of.inverted.element", "'${prepared.name}'"))) {
+        // "Name of inverted variable:", as the platform's dialog says it, of what by says the name is
+        val what = prepared.kind?.let { "$it '${prepared.name}'" } ?: "'${prepared.name}'"
+        row(UIUtil.removeMnemonic(RefactoringBundle.message("invert.boolean.name.of.inverted.element", what))) {
             cell(nameField).align(AlignX.FILL)
         }
     }
