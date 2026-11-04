@@ -5,13 +5,14 @@ import com.intellij.openapi.application.readAction
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.util.TextRange
 import com.intellij.testFramework.junit5.fixture.TestFixtures
-import dev.basedpython.pycharm.lsp.ByAnswer
 import dev.basedpython.pycharm.lsp.ByExperimental
 import dev.basedpython.pycharm.lsp.ByTextHash
 import dev.basedpython.pycharm.lsp.ext.ByNamedRenameParams
 import dev.basedpython.pycharm.testFramework.AnsweringClient
 import dev.basedpython.pycharm.testFramework.AnsweringClient.Companion.answered
 import dev.basedpython.pycharm.testFramework.AnsweringClient.Companion.experimental
+import dev.basedpython.pycharm.testFramework.AnsweringClient.Companion.failed
+import org.eclipse.lsp4j.jsonrpc.messages.ResponseErrorCode
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
 import dev.basedpython.pycharm.testFramework.onEdt
 import kotlinx.coroutines.Dispatchers
@@ -136,13 +137,34 @@ class ByAnnotatedRenameTest {
             }
         }
 
-        assertEquals(parsed(), (asked as ByAnswer.Answer).value)
-        assertEquals(ByAnswer.Failed, unasked)
+        assertEquals(parsed(), (asked as ByAsked.Answer).value)
+        assertEquals(ByAsked.Unsupported, unasked)
         assertEquals(0, old.requests.get())
         val sent = client.sentParams.single() as ByNamedRenameParams
         assertEquals("talk", sent.newName)
         assertEquals(Position(1, 8), sent.position)
         assertEquals(ByTextHash.of(animal), sent.textHash)
+    }
+
+    @Test
+    fun `by's refusal is its reason, and any other failure is not one`() = onEdt {
+        val source = fixture.configureByText("animal.by", animal)
+        val document = fixture.editor.document
+        val advertised = experimental(ByExperimental.RENAME_CHANGE_ANNOTATIONS)
+        val refusing = AnsweringClient(fixture.project, initializeResult = advertised) {
+            failed(ResponseErrorCode.RequestFailed, "`talk` is already defined in the same scope")
+        }
+        val broken = AnsweringClient(fixture.project, initializeResult = advertised) { failed(ResponseErrorCode.InternalError) }
+
+        val (refused, failure) = withContext(Dispatchers.Default) {
+            readAction {
+                ByAnnotatedRename.ask(refusing, fixture.project, source.virtualFile, document, 22, "talk") to
+                    ByAnnotatedRename.ask(broken, fixture.project, source.virtualFile, document, 22, "talk")
+            }
+        }
+
+        assertEquals(ByAsked.Refused("`talk` is already defined in the same scope"), refused)
+        assertEquals(ByAsked.Failed, failure)
     }
 
     @Test

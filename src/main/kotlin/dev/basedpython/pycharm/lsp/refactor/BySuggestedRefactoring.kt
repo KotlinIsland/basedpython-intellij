@@ -534,16 +534,17 @@ class ByRenamedNameProcessor : RenamePsiElementProcessor() {
         element.fileRenames = emptyList()
         if (ByAnnotatedRename.advertised(server)) {
             val asked = element.asked?.takeIf { it.newName == newName && it.stamp == document.modificationStamp }?.answer
-            when (val answer = asked?.let { ByAnswer.Answer(it) } ?: ByAnnotatedRename.ask(server, project, file, document, element.textOffset, newName)) {
-                is ByAnswer.Answer -> {
+            when (val answer = asked?.let { ByAsked.Answer(it) } ?: ByAnnotatedRename.ask(server, project, file, document, element.textOffset, newName)) {
+                is ByAsked.Answer -> {
                     val kept = answer.value.keeping(element.keptGroups)
                     result += ByImportEdit.of(project, answer.value.rename, element)
                     for (group in kept) result += ByImportEdit.of(project, group.edit, element)
                     element.fileRenames = kept.flatMap { it.fileRenames }
                     result += ByRenameGroups.conflicts(element, element.fileRenames)
                 }
-                ByAnswer.None, ByAnswer.Failed ->
-                    result += ByRenameUnknown(element, BasedPythonBundle.message("rename.by.suggested.failed", element.name, newName))
+                // by's reason, such as a name that would collide, for the user to see before anything changes
+                is ByAsked.Refused -> result += ByRenameUnknown(element, answer.message)
+                else -> result += ByRenameUnknown(element, BasedPythonBundle.message("rename.by.suggested.failed", element.name, newName))
             }
             return
         }

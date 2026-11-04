@@ -14,7 +14,10 @@ import dev.basedpython.pycharm.lsp.ByAnswer
 import dev.basedpython.pycharm.lsp.ByExperimental
 import dev.basedpython.pycharm.lsp.ByServerDocuments
 import dev.basedpython.pycharm.lsp.ByTextHash
-import dev.basedpython.pycharm.lsp.askBy
+import dev.basedpython.pycharm.lsp.askingAgain
+import org.eclipse.lsp4j.jsonrpc.ResponseErrorException
+import org.eclipse.lsp4j.jsonrpc.messages.ResponseErrorCode
+import java.util.concurrent.CompletableFuture
 import dev.basedpython.pycharm.lsp.ext.ByNamedRenameParams
 import dev.basedpython.pycharm.lsp.ext.ByServerExtensions
 import org.eclipse.lsp4j.Range
@@ -51,14 +54,15 @@ internal data class ByAnnotatedRename(val rename: WorkspaceEdit, val groups: Lis
         /**
          * Asks `by/rename` for renaming the symbol at [offset] of [document] to [newName]. Only of a
          * `by` that advertises `experimental.renameChangeAnnotations`: for any other the answer is
-         * [ByAnswer.Failed] without asking, and the caller asks `textDocument/rename`, which has no
-         * groups. An answer that is not a workspace edit this can read is [ByAnswer.Failed] too:
-         * applying part of it could leave a group half made, or make one nobody kept.
+         * [ByAsked.Unsupported] without asking, and the caller asks `textDocument/rename`, which has
+         * no groups. `by`'s refusal (`RequestFailed`), such as a name that would collide, is
+         * [ByAsked.Refused] with its reason. An answer that is not a workspace edit this can read is
+         * [ByAsked.Failed]: applying part of it could leave a group half made, or make one nobody kept.
          */
         @RequiresBackgroundThread
         @RequiresReadLock
-        fun ask(client: LspClient, project: Project, file: VirtualFile, document: Document, offset: Int, newName: String): ByAnswer<ByAnnotatedRename> {
-            if (!advertised(client)) return ByAnswer.Failed
+        fun ask(client: LspClient, project: Project, file: VirtualFile, document: Document, offset: Int, newName: String): ByAsked<ByAnnotatedRename> {
+            if (!advertised(client)) return ByAsked.Unsupported
             ByServerDocuments.ensureOpen(client, project, file)
             val params = ByNamedRenameParams(
                 TextDocumentIdentifier(client.getDocumentIdentifier(file).uri),
@@ -66,11 +70,25 @@ internal data class ByAnnotatedRename(val rename: WorkspaceEdit, val groups: Lis
                 newName,
                 ByTextHash.of(document.immutableCharSequence),
             )
-            return when (val answer = client.askBy(METHOD) { (it as ByServerExtensions).annotatedRename(params) }) {
-                ByAnswer.None -> ByAnswer.None
-                ByAnswer.Failed -> ByAnswer.Failed
-                is ByAnswer.Answer -> answer.value.takeUnless { it.isJsonNull }?.let(::parse)?.let { ByAnswer.Answer(it) } ?: ByAnswer.Failed
+            var last: CompletableFuture<JsonElement?>? = null
+            val answer = askingAgain<JsonElement>(METHOD) { sent ->
+                client.sendRequestSync(LspClient.DEFAULT_REQUEST_TIMEOUT_MS) { server ->
+                    (server as ByServerExtensions).annotatedRename(params).also { last = it; sent(it) }
+                }
             }
+            return when (answer) {
+                ByAnswer.None -> ByAsked.None
+                ByAnswer.Failed -> refusal(last)?.let { ByAsked.Refused(it) } ?: ByAsked.Failed
+                is ByAnswer.Answer -> answer.value.takeUnless { it.isJsonNull }?.let(::parse)?.let { ByAsked.Answer(it) } ?: ByAsked.Failed
+            }
+        }
+
+        /** The reason `by` gave for refusing the request that went out as [future], if that is what it did. */
+        private fun refusal(future: CompletableFuture<*>?): String? {
+            if (future == null || !future.isCompletedExceptionally) return null
+            val error = runCatching { future.getNow(null) }.exceptionOrNull() ?: return null
+            return generateSequence(error) { it.cause }.filterIsInstance<ResponseErrorException>()
+                .firstOrNull { it.responseError.code == ResponseErrorCode.RequestFailed.value }?.responseError?.message
         }
 
         /** Whether [client] answers [METHOD]. */

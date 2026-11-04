@@ -334,7 +334,7 @@ internal class ByRenameDialog(project: Project, name: ByRenamedName, editor: Edi
         val client = runningByServer(project, file) ?: return null
         val document = renamed.containingFile.viewProvider.document ?: return null
         val stamp = document.modificationStamp
-        val answer = ByAnnotatedRename.ask(client, project, file, document, renamed.textOffset, newName).value ?: return null
+        val answer = (ByAnnotatedRename.ask(client, project, file, document, renamed.textOffset, newName) as? ByAsked.Answer)?.value ?: return null
         return ByAnnotatedRenameFor(newName, stamp, answer)
     }
 
@@ -535,7 +535,7 @@ internal class ByInplaceRename(
                             val virtualFile = file.virtualFile ?: return@readAction ByNameVerdict.Unknown to null
                             val verdict = ByRenameNames.validate(by, project, virtualFile, document, name.textOffset, typed)
                             val asked = if (verdict is ByNameVerdict.Invalid) null else {
-                                ByAnnotatedRename.ask(by, project, virtualFile, document, name.textOffset, typed).value
+                                (ByAnnotatedRename.ask(by, project, virtualFile, document, name.textOffset, typed) as? ByAsked.Answer)?.value
                                     ?.let { ByAnnotatedRenameFor(typed, document.modificationStamp, it) }
                             }
                             verdict to asked
