@@ -41,7 +41,8 @@ import dev.basedpython.pycharm.lsp.ByServerDocuments
 import dev.basedpython.pycharm.lsp.ByTextHash
 import dev.basedpython.pycharm.lsp.awaitBy
 import dev.basedpython.pycharm.lsp.byServerFor
-import dev.basedpython.pycharm.lsp.ext.ByRenameNameSuggestionsParams
+import dev.basedpython.pycharm.lsp.ext.ByNameSuggestionsParams
+import dev.basedpython.pycharm.lsp.ByExperimental
 import dev.basedpython.pycharm.lsp.ext.ByServerExtensions
 import dev.basedpython.pycharm.navigation.ByDeclarations
 import com.intellij.usageView.UsageViewUtil
@@ -53,6 +54,25 @@ import org.eclipse.lsp4j.PrepareRenameParams
 import org.eclipse.lsp4j.Range
 import org.eclipse.lsp4j.jsonrpc.ResponseErrorException
 import java.awt.GridBagConstraints
+import java.util.WeakHashMap
+import com.intellij.util.concurrency.AppExecutorUtil
+import com.intellij.openapi.util.Disposer
+import com.intellij.codeInsight.hint.HintManager
+import com.intellij.openapi.editor.colors.CodeInsightColors
+import com.intellij.openapi.editor.markup.RangeHighlighter
+import com.intellij.openapi.editor.markup.HighlighterTargetArea
+import com.intellij.openapi.editor.markup.HighlighterLayer
+import com.intellij.openapi.editor.event.DocumentListener
+import com.intellij.openapi.editor.event.DocumentEvent
+import com.intellij.openapi.application.ReadAction
+import com.intellij.openapi.Disposable
+import dev.basedpython.pycharm.lsp.runningByServer
+import com.intellij.openapi.application.ModalityState
+import org.jetbrains.annotations.TestOnly
+import javax.swing.JCheckBox
+import java.awt.BorderLayout
+import com.intellij.util.ui.JBUI
+import com.intellij.util.Alarm
 import javax.swing.JComponent
 import javax.swing.JPanel
 
@@ -179,11 +199,11 @@ internal object ByRename {
         } catch (_: ResponseErrorException) {
             null
         }.orEmpty()
-        val suggestions = if (suggest) {
+        val suggestions = if (suggest && ByExperimental.advertises(server, ByExperimental.NAME_SUGGESTIONS)) {
             val params = readAction {
-                ByRenameNameSuggestionsParams(identifier, position, ByTextHash.of(document.immutableCharSequence))
+                ByNameSuggestionsParams(identifier, position, ByTextHash.of(document.immutableCharSequence))
             }
-            server.awaitBy("by/renameNameSuggestions") { (it as ByServerExtensions).renameNameSuggestions(params) }.value.orEmpty()
+            server.awaitBy("by/nameSuggestions") { (it as ByServerExtensions).nameSuggestions(params) }.value?.names.orEmpty()
         } else {
             emptyList()
         }
@@ -213,9 +233,36 @@ internal object ByRename {
  * Without the platform's options that `by`'s rename has no answer for. It renames the name's uses
  * across the project and nothing else, so there is no scope to narrow it to, and comments, strings
  * and text occurrences are `by`'s to rename or leave — checkboxes for them would change nothing.
+ *
+ * With the renames `by` says go with renaming to the name typed — overriding methods, the same
+ * parameter of each, the module named after a class ([ByRenameGroup]) — as a checkbox per group,
+ * where PyCharm's dialog has *Rename inheritors*: what goes with a rename is only known once the new
+ * name is, so the groups are `by/rename`'s answer for the name in the field, asked as it is checked,
+ * and shown under the name.
  */
-private class ByRenameDialog(project: Project, name: ByRenamedName, editor: Editor) :
+internal class ByRenameDialog(project: Project, name: ByRenamedName, editor: Editor) :
     RenameDialog(project, name, null, editor) {
+
+    private val renamed: ByRenamedName get() = psiElement as ByRenamedName
+
+    private val choices = ByRenameGroupChoices()
+
+    /**
+     * Where the groups' checkboxes go, under the name. Made by [createCheckboxes], which RenameDialog's
+     * constructor calls before this class's own initializers run — so it has none, which would put it
+     * back to null.
+     */
+    private lateinit var groupsPanel: JPanel
+
+    /** The groups on screen, for the name they were asked for. */
+    private var shown: ByAnnotatedRenameFor? = null
+
+    /** Checks the name once typing pauses. Made after RenameDialog's constructor, which may change the name already. */
+    private lateinit var checking: Alarm
+
+    init {
+        checking = Alarm(Alarm.ThreadToUse.SWING_THREAD, disposable)
+    }
 
     /**
      * `method 'speak'`, as `.py`'s dialog says it: the kind `by` gave the name ([ByRenamedNameDescriptionProvider]).
@@ -227,31 +274,95 @@ private class ByRenameDialog(project: Project, name: ByRenamedName, editor: Edit
         // the dialog reads and saves its own checkbox, so it is made and not shown
         super.createCheckboxes(panel, gbConstraints)
         cbSearchInComments.isVisible = false
+        gbConstraints.gridx = 0
+        gbConstraints.gridwidth = GridBagConstraints.REMAINDER
+        gbConstraints.insets = JBUI.emptyInsets()
+        groupsPanel = JPanel(BorderLayout())
+        panel.add(groupsPanel, gbConstraints)
     }
 
     override fun createSearchScopePanel(): JComponent? = null
 
     /**
-     * Checked as it is typed, by `by` ([ByRenameNames]): the rule a new name must follow is the one
-     * `textDocument/rename` refuses it by, and the reason shown is the one it would give. Asked off
-     * the EDT, in the platform's cancellable non-blocking read action, so typing never waits for
-     * `by`; the constructor's own first check goes the same way.
+     * Checked as it is typed, by `by` ([ByRenameNames]), once typing pauses: the rule a new name must
+     * follow is the one `textDocument/rename` refuses it by, and the reason shown is the one it would
+     * give. Asked off the EDT, in the platform's cancellable non-blocking read action, so typing never
+     * waits for `by`; the constructor's own first check goes the same way.
      */
     override fun validateButtons() = validateButtonsAsync()
 
-    override fun processNewNameChanged() = validateButtonsAsync()
+    override fun processNewNameChanged() {
+        // not super's, which checks at once
+        if (!::checking.isInitialized) return validateButtonsAsync()
+        checking.cancelAllRequests()
+        checking.addRequest({ validateButtonsAsync() }, CHECK_DELAY_MS)
+    }
 
     override fun canRun() {
         val newName = newName
         if (newName.isEmpty()) throw ConfigurationException(null)
         // never asked on the EDT once validateButtons is the async one; nothing to wait for there
         if (ApplicationManager.getApplication().isDispatchThread) return
-        val verdict = ByRenameNames.validate(psiElement as ByRenamedName, newName)
+        val verdict = ByRenameNames.validate(renamed, newName)
         if (verdict is ByNameVerdict.Invalid) throw ConfigurationException(verdict.reason)
+        if (newName != renamed.name) ask(newName)?.let { asked -> ApplicationManager.getApplication().invokeLater({ show(asked) }, ModalityState.stateForComponent(contentPanel)) }
+    }
+
+    /**
+     * Refactor, with the groups kept that are checked. When the name was never checked — Enter
+     * before typing paused — its groups are asked for now, and a group the user has not seen stops
+     * it: they are shown, unchecked by nobody, for Refactor to be pressed again with them in sight.
+     */
+    override fun doAction() {
+        val newName = newName
+        if (newName != renamed.name && shown?.newName != newName) {
+            val asked = runWithModalProgressBlocking(project, RefactoringBundle.message("rename.title")) { readAction { ask(newName) } }
+            if (asked != null) {
+                val unseen = asked.answer.groups.any { group -> shown?.answer?.groups?.none { it.label == group.label } ?: true }
+                show(asked)
+                if (unseen) return
+            }
+        }
+        renamed.asked = shown?.takeIf { it.newName == newName }
+        renamed.keptGroups = shown?.takeIf { it.newName == newName }?.let { choices.kept(it.answer.groups) }.orEmpty()
+        super.doAction()
+    }
+
+    /** `by/rename`'s answer for [newName], or null with no `by` that answers it. Off the EDT, in a read action. */
+    private fun ask(newName: String): ByAnnotatedRenameFor? {
+        val file = renamed.containingFile.virtualFile ?: return null
+        val client = runningByServer(project, file) ?: return null
+        val document = renamed.containingFile.viewProvider.document ?: return null
+        val stamp = document.modificationStamp
+        val answer = ByAnnotatedRename.ask(client, project, file, document, renamed.textOffset, newName).value ?: return null
+        return ByAnnotatedRenameFor(newName, stamp, answer)
+    }
+
+    /** Puts the checkboxes of [asked]'s groups under the name, when it is still the name in the field. */
+    private fun show(asked: ByAnnotatedRenameFor) {
+        if (isDisposed || asked.newName != newName) return
+        val panel = groupsPanel
+        val same = shown?.answer?.groups?.map { it.label to it.descriptions } == asked.answer.groups.map { it.label to it.descriptions }
+        shown = asked
+        if (same) return
+        panel.removeAll()
+        if (asked.answer.groups.isNotEmpty()) panel.add(choices.panel(asked.answer.groups), BorderLayout.CENTER)
+        panel.revalidate()
+        panel.repaint()
+        pack()
     }
 
     /** What the processor is handed in place of a chosen scope; `by` renames across the project regardless. */
     override fun getRefactoringScope(): SearchScope = GlobalSearchScope.projectScope(project)
+
+    /** The groups' checkbox labelled [label], for a test. */
+    @TestOnly
+    fun groupBox(label: String): JCheckBox? = choices.box(label)
+
+    private companion object {
+        /** How long typing pauses before the name is checked, as the platform's own name fields wait. */
+        const val CHECK_DELAY_MS = 300
+    }
 }
 
 /**
@@ -268,6 +379,8 @@ internal class ByInplaceRename(
     private val suggestions: List<String> = emptyList(),
     /** What `by` says the name is, for what the rename is called; see [ByRenamedName.kind]. */
     private val kind: String? = null,
+    /** The `by` asked about the name; the project's running one but in a test. Off the EDT. */
+    private val client: () -> LspClient? = { file.virtualFile?.let { runningByServer(project, it) } },
 ) {
     private val document = editor.document
     private val commandName = RefactoringBundle.message("renaming.command.name", sites.name)
@@ -302,6 +415,72 @@ internal class ByInplaceRename(
                 }
             }
             state.addTemplateStateListener(Ending(markers, all.indexOf(sites.primary), started))
+            TypingCheck(state)
+        }
+    }
+
+    /**
+     * Checks the name as it is typed, once typing pauses, by `by` ([ByRenameNames]) — at the position
+     * of the name being typed, in the text that holds it — and marks a name `by` would refuse with an
+     * error underline and its reason, as the Rename dialog says it under the field. Lives as long as
+     * the template.
+     */
+    inner class TypingCheck(private val state: TemplateState) : DocumentListener, Disposable {
+
+        private val alarm = Alarm(Alarm.ThreadToUse.SWING_THREAD, this)
+        private var marked: RangeHighlighter? = null
+
+        /** The reason the name on screen was refused, while it is marked. */
+        @get:TestOnly
+        val refusal: String? get() = marked?.takeIf { it.isValid }?.errorStripeTooltip as? String
+
+        init {
+            Disposer.register(state, this)
+            document.addDocumentListener(this, this)
+            checks[editor] = this
+        }
+
+        override fun documentChanged(event: DocumentEvent) {
+            unmark()
+            alarm.cancelAllRequests()
+            alarm.addRequest(::check, CHECK_DELAY_MS)
+        }
+
+        private fun check() {
+            if (state.isFinished) return
+            val range = state.getVariableRange(PRIMARY) ?: return
+            val typed = document.getText(range)
+            if (typed.isEmpty() || typed == sites.name) return
+            val virtualFile = file.virtualFile ?: return
+            val stamp = document.modificationStamp
+            ReadAction.nonBlocking<ByNameVerdict> {
+                val by = client() ?: return@nonBlocking ByNameVerdict.Unknown
+                ByRenameNames.validate(by, project, virtualFile, document, range.startOffset, typed)
+            }
+                .expireWhen { state.isFinished || document.modificationStamp != stamp }
+                .finishOnUiThread(ModalityState.defaultModalityState()) { verdict ->
+                    if (verdict is ByNameVerdict.Invalid) mark(range, verdict.reason)
+                }
+                .submit(AppExecutorUtil.getAppExecutorService())
+        }
+
+        private fun mark(range: TextRange, reason: String) {
+            unmark()
+            marked = editor.markupModel.addRangeHighlighter(
+                CodeInsightColors.ERRORS_ATTRIBUTES, range.startOffset, range.endOffset,
+                HighlighterLayer.ERROR + 1, HighlighterTargetArea.EXACT_RANGE,
+            ).apply { errorStripeTooltip = reason }
+            HintManager.getInstance().showErrorHint(editor, reason, HintManager.ABOVE)
+        }
+
+        private fun unmark() {
+            marked?.let(editor.markupModel::removeHighlighter)
+            marked = null
+        }
+
+        override fun dispose() {
+            unmark()
+            checks.remove(editor, this)
         }
     }
 
@@ -348,20 +527,44 @@ internal class ByInplaceRename(
             try {
                 if (typed != null && typed.isNotBlank() && typed != sites.name && markers[primaryIndex].isValid) {
                     val name = ByRenamedName(file, document, markers[primaryIndex].textRange).also { it.kind = kind }
-                    // Asked once the old name is back, which is the text by can say anything about:
-                    // while the name was being typed, the symbol at its position was what was typed.
-                    val verdict = runWithModalProgressBlocking(project, commandName) {
-                        readAction { ByRenameNames.validate(name, typed) }
+                    // Asked once the old name is back, which is the text the rename is about: the
+                    // name, and the renames by says go with renaming it to the one typed.
+                    val (verdict, asked) = runWithModalProgressBlocking(project, commandName) {
+                        readAction {
+                            val by = client() ?: return@readAction ByNameVerdict.Unknown to null
+                            val virtualFile = file.virtualFile ?: return@readAction ByNameVerdict.Unknown to null
+                            val verdict = ByRenameNames.validate(by, project, virtualFile, document, name.textOffset, typed)
+                            val asked = if (verdict is ByNameVerdict.Invalid) null else {
+                                ByAnnotatedRename.ask(by, project, virtualFile, document, name.textOffset, typed).value
+                                    ?.let { ByAnnotatedRenameFor(typed, document.modificationStamp, it) }
+                            }
+                            verdict to asked
+                        }
                     }
                     if (verdict is ByNameVerdict.Invalid) {
                         CommonRefactoringUtil.showErrorHint(project, editor, verdict.reason, commandName, null)
-                    } else {
+                    } else if (keep(name, typed, asked)) {
                         RenameProcessor(project, name, typed, false, false).run()
                     }
                 }
             } finally {
                 finish()
             }
+        }
+
+        /**
+         * Which of the renames `by` says go with this one to make, asked in a dialog as PyCharm asks
+         * about a method's overriding methods once its new name is typed; false when it is cancelled,
+         * and nothing is renamed.
+         */
+        private fun keep(name: ByRenamedName, typed: String, asked: ByAnnotatedRenameFor?): Boolean {
+            name.asked = asked
+            val groups = asked?.answer?.groups.orEmpty()
+            if (groups.isEmpty()) return true
+            val dialog = groupsDialog(project, sites.name, typed, groups)
+            if (!dialog.ask()) return false
+            name.keptGroups = dialog.kept()
+            return true
         }
 
         override fun templateCancelled(template: Template?) {
@@ -384,8 +587,23 @@ internal class ByInplaceRename(
         }
     }
 
-    private companion object {
+    internal companion object {
         const val PRIMARY = "BY_RENAME_PRIMARY"
         const val OTHER = "BY_RENAME_OTHER_"
+
+        /** How long typing pauses before the name is checked. */
+        const val CHECK_DELAY_MS = 300
+
+        /** The check of each editor renaming in place now; EDT only. */
+        private val checks = WeakHashMap<Editor, ByInplaceRename.TypingCheck>()
+
+        /** What `by` refused the name being typed in [editor] for, while it is marked. */
+        @TestOnly
+        fun refusal(editor: Editor): String? = checks[editor]?.refusal
+
+        /** Asks which groups to keep; a test answers instead. */
+        @TestOnly
+        internal var groupsDialog: (Project, String, String, List<ByRenameGroup>) -> ByRenameGroupsAsker =
+            { project, oldName, newName, groups -> ByRenameGroupsDialog(project, oldName, newName, groups) }
     }
 }

@@ -11,14 +11,14 @@ import com.intellij.refactoring.rename.NameSuggestionProvider
 import com.intellij.util.concurrency.annotations.RequiresBackgroundThread
 import com.intellij.util.concurrency.annotations.RequiresReadLock
 import dev.basedpython.pycharm.lsp.ByAnswer
+import dev.basedpython.pycharm.lsp.ByExperimental
 import dev.basedpython.pycharm.lsp.ByServerDocuments
 import dev.basedpython.pycharm.lsp.ByTextHash
 import dev.basedpython.pycharm.lsp.askBy
-import dev.basedpython.pycharm.lsp.ext.ByRenameNameSuggestionsParams
+import dev.basedpython.pycharm.lsp.ext.ByCheckNameParams
+import dev.basedpython.pycharm.lsp.ext.ByNameSuggestionsParams
 import dev.basedpython.pycharm.lsp.ext.ByServerExtensions
-import dev.basedpython.pycharm.lsp.ext.ByValidateRenameNameParams
 import dev.basedpython.pycharm.lsp.runningByServer
-import dev.basedpython.pycharm.util.BasedPythonBundle
 
 /** What `by` says of a new name for the symbol a rename is about. */
 internal sealed interface ByNameVerdict {
@@ -30,22 +30,20 @@ internal sealed interface ByNameVerdict {
     data class Invalid(val reason: String) : ByNameVerdict
 
     /**
-     * Nothing to go on: no `by` running, one from before `by/validateRenameName`, no answer, or
-     * nothing to rename at the position. The rename itself is then what says whether the name will
-     * do, as it did before the request existed.
+     * Nothing to go on: no `by` running, one that does not advertise `experimental.checkName`, or no
+     * answer. The rename itself is then what says whether the name will do.
      */
     data object Unknown : ByNameVerdict
 }
 
 /**
- * A rename's new name, as `by` judges it and suggests it — `by/validateRenameName` and
- * `by/renameNameSuggestions` — rather than by a list of keywords and an identifier pattern kept
- * here: which names a symbol may take is the rule `textDocument/rename` applies, and differs between
- * a python name and a django one.
+ * A rename's new name, as `by` judges it and suggests it — `by/checkName` and `by/nameSuggestions` —
+ * rather than by a list of keywords and an identifier pattern kept here: which names a symbol may
+ * take is the rule `textDocument/rename` applies, and differs between a python name and a django one.
  *
- * Both are asked about the symbol where the rename found it, in the text the rename was asked
- * about, which [ByTextHash] names: an in-place rename types the new name into the file, and the
- * symbol at that position is then whatever was typed, not the one being renamed.
+ * Each is asked of a `by` that advertises it (`experimental.checkName`, `experimental.nameSuggestions`,
+ * [ByExperimental]), about a position in the text the document holds now, which [ByTextHash] names.
+ * While a name is typed in place, that text holds the name typed so far at the position.
  */
 internal object ByRenameNames {
 
@@ -53,19 +51,19 @@ internal object ByRenameNames {
     @RequiresBackgroundThread
     @RequiresReadLock
     fun validate(client: LspClient, project: Project, file: VirtualFile, document: Document, offset: Int, newName: String): ByNameVerdict {
+        if (!ByExperimental.advertises(client, ByExperimental.CHECK_NAME)) return ByNameVerdict.Unknown
         ByServerDocuments.ensureOpen(client, project, file)
-        val params = ByValidateRenameNameParams(
+        val params = ByCheckNameParams(
             client.getDocumentIdentifier(file),
             getLsp4jPosition(document, offset),
             newName,
             ByTextHash.of(document.immutableCharSequence),
         )
-        val answer = client.askBy("by/validateRenameName") { (it as ByServerExtensions).validateRenameName(params) }
-        val verdict = (answer as? ByAnswer.Answer)?.value ?: return ByNameVerdict.Unknown
-        return if (verdict.valid) {
-            ByNameVerdict.Valid
-        } else {
-            ByNameVerdict.Invalid(verdict.message ?: BasedPythonBundle.message("rename.by.name.invalid", newName))
+        return when (val answer = client.askBy("by/checkName") { (it as ByServerExtensions).checkName(params) }) {
+            // `null` is by's "it would take it"
+            ByAnswer.None -> ByNameVerdict.Valid
+            ByAnswer.Failed -> ByNameVerdict.Unknown
+            is ByAnswer.Answer -> answer.value.message?.let(ByNameVerdict::Invalid) ?: ByNameVerdict.Valid
         }
     }
 
@@ -73,14 +71,14 @@ internal object ByRenameNames {
     @RequiresBackgroundThread
     @RequiresReadLock
     fun suggestions(client: LspClient, project: Project, file: VirtualFile, document: Document, offset: Int): List<String> {
+        if (!ByExperimental.advertises(client, ByExperimental.NAME_SUGGESTIONS)) return emptyList()
         ByServerDocuments.ensureOpen(client, project, file)
-        val params = ByRenameNameSuggestionsParams(
+        val params = ByNameSuggestionsParams(
             client.getDocumentIdentifier(file),
             getLsp4jPosition(document, offset),
             ByTextHash.of(document.immutableCharSequence),
         )
-        return client.askBy("by/renameNameSuggestions") { (it as ByServerExtensions).renameNameSuggestions(params) }
-            .value.orEmpty()
+        return client.askBy("by/nameSuggestions") { (it as ByServerExtensions).nameSuggestions(params) }.value?.names.orEmpty()
     }
 
     /** [validate] for the name a [ByRenamedName] stands for, or [ByNameVerdict.Unknown] with no `by` to ask. */
@@ -99,8 +97,8 @@ internal object ByRenameNames {
  * for it (see [ByRenameNames]).
  *
  * The dialog asks under a modal progress, off the EDT and in a read action, so `by` is waited for
- * there and the wait can be cancelled. A `by` without the request suggests nothing, and the dialog
- * offers the name the symbol has, as it did before.
+ * there and the wait can be cancelled. A `by` without `by/nameSuggestions` suggests nothing, and the
+ * dialog offers the name the symbol has.
  */
 class ByRenameNameSuggestionProvider : NameSuggestionProvider {
 

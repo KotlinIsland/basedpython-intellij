@@ -360,37 +360,36 @@ interface ByServerExtensions {
     fun typeDeclaration(args: ByTypeDeclarationParams): CompletableFuture<ByDeclaration?>
 
     /**
-     * Whether `textDocument/rename` would take [ByValidateRenameNameParams.newName] for the symbol at
-     * a position, and if not the reason it would give: a python name is an identifier that is not a
-     * keyword, a django name any text, and a symbol that cannot be renamed at all, such as a builtin,
-     * is refused whatever the name. `null` where there is nothing to rename, as `prepareRename` is.
-     * Asked by [dev.basedpython.pycharm.lsp.refactor.ByRenameNames]; a `by` from before the request
-     * answers `MethodNotFound`.
+     * `textDocument/rename`'s answer, from the same code, with the renames that go with it — the
+     * methods that override a renamed method, the same parameter of each, the module a renamed class
+     * is named after — as change annotations the user confirms: each such edit an `AnnotatedTextEdit`,
+     * and a module's move an annotated `RenameFile`, under a `ChangeAnnotation` with
+     * `needsConfirmation`, one label per group. A request of its own because lsp4j reads every
+     * `AnnotatedTextEdit` of `textDocument/rename` as a plain `TextEdit` and drops its
+     * `annotationId` (its `TextEditListAdapter`), and the response type of a method is fixed by its
+     * name, so the answer is taken as JSON and read by
+     * [dev.basedpython.pycharm.lsp.refactor.ByAnnotatedRename]. Asked only of a `by` that advertises
+     * `experimental.renameChangeAnnotations`.
      */
-    @JsonRequest("by/validateRenameName")
-    fun validateRenameName(args: ByValidateRenameNameParams): CompletableFuture<ByRenameNameVerdict?>
+    @JsonRequest("by/rename")
+    fun annotatedRename(args: ByNamedRenameParams): CompletableFuture<com.google.gson.JsonElement?>
 
     /**
-     * Names the symbol at a position could be renamed to, best first: after the class of what it holds
-     * and what its value is computed by, as extracting a variable names one. Every one is a name the
-     * rename takes, and none is the name it has. A `by` from before the request answers
-     * `MethodNotFound`.
+     * Why `textDocument/rename` would refuse [ByCheckNameParams.newName] for the symbol at a position
+     * — a python name is an identifier that is not a keyword, a django name any text — or `null` when
+     * it would take it. Asked by [dev.basedpython.pycharm.lsp.refactor.ByRenameNames] as the name is
+     * typed, of a `by` that advertises `experimental.checkName`.
      */
-    @JsonRequest("by/renameNameSuggestions")
-    fun renameNameSuggestions(args: ByRenameNameSuggestionsParams): CompletableFuture<List<String>?>
+    @JsonRequest("by/checkName")
+    fun checkName(args: ByCheckNameParams): CompletableFuture<ByCheckNameResult?>
 
     /**
-     * The renames offered beside a rename — the methods that override a renamed method, the
-     * same-named parameter of each, the module a renamed class is named after — each as an edit of
-     * its own, for the user to choose. `textDocument/rename` gives the same offers as change
-     * annotations, whose ids lsp4j does not keep, so this is how they are read; the rename itself is
-     * still `textDocument/rename`'s, and no offer repeats an edit of it. Refused, with the rename's
-     * reason, where the rename would refuse the name; `[]` where there is nothing to offer. Asked by
-     * [dev.basedpython.pycharm.lsp.refactor.ByRenamedNameProcessor]; a `by` from before the request
-     * answers `MethodNotFound`.
+     * Names the symbol at a position could be renamed to, best first. Asked by
+     * [dev.basedpython.pycharm.lsp.refactor.ByRenameNames] of a `by` that advertises
+     * `experimental.nameSuggestions`.
      */
-    @JsonRequest("by/renameOffers")
-    fun renameOffers(args: ByRenameOffersParams): CompletableFuture<List<ByRenameOffer>?>
+    @JsonRequest("by/nameSuggestions")
+    fun nameSuggestions(args: ByNameSuggestionsParams): CompletableFuture<ByNameSuggestionsResult?>
 
     /**
      * `textDocument/references` with what each reference does with the name: the same references in
@@ -1322,39 +1321,21 @@ class ByNamedImplementationParams(textDocument: TextDocumentIdentifier, position
     ImplementationParams(textDocument, position)
 
 /** The symbol at a position in one text of the document, and the name a rename would give it. */
-data class ByValidateRenameNameParams(
+data class ByCheckNameParams(
     val textDocument: TextDocumentIdentifier,
     val position: Position,
     val newName: String,
     val textHash: String,
 )
 
-/** `by/validateRenameName`'s answer: [message] says why when the name is not [valid]. */
-data class ByRenameNameVerdict(val valid: Boolean = false, val message: String? = null)
+/** `by/checkName`'s answer for a name the rename would refuse: why. */
+data class ByCheckNameResult(val message: String? = null)
 
 /** The symbol at a position in one text of the document, to suggest names for. */
-data class ByRenameNameSuggestionsParams(val textDocument: TextDocumentIdentifier, val position: Position, val textHash: String)
+data class ByNameSuggestionsParams(val textDocument: TextDocumentIdentifier, val position: Position, val textHash: String)
 
-/** `textDocument/rename`'s params, for `by/renameOffers`, in one text of the document. */
-data class ByRenameOffersParams(
-    val textDocument: TextDocumentIdentifier,
-    val position: Position,
-    val newName: String,
-    val textHash: String,
-)
-
-/**
- * One rename offered beside a rename. [id] is `override:<n>`, `parameter:<n>` or `module:<n>`;
- * [label] the kind, shared by every offer of it (*Rename overriding methods*); [description] what
- * this one renames (`` `dog.Dog.speak` ``); and [edit] makes it and nothing else — plain `changes`, or
- * for a module the import rewrites as `documentChanges` followed by the `RenameFile`.
- */
-data class ByRenameOffer(
-    val id: String = "",
-    val label: String = "",
-    val description: String = "",
-    val edit: org.eclipse.lsp4j.WorkspaceEdit? = null,
-)
+/** `by/nameSuggestions`' answer, best first. */
+data class ByNameSuggestionsResult(val names: List<String> = emptyList())
 
 /** A position on a class's name in one text of the document, for `by/mro`. */
 data class ByMroParams(val textDocument: TextDocumentIdentifier, val position: Position, val textHash: String)

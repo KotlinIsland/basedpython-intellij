@@ -13,6 +13,7 @@ import dev.basedpython.pycharm.lsp.ByLspServerSupportProvider
 import dev.basedpython.pycharm.lsp.ext.BuffServerExtensions
 import kotlinx.coroutines.future.await
 import org.eclipse.lsp4j.InitializeResult
+import org.eclipse.lsp4j.ServerCapabilities
 import org.eclipse.lsp4j.TextDocumentIdentifier
 import org.eclipse.lsp4j.jsonrpc.ResponseErrorException
 import org.eclipse.lsp4j.jsonrpc.messages.ResponseError
@@ -46,6 +47,8 @@ class AnsweringClient(
     override val project: Project,
     private val running: Boolean = true,
     descriptor: LspClientDescriptor? = null,
+    /** What the server said at `initialize`; see [experimental] for one that names its extensions. */
+    override val initializeResult: InitializeResult? = null,
     private val answer: (method: String) -> CompletableFuture<*>,
 ) : LspClient {
 
@@ -81,7 +84,6 @@ class AnsweringClient(
         override fun isSupportedFile(file: VirtualFile): Boolean = true
     }
     override val state: LspServerState = if (running) LspServerState.Running else LspServerState.ShutdownNormally
-    override val initializeResult: InitializeResult? = null
 
     override fun sendNotification(lsp4jSender: (LanguageServer) -> Unit) {
         if (running) lsp4jSender(server)
@@ -116,6 +118,12 @@ class AnsweringClient(
     override fun nextDocumentVersion(document: Document): Int = -1
 
     companion object {
+        /** An `initialize` answer advertising each of [names] as `true` under `capabilities.experimental`. */
+        fun experimental(vararg names: String): InitializeResult =
+            InitializeResult(ServerCapabilities().apply {
+                experimental = com.google.gson.JsonObject().apply { names.forEach { addProperty(it, true) } }
+            })
+
         /** A server's answer of [value]. */
         fun <T> answered(value: T?): CompletableFuture<*> = CompletableFuture.completedFuture(value)
 

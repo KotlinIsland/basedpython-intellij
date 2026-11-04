@@ -484,10 +484,11 @@
             implementationClass="dev.basedpython.pycharm.lsp.refactor.ByRefactoringSupportProvider"/>
         <inlineActionHandler implementation="dev.basedpython.pycharm.lsp.refactor.ByInlineActionHandler"/>
         <!-- Rename (Shift+F6) in a .by file: by's name and occurrences, edited in place or in the
-             Rename dialog as Specify refactoring options says, renamed by by's textDocument/rename. -->
+             Rename dialog as Specify refactoring options says, renamed by by's by/rename (or
+             textDocument/rename), with the groups of renames by says go with it as checkboxes. -->
         <renameHandler implementation="dev.basedpython.pycharm.lsp.refactor.ByRenameHandler"/>
         <!-- The Rename dialog's suggested names for a .by symbol, after the name it has: by's
-             (by/renameNameSuggestions). -->
+             (by/nameSuggestions). -->
         <nameSuggestionProvider implementation="dev.basedpython.pycharm.lsp.refactor.ByRenameNameSuggestionProvider"/>
         <!-- Code | Unwrap/Remove (Ctrl+Shift+Delete): the options and their edits are by/unwrap's. -->
         <lang.unwrapDescriptor
@@ -520,17 +521,6 @@
         <renamePsiElementProcessor
             implementation="dev.basedpython.pycharm.lsp.refactor.ByRenamedNameProcessor"
             order="first"/>
-        <!-- The renames by offers beside a rename (by/renameOffers): overriding methods, their
-             parameters, the module named after a class, one automatic-renaming dialog per kind, in
-             this order, applied in the rename's command. See lsp.refactor.ByRenameOffers. -->
-        <automaticRenamerFactory implementation="dev.basedpython.pycharm.lsp.refactor.ByRenameOverridesFactory"/>
-        <automaticRenamerFactory implementation="dev.basedpython.pycharm.lsp.refactor.ByRenameParametersFactory"/>
-        <automaticRenamerFactory implementation="dev.basedpython.pycharm.lsp.refactor.ByRenameModuleFactory"/>
-        <renamePsiElementProcessor
-            implementation="dev.basedpython.pycharm.lsp.refactor.ByRenameOfferProcessor"
-            order="first"/>
-        <renameInputValidator implementation="dev.basedpython.pycharm.lsp.refactor.ByRenameOfferNameValidator"/>
-        <elementDescriptionProvider implementation="dev.basedpython.pycharm.lsp.refactor.ByRenameOfferDescriptionProvider"/>
         <!-- What a .by rename is called in its undo step, dialog and preview: by's kind of the name. -->
         <elementDescriptionProvider implementation="dev.basedpython.pycharm.lsp.refactor.ByRenamedNameDescriptionProvider"/>
         <!-- Renaming or moving a .by module or package also rewrites the imports that name it, as

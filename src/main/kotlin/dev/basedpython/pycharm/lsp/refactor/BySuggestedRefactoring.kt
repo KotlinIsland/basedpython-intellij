@@ -52,12 +52,12 @@ import dev.basedpython.pycharm.lsp.ext.ByAnnotationEdit
 import dev.basedpython.pycharm.lsp.ext.ByChangeSignatureParams
 import dev.basedpython.pycharm.lsp.ext.ByChangedParameter
 import dev.basedpython.pycharm.lsp.ext.ByNamedRenameParams
-import dev.basedpython.pycharm.lsp.ext.ByRenameOffer
 import dev.basedpython.pycharm.lsp.ext.BySignature
 import dev.basedpython.pycharm.lsp.outline.ByOutline
 import dev.basedpython.pycharm.lsp.outline.ByOutlines
 import dev.basedpython.pycharm.lsp.runningByServer
 import dev.basedpython.pycharm.util.BasedPythonBundle
+import org.eclipse.lsp4j.RenameFile
 import org.eclipse.lsp4j.TextDocumentIdentifier
 
 /**
@@ -435,11 +435,25 @@ internal class ByChangeSignatureExecution(support: SuggestedRefactoringSupport) 
 internal class ByRenamedName(private val file: PsiFile, private val document: Document, range: TextRange) : FakePsiElement() {
 
     /**
-     * What `by` offers to rename beside this name ([ByRenameOffers]), read when the rename finds its
-     * uses and handed to the platform's automatic renamers straight after, on the same thread.
+     * The labels of the groups of renames that go with this one ([ByRenameGroup]) the user chose to
+     * make — in the Rename dialog's checkboxes, or the dialog an in-place rename asks in. Empty where
+     * nobody was asked, such as the gutter's suggested rename: a group `by` says needs confirming is
+     * then not made.
      */
     @Volatile
-    var offers: List<ByRenameOffer> = emptyList()
+    var keptGroups: Set<String> = emptySet()
+
+    /**
+     * `by/rename`'s answer for renaming to [ByAnnotatedRenameFor.newName], asked where the user was
+     * shown its groups, so the rename makes what they chose from rather than asking again — as long
+     * as the document is still the text it was asked about.
+     */
+    @Volatile
+    var asked: ByAnnotatedRenameFor? = null
+
+    /** The files the groups kept move, found with the rename's uses and moved once its edits are made. */
+    @Volatile
+    var fileRenames: List<RenameFile> = emptyList()
 
     /**
      * What `by` says the name is — `method`, `class`, `parameter`, `variable`, `module`, … from
@@ -482,12 +496,15 @@ internal class ByRenamedName(private val file: PsiFile, private val document: Do
 }
 
 /**
- * The Rename the platform runs for a suggested rename of a [ByRenamedName], made by `by`.
+ * The Rename the platform runs for a [ByRenamedName], made by `by`.
  *
  * The platform finds no references to the name, since nothing in a `.by` file's tree refers to
  * anything; [findCollisions], which it calls off the EDT under the rename's progress with the new
- * name, asks `by`'s `textDocument/rename` instead, and each edit `by` answers with becomes a usage
- * that [renameElement] makes — the declaration's own name among them.
+ * name, asks `by` instead, and each edit `by` answers with becomes a usage that [renameElement]
+ * makes — the declaration's own name among them. A `by` that advertises
+ * `experimental.renameChangeAnnotations` is asked `by/rename` ([ByAnnotatedRename]), and the groups
+ * of renames that go with it are made only as [ByRenamedName.keptGroups] says, a module's file moved
+ * after every edit ([ByRenameGroups.moveFiles]); any other `by` is asked `textDocument/rename`.
  */
 class ByRenamedNameProcessor : RenamePsiElementProcessor() {
 
@@ -514,6 +531,22 @@ class ByRenamedNameProcessor : RenamePsiElementProcessor() {
         val server = file?.let { runningByServer(project, it) }
             ?: return run { result += ByRenameUnknown(element, BasedPythonBundle.message("rename.by.suggested.noServer", element.name)) }
         val document = element.containingFile.viewProvider.document ?: return
+        element.fileRenames = emptyList()
+        if (ByAnnotatedRename.advertised(server)) {
+            val asked = element.asked?.takeIf { it.newName == newName && it.stamp == document.modificationStamp }?.answer
+            when (val answer = asked?.let { ByAnswer.Answer(it) } ?: ByAnnotatedRename.ask(server, project, file, document, element.textOffset, newName)) {
+                is ByAnswer.Answer -> {
+                    val kept = answer.value.keeping(element.keptGroups)
+                    result += ByImportEdit.of(project, answer.value.rename, element)
+                    for (group in kept) result += ByImportEdit.of(project, group.edit, element)
+                    element.fileRenames = kept.flatMap { it.fileRenames }
+                    result += ByRenameGroups.conflicts(element, element.fileRenames)
+                }
+                ByAnswer.None, ByAnswer.Failed ->
+                    result += ByRenameUnknown(element, BasedPythonBundle.message("rename.by.suggested.failed", element.name, newName))
+            }
+            return
+        }
         ByServerDocuments.ensureOpen(server, project, file)
         val params = ByNamedRenameParams(
             TextDocumentIdentifier(server.getDocumentIdentifier(file).uri),
@@ -522,10 +555,7 @@ class ByRenamedNameProcessor : RenamePsiElementProcessor() {
             ByTextHash.of(document.immutableCharSequence),
         )
         when (val answer = server.askBy("textDocument/rename") { it.textDocumentService.rename(params) }) {
-            is ByAnswer.Answer -> {
-                result += ByImportEdit.of(project, answer.value, element)
-                element.offers = ByRenameOffers.ask(server, project, file, document, element.textOffset, newName)
-            }
+            is ByAnswer.Answer -> result += ByImportEdit.of(project, answer.value, element)
             ByAnswer.None, ByAnswer.Failed ->
                 result += ByRenameUnknown(element, BasedPythonBundle.message("rename.by.suggested.failed", element.name, newName))
         }
@@ -540,6 +570,7 @@ class ByRenamedNameProcessor : RenamePsiElementProcessor() {
     ) {
         val (edits, _) = splitImportEdits(usages)
         ByImportEdit.apply(element.project, edits)
+        (element as? ByRenamedName)?.let { name -> ByRenameGroups.moveFiles(name.project, name.fileRenames) }
         listener?.elementRenamed(element)
     }
 }

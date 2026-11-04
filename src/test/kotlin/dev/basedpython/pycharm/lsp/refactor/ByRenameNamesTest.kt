@@ -3,11 +3,14 @@ package dev.basedpython.pycharm.lsp.refactor
 import com.intellij.openapi.application.readAction
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.lsp.ByTextHash
-import dev.basedpython.pycharm.lsp.ext.ByRenameNameSuggestionsParams
-import dev.basedpython.pycharm.lsp.ext.ByRenameNameVerdict
-import dev.basedpython.pycharm.lsp.ext.ByValidateRenameNameParams
+import dev.basedpython.pycharm.lsp.ByExperimental
+import dev.basedpython.pycharm.lsp.ext.ByCheckNameParams
+import dev.basedpython.pycharm.lsp.ext.ByCheckNameResult
+import dev.basedpython.pycharm.lsp.ext.ByNameSuggestionsParams
+import dev.basedpython.pycharm.lsp.ext.ByNameSuggestionsResult
 import dev.basedpython.pycharm.testFramework.AnsweringClient
 import dev.basedpython.pycharm.testFramework.AnsweringClient.Companion.answered
+import dev.basedpython.pycharm.testFramework.AnsweringClient.Companion.experimental
 import dev.basedpython.pycharm.testFramework.AnsweringClient.Companion.failed
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
 import dev.basedpython.pycharm.testFramework.onEdt
@@ -19,8 +22,9 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 
 /**
- * A rename's new name as `by` judges and suggests it, asked about the symbol in the text the rename
- * found it in, and nothing to go on — not a verdict — where `by` has nothing to say.
+ * A rename's new name as `by` judges and suggests it (`by/checkName`, `by/nameSuggestions`), asked
+ * about a position in the text the document holds, of a `by` that advertises each, and nothing to go
+ * on — not a verdict — where `by` cannot say.
  */
 @TestFixtures
 class ByRenameNamesTest {
@@ -28,6 +32,9 @@ class ByRenameNamesTest {
     private val fixture by codeInsightFixture()
 
     private val source = "rate = 0.2\nprint(rate)\n"
+
+    private val checks = experimental(ByExperimental.CHECK_NAME)
+    private val suggests = experimental(ByExperimental.NAME_SUGGESTIONS)
 
     private suspend fun verdict(client: AnsweringClient, newName: String): ByNameVerdict {
         val file = fixture.configureByText("main.by", source).virtualFile
@@ -39,36 +46,37 @@ class ByRenameNamesTest {
 
     @Test
     fun `a name by refuses is refused with by's reason, about the symbol in the text it was found in`() = onEdt {
-        val client = AnsweringClient(fixture.project) { answered(ByRenameNameVerdict(valid = false, message = "`class` is a keyword")) }
+        val client = AnsweringClient(fixture.project, initializeResult = checks) { answered(ByCheckNameResult("`class` is a keyword")) }
 
         assertEquals(ByNameVerdict.Invalid("`class` is a keyword"), verdict(client, "class"))
-        val sent = client.sentParams.single() as ByValidateRenameNameParams
+        val sent = client.sentParams.single() as ByCheckNameParams
         assertEquals("class", sent.newName)
         assertEquals(Position(1, 6), sent.position)
         assertEquals(ByTextHash.of(source), sent.textHash)
     }
 
     @Test
-    fun `a name by takes is valid`() = onEdt {
-        val client = AnsweringClient(fixture.project) { answered(ByRenameNameVerdict(valid = true)) }
+    fun `a name by takes, its null answer, is valid`() = onEdt {
+        val client = AnsweringClient(fixture.project, initializeResult = checks) { answered(null) }
         assertEquals(ByNameVerdict.Valid, verdict(client, "ratio"))
     }
 
     @Test
-    fun `a by without the request, or nothing to rename, says nothing either way`() = onEdt {
-        val old = AnsweringClient(fixture.project) { failed(ResponseErrorCode.MethodNotFound, "Unhandled method by/validateRenameName") }
-        val nothing = AnsweringClient(fixture.project) { answered(null) }
+    fun `a by that does not advertise the request is not asked, and one that fails says nothing either way`() = onEdt {
+        val old = AnsweringClient(fixture.project) { answered(ByCheckNameResult("asked anyway")) }
+        val failing = AnsweringClient(fixture.project, initializeResult = checks) { failed(ResponseErrorCode.InternalError) }
 
         assertEquals(ByNameVerdict.Unknown, verdict(old, "ratio"))
-        assertEquals(ByNameVerdict.Unknown, verdict(nothing, "ratio"))
+        assertEquals(0, old.requests.get())
+        assertEquals(ByNameVerdict.Unknown, verdict(failing, "ratio"))
     }
 
     @Test
     fun `suggestions are by's, in its order, and none from a by without the request`() = onEdt {
         val file = fixture.configureByText("main.by", source).virtualFile
         val document = fixture.editor.document
-        val client = AnsweringClient(fixture.project) { answered(listOf("interest_rate", "fraction")) }
-        val old = AnsweringClient(fixture.project) { failed(ResponseErrorCode.MethodNotFound) }
+        val client = AnsweringClient(fixture.project, initializeResult = suggests) { answered(ByNameSuggestionsResult(listOf("interest_rate", "fraction"))) }
+        val old = AnsweringClient(fixture.project) { answered(ByNameSuggestionsResult(listOf("asked anyway"))) }
 
         val (names, none) = withContext(Dispatchers.Default) {
             readAction {
@@ -79,6 +87,9 @@ class ByRenameNamesTest {
 
         assertEquals(listOf("interest_rate", "fraction"), names)
         assertEquals(emptyList<String>(), none)
-        assertEquals(Position(0, 0), (client.sentParams.single() as ByRenameNameSuggestionsParams).position)
+        assertEquals(0, old.requests.get())
+        val sent = client.sentParams.single() as ByNameSuggestionsParams
+        assertEquals(Position(0, 0), sent.position)
+        assertEquals(ByTextHash.of(source), sent.textHash)
     }
 }

@@ -7,6 +7,12 @@ import com.intellij.openapi.editor.EditorFactory
 import com.intellij.openapi.util.TextRange
 import com.intellij.refactoring.rename.RenameHandler
 import com.intellij.testFramework.junit5.fixture.TestFixtures
+import dev.basedpython.pycharm.lsp.ByExperimental
+import dev.basedpython.pycharm.lsp.ext.ByCheckNameParams
+import dev.basedpython.pycharm.lsp.ext.ByCheckNameResult
+import dev.basedpython.pycharm.testFramework.AnsweringClient
+import dev.basedpython.pycharm.testFramework.AnsweringClient.Companion.answered
+import dev.basedpython.pycharm.testFramework.AnsweringClient.Companion.experimental
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
 import dev.basedpython.pycharm.testFramework.onEdt
 import org.eclipse.lsp4j.DocumentHighlight
@@ -18,6 +24,7 @@ import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import kotlinx.coroutines.delay
 
 /**
  * Shift+F6 in a `.by` file: where the name is and where else it is written are `by`'s answers
@@ -102,6 +109,35 @@ class ByRenameTest {
 
         state.gotoEnd(true)
         assertNull(TemplateManagerImpl.getTemplateState(fixture.editor))
+        assertEquals(source, fixture.editor.document.text)
+    }
+
+    @Test
+    fun `a name by refuses is marked as it is typed in place, once typing pauses, and unmarked by the next key`() = onEdt {
+        TemplateManagerImpl.setTemplateTesting(fixture.testRootDisposable)
+        fixture.configureByText("a.by", source)
+        val sites = ByRenameSites("width", range("width", 1), listOf(range("width", 0), range("width", 2)))
+        val client = AnsweringClient(fixture.project, initializeResult = experimental(ByExperimental.CHECK_NAME)) {
+            answered(ByCheckNameResult("`class` is a keyword"))
+        }
+
+        ByInplaceRename(fixture.project, fixture.editor, fixture.file, sites, client = { client }).start()
+        fixture.type("class")
+        var waited = 0
+        while (ByInplaceRename.refusal(fixture.editor) == null && waited < 5_000) {
+            delay(50)
+            waited += 50
+        }
+
+        assertEquals("`class` is a keyword", ByInplaceRename.refusal(fixture.editor))
+        val sent = client.sentParams.last() as ByCheckNameParams
+        assertEquals("class", sent.newName)
+        // the name being typed — the one the caret was on, after `return` — where it is in the text as it is now
+        assertEquals(Position(2, 11), sent.position)
+
+        fixture.type("y")
+        assertNull(ByInplaceRename.refusal(fixture.editor))
+        checkNotNull(TemplateManagerImpl.getTemplateState(fixture.editor)).gotoEnd(true)
         assertEquals(source, fixture.editor.document.text)
     }
 }
