@@ -79,8 +79,14 @@ private const val BY_EXTENSION = ".by"
  * A file path token ending in `.by` or `.py` with an optional `:line[:col]` suffix. Path chars
  * exclude whitespace and the `:` used as the separator, but allow `/`, `\`, `.`, `-`, `_` and
  * alphanumerics so both POSIX and Windows-ish paths match.
+ *
+ * A Windows drive (`C:` followed by a separator) is the one `:` a path may hold. `by` 0.0.1 prints
+ * a Windows path as `C:\...\pkg\calc.by` rather than `\\?\C:\...`, and `by check` prints a path
+ * relative to the working directory only when it can be, so an absolute one can reach the console as
+ * `C:\p\calc.by:3:5`. Without the drive the link began after it and resolved against the
+ * project's drive.
  */
-private val PATH_PATTERN = Regex("""([\w./\\\-]+\.(?:by|py))(?::(\d+))?(?::(\d+))?""")
+private val PATH_PATTERN = Regex("""((?:\b[A-Za-z]:(?=[/\\]))?[\w./\\\-]+\.(?:by|py))(?::(\d+))?(?::(\d+))?""")
 
 /** CPython's traceback frame header, which quotes the path and spells the line out in words. */
 private val TRACEBACK_PATTERN = Regex("""File "([^"]+\.(?:by|py))", line (\d+)""")

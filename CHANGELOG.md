@@ -105,9 +105,9 @@
 - **The minimum IDE is build 263.7307**, the latest 2026.3 EAP, where it was 263.5153. Only the
   latest build is supported: older EAPs stop at "EAP Build Expired" on start. The plugin now compiles
   and tests against IU-263.7307.44.
-- Bundles `by` and `buff` from basedpython 0.0.1b2 and `bpd` from basedpython-debugger 0.0.1a3.
-  Much of this release asks `by` for its answer; with an older `by`, a feature says `by` needs
-  updating rather than doing nothing.
+- Bundles `by` and `buff` from basedpython 0.0.1, its first stable release, and `bpd` from
+  basedpython-debugger 0.0.1a3. Much of this release asks `by` for its answer; with an older `by`, a
+  feature says `by` needs updating rather than doing nothing.
 - Indentation in `.by` files follows the code: Enter after `return` leaves the suite, inside
   brackets it aligns or hangs, and *Auto-Indent Lines* works. Lines pasted at the start of a line
   keep their shape as a block. Ctrl+/ comments a line at its indent with `# `.
@@ -178,6 +178,8 @@
 - A variable named `out` was coloured as the variance keyword.
 - After the servers restart or crash, the old server's hints, code vision and gutter icons no
   longer stay until the next edit.
+- A Windows path with its drive in `by`'s output, `C:\p\calc.by:3:5`, links to that file at that
+  line; the link began after the drive and looked for the file on the project's drive.
 
 ## [0.0.4]
 

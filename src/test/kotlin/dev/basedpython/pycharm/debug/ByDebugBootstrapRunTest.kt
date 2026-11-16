@@ -36,8 +36,9 @@ class ByDebugBootstrapRunTest {
     fun `pydevd is handed no source map`() {
         val report = activate(
             """
-            SOURCEMAP = {"RUN/ok.py": ("/p/ok.by", [None, None, 0, None, 2, 3, 4])}
+            SOURCEMAP = {"RUN/ok.py": ("/p/ok.by", "-,-,0,-,2,3,4")}
             DIGESTS = {"RUN/ok.py": "0"}
+            COLUMNS = {"RUN/ok.py": ";;0 5 0 0;;0 9 2 0;0 9 3 0;0 9 4 0;"}
             """,
         )
         assertEquals("listening", report.get("status").asString, "$report")
@@ -63,14 +64,18 @@ class ByDebugBootstrapRunTest {
      * both transpiled to one `main.py`. The empty one was written last, so it won — the program ran
      * and printed nothing. `SOURCEMAP` cannot show this once loaded, because it is a dict literal
      * whose duplicate key has already collapsed; the bootstrap reads it back as a syntax tree.
+     *
+     * `by` 0.0.1 refuses such a pair itself ("both build to `main.py`"), so only an older `by`
+     * writes this map; the maps here are in 0.0.1's packed form all the same, a line table as one
+     * string, since the bootstrap reads nothing of an entry but its `.by` path.
      */
     @Test
     fun `two by files transpiled to one module are reported in write order`() {
         val report = activate(
             """
             SOURCEMAP = {
-                "RUN/main.py": ("/p/main.by", [0]),
-                "RUN/main.py": ("/p/src/main.by", [0]),
+                "RUN/main.py": ("/p/main.by", "0"),
+                "RUN/main.py": ("/p/src/main.by", ""),
             }
             DIGESTS = {}
             """,

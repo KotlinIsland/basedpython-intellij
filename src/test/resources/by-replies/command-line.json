@@ -1115,7 +1115,7 @@
     },
     {
      "aliases": [],
-     "help": "Fail the build when a function cannot be compiled because a type is gradual, instead of leaving it to its interpreted definition",
+     "help": "Fail the build when a compiled function has a gradual type",
      "long": "no-any",
      "repeatable": false,
      "short": null,
@@ -1368,7 +1368,7 @@
     },
     {
      "aliases": [],
-     "help": "Python version to assume when resolving types",
+     "help": "Python version to generate the lockfile for, which its `#python:` header names. Defaults to the version the existing lockfile's header names, or the project's",
      "long": "python-version",
      "repeatable": false,
      "short": null,

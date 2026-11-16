@@ -68,6 +68,35 @@ class ByConsoleLinksTest {
         assertEquals(1, findConsoleLinks("""  File "/abs/demo.by", line 8, in total""").size)
     }
 
+    /**
+     * `by` 0.0.1 writes a Windows path as `C:\...\pkg\calc.by`, with no `\\?\` in front: the drive is
+     * part of the path, and the `:` after it is not the one before a line number. Written in that
+     * form rather than captured, since no run here is on windows.
+     */
+    @Test
+    fun `a windows path keeps its drive`() {
+        val text = """ --> C:\Users\me\pkg\calc.by:3:5"""
+        val link = single(text)
+        assertEquals("""C:\Users\me\pkg\calc.by""", link.path)
+        assertEquals("""C:\Users\me\pkg\calc.by:3:5""", text.substring(link.start, link.end))
+        assertEquals(3, link.line)
+        assertEquals(5, link.column)
+    }
+
+    /** A traceback quotes the whole path, drive and all, so it needs no help from the colon form. */
+    @Test
+    fun `a windows traceback frame is linked whole`() {
+        val link = single("""  File "C:\Users\me\pkg\calc.by", line 8, in total""")
+        assertEquals("""C:\Users\me\pkg\calc.by""", link.path)
+        assertEquals(8, link.line)
+    }
+
+    /** A letter and a colon are a drive only before a separator: `x:a.by` is no path of `x:`. */
+    @Test
+    fun `a letter and colon before a name is not a drive`() {
+        assertEquals("a.by", single("x:a.by:2").path)
+    }
+
     @Test
     fun `a pytest failure line is found`() {
         val link = single("tests/test_math.py:8: AssertionError")
