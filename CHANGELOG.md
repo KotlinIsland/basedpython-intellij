@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Added
+
+- configured exception and UI freeze reporting
+
 ## [0.0.6]
 
 ### Added

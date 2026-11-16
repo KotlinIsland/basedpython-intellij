@@ -74,6 +74,14 @@
     </extensionPoints>
 
     <extensions defaultExtensionNs="com.intellij">
+        <!-- Exceptions and UI freezes the IDE attributes to this plugin go to its Marketplace page
+             (the Exceptions and Freezes tabs), sent from the IDE's error dialog with the user's
+             consent, or in the background when they have turned on sending error reports to
+             JetBrains automatically. The platform picks the submitter whose own plugin is the one
+             blamed, so it must be registered here, by this plugin, not left to the platform's
+             default. Freezes need nothing more: the IDE attaches the thread dumps it captured. -->
+        <errorHandler implementation="com.intellij.diagnostic.JetBrainsMarketplaceErrorReportSubmitter"/>
+
         <!-- ===== Stream A: language / file type / highlighting ===== -->
         <fileType
             name="basedpython"
