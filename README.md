@@ -1,10 +1,17 @@
 # basedpython for PyCharm / IntelliJ
 
 <!-- Plugin description -->
-PyCharm / IntelliJ support for **basedpython** — a Python superset (`.by` files) that
-transpiles to pure Python 3.10+. Wraps the `by` language server (type checking,
-completion, navigation) and the `buff` formatter/linter, and adds first-class file-type
-support, run configurations, CLI actions, and editor tooling.
+Python and basedpython support: editing, testing, refactoring, debugging, environment management
+
+Write Python with what it is missing (sum types, extension methods, `?.` and `??`) and ship plain `.py` that every Python tool already reads. This plugin makes [basedpython](https://kotlinisland.github.io/basedpython/)'s `.by` files a first-class language in IntelliJ IDEA Ultimate and PyCharm Professional.
+
+- **A type checker that knows your frameworks.** Pydantic, SQLAlchemy, pytest and Django are modelled, so synthesized constructors and injected fixtures are checked like ordinary code.
+- **Completion that understands your types**, from the `by` language server: navigation, rename, find usages, inlay hints and quick fixes.
+- **See what ships.** Compare any `.by` with the Python it lowers to, side by side.
+- **Run, test and debug `.by` directly.** Run configurations for `by run`, `by build` and `by check`, pytest results in the test tree, and breakpoints on the lines you wrote.
+- **Formatting and linting** from `buff`, with format on save.
+
+[Getting started](https://kotlinisland.github.io/basedpython/getting-started/) · [The plugin](https://kotlinisland.github.io/basedpython/features/intellij-plugin/) · [Language reference](https://kotlinisland.github.io/basedpython/features/) · [Discord](https://discord.gg/7y9upqPrk2)
 <!-- Plugin description end -->
 
 ## Features
