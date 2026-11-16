@@ -267,6 +267,14 @@ jobs:
           TAG: ${{ github.event.release.tag_name }}
         run: |
           set -euo pipefail
+          # A release cut from a changelog that already has its section needs nothing, and
+          # patchChangelog is no no-op there: it re-serialises the whole file, putting blank lines
+          # inside entries and fenced code and taking them out between others (measured with
+          # gradle-changelog-plugin on 0.0.6's changelog), which the diff check below would push
+          if grep -qxF "## [${TAG#v}]" CHANGELOG.md; then
+            echo "changelog already has a [${TAG#v}] section"
+            exit 0
+          fi
           ./gradlew patchChangelog "-Pversion=${TAG#v}"
           git config user.name 'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'
