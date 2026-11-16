@@ -1,8 +1,18 @@
 ## [Unreleased]
 
+## [0.0.6.1]
+
 ### Added
 
-- configured exception and UI freeze reporting
+- Exceptions and UI freezes the IDE blames on the plugin can be sent to its Marketplace page, from
+  the error dialog's *Report to third-party plugin*, or in the background when *Send error reports
+  to JetBrains automatically* is on, freezes with their thread dumps, where the dialog had nowhere
+  to send them.
+
+### Changed
+
+- The basedpython icon is a `b` over its reflection, a `p`, with a dark variant that stays visible
+  in a dark theme.
 
 ### Fixed
 

@@ -453,6 +453,10 @@ changelog {
   groups.empty()
   repositoryUrl = providers.gradleProperty("pluginRepositoryUrl")
   versionPrefix = ""
+  // Three or four numbers, `0.0.6` or `0.0.6.1`. The default is SemVer, which refuses a fourth part
+  // and fails the whole build on the header of a patch release such as 0.0.6.1. The plugin
+  // matchEntire()s the header and takes the first group as the version.
+  headerParserRegex = Regex("""\[?v?(\d+(?:\.\d+){2,3})]?""")
 }
 
 // Deprecated API the verifier may report, each a substring of one line of its
