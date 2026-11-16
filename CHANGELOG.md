@@ -110,7 +110,7 @@
   latest build is supported: older EAPs stop at "EAP Build Expired" on start. The plugin now compiles
   and tests against IU-263.7307.112.
 - Bundles `by` and `buff` from basedpython 0.0.1, its first stable release, and `bpd` from
-  basedpython-debugger 0.0.1a3. Much of this release asks `by` for its answer; with an older `by`, a
+  basedpython-debugger 0.0.1a4. Much of this release asks `by` for its answer; with an older `by`, a
   feature says `by` needs updating rather than doing nothing.
 - Indentation in `.by` files follows the code: Enter after `return` leaves the suite, inside
   brackets it aligns or hangs, and *Auto-Indent Lines* works. Lines pasted at the start of a line
