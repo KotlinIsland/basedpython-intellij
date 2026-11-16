@@ -234,7 +234,7 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
                     // environment cannot stand in for an answer the IDE did not give
                     commandLine.infrastructureEnv[ByBpdWrapper.ENV_BPD] = setup.bpd?.besideBy?.toString().orEmpty()
                     commandLine.infrastructureEnv[ByBpdWrapper.ENV_BPD_FALLBACK] =
-                        setup.bpd?.onPath?.toString().orEmpty()
+                        setup.bpd?.fallback?.toString().orEmpty()
                 }
                 // what `by run` says when it ends before the wrapper has recorded anything — a
                 // refused interpreter, a transpile error — is in no record, and a start that fails

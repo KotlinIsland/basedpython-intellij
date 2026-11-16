@@ -103,8 +103,8 @@ class ByDebugSetupsTest {
      */
     @Test
     fun `two sessions at once never share a directory, and one ending leaves the other's wrapper`() {
-        val first = ByDebugSetup.forBpd(ByBpdExecutable.Found(besideBy = null, onPath = null))
-        val second = ByDebugSetup.forBpd(ByBpdExecutable.Found(besideBy = null, onPath = null))
+        val first = ByDebugSetup.forBpd(ByBpdExecutable.Found(besideBy = null, bundled = null, onPath = null))
+        val second = ByDebugSetup.forBpd(ByBpdExecutable.Found(besideBy = null, bundled = null, onPath = null))
         assertNotEquals(first.bootstrapDir, second.bootstrapDir)
         val firstProcess = NopProcessHandler().apply { startNotify() }
         val secondProcess = NopProcessHandler().apply { startNotify() }

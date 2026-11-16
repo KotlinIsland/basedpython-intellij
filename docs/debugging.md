@@ -324,9 +324,16 @@ run console writes typed lines to, so the launch says `inheritStdin` and `input(
 console.
 
 Which `bpd`: the one beside the `by` the run starts, else the one beside the interpreter `by run`
-chose (a uv project's `.venv/bin`), else the one on `PATH`. The middle one is only knowable once
-`by run` has chosen, so the wrapper applies the order; with none at all it records that and exits
-before the program starts, and the session reports it.
+chose (a uv project's `.venv/bin`), else the one bundled with the plugin, else the one on `PATH`.
+The second is only knowable once `by run` has chosen, so the wrapper applies the order; with none
+at all it records that and exits before the program starts, and the session reports it, naming
+`basedpython-debugger` as the package to add.
+
+The bundled one used to be taken only beside a bundled `by`, so a project whose `.venv` had `by`
+but not `basedpython-debugger` could not debug at all, though the plugin ships a `bpd`. Bundled
+comes before `PATH` because that is the order `by` itself is resolved in. Nothing keeps a fallback
+`bpd` in step with the project's `by` — one on `PATH` never was — and bpd refuses a source map it
+cannot read by naming the `by` that wrote it, which says what to install.
 
 The record is lines rather than JSON: quoting a path into JSON from `sh` needs `sed` and gets a
 backslash subtly wrong, and a line needs no quoting at all. bpd's own announcement — where it bound

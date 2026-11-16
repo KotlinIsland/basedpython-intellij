@@ -4,6 +4,12 @@
 
 - configured exception and UI freeze reporting
 
+### Fixed
+
+- Debugging under `bpd` uses the `bpd` bundled with the plugin when the project's environment has
+  `by` but not `basedpython-debugger`, where it refused with *bpd was not found*. When there is no
+  `bpd` at all, the message names `basedpython-debugger` as the package to add.
+
 ## [0.0.6]
 
 ### Added

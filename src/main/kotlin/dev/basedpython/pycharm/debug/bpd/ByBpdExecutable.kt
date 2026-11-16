@@ -10,20 +10,36 @@ import java.nio.file.Path
 /**
  * The `bpd`s the IDE can find before the run starts.
  *
- * `bpd` is looked for beside `by` first, beside the interpreter second and on `PATH` last, which is
- * the order that matches how people install them: `uv add --dev basedpython` puts `by` in the
- * project's `.venv`, and a `bpd` installed the same way lands next to it. A `bpd` on `PATH` is the
- * system-wide install, and is the right fallback rather than the first guess — a project pinned to
- * one toolchain should not silently borrow another one's debugger.
+ * `bpd` is looked for beside `by` first, beside the interpreter second, then the one bundled with
+ * the plugin, and on `PATH` last. The first two match how people install them: `uv add --dev
+ * basedpython` puts `by` in the project's `.venv`, and a `bpd` installed the same way lands next to
+ * it. Bundled before `PATH` is the order `by` itself is resolved in, and what the docs promise — the
+ * plugin carries its own `bpd`, so a project that installs only `basedpython` can still debug. A
+ * `bpd` on `PATH` is the system-wide install, and the last resort rather than the first guess — a
+ * project pinned to one toolchain should not silently borrow another one's debugger.
  *
- * The middle one is not here. The interpreter is the one `by run` chooses, and only the wrapper
- * `by run` starts is told which — so the wrapper applies the order, with these two as its first and
- * last answers. See [ByBpdWrapper].
+ * The bundled one is a fallback and not a refusal because nothing else keeps `bpd` in step with
+ * `by` either: one on `PATH` was always taken whatever its version, and a `bpd` handed a source map
+ * it cannot read refuses the launch naming the `by` that wrote it (bpd 565f904), which says what to
+ * do. Refusing to debug at all said less.
+ *
+ * The second one is not here. The interpreter is the one `by run` chooses, and only the wrapper
+ * `by run` starts is told which — so the wrapper applies the order, with [Found.besideBy] as its
+ * first answer and [Found.fallback] as its last. See [ByBpdWrapper].
  */
 object ByBpdExecutable {
 
-    /** The two `bpd`s the IDE can find itself: beside `by`, and on `PATH`. Either may be absent. */
-    data class Found(val besideBy: Path?, val onPath: Path?)
+    /**
+     * The `bpd`s the IDE can find itself: beside `by`, bundled with the plugin, and on `PATH`. Any
+     * may be absent.
+     */
+    data class Found(val besideBy: Path?, val bundled: Path?, val onPath: Path?) {
+        /**
+         * What the wrapper falls back on when there is no `bpd` beside `by` or the interpreter: the
+         * bundled one, else the one on `PATH`.
+         */
+        val fallback: Path? get() = bundled ?: onPath
+    }
 
     /** The binary's name, without the platform's executable suffix. */
     const val BPD: String = "bpd"
@@ -35,8 +51,13 @@ object ByBpdExecutable {
         BPD
     }
 
-    /** The `bpd` beside the `by` [launch] starts, and the one on `PATH`. */
-    fun find(launch: ByLaunch?): Found = Found(besideBy(launch), Executables.findOnPath(name()))
+    /**
+     * The `bpd` beside the `by` [launch] starts, the one bundled with the plugin, and the one on
+     * `PATH`. [bundled] is a parameter so a test can stand in for a plugin installation, which a
+     * unit test has none of.
+     */
+    fun find(launch: ByLaunch?, bundled: () -> Path? = { BundledBinaries.find(BPD) }): Found =
+        Found(besideBy(launch), bundled(), Executables.findOnPath(name()))
 
     /**
      * A `bpd` in the same directory as the `by` this run starts.

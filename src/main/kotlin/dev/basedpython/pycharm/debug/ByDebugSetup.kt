@@ -53,7 +53,8 @@ class ByDebugSetup internal constructor(
      */
     val backend: ByDebugBackend = ByDebugBackend.DEBUGPY,
     /**
-     * The `bpd`s the IDE found beside `by` and on `PATH`, when [backend] is [ByDebugBackend.BPD].
+     * The `bpd`s the IDE found beside `by`, bundled with the plugin and on `PATH`, when [backend]
+     * is [ByDebugBackend.BPD].
      *
      * Not the one the session uses: the wrapper chooses between these and the one beside the
      * interpreter `by run` picks, which is not known until `by run` has picked it.

@@ -34,8 +34,9 @@ package dev.basedpython.pycharm.debug.bpd
  *
  * The one beside the `by` the run starts when the IDE found one there ([ENV_BPD]), else the one
  * beside the interpreter `by run` chose — the environment's `bin`, where `uv add --dev` puts it for
- * a uv project, whose launch names no directory of its own — else the one the IDE found on `PATH`
- * ([ENV_BPD_FALLBACK]). The middle answer is only knowable here, which is why the order is decided
+ * a uv project, whose launch names no directory of its own — else the one bundled with the plugin,
+ * else the one the IDE found on `PATH` ([ENV_BPD_FALLBACK], which is whichever of those two the IDE
+ * found first). The middle answer is only knowable here, which is why the order is decided
  * here rather than in [ByBpdExecutable]. When there is none at all the wrapper records that
  * ([NO_BPD_PREFIX]) and exits without starting the program.
  *
@@ -60,7 +61,10 @@ object ByBpdWrapper {
     /** The `bpd` beside the `by` the run starts, when there is one. Preferred over every other. */
     const val ENV_BPD: String = "BASEDPYTHON_BPD"
 
-    /** The `bpd` on the IDE's `PATH`, for when there is none beside `by` or the interpreter. */
+    /**
+     * The `bpd` bundled with the plugin, else the one on the IDE's `PATH`, for when there is none
+     * beside `by` or the interpreter.
+     */
     const val ENV_BPD_FALLBACK: String = "BASEDPYTHON_BPD_FALLBACK"
 
     /**
@@ -129,7 +133,8 @@ object ByBpdWrapper {
         python="$1"
         shift
 
-        # Which bpd: beside `by`, else beside the interpreter, else on the IDE's PATH. A bare
+        # Which bpd: beside `by`, else beside the interpreter, else the plugin's own or the one on
+        # the IDE's PATH, whichever the IDE found. A bare
         # interpreter name has no directory to look in, and `dirname` would answer `.`, which is
         # wherever this happens to be standing.
         bpd="${'$'}@BPD@"

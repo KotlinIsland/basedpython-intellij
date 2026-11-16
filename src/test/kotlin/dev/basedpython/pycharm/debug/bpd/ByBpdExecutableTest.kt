@@ -13,11 +13,12 @@ import java.nio.file.Files
 import java.nio.file.Path
 
 /**
- * Which `bpd` the IDE can find before the run: the one installed with the toolchain the run uses.
+ * Which `bpd` the IDE can find before the run: the one installed with the toolchain the run uses,
+ * and the one bundled with the plugin for when there is none.
  *
- * Only the answers that come from the launch are asserted; the one on `PATH` is whatever the
- * machine running the suite holds, which no test here controls. The one beside the interpreter is
- * the wrapper's to find — see [ByBpdWrapperExecutionTest].
+ * Only the answers that come from the launch and the plugin are asserted; the one on `PATH` is
+ * whatever the machine running the suite holds, which no test here controls. The one beside the
+ * interpreter is the wrapper's to find — see [ByBpdWrapperExecutionTest].
  */
 @DisabledOnOs(OS.WINDOWS, disabledReason = "the bpd backend is refused on Windows by name")
 class ByBpdExecutableTest {
@@ -81,5 +82,43 @@ class ByBpdExecutableTest {
 
         assertNull(ByBpdExecutable.find(launch(by, ByEnvironmentKind.AUTO)).besideBy)
         assertNull(ByBpdExecutable.find(null).besideBy)
+    }
+
+    /**
+     * A project whose `.venv` has `by` from `basedpython` but not `basedpython-debugger`: the plugin
+     * ships a `bpd`, and it is what the wrapper falls back on rather than refusing the session.
+     */
+    @Test
+    fun `the bundled bpd is the fallback when the by the run starts has none beside it`(@TempDir dir: Path) {
+        val by = executable(dir.resolve("project/.venv/bin/by"))
+        val bundled = executable(dir.resolve("plugin/bin/bpd"))
+
+        val found = ByBpdExecutable.find(launch(by, ByEnvironmentKind.AUTO), bundled = { bundled })
+
+        assertNull(found.besideBy)
+        assertEquals(bundled, found.fallback)
+    }
+
+    /** One installed with the project's `by` is the toolchain it chose, and wins over the plugin's. */
+    @Test
+    fun `a bpd beside by is still preferred to the bundled one`(@TempDir dir: Path) {
+        val by = executable(dir.resolve("project/.venv/bin/by"))
+        val beside = executable(dir.resolve("project/.venv/bin/bpd"))
+        val bundled = executable(dir.resolve("plugin/bin/bpd"))
+
+        val found = ByBpdExecutable.find(launch(by, ByEnvironmentKind.AUTO), bundled = { bundled })
+
+        assertEquals(beside, found.besideBy)
+    }
+
+    /** Bundled before `PATH`, the order `by` itself is resolved in. */
+    @Test
+    fun `the bundled bpd is preferred to the one on PATH`(@TempDir dir: Path) {
+        val bundled = dir.resolve("plugin/bin/bpd")
+        val onPath = dir.resolve("usr/bin/bpd")
+
+        assertEquals(bundled, ByBpdExecutable.Found(besideBy = null, bundled = bundled, onPath = onPath).fallback)
+        assertEquals(onPath, ByBpdExecutable.Found(besideBy = null, bundled = null, onPath = onPath).fallback)
+        assertNull(ByBpdExecutable.Found(besideBy = null, bundled = null, onPath = null).fallback)
     }
 }
