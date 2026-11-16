@@ -1,0 +1,72 @@
+# The Marketplace screenshots, composed by mpshots (https://github.com/jreznot/mpshots) from the raw
+# captures in captures/. See README.md for how the captures are made and how to rebuild.
+#
+# Captures are 2560x1440: the sandbox frame at 1280x720 painted at 2x, so uiScale is 2. A side
+# slide's window is 928x980 logical px, and the status bar starts at y=1375, so the tallest crop that
+# leaves it out is 1289 px — which makes 1221 px the widest crop that fills the window without
+# upscaling, and that is the size of every side crop here.
+
+output:
+  width: 2560
+  dir: screenshots
+
+theme: dark
+
+brand:
+  name: basedpython
+  logo: ../src/main/resources/META-INF/pluginIcon.svg
+  accent: "#5A9BE0"
+
+defaults:
+  uiScale: 2
+  footnote: "PyCharm Pro and IntelliJ IDEA Ultimate 2026.3"
+
+slides:
+  - id: transpiled
+    layout: hero
+    headline: Write .by. Ship plain .py.
+    body: Sum types, extensions and optional chaining, lowered to Python you can watch side by side.
+    screenshot:
+      src: captures/transpiled.png
+      crop: [84, 170, 2310, 1010]
+
+  - id: frameworks
+    layout: text-left
+    align: center
+    headline: A type checker that knows your frameworks
+    body:
+      - Pydantic, SQLAlchemy, pytest and Django are modelled directly, so the magic they do at runtime is checked like ordinary code.
+    screenshot:
+      src: captures/pydantic.png
+      crop: [84, 86, 1221, 1289]
+
+  - id: completion
+    layout: text-right
+    align: center
+    headline: Completion that understands sum types
+    body:
+      - Completion, inlay hints, navigation and docs come from the by language server. Every case of an enum class is one keystroke away.
+    screenshot:
+      src: captures/completion.png
+      crop: [119, 86, 1221, 1289]
+
+  - id: debugger
+    layout: text-left
+    align: center
+    headline: Debug what you wrote
+    body:
+      - Breakpoints, stepping and variables work on .by lines, and every frame maps back to your source, not to the Python it became.
+    screenshot:
+      src: captures/debugger.png
+      # shorter, to leave out the frame list's "Switch frames" tip
+      crop: [84, 82, 1184, 1250]
+
+  - id: tests
+    layout: text-right
+    align: center
+    headline: pytest, in the test tree
+    body:
+      - Run .by tests from the gutter or the Run window. Each parametrized case shows up on its own, named by its arguments.
+    screenshot:
+      src: captures/tests.png
+      crop: [84, 86, 1221, 1289]

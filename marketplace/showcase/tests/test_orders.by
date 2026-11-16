@@ -1,0 +1,35 @@
+import pytest
+
+from shop.orders import Customer, Order, Payment
+
+
+def order(*quantities: int, email: str? = "ada@example.com") -> Order:
+    return Order(
+        customer=Customer("Ada", email),
+        lines=[(f"SKU-{n}", n, 250) for n in quantities],
+        payment=Payment.Card("4242", "Visa"),
+    )
+
+
+def test_total():
+    assert order(1, 2, 3).total() == 1500
+
+
+def test_revenue_adds_every_order():
+    assert [order(1), order(2)].revenue() == 750
+
+
+@pytest.mark.parametrize(
+    ("payment", "expected"),
+    [
+        (Payment.Card("4242", "Visa"), "Visa ending 4242"),
+        (Payment.Voucher("SPRING", 500), "voucher SPRING"),
+        (Payment.Invoice(), "invoice, due in 30 days"),
+    ],
+)
+def test_describe(payment: Payment, expected: str):
+    assert payment.describe() == expected
+
+
+def test_contacts_without_email():
+    assert [order(1, email=None)].contacts() == ["no email"]

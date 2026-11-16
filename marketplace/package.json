@@ -1,0 +1,11 @@
+{
+  "private": true,
+  "description": "Builds the Marketplace screenshots in screenshots/ from captures/ with mpshots",
+  "scripts": {
+    "validate": "mpshots validate --strict",
+    "build": "mpshots build --strict"
+  },
+  "devDependencies": {
+    "mpshots": "github:jreznot/mpshots#5cd837571aaea47e68c80a1603f05a1df756f131"
+  }
+}

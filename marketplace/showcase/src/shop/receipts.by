@@ -1,0 +1,14 @@
+from shop.orders import Order
+
+
+def receipt_email(orders: list[Order]) -> str:
+    let last = orders[-1] if orders else None
+    return last?.customer?.email ?? "nobody"
+
+
+def biggest(orders: list[Order]) -> (sku: str, cents: int)?:
+    let lines = [line for order in orders for line in order.lines]
+    if not lines:
+        return None
+    let top = max(lines, key=lambda line: line.cents)
+    return (top.sku, top.cents)

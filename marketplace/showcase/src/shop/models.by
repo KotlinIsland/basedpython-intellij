@@ -1,0 +1,21 @@
+from pydantic import BaseModel, Field
+
+
+class LineItem(BaseModel):
+    sku: str
+    quantity: int = Field(gt=0)
+    cents: int
+
+
+class Checkout(BaseModel):
+    email: str
+    items: list[LineItem]
+    coupon: str? = None
+
+
+def checkout_from_cart(email: str, cart: dict[str, int], prices: dict[str, int]) -> Checkout:
+    let items = [
+        LineItem(sku=sku, quantity=n, cents=prices[sku], discount=10)
+        for sku, n in cart.items()
+    ]
+    return Checkout(email=email, items=items)

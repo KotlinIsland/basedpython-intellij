@@ -1,0 +1,37 @@
+from dataclasses import dataclass
+
+
+enum class Payment:
+    case Card(last4: str, brand: str)
+    case Voucher(code: str, amount: int)
+    case Invoice(days: int = 30)
+
+    def describe(self) -> str:
+        return match self:
+            case Payment.Card(last4, brand): f"{brand} ending {last4}"
+            case Payment.Voucher(code, _): f"voucher {code}"
+            case Payment.Invoice(days): f"invoice, due in {days} days"
+
+
+@dataclass
+class Customer:
+    name: str
+    email: str?
+
+
+@dataclass
+class Order:
+    customer: Customer?
+    lines: list[(sku: str, quantity: int, cents: int)]
+    payment: Payment
+
+    def total(self) -> int:
+        return sum(line.quantity * line.cents for line in self.lines)
+
+
+extension list[Element: Order]:
+    def revenue(self) -> int:
+        return sum(order.total() for order in self)
+
+    def contacts(self) -> list[str]:
+        return [order.customer?.email ?? "no email" for order in self]

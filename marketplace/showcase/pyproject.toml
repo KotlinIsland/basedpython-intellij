@@ -1,0 +1,17 @@
+[project]
+name = "shop"
+version = "0.1.0"
+description = "A small basedpython project, used only to capture the Marketplace screenshots"
+requires-python = ">=3.13"
+dependencies = ["pydantic>=2"]
+
+[dependency-groups]
+dev = ["basedpython", "basedpython-debugger", "pytest"]
+
+[build-system]
+requires = ["basedpython"]
+build-backend = "basedpython.build"
+
+[tool.uv]
+# only ever opened in the IDE, never installed, so uv has no reason to build it
+package = false
