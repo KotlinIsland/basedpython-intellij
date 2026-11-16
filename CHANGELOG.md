@@ -4,9 +4,11 @@
 
 ### Added
 
-- `by run` configurations run on Docker, SSH and WSL run targets: a basedpython runtime on the
-  target says where `by` is, the project is uploaded there, and paths in the output link back to
-  the project. Only Run is supported on a target, not Debug.
+- `by run`, test, `by build` and `by check` configurations run on Docker, SSH and WSL run targets:
+  a basedpython runtime on the target says where `by` is, the project is uploaded there, and paths
+  in the output and the test tree link back to the project. `by run` and test configurations debug
+  there too, under `bpd`, which connects back to the IDE from the target. *Rerun Failed Tests*
+  reruns on the target.
 - *Build | Build Project*, *Build Module* and *Rebuild* run `by build` in a basedpython project,
   reported in the Build tool window with each diagnostic at its `.by` line. What `by build` writes
   is treated as generated: a banner links the `.by` it came from, and the first edit asks first.
@@ -95,6 +97,8 @@
   are basedpython editors, highlighted as code where they were plain text, and complete from the
   debugger where it offers completion (debugpy does; bpd does not yet). Picking a completion after
   a dot keeps the dot: `sys.vers` completed to `sysversion_info` in the plain-text field.
+- *View | Context Info* (Alt+Q) in a `.by` editor shows the header of the class or function the
+  caret is in.
 - With their plugins installed: the *Endpoints* tool window lists a basedpython project's FastAPI
   and Django routes, the IDE's MCP server offers agents `by`'s transpile, rule explanations, tests,
   whole-project check and entry points, the Copyright plugin writes its notice in `.by` files, and
@@ -104,7 +108,7 @@
 
 - **The minimum IDE is build 263.7307**, the latest 2026.3 EAP, where it was 263.5153. Only the
   latest build is supported: older EAPs stop at "EAP Build Expired" on start. The plugin now compiles
-  and tests against IU-263.7307.44.
+  and tests against IU-263.7307.112.
 - Bundles `by` and `buff` from basedpython 0.0.1, its first stable release, and `bpd` from
   basedpython-debugger 0.0.1a3. Much of this release asks `by` for its answer; with an older `by`, a
   feature says `by` needs updating rather than doing nothing.
@@ -120,11 +124,16 @@
   basedpython is listed on the *Breadcrumbs* and *Sticky Lines* pages.
 - *Rename* (Shift+F6) renames every occurrence in place as the name is typed, or in the dialog
   with Preview when *Specify refactoring options* says so, where only the occurrence at the caret
-  changed. *Introduce Variable* and *Introduce Constant* let you choose the expression and name it
+  changed. The new name is checked as it is typed, so a keyword is refused with `by`'s reason
+  before anything is renamed, and names are suggested from what the symbol holds. Renaming a method
+  offers its overrides, renaming a parameter the same parameter of each override, and renaming a
+  class the module named after it, each kind in a dialog of its own. The undo step, dialog and
+  preview name what is renamed, *Rename method 'speak'*, where they said *By Renamed Name*. *Introduce Variable* and *Introduce Constant* let you choose the expression and name it
   in place, and an extracted function is renamed in place at its call.
 - *Find Usages* names the target as the class or function it is, placed in what declares it,
   groups usages by the class or function they are in and by what they do (import, `isinstance`,
   type hint, superclass list, read, write), and no longer lists the declaration as its own usage.
+  Turning off *Show Import Statements* hides the usages in imports.
 - *Type Info* (Ctrl+Shift+P) chooses among the expressions around the caret, each with its type,
   shown as `by`'s highlighted pretty type. *Surround With* offers statement surrounders for whole
   statements and expression surrounders only for an expression.
@@ -135,10 +144,14 @@
 - The *Structure* view and *File Structure* popup have the *Alphabetical* sorter, *Show Fields*
   and *Show Inherited*. *Go to Class* and *Go to Symbol* show where a symbol is declared,
   `shapes.base.Circle`, and match `Shape.desc`. *Go to Super* on a class lists its whole method
-  resolution order, not only its direct bases.
+  resolution order, not only its direct bases. A popup of several targets, such as *Choose
+  Implementation*, names each by what it declares, with its kind's icon and what declares it, where
+  each was named by its file: `area (shapes.by)` three times.
 - Alt+Enter lists each kind of `by`'s code actions as an intention of its own under *Settings |
   Editor | Intentions | basedpython*, with a description, an example and a switch, including the
-  new *Put elements on separate lines* and *Put elements on one line*.
+  new *Put elements on separate lines*, *Put elements on one line* and *Invert boolean*, which
+  gives a boolean variable, parameter or function the opposite meaning under a `not_` name and
+  negates every use.
 - Postfix templates come from `by` alone, switched with *Postfix templates* under *Code Completion
   | basedpython*, where the plugin's own provider listed a second `.for`. `by` follows *Insert
   parentheses automatically when applicable*.
@@ -149,6 +162,13 @@
   is reported once.
 - A line breakpoint can be set only on a line holding code, as in `.py`; one on a blank line used
   to move to the next `def` and stop at import time.
+- *Stop* ends a `by run`, test, build or check run with a SIGTERM that `by` passes on to the
+  program, which can clean up, print its last lines and exit with its own code, where it killed the
+  whole process tree and the program heard nothing. A second *Stop* kills the tree. On a Docker
+  target *Stop* ends the program at once, where it waited out Docker's timeout and ended in
+  SIGKILL. A `.by` debug session stops the same way when `bpd` says it passes the signal on. In the
+  *basedpython Console*, *Stop* and *Interrupt* signal `by repl` alone, where *Interrupt* interrupted
+  the input twice.
 - `by`'s Information diagnostics are drawn with a blue wave and untagged hints with a grey dotted
   line, as PyCharm draws ty's, under *Diagnostics* keys on the colour page.
 - basedpython stays out of a plain Python project: *Inspect Code* runs `by`'s diagnostics only
@@ -178,6 +198,14 @@
 - A variable named `out` was coloured as the variance keyword.
 - After the servers restart or crash, the old server's hints, code vision and gutter icons no
   longer stay until the next edit.
+- A `.by` log point keeps its *Log:* box across a restart, and unloading the plugin with a `.by`
+  breakpoint set no longer logs an error.
+- Backspace right after typing `"""` in a `.by` file takes back the empty literal, where it left
+  `""|"""`.
+- A string `by` marks as a regular expression is injected as one in IntelliJ IDEA without the Python
+  plugin, where nothing was injected.
+- Alt+Enter in basedpython injected into a string asks `by` about the file around it, where `by` was
+  sent the fragment's offsets as the file's.
 - A Windows path with its drive in `by`'s output, `C:\p\calc.by:3:5`, links to that file at that
   line; the link began after the drive and looked for the file on the project's drive.
 
