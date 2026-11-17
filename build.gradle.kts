@@ -413,7 +413,7 @@ intellijPlatform {
       // Only the latest build: the branch of `platformVersion`, which moves with it, since an older
       // EAP stops at "EAP Build Expired" on start (see `platformVersion`).
       sinceBuild = "263.7307"
-      untilBuild = "263.*"
+      untilBuild = "271.*"
     }
 
     // Extract the <!-- Plugin description --> section from README.md and provide for the plugin's manifest
