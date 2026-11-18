@@ -44,6 +44,9 @@ class BasedPythonEnterHandler : EnterHandlerDelegate {
         BasedPythonLineIndentProvider.forget()
         if (file !is BasedPythonFile) return EnterHandlerDelegate.Result.Continue
         val document = editor.document
+        if (onlyWhitespaceBefore(document.immutableCharSequence, caretOffset.get())) {
+            return EnterHandlerDelegate.Result.DefaultSkipIndent
+        }
         val outline = ByOutlines.getInstance(file.project).current(document)
             ?: return EnterHandlerDelegate.Result.Continue
         val indents = ByIndents(outline, document.immutableCharSequence, CodeStyle.getIndentOptions(file))
@@ -95,6 +98,25 @@ class BasedPythonEnterHandler : EnterHandlerDelegate {
         document.insertString(caret, pending.after)
         editor.caretModel.moveToOffset(caret + pending.after.length)
         return EnterHandlerDelegate.Result.Continue
+    }
+
+    /**
+     * Whether nothing but spaces and tabs comes before [offset] on its line. Enter there honours the
+     * column the caret was put at — backspaced out of a suite, or left in one above its next
+     * statement — instead of indenting the new line anew, as PyCharm's `PyEnterAtIndentHandler`
+     * does for `.py` (PY-3009) and only for `.py`: the platform breaks the line without its smart
+     * indent, so the new line starts at the caret's column.
+     */
+    private fun onlyWhitespaceBefore(text: CharSequence, offset: Int): Boolean {
+        var i = offset
+        while (i > 0) {
+            when (text[i - 1]) {
+                ' ', '\t' -> i--
+                '\n', '\r' -> return true
+                else -> return false
+            }
+        }
+        return true
     }
 
     /**

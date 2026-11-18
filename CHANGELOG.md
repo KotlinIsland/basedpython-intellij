@@ -1,5 +1,10 @@
 ## [Unreleased]
 
+### Fixed
+
+- Enter with nothing but whitespace before the caret keeps the caret's column, as it does in a
+  `.py` file: on a blank line backspaced out of a suite the new line no longer goes back into it.
+
 ## [0.0.6.1]
 
 ### Added

@@ -299,4 +299,46 @@ class BasedPythonEnterHandlerTest {
         simple("x = f'{a + b}'")
         string("f'{a + b}'", interpolations = listOf("{a + b}"))
     }
+
+    // ---- only whitespace before the caret: its column is kept, as PyCharm's PyEnterAtIndentHandler keeps it for .py ----
+
+    @Test
+    fun `on a blank line the caret was dedented to, the new line stays dedented`() = enter(
+        "def f():\n    foo = 1\n    \n<caret>",
+        "def f():\n    foo = 1\n    \n\n<caret>",
+    ) {
+        compound { clause("def f():") { simple("foo = 1") } }
+    }
+
+    @Test
+    fun `on a blank line above a suite's next statement, the new line stays in the suite`() = enter(
+        "class A:\n    <caret>\n    def f(self):\n        ...\n",
+        "class A:\n    \n    <caret>\n    def f(self):\n        ...\n",
+    ) {
+        compound { clause("class A:") { compound { clause("def f(self):") { simple("...") } } } }
+    }
+
+    @Test
+    fun `so does a second Enter before by has answered for the first`() = onEdt {
+        fixture.configureByText("a.by", "class A:<caret>\n    def f(self):\n        ...\n")
+        OutlineSpec.remember(fixture.project, fixture.editor.document) {
+            compound { clause("class A:") { compound { clause("def f(self):") { simple("...") } } } }
+        }
+        fixture.type('\n')
+        fixture.type('\n')
+        fixture.checkResult("class A:\n    \n    <caret>\n    def f(self):\n        ...\n")
+    }
+
+    @Test
+    fun `before a line's code, the code keeps its indentation`() = enter(
+        "def f():\n    pass\n<caret>    x = 1\n",
+        "def f():\n    pass\n\n<caret>    x = 1\n",
+    ) {
+        compound {
+            clause("def f():") {
+                simple("pass")
+                simple("x = 1")
+            }
+        }
+    }
 }
