@@ -62,13 +62,12 @@ import java.nio.file.Path
  *
  * ## the frame you are stopped in
  *
- * bpd refuses a replacement while any frame of the process — on a thread, or suspended inside a
- * generator, a coroutine or an async generator — is running code the replacement would change. That
- * covers the case people most want this in: stopped at a breakpoint *inside* the function just
- * edited. The refusal names the frame and says to let it return first, and it is the default
- * because between the assignment and that frame returning the process really is running two
- * versions of one function. bpd will do it anyway for a caller that asks by name; nothing here asks
- * — see [ByReplaceCodeArguments.evenUnderALiveFrame].
+ * The case people most want this in is stopped at a breakpoint *inside* the function just edited.
+ * The reload applies there, as HotSwap does on the JVM: the call that is stopped finishes on the code
+ * it started with, and the next call runs the edit. bpd refuses that by default, since until the
+ * frame returns the process runs two versions of one function, so this asks for it
+ * ([ByReplaceCodeArguments.evenUnderALiveFrame]) and bpd says on the console which calls are still on
+ * the old code. Refusing would leave the button doing nothing in the one place it is pressed most.
  */
 internal class ByHotSwapProvider(
     private val process: XDebugProcess,
@@ -266,6 +265,8 @@ internal class ByHotSwapProvider(
                             // replaced, and bpd installs the new one and translates them again, in
                             // the same message, before it assigns any `__code__`.
                             remap = write.sourcemap != null,
+                            // See "the frame you are stopped in" above
+                            evenUnderALiveFrame = true,
                         ).toJson(),
                     ),
                 )
@@ -297,7 +298,7 @@ internal class ByHotSwapProvider(
             // tree is once again what the process is running.
             val stranded = written.rollback()
             val why = when {
-                replaced != null -> "the debugger refused it — see the console for what stood in the way"
+                replaced != null -> "see the debug console for why"
                 failure != null -> "the debugger could not do it: $failure"
                 else -> "the debug adapter did not answer the request"
             }

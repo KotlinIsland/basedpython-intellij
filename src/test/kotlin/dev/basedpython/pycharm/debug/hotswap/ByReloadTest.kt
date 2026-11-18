@@ -67,7 +67,7 @@ class ByReloadTest {
             written.written,
             "each module once, then the map once",
         )
-        assertEquals(listOf(dir.resolve("a.py").toString(), dir.resolve("b.py").toString()), plan.replace)
+        assertEquals(listOf("/project/a.by", "/project/b.by"), plan.replace, "bpd is handed what the user edited")
     }
 
     /**
@@ -170,7 +170,7 @@ class ByReloadTest {
         val written = ByBuildTree()
         ByReload.write(plan, dir, written)
 
-        assertEquals(listOf(dir.resolve("a.py").toString()), plan.replace)
+        assertEquals(listOf("/project/a.by"), plan.replace)
         assertFalse(dir.resolve("b.py") in written.written)
         assertEquals(MAP_AFTER, Files.readString(dir.resolve(ByReload.BY_SOURCEMAP)))
     }
@@ -189,8 +189,35 @@ class ByReloadTest {
 
         val plan = assertInstanceOf(ByReload.Plan.Write::class.java, ByReload.plan(answer))
         assertEquals(emptyList<ByRestaged>(), plan.files)
-        assertEquals(listOf(dir.resolve("a.py").toString()), plan.replace)
+        assertEquals(listOf("/project/a.by"), plan.replace)
         assertEquals(MAP_AFTER, plan.sourcemap)
+    }
+
+    /**
+     * A hand-written `.py` is copied into the tree, and the runner compiles the copy as the project
+     * file: bpd is handed the project file, which is the only name the process knows that code by.
+     * Handing it the copy was refused as code that had never run, on the first reload anyone tried.
+     */
+    @Test
+    fun `a python file the build carried is replaced as the project file`(@TempDir dir: Path) {
+        Files.writeString(dir.resolve("main.py"), "def f():\n    a = 1\n")
+        val answer = ByRestage(
+            files = listOf(
+                ByRestaged(
+                    source = "/project/main.py",
+                    generated = dir.resolve("main.py").toString(),
+                    content = "def f():\n    a = 2\n",
+                    changed = true,
+                ),
+            ),
+            sourcemap = null,
+        )
+
+        val plan = assertInstanceOf(ByReload.Plan.Write::class.java, ByReload.plan(answer))
+        ByReload.write(plan, dir, ByBuildTree())
+
+        assertEquals("def f():\n    a = 2\n", Files.readString(dir.resolve("main.py")), "the copy is restaged")
+        assertEquals(listOf("/project/main.py"), plan.replace)
     }
 
     /** Nothing moved at all: the process already matches the source. */

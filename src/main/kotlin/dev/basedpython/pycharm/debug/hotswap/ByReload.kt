@@ -33,7 +33,15 @@ internal object ByReload {
             val files: List<ByRestaged>,
             /** The one new `_by_sourcemap.py` for the whole set, or null when it did not change. */
             val sourcemap: String?,
-            /** What `bpd/replaceCode` is given, as paths in the tree. */
+            /**
+             * What `bpd/replaceCode` is given: the files the user edited, as `by` names them.
+             *
+             * Not the paths in the tree. `by run`'s runner compiles a hand-written `.py`'s copy as
+             * the project file, so no code in the process is named after the copy — bpd handed the
+             * copy found nothing of it and refused, on the first reload anyone tries. A `.by` bpd
+             * resolves through the map to the generated python itself, and its answer then names
+             * the file the user is looking at rather than one in a temporary directory.
+             */
             val replace: List<String>,
         ) : Plan
     }
@@ -64,7 +72,11 @@ internal object ByReload {
             answer.sourcemap != null -> files
             else -> return Plan.UpToDate
         }
-        return Plan.Write(files = changed, sourcemap = answer.sourcemap, replace = replace.map { it.generated!! })
+        return Plan.Write(
+            files = changed,
+            sourcemap = answer.sourcemap,
+            replace = replace.map { it.source ?: it.generated!! },
+        )
     }
 
     /**

@@ -696,24 +696,20 @@ replaced". They are different facts about the process and bpd distinguishes them
 
 ### the frame you are stopped in
 
-bpd refuses a replacement while any frame of the process is running code the replacement would
-change — on a thread, or suspended inside a generator, a coroutine or an async generator waiting to
-be sent into. That covers the case people most want this in: stopped at a breakpoint *inside* the
-function just edited. The refusal names the frame and says to let it return first.
+The case people most want this in is stopped at a breakpoint *inside* the function just edited, and
+the reload applies there, as HotSwap does on the JVM: the call that is stopped finishes on the code
+it started with, and the next call runs the edit. bpd says so on the console, one line per call left
+on the old code:
 
-It is a design decision rather than a safety one, and bpd is explicit that it must never be
-described as one: assigning `function.__code__` under a live frame is *accepted* on 3.13 through
-3.15, the frame runs the old code to completion, and the next call gets the new one. What is refused
-is what it leaves behind — until that frame returns the process runs two versions of one function,
-and a stack whose frames behave two different ways is evidence about neither. bpd will do it for a
-caller that asks by name (`evenUnderALiveFrame`, with every still-old frame reported back); nothing
-here asks, and the option is one line away in `ByReplaceCodeArguments` if it should.
+```
+reloaded, but `f` is stopped at line 3; that call finishes on the old code, and the next call runs the new code
+```
 
-One consequence worth knowing, measured rather than reasoned: a program stopped anywhere has its
-**own script's module frame** live for the whole run, so editing the file the interpreter was
-started on is always refused. That is not the shape a session here has — `by run` starts
-`_by_runner.py`, and everything the user wrote is an imported module whose body has already returned
-— but it is what you will see if you try this against a bare `bpd launch script.py`.
+bpd's own default is to refuse — until that frame returns the process runs two versions of one
+function — and it applies only for a caller that asks by name (`evenUnderALiveFrame`). The plugin
+asks: refusing left the button doing nothing in the one place it is pressed most, and the cost is
+stated on the console rather than hidden. It is not a safety question either way: assigning
+`function.__code__` under a live frame is *accepted* on 3.13 through 3.15.
 
 ### nothing you edit is the file that is running
 
@@ -722,12 +718,13 @@ there from the project: a `.by` because it was **transpiled**, a hand-written `.
 **copied**. `sys.path[0]` is that tree. Measured rather than argued — a project with a `helper.py`
 beside its `main.by` reports both `__file__`s inside `/var/folders/.../T/.tmpXXXX/`.
 
-So both kinds of file take the same route. That was not always what this said. A `.by` used to be
-refused, with a long and correct explanation of why the debugger could not transpile it; what was
-wrong was the other half of the argument, which held that a plain `.py` needed none of that because
-`by run` "copies nothing else". It copies everything else — `stage_verbatim` walks the project root
-— so the `.py` path had quietly stopped working too, answering `NotLoaded` about a file that was
-plainly running. The refusal was the only part anybody could see.
+So both kinds of file are restaged into the tree the same way. What bpd is then handed is the file
+the user **edited**, not the copy: `by run`'s runner compiles a copied `.py` *as the project file*
+(it is in `CARRIED` in `_by_project.py`), so frames and breakpoints name the file you are looking at
+and no code object in the process is named after the copy. Handing bpd the copy got `NotLoaded` —
+"no code has run" about the file the program was stopped in — on the first reload anybody tried. A
+`.by` is resolved by bpd through the map to the generated python, and its answer then names the
+`.by`. bpd also translates a copy's path itself, for clients that hand it the tree path.
 
 ### the route a press of the button takes
 
@@ -740,7 +737,8 @@ plainly running. The refusal was the only part anybody could see.
    `by/transpileForBuild`, carrying the build directory the wrapper recorded. It answers with the
    generated python, the whole rewritten `_by_sourcemap.py`, and both digests. It **writes nothing**.
 3. **Write it into the tree**, remembering every byte replaced.
-4. **One `bpd/replaceCode`** over everything written, with `remap` set.
+4. **One `bpd/replaceCode`** over the edited files, with `remap` set when the map was rewritten and
+   `evenUnderALiveFrame` set.
 5. **On any refusal, put the tree back.** A tree holding code the process is not running is a tree
    that lies: bpd reads the map out of it to say which `.by` line a frame is on, and reads the
    generated python to prove a frame's code object is still in it. bpd is honest about the mismatch

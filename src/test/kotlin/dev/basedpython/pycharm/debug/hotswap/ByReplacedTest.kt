@@ -219,7 +219,7 @@ class ByReplacedTest {
         assertTrue(r.applied)
         assertTrue(r.files.single().changed.isEmpty())
         assertEquals(4, r.files.single().unchanged.size)
-        assertTrue(r.report()!!.contains("nothing needed replacing"), r.report()!!)
+        assertTrue(r.report()!!.contains("is already up to date"), r.report()!!)
     }
 
     /**
@@ -238,7 +238,7 @@ class ByReplacedTest {
     @Test
     fun `a function that moved says where from and where to`() {
         val report = parse(envelope(movedFile))!!.report()!!
-        assertTrue(report.contains("line 12 is now 13"), report)
+        assertTrue(report.contains("(now at line 13)"), report)
     }
 
     /**
@@ -271,11 +271,11 @@ class ByReplacedTest {
     }
 
     /**
-     * The map moving is the half of this a user cannot otherwise see: it happened before any
-     * `__code__` was assigned, and every `.by` line reported afterwards comes out of the new table.
+     * The map moving is read, and left out of what the user is told: it is how a `.by` reloads,
+     * not something the reload did to their program.
      */
     @Test
-    fun `a remap is reported when one happened`() {
+    fun `a remap is read and not reported`() {
         val r = parse(
             envelope(
                 appliedFile,
@@ -284,7 +284,7 @@ class ByReplacedTest {
         )!!
         assertEquals(3, r.remapped?.files)
         assertEquals(2, r.remapped?.breakpoints)
-        assertTrue(r.report()!!.contains("read the build's source map again"), r.report()!!)
+        assertFalse(r.report()!!.contains("source map"), r.report()!!)
     }
 
     /**
@@ -345,7 +345,7 @@ class ByReplacedTest {
         assertEquals(listOf(9), r.rebound)
 
         val report = r.report()!!
-        assertTrue(report.contains("read the build's source map again"), report)
-        assertTrue(report.contains("now at line 9"), report)
+        assertTrue(report.startsWith("reloaded `"), report)
+        assertTrue(report.contains("breakpoint now at line 9"), report)
     }
 }

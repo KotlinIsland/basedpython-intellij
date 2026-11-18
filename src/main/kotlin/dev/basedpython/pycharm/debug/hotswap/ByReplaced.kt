@@ -233,48 +233,29 @@ internal data class ByRebound(
 internal fun ByReplaced.report(): String? {
     if (!applied) return null
     return buildString {
-        remapped?.let {
-            append(
-                "read the build's source map again — ${it.files} file(s) in it, " +
-                    "${it.breakpoints} breakpoint(s) translated through it",
-            )
-            append('\n')
-        }
         files.joinTo(this, "\n") { it.report() }
         if (rebound.isNotEmpty()) {
-            append(
-                "\n${rebound.size} ${if (rebound.size == 1) "breakpoint" else "breakpoints"} of " +
-                    "the build bound again, now at line ${rebound.sorted().joinToString(", ")} — " +
-                    "an edit above a breakpoint means the same request names a different statement",
-            )
+            val lines = rebound.sorted().joinToString(", ")
+            append(if (rebound.size == 1) "\nbreakpoint now at line $lines" else "\nbreakpoints now at lines $lines")
         }
     }
 }
 
-/** What one file's replacement changed, as a person reads it. */
+/**
+ * One line per file: which functions now run the edit, or that the file already was the code.
+ *
+ * The source map moving under a `.by` reload is left out: it is how the reload works rather than
+ * something it did to the program, and it is in [ByReplaced.remapped] for anything that asks.
+ */
 private fun ByReplacedFile.report(): String {
     val what = file?.substringAfterLast('/') ?: "the file"
-    if (changed.isEmpty()) {
-        return "$what already was the code the process is running; nothing needed replacing"
-    }
-    return buildString {
-        append("replaced the code of ")
-        append(changed.joinToString(", ") { it.describe() })
-        append(" in $what")
-        if (unchanged.isNotEmpty()) {
-            append(
-                "; ${unchanged.size} other ${if (unchanged.size == 1) "function" else "functions"} " +
-                    "of it did not move",
-            )
-        }
-    }
+    if (changed.isEmpty()) return "$what is already up to date"
+    return "reloaded ${changed.joinToString(", ") { it.describe() }} in $what"
 }
 
-/** One replaced function, as a person reads it: what moved, from where to where, and how many held it. */
 private fun ByRebound.describe(): String = buildString {
     append('`')
     append(function)
     append('`')
-    if (wasAt != null && nowAt != null && wasAt != nowAt) append(" (line $wasAt is now $nowAt)")
-    if (objects != null && objects > 1) append(" — $objects function objects held it")
+    if (wasAt != null && nowAt != null && wasAt != nowAt) append(" (now at line $nowAt)")
 }
