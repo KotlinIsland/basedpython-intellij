@@ -61,4 +61,17 @@ class BasedPythonLanguageGeneratorTest {
         }
         assertEquals(modules, ModuleManager.getInstance(project).modules.toList())
     }
+
+    @Test
+    fun `a file already in the project's directory is the user's and is kept`() = onEdt {
+        val project = fixture.project
+        val pyproject = Path.of(project.basePath!!, "pyproject.toml")
+        Files.writeString(pyproject, "[project]\nname = \"mine\"\n")
+        LocalFileSystem.getInstance().refreshAndFindFileByNioFile(pyproject)
+
+        generator.createStep(RootNewProjectWizardStep(WizardContext(null, disposable))).setupProject(project)
+
+        assertEquals("[project]\nname = \"mine\"\n", Files.readString(pyproject))
+        assertTrue(Files.isRegularFile(Path.of(project.basePath!!, BasedPythonProjectScaffold.ENTRY_POINT)))
+    }
 }

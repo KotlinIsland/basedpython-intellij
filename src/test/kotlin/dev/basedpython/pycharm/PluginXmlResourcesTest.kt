@@ -114,9 +114,11 @@ class PluginXmlResourcesTest {
             parser.setErrorHandler(null)
             val parsed = runCatching { parser.parse(bytes.inputStream()) }
             assertTrue(parsed.isSuccess, "$name is not well-formed XML: ${parsed.exceptionOrNull()?.message}")
+            // Looked up as class files, not loaded: a descriptor's classes extend the API of the
+            // plugin it depends on, which the tests run without (PythonCore's PyV3ProjectBaseGenerator).
             val missing = Regex("""implementation="([^"]+)"""").findAll(bytes.decodeToString())
                 .map { it.groupValues[1] }
-                .filter { runCatching { Class.forName(it) }.isFailure }
+                .filter { javaClass.classLoader.getResource(it.replace('.', '/') + ".class") == null }
                 .toList()
             assertTrue(missing.isEmpty(), "$name names classes that do not exist: $missing")
         }

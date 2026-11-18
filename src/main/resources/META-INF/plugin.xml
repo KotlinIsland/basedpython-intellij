@@ -554,7 +554,8 @@
              showed basedpython twice — and which PyCharm's New Project dialog does not read. The EP
              is named, not its interface (LanguageGeneratorNewProjectWizard): an entry named after
              the interface binds to an extension point that does not exist, and the platform neither
-             fails the build nor logs an error at load. -->
+             fails the build nor logs an error at load. PyCharm's dialog gets its own generator,
+             registered in basedpython-python.xml. -->
         <newProjectWizard.languageGenerator
             implementation="dev.basedpython.pycharm.project.BasedPythonLanguageGenerator"/>
         <completion.contributor

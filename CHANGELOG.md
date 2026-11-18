@@ -1,5 +1,15 @@
 ## [Unreleased]
 
+### Added
+
+- basedpython in PyCharm's New Project dialog, in its Python group beside *Pure Python*, with the
+  interpreter choice every Python project there gets. With uv, the new environment is synced from
+  the project's `pyproject.toml` and so has `by` from the start.
+
+### Changed
+
+- A new project's files are not written over files already in its directory.
+
 ### Fixed
 
 - Enter with nothing but whitespace before the caret keeps the caret's column, as it does in a

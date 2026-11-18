@@ -1,12 +1,23 @@
 <!--
-  Loaded only when the Python plugin is present — PyCharm, or IntelliJ IDEA with the Python plugin:
-  a `.by` function's docstring stub is written in the format PyCharm's Docstring format setting
+  Loaded only when the Python plugin is present — PyCharm, or IntelliJ IDEA with the Python plugin.
+  Optional because basedpython does not need the Python plugin.
+
+  A `.by` function's docstring stub is written in the format PyCharm's Docstring format setting
   names (Settings | Tools | Python Integrated Tools), as a `.py` one is
-  (editor.smart.python.PythonDocstringFormatProvider). Optional because basedpython does not need
-  the Python plugin; without it `by` picks the format from the file's other docstrings.
+  (editor.smart.python.PythonDocstringFormatProvider); without it `by` picks the format from the
+  file's other docstrings.
+
+  basedpython in PyCharm's New Project dialog, in its Python group
+  (project.python.BasedPythonPyCharmGenerator). Its API is in PythonCore's content module
+  `intellij.python.community.impl`, which a `<depends>` on PythonCore reaches: the platform adds an
+  edge to every content module of a plugin depended on that way. IntelliJ IDEA's wizard does not
+  read this extension point, and lists basedpython from plugin.xml's `languageGenerator` instead.
 -->
 <idea-plugin>
     <extensions defaultExtensionNs="dev.basedpython.ide">
         <docstringFormat implementation="dev.basedpython.pycharm.editor.smart.python.PythonDocstringFormatProvider"/>
+    </extensions>
+    <extensions defaultExtensionNs="com.intellij">
+        <directoryProjectGenerator implementation="dev.basedpython.pycharm.project.python.BasedPythonPyCharmGenerator"/>
     </extensions>
 </idea-plugin>

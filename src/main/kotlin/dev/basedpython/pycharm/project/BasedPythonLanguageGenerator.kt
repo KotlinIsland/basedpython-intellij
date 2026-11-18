@@ -12,17 +12,19 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.roots.ModuleRootModificationUtil
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VfsUtil
-import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.ui.dsl.builder.Panel
 import com.intellij.ui.dsl.builder.bindSelected
 import dev.basedpython.pycharm.BasedPythonIcons
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import dev.basedpython.pycharm.util.BasedPythonBundle
+import java.nio.file.Files
+import java.nio.file.Path
 import javax.swing.Icon
 
 /**
  * basedpython in the New Project wizard's list of languages, beside Java and Kotlin, in IntelliJ
- * IDEA.
+ * IDEA. PyCharm's New Project dialog does not read this extension point; there it is
+ * [dev.basedpython.pycharm.project.python.BasedPythonPyCharmGenerator].
  *
  * The platform puts the steps every language shares in front of [createStep]'s — the project's name
  * and location, and Git — so what is left is [BasedPythonScaffoldStep], which writes the project
@@ -73,25 +75,15 @@ internal class BasedPythonScaffoldStep(parent: NewProjectWizardStep) : AbstractN
     override fun setupProject(project: Project) {
         if (gitData?.git == true && gitMerge.get()) BasedPythonSettings.getInstance(project).enableGitMergeIntegration = true
         val basePath = project.basePath ?: return
+        BasedPythonProjectScaffold.write(Path.of(basePath), project.name)
         val baseDir = LocalFileSystem.getInstance().refreshAndFindFileByPath(basePath) ?: return
+        VfsUtil.markDirtyAndRefresh(false, true, true, baseDir)
         WriteAction.runAndWait<Throwable> {
-            scaffoldProject(baseDir, project.name)
             if (ModuleManager.getInstance(project).modules.isEmpty()) {
                 val module = ModuleManager.getInstance(project)
                     .newModule(baseDir.toNioPath().resolve("${project.name}.iml"), GeneralModuleType.TYPE_ID)
                 ModuleRootModificationUtil.addContentRoot(module, baseDir)
             }
-        }
-    }
-
-    private fun scaffoldProject(baseDir: VirtualFile, projectName: String) {
-        for ((relativePath, content) in BasedPythonProjectScaffold.files(projectName)) {
-            val subdirectory = relativePath.substringBeforeLast('/', "")
-            val dir = if (subdirectory.isEmpty()) baseDir
-            else VfsUtil.createDirectoryIfMissing(baseDir, subdirectory) ?: continue
-            val name = relativePath.substringAfterLast('/')
-            val file = dir.findChild(name) ?: dir.createChildData(this, name)
-            VfsUtil.saveText(file, content)
         }
     }
 }
@@ -107,9 +99,30 @@ internal class BasedPythonScaffoldStep(parent: NewProjectWizardStep) : AbstractN
  */
 internal object BasedPythonProjectScaffold {
 
+    /**
+     * Writes [files] into [baseDir] on disk. A file already there is the user's and is left as it
+     * is: the directory a new project is made in need not be empty.
+     *
+     * Straight to disk rather than through the VFS, so no write action is needed: PyCharm's dialog
+     * calls its generator where a write action is refused, and the tool it then runs to make the
+     * interpreter reads the disk, not the VFS. The caller refreshes the VFS when it reads the files
+     * back through it.
+     */
+    fun write(baseDir: Path, projectName: String) {
+        for ((relativePath, content) in files(projectName)) {
+            val file = baseDir.resolve(relativePath)
+            if (Files.exists(file)) continue
+            Files.createDirectories(file.parent)
+            Files.writeString(file, content)
+        }
+    }
+
+    /** The file a new project is opened at. */
+    const val ENTRY_POINT = "src/main.by"
+
     fun files(projectName: String): Map<String, String> = linkedMapOf(
         "pyproject.toml" to pyprojectToml(projectName),
-        "src/main.by" to mainByContent(),
+        ENTRY_POINT to mainByContent(),
         ".gitignore" to gitignoreContent(),
         "README.md" to readmeContent(projectName),
     )
