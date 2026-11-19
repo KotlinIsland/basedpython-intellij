@@ -23,6 +23,7 @@ import com.intellij.platform.dap.DapExecutionUiSupport
 import com.intellij.platform.dap.DapExpressionSupport
 import com.intellij.platform.dap.DapPresentationSupport
 import com.intellij.platform.dap.DapSourcesSupport
+import com.intellij.platform.dap.DapStartDebuggingSupport
 import com.intellij.platform.dap.DapStartRequest
 import com.intellij.platform.dap.DapVirtualFileResolver
 import com.intellij.platform.dap.DebugAdapterDescriptor
@@ -32,6 +33,9 @@ import com.intellij.platform.dap.connection.DebugAdapterHandle
 import com.intellij.platform.dap.connection.DebugAdapterSocketConnection
 import com.intellij.platform.dap.xdebugger.DapXDebugProcess
 import com.intellij.platform.dap.xdebugger.DapXDebugSessionState
+import com.intellij.platform.dap.xdebugger.DapXSuspendContext
+import com.intellij.platform.dap.DapThreadState
+import com.jetbrains.dap.protocol.StopReason
 import com.intellij.xdebugger.XDebugSessionListener
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -47,6 +51,8 @@ import dev.basedpython.pycharm.actions.ByCli
 import dev.basedpython.pycharm.debug.bpd.ByBpdConnection
 import dev.basedpython.pycharm.debug.bpd.ByBpdRecord
 import dev.basedpython.pycharm.debug.bpd.ByBpdWrapper
+import dev.basedpython.pycharm.debug.bpd.ByChildSession
+import dev.basedpython.pycharm.debug.bpd.ByStartDebuggingSupport
 import dev.basedpython.pycharm.debug.bpd.ByDebugBackend
 import dev.basedpython.pycharm.debug.recompose.ByRecompositionLink
 import dev.basedpython.pycharm.debug.recompose.ByRecompositionRequests
@@ -103,6 +109,27 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
 
     private var setup: ByDebugSetup? = null
 
+    /**
+     * The child of another session's program this session takes up, when it is one
+     * ([ByStartDebuggingSupport]); null for a session the user started. Set in
+     * [configureProfileState], before anything else of the session is decided.
+     */
+    @Volatile
+    private var child: ByChildSession? = null
+
+    /** Which debugger drives this session: the setup's, or bpd for a child, which only bpd hands over. */
+    private val backend: ByDebugBackend?
+        get() = setup?.backend ?: child?.let { ByDebugBackend.BPD }
+
+    /**
+     * What answers bpd's `startDebugging` for this session's children, and so what makes the platform
+     * tell bpd in `initialize` that it can take one up.
+     */
+    private val children = ByStartDebuggingSupport(
+        parent = { bpdRecord ?: child?.parent },
+        recordFile = { setup?.infoFile ?: child?.recordFile },
+    )
+
     /** What a bpd session's wrapper recorded, once [launchDebugAdapter] has read it. */
     @Volatile
     private var bpdRecord: ByBpdRecord.Launch? = null
@@ -117,7 +144,21 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
     private var recompositionLink: ByRecompositionRequests? = null
 
     override val customization: DapCustomization = object : DapCustomization() {
-        override val executionUiSupport: DapExecutionUiSupport = ByOutputSupport { setup?.backend }
+        override val executionUiSupport: DapExecutionUiSupport = ByOutputSupport { backend }
+
+        /**
+         * Only a bpd session that bpd can be reached at a second time answers `startDebugging`: one
+         * whose adapter listens ([ByBpdRecord.Ready]), as a session here does. A session on a run
+         * target is dialled by bpd instead, and a debugpy session has no use for it; for those the
+         * platform tells the adapter it cannot take a child up, which is the truth. Read when the
+         * platform builds `initialize`, by which time [configureProfileState] has said which this is.
+         */
+        override val startDebuggingSupport: DapStartDebuggingSupport?
+            get() = when {
+                child != null -> children
+                setup?.backend == ByDebugBackend.BPD && setup?.onTarget == null -> children
+                else -> null
+            }
 
         /**
          * A session on a run target reports the target's paths — `by run`'s source maps name the
@@ -135,7 +176,7 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
          * Frames whose evaluator asks `by` which expression a position is on, [ByDapEvaluator], and
          * variables that ask it where their type is declared, [ByDapXValue].
          */
-        override val presentationSupport: DapPresentationSupport = ByPresentationSupport(project) { setup?.backend }
+        override val presentationSupport: DapPresentationSupport = ByPresentationSupport(project) { backend }
 
         /**
          * bpd's own events, bound to the client's dispatch by name. Nothing else is listened to:
@@ -182,6 +223,11 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
      * moment where the environment of a process somebody else launches can still be changed.
      */
     override fun configureProfileState(environment: ExecutionEnvironment, state: RunProfileState) {
+        // a child's process is already running, under the parent's `by run`: nothing to point at a port
+        ByStartDebuggingSupport.take(environment)?.let {
+            child = it
+            return
+        }
         val setup = ByDebugSetups.getInstance(project).take(environment.runProfile)
             ?: throw ExecutionException(BasedPythonBundle.message("debug.error.noSetup"))
         this.setup = setup
@@ -253,6 +299,16 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
         executionResult: ExecutionResult?,
         sessionId: String,
     ): DebugAdapterHandle {
+        child?.let { child ->
+            this.executionResult = executionResult
+            bpdRecord = child.parent
+            return try {
+                ByBpdConnection.child(child.parent)
+            } catch (e: ExecutionException) {
+                reportDebugStartFailure(project, e.message ?: BasedPythonBundle.message("debug.error.noSetup"), install = null)
+                throw CantRunException.CustomProcessedCantRunException()
+            }
+        }
         val setup = setup ?: throw ExecutionException(BasedPythonBundle.message("debug.error.noSetup"))
         this.executionResult = executionResult
         val processHandler = executionResult?.processHandler
@@ -365,13 +421,14 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
             // no setup at all never reached `launchDebugAdapter`, so the value is moot, and null is
             // the safe way to be wrong: it costs at most a duplicate of output the console already
             // has, and a hot reload button for a session nothing could have been reloaded in.
-            backend = setup?.backend,
+            backend = backend,
             // The *path*, not what is in it. The wrapper writes the temp directory `by run` chose
             // into this file, and `by run` has not chosen one yet when the process is built — so
             // reading it here is reading a file that does not exist. It is read when hot reload
             // asks, by which time the program is running and the record is complete.
-            recordFile = setup?.infoFile,
+            recordFile = setup?.infoFile ?: child?.recordFile,
             recompositionLink = link,
+            letsArrivalGo = child?.stopsOnEntry == false,
         ).also { process = it }
     }
 
@@ -398,23 +455,27 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
      * the session's breakpoints hold, which the handlers registered before the adapter was reached
      * ([ByBreakpointChannel]), so both are in force before the program runs a line.
      */
-    private fun startArguments(provided: Map<String, Any?>): Map<String, Any?> = when (setup?.backend) {
-        ByDebugBackend.BPD -> ByRecordedArguments {
+    private fun startArguments(provided: Map<String, Any?>): Map<String, Any?> = when {
+        // bpd wrote a child's arguments itself, out of the parent's launch; they are complete
+        child != null -> provided
+
+        setup?.backend == ByDebugBackend.BPD -> ByRecordedArguments {
             val record = bpdRecord ?: throw ExecutionException(BasedPythonBundle.message("debug.error.noSetup"))
             record.launchArguments(
                 provided,
                 watchRecompositions = ByRecompositionSession.getInstance(project).watchesFromTheStart,
-            ) + process?.breakpoints?.launchArguments().orEmpty()
+            ) + process?.breakpoints?.launchArguments().orEmpty() +
+                (DEBUG_CHILDREN to (record is ByBpdRecord.Ready && ByDebuggerSettings.getInstance().debugsChildren))
         }
 
         // the runner the bootstrap was loaded into is only known once it has reported, which is
         // also what [launchDebugAdapter] waits for before the platform can send the `attach`
-        ByDebugBackend.DEBUGPY -> ByRecordedArguments {
+        setup?.backend == ByDebugBackend.DEBUGPY -> ByRecordedArguments {
             val info = debuggee ?: throw ExecutionException(BasedPythonBundle.message("debug.error.noSetup"))
             info.attachArguments(provided)
         }
 
-        null -> provided
+        else -> provided
     }
 
     /** What a debugpy session's bootstrap reported, once [launchDebugAdapter] has read it. */
@@ -483,6 +544,14 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
 
         /** What `by run` starts the program through, in front of the interpreter it chose. */
         private const val BY_LAUNCHER_FLAG = "--launcher"
+
+        /**
+         * bpd's launch field for taking up the program's children. Sent only to an adapter that
+         * listens: bpd refuses it, and with it the whole launch, from one it cannot reach a second
+         * time ([ByBpdRecord.Ready]). A bpd from before it ignores the field and debugs the parent
+         * alone, as it always did.
+         */
+        private const val DEBUG_CHILDREN = "debugChildren"
         private const val PYDEVD_DISABLE_FILE_VALIDATION = "PYDEVD_DISABLE_FILE_VALIDATION"
 
         /** The bootstrap only writes its report once the port is open, so this is a formality. */
@@ -561,6 +630,14 @@ internal class ByDapXDebugProcess(
     val recordFile: java.nio.file.Path?,
     /** What this session's recomposition requests are sent through, and known by. */
     internal val recompositionLink: ByRecompositionLink,
+    /**
+     * Whether this session is a child's that the user did not ask to stop at its start
+     * ([ByChildSession.stopsOnEntry]). bpd holds a taken-up child and announces where it is held —
+     * `runserver`'s serving child at its interpreter's startup, before a line of Django has run — so
+     * without letting it go here, every start and every reload of the server would stop the IDE in
+     * a session with no line to show.
+     */
+    private val letsArrivalGo: Boolean = false,
 ) : DapXDebugProcess(
     session,
     dapDebugSession,
@@ -629,6 +706,28 @@ internal class ByDapXDebugProcess(
 
     /** Jump To Cursor in this session: what [ByJumpToCursorAction] asks the adapter through. */
     internal val jumps = ByJumps(session, dapDebugSession, xDebugProcessScope, backend)
+
+    /** Whether this session's first stop has been seen: the only one that can be a child's arrival. */
+    private val arrived = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    /**
+     * A child's arrival is resumed rather than shown: the first stop of a session that
+     * [letsArrivalGo], when bpd gave it DAP's `entry` reason — what it gives a child held at its
+     * startup or at the line that forked, which has run nothing of its own. Any other first stop is a
+     * breakpoint or an exception the user does want to see. By the time bpd announces it, the
+     * platform has sent the session's breakpoints and `configurationDone`, so they are bound when it
+     * runs.
+     */
+    override suspend fun applySuspendContext(context: DapXSuspendContext) {
+        if (!arrived.getAndSet(true) && letsArrivalGo && isArrival(context)) {
+            resume(context)
+            return
+        }
+        super.applySuspendContext(context)
+    }
+
+    private fun isArrival(context: DapXSuspendContext): Boolean =
+        (context.activeThread?.state as? DapThreadState.Paused)?.rawEvent?.reason == StopReason.Entry
 }
 
 /**

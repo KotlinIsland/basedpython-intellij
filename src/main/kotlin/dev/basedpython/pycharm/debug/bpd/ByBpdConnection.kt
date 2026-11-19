@@ -188,7 +188,26 @@ class ByBpdConnection private constructor(
             timeout: Duration = READY_TIMEOUT,
         ): ByBpdConnection {
             val ready = await(record, debuggee, said, timeout)
+            return connect(ready) { debuggee?.destroyProcess() }
+        }
 
+        /**
+         * A second connection to the `bpd dap --listen` a session of [parent] already speaks to, for
+         * a child of its program that bpd asked the IDE to take up (`startDebugging`, see
+         * [ByChildSession]).
+         *
+         * The parent's address and token rather than the ones the reverse request named: bpd says in
+         * the request where it listens, and it is the listener the parent connected to — one
+         * listener and one token for every session of a debuggee — so what the request names is
+         * checked against the parent's record before this is reached
+         * ([ByChildSession.parse]), and the connection is made to what the IDE already trusted.
+         * Nothing is destroyed when it fails: the program is the parent's, and its session goes on.
+         */
+        @Throws(ExecutionException::class)
+        internal suspend fun child(parent: ByBpdRecord.Ready): ByBpdConnection = connect(parent) {}
+
+        @Throws(ExecutionException::class)
+        private suspend fun connect(ready: ByBpdRecord.Ready, onFailure: () -> Unit): ByBpdConnection {
             val socket = try {
                 withContext(Dispatchers.IO) {
                     Socket().apply {
@@ -203,7 +222,7 @@ class ByBpdConnection private constructor(
                     }
                 }
             } catch (failed: IOException) {
-                debuggee?.destroyProcess()
+                onFailure()
                 throw ExecutionException(
                     BasedPythonBundle.message(
                         "debug.bpd.error.connect",

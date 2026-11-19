@@ -26,10 +26,9 @@ import kotlin.reflect.KMutableProperty0
  *    step into library scripts*, which PyCharm sends as `justMyCode` to its own DAP python
  *    sessions: `PyDebuggerSettings` is internal API, which the plugin verifier refuses, and the
  *    platform has no setting of its own for it
- *  - **no `debugChildren`**. bpd refuses it at `launch` unless the client says in `initialize`
- *    that it answers the `startDebugging` reverse request, and the platform's client says so only
- *    when a customization supplies that support, which this plugin's does not — so turning it on
- *    would refuse every session
+ *  - **no `debugChildren` on a run target**. bpd refuses it at `launch` from an adapter it cannot
+ *    be reached at a second time, and on a target bpd dials the IDE instead of listening, so it is
+ *    sent there as off ([debugsChildren])
  *  - **no `console`**. A terminal is the `runInTerminal` reverse request, refused the same way, and
  *    a `.by` program's console is the run configuration's own anyway ([ByDebugAdapterDescriptor])
  *
@@ -85,6 +84,17 @@ class ByDebuggerSettings : XDebuggerSettings<ByDebuggerSettings.State>(ID) {
          * because it runs the program's code, which can hang it or change it.
          */
         var repr: Boolean = false
+
+        /**
+         * `debugChildren`: take up each Python process the program starts as a session of its own.
+         * On, as PyCharm attaches to subprocesses by default — and unlike bpd, which defaults it off
+         * because a debugged child is held until a client takes it up, and a front end that cannot
+         * would hang the program. This IDE takes each one up as it arrives and lets it run
+         * ([dev.basedpython.pycharm.debug.bpd.ByStartDebuggingSupport]). It is what reaches the
+         * process `runserver` serves from: Django's reloader runs the server in a child and only
+         * waits on it.
+         */
+        var debugChildren: Boolean = true
     }
 
     private var state = State()
@@ -121,6 +131,9 @@ class ByDebuggerSettings : XDebuggerSettings<ByDebuggerSettings.State>(ID) {
         return mapOf("stopTheWorld" to state.stopTheWorld, "justMyCode" to state.justMyCode, "variables" to variables)
     }
 
+    /** Whether a session takes up its program's children: on a run target it is sent as off regardless. */
+    val debugsChildren: Boolean get() = state.debugChildren
+
     /** *Stepping | basedpython*: just my code. */
     private class SteppingConfigurable(private val state: State) :
         BoundConfigurable(BasedPythonBundle.message("debug.settings.displayName")) {
@@ -141,6 +154,11 @@ class ByDebuggerSettings : XDebuggerSettings<ByDebuggerSettings.State>(ID) {
                     checkBox(BasedPythonBundle.message("debug.settings.stopTheWorld"))
                         .bindSelected(state::stopTheWorld)
                         .comment(BasedPythonBundle.message("debug.settings.stopTheWorld.comment"))
+                }
+                row {
+                    checkBox(BasedPythonBundle.message("debug.settings.debugChildren"))
+                        .bindSelected(state::debugChildren)
+                        .comment(BasedPythonBundle.message("debug.settings.debugChildren.comment"))
                 }
             }
         }

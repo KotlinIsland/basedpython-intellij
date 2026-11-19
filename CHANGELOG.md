@@ -35,6 +35,11 @@
   and typing `{%`, `{{` or `{#` closes the tag around the caret.
 - Line breakpoints in django templates, on the lines a tag or a variable starts on, for bpd to stop
   on while django renders the template.
+- Debugging the child processes a program starts, each in a session of its own beside the
+  program's: `manage.py runserver` is debugged in the process that serves the requests, without
+  `--noreload`. *Settings | Build, Execution, Deployment | Debugger | Debug the child processes a
+  program starts*, on by default; bpd only, and not on a run target. A server that reloads keeps
+  one tab for its child.
 
 ### Changed
 

@@ -8,6 +8,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assumptions.assumeTrue
+import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.condition.DisabledOnOs
 import org.junit.jupiter.api.condition.OS
@@ -43,6 +44,25 @@ class ByBpdLiveSessionTest {
 
         /** The interpreter `bpd` debugs. Its own minimum is 3.13. */
         const val PYTHON = "BASEDPYTHON_PYTHON_UNDER_TEST"
+
+        /** What the child imports and runs: a module, as a view is to `runserver`'s child. */
+        val WORK = """
+            def run():
+                value = 41
+                value += 1
+                print("child", value)
+        """.trimIndent() + "\n"
+
+        /** A program that starts a Python child and waits on it, as Django's reloader does. */
+        val STARTS_A_CHILD = """
+            import subprocess
+            import sys
+
+
+            def main():
+                subprocess.run([sys.executable, "child.py"], check=True)
+                print("parent done")
+        """.trimIndent() + "\n"
     }
 
     private fun binary(variable: String): Path? = System.getenv(variable)
@@ -176,6 +196,126 @@ class ByBpdLiveSessionTest {
     }
 
     /**
+     * A child the program starts is taken up the way the IDE takes it up: bpd asks with
+     * `startDebugging`, the configuration it carries is read by [ByChildSession.parse] against the
+     * parent's record, a second connection is made with [ByBpdConnection.child], the child arrives
+     * held at its interpreter's startup — `entry`, with nothing of its own run — and once let go it
+     * runs to its end, its output on the parent's session. What `runserver` does with its reloader
+     * child, in a few lines.
+     */
+    @Test
+    fun `a child the program starts is taken up on a second connection and runs once let go`(@TempDir tempDir: Path) {
+        val dir = tempDir.toRealPath()
+        Files.writeString(dir.resolve("work.py"), WORK)
+        Files.writeString(dir.resolve("child.py"), "import work\n\nwork.run()\n")
+        Files.writeString(dir.resolve("demo.by"), STARTS_A_CHILD)
+
+        session(dir, module = "demo") { connection, _, dap ->
+            takeUpTheChild(connection, dap) { _, childDap ->
+                val arrival = childDap.until("stopped")
+                assertEquals("entry", arrival.body?.get("reason")?.asString, "a taken-up child is announced where it is held: $arrival")
+                childDap.request("continue", mapOf("threadId" to arrival.body!!.get("threadId").asInt))
+                childDap.until("terminated")
+            }
+            dap.until("terminated")
+            val printed = dap.seen.filter { it.event == "output" }.mapNotNull { it.body?.get("output")?.asString }
+            assertTrue(printed.any { "child 42" in it }, "the child ran, and its output is the parent's session's: $printed")
+            assertTrue(printed.any { "parent done" in it }, "the parent ran on once its child had finished: $printed")
+        }
+    }
+
+    /**
+     * A breakpoint in the project's own file stops the child that imports it. Not yet: `by run`
+     * runs the program from a staged copy of the project, and bpd translates a session it launched
+     * through `by run`'s source map but not one it took up, so the child loads the copy and a
+     * breakpoint on the project's file never binds there — measured, with this test stopping at the
+     * same line once the breakpoint is set on the copy instead. The fix is bpd's (a taken-up session
+     * reads the map its parent read) or `by run`'s (staging what it does not transpile as links).
+     */
+    @Test
+    @Disabled("bpd does not translate a taken-up session through by run's source map; see the doc")
+    fun `a breakpoint in a project file stops the child that imports it`(@TempDir tempDir: Path) {
+        val dir = tempDir.toRealPath()
+        val work = dir.resolve("work.py")
+        Files.writeString(work, WORK)
+        Files.writeString(dir.resolve("child.py"), "import work\n\nwork.run()\n")
+        Files.writeString(dir.resolve("demo.by"), STARTS_A_CHILD)
+
+        session(dir, module = "demo") { connection, _, dap ->
+            takeUpTheChild(connection, dap, breakpoint = work to 3) { _, childDap ->
+                val arrival = childDap.until("stopped")
+                childDap.request("continue", mapOf("threadId" to arrival.body!!.get("threadId").asInt))
+                val hit = childDap.until("stopped")
+                assertEquals("breakpoint", hit.body?.get("reason")?.asString, "$hit")
+                val thread = hit.body!!.get("threadId").asInt
+                val top = childDap.request("stackTrace", mapOf("threadId" to thread))
+                    .getAsJsonObject("body").getAsJsonArray("stackFrames")[0].asJsonObject
+                assertEquals(work.toString(), top.getAsJsonObject("source").get("path").asString, "$top")
+                assertEquals(3, top.get("line").asInt, "$top")
+                childDap.request("continue", mapOf("threadId" to thread))
+                childDap.until("terminated")
+            }
+        }
+    }
+
+    /**
+     * The parent launched with `debugChildren`, bpd's `startDebugging` answered and read by
+     * [ByChildSession.parse], and the child's session opened on a second connection in the
+     * platform's order — [breakpoint], `configurationDone`, then the `attach` bpd's configuration
+     * asks for — before [body] drives it.
+     */
+    private fun takeUpTheChild(
+        connection: ByBpdConnection,
+        dap: Dap,
+        breakpoint: Pair<Path, Int>? = null,
+        body: (ByChildSession, Dap) -> Unit,
+    ) {
+        dap.request(
+            "initialize",
+            mapOf("adapterID" to "basedpython", "linesStartAt1" to true, "pathFormat" to "path", "supportsStartDebuggingRequest" to true),
+        )
+        dap.until("initialized")
+        dap.request("configurationDone", emptyMap())
+        val launched = dap.request(
+            "launch",
+            connection.record.launchArguments(mapOf("stopOnEntry" to false), watchRecompositions = false) + ("debugChildren" to true),
+        )
+        assertTrue(launched.get("success").asBoolean, "bpd would not launch with debugChildren: $launched")
+
+        val asked = dap.reverse("startDebugging")
+        val arguments = asked.json.getAsJsonObject("arguments")
+        assertEquals("attach", arguments.get("request").asString, "$asked")
+        val configuration = kotlinx.serialization.json.Json.parseToJsonElement(arguments.getAsJsonObject("configuration").toString())
+            as kotlinx.serialization.json.JsonObject
+        val parsed = ByChildSession.parse(configuration, connection.record, recordFile = null)
+        assertTrue(parsed is ByChildSession.Parsed.Child, "the plugin refused bpd's own request: $parsed")
+        val child = (parsed as ByChildSession.Parsed.Child).session
+        dap.answer(asked)
+
+        val second = runBlocking { ByBpdConnection.child(child.parent) }
+        val reader = Executors.newSingleThreadExecutor()
+        try {
+            val childDap = Dap(second, reader)
+            childDap.request("initialize", mapOf("adapterID" to "basedpython", "linesStartAt1" to true, "pathFormat" to "path"))
+            childDap.until("initialized")
+            breakpoint?.let { (file, line) ->
+                val set = childDap.request(
+                    "setBreakpoints",
+                    mapOf("source" to mapOf("path" to file.toString()), "breakpoints" to listOf(mapOf("line" to line))),
+                )
+                assertTrue(set.get("success").asBoolean, "$set")
+            }
+            childDap.request("configurationDone", emptyMap())
+            val attached = childDap.request("attach", child.configuration)
+            assertTrue(attached.get("success").asBoolean, "bpd would not take the child up: $attached")
+            body(child, childDap)
+        } finally {
+            reader.shutdownNow()
+            runBlocking { second.disconnect() }
+        }
+    }
+
+    /**
      * `by run` of [module] in [dir] through the real wrapper, connected with [ByBpdConnection], and
      * [body] run against it. Skips unless both binaries are named.
      */
@@ -254,6 +394,26 @@ class ByBpdLiveSessionTest {
 
         /** The next event named [event] not already taken, waiting for it if it has not come. */
         fun until(event: String): Message = next { it.event == event }
+
+        /** The next reverse request — the adapter asking the client — named [command]. */
+        fun reverse(command: String): Message =
+            next { it.type == "request" && it.json.get("command")?.asString == command }
+
+        /** Answer a reverse request with success and no body, as the platform answers `startDebugging`. */
+        fun answer(request: Message) {
+            val body = Gson().toJson(
+                mapOf(
+                    "seq" to seq++,
+                    "type" to "response",
+                    "request_seq" to request.json.get("seq").asInt,
+                    "success" to true,
+                    "command" to request.json.get("command").asString,
+                ),
+            ).toByteArray(StandardCharsets.UTF_8)
+            connection.output.write("Content-Length: ${body.size}\r\n\r\n".toByteArray(StandardCharsets.US_ASCII))
+            connection.output.write(body)
+            connection.output.flush()
+        }
 
         private fun next(wanted: (Message) -> Boolean): Message {
             while (true) {
