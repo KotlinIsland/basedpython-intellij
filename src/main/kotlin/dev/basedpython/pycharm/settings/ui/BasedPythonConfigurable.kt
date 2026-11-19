@@ -1,7 +1,5 @@
 package dev.basedpython.pycharm.settings.ui
 
-import com.intellij.codeInsight.daemon.DaemonCodeAnalyzer
-import com.intellij.codeInsight.daemon.impl.InlayHintsPassFactoryInternal
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.options.BoundConfigurable
 import com.intellij.openapi.project.Project
@@ -28,9 +26,8 @@ import dev.basedpython.pycharm.lang.dialect.ProjectKind
 import dev.basedpython.pycharm.lang.dialect.PyFileHandling
 import dev.basedpython.pycharm.lsp.BasedPythonBinaries
 import dev.basedpython.pycharm.lsp.diagnostics.ByProjectDiagnostics
-import dev.basedpython.pycharm.lsp.inlay.ByHintKind
 import dev.basedpython.pycharm.lsp.inlay.ByHintMode
-import dev.basedpython.pycharm.lsp.inlay.ByPushKey
+import dev.basedpython.pycharm.lsp.inlay.ByInlayCatalog
 import dev.basedpython.pycharm.lsp.reload.BasedPythonLspReloader
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import dev.basedpython.pycharm.settings.BasedPythonSettingsEffects
@@ -243,37 +240,31 @@ internal class BasedPythonConfigurable(private val project: Project) :
     }
 
     /**
-     * One mode per kind of hint `by` sends: off, always, or only while the push key is held.
+     * What the hints are set to, in one line, and the way to the page that sets them.
      *
-     * Collapsed: two dozen rows that most people set once, and the same checkboxes, without the
-     * push-key mode, are on Editor | Inlay Hints. "Set all" is for the common wish of one mode for
-     * every kind.
+     * The page of its own ([ByInlayHintsConfigurable]) because each kind there has a description and a
+     * preview, which two dozen rows of drop-downs here had neither of.
      */
     private fun Panel.inlayHintsGroup() {
-        val s = settings
-        val combos = mutableMapOf<ByHintKind, ComboBox<ByHintMode>>()
-        collapsibleGroup("Inlay hints") {
-            row("Push key:") {
-                comboBox(ByPushKey.entries, textListCellRenderer("") { it.display })
-                    .bindItem({ s.inlayPushKey }, { s.inlayPushKey = it ?: ByPushKey.CTRL_ALT })
-                    .comment("Hold it to see the hints set to show while it is held.", maxLineLength = WRAP)
+        group("Inlay hints") {
+            row {
+                comment(inlaySummary(), maxLineLength = WRAP)
             }
-            row("Set all to:") {
-                for (mode in ByHintMode.entries) {
-                    link(mode.display) { combos.values.forEach { it.selectedItem = mode } }
-                }
-            }
-            for (kind in ByHintKind.entries) {
-                row("${kind.display}:") {
-                    val combo = comboBox(ByHintMode.entries, textListCellRenderer("") { it.display })
-                        .bindItem({ s.inlayMode(kind) }, { s.setInlayMode(kind, it ?: ByHintMode.ALWAYS) })
-                    if (kind == ByHintKind.OTHER) {
-                        combo.comment("Kinds not listed above, and every hint from an older by.", maxLineLength = WRAP)
-                    }
-                    combos[kind] = combo.component
-                }
+            row {
+                link("Configure inlay hints…") { e -> selectInSettings(e.source as? java.awt.Component, ByInlayHintsConfigurable.ID) }
             }
         }
+    }
+
+    private fun inlaySummary(): String {
+        val kinds = ByInlayCatalog.getInstance().catalog?.sourceKinds.orEmpty()
+        if (kinds.isEmpty()) return "by names its kinds of hint when it starts, which it has not in this IDE yet."
+        val counts = kinds.groupingBy { settings.inlayMode(it.kind) }.eachCount()
+        return listOfNotNull(
+            counts[ByHintMode.ALWAYS]?.let { "$it always shown" },
+            counts[ByHintMode.ON_PUSH]?.let { "$it while ${settings.inlayPushKey.display} is held" },
+            counts[ByHintMode.NEVER]?.let { "$it off" },
+        ).joinToString(", ", postfix = ".")
     }
 
     override fun reset() {
@@ -288,8 +279,6 @@ internal class BasedPythonConfigurable(private val project: Project) :
         val projectDiagnostics = s.byProjectDiagnostics
         val dataFlow = s.debuggerDataFlow
         val recompositions = s.debuggerRecompositions
-        val inlay = inlaySnapshot()
-
         super.apply()
 
         // Off must take what a stopped session drew down now: the pass that would have removed it
@@ -298,29 +287,9 @@ internal class BasedPythonConfigurable(private val project: Project) :
         if (s.debuggerDataFlow != dataFlow) ByDataFlowSession.getInstance(project).settingChanged()
         if (s.debuggerRecompositions != recompositions) ByRecompositionSession.getInstance(project).settingChanged()
         BasedPythonSettingsEffects.announce(project, before)
-        if (inlaySnapshot() != inlay) redrawInlayHints()
         BasedPythonLspReloader.getInstance(project).onSettingsChanged()
         byBinary.refresh()
         buffBinary.refresh()
-    }
-
-    private fun inlaySnapshot(): Pair<Map<ByHintKind, ByHintMode>, ByPushKey> {
-        val s = settings
-        return ByHintKind.entries.associateWith { s.inlayMode(it) } to s.inlayPushKey
-    }
-
-    /**
-     * Re-collect the inlay hints of every open editor, so a changed mode is visible on Apply.
-     *
-     * A plain daemon restart is not enough: the platform's inlay pass keeps the PSI modification
-     * stamp it last ran against and declines to build a pass at all when the file has not changed
-     * since, which is precisely the case here — the file is the same, the settings are not.
-     * [InlayHintsPassFactoryInternal.forceHintsUpdateOnNextPass] clears that stamp; without it a
-     * changed mode would take effect on the next keystroke instead.
-     */
-    private fun redrawInlayHints() {
-        InlayHintsPassFactoryInternal.forceHintsUpdateOnNextPass()
-        DaemonCodeAnalyzer.getInstance(project).restart("basedpython inlay hint settings applied")
     }
 
     override fun disposeUIResources() {

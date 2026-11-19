@@ -68,40 +68,48 @@ enum class ByHintMode(val id: String, val display: String) {
 /**
  * The mode every kind of hint is on — the settings as the rest of the plugin reads them.
  *
- * One value rather than a parameter per kind, because the kinds are `by`'s list and it grows: a
- * kind the server adds is one enum entry here, not another argument threaded through the provider,
- * the collector and every test that builds one.
+ * Keyed by `by`'s name for each kind ([ByHintKind.setting]). A kind with no mode of its own is
+ * [ByHintMode.ALWAYS], which is also what `by` does with a kind it is not told about, so a kind the
+ * server adds is on in both until somebody says otherwise.
+ *
+ * [known] is the kinds the server is known to have ([ByInlayCatalog]), which is what decides whether
+ * anything is worth asking for at all; empty when no catalog has been seen, and then something is.
  */
-class ByHintModes(private val modes: Map<ByHintKind, ByHintMode>) {
+class ByHintModes(
+    private val modes: Map<String, ByHintMode>,
+    private val known: Collection<String> = emptyList(),
+) {
 
-    operator fun get(kind: ByHintKind): ByHintMode = modes[kind] ?: ByHintMode.ALWAYS
+    operator fun get(kind: ByHintKind): ByHintMode = modes[kind.setting] ?: ByHintMode.ALWAYS
 
     /** Whether anything at all is worth asking `by` for. */
-    val anyCollected: Boolean get() = ByHintKind.entries.any { this[it].isCollected }
+    val anyCollected: Boolean
+        get() = known.isEmpty() || known.any { this[ByHintKind(it)].isCollected } || modes.values.any { it.isCollected }
 
     /**
-     * What to send `by` as its `inlayHints` options: every kind it knows a name for, on unless the
-     * setting says never.
+     * What to send `by` as its `inlayHints` options: each kind that has a mode, on unless it is never.
      *
      * "Never" is the one mode the server can enforce itself, and enforcing it there means the hint
      * is not computed rather than computed and dropped. The other two both need the hint, since an
-     * on-push hint is drawn from an inlay that was built before the key went down.
+     * on-push hint is drawn from an inlay that was built before the key went down. A kind with no
+     * mode is left out, which `by` reads as on.
+     *
+     * Only the kinds [known] names, once a catalog has been seen: `by` reports an option it does not
+     * have back to the user as unknown, and a settings file can hold a name an older `by` used.
      */
-    fun serverOptions(): Map<String, Boolean> = ByHintKind.entries
-        .mapNotNull { kind -> kind.option?.let { it to (this[kind] != ByHintMode.NEVER) } }
-        .toMap()
+    fun serverOptions(): Map<String, Boolean> =
+        modes.filterKeys { it.isNotEmpty() && (known.isEmpty() || it in known) }
+            .mapValues { (_, mode) -> mode != ByHintMode.NEVER }
 
     override fun equals(other: Any?): Boolean =
-        this === other || (other is ByHintModes && ByHintKind.entries.all { this[it] == other[it] })
+        this === other || (other is ByHintModes && (modes.keys + other.modes.keys).all { this[ByHintKind(it)] == other[ByHintKind(it)] })
 
-    override fun hashCode(): Int = ByHintKind.entries.map { this[it] }.hashCode()
+    override fun hashCode(): Int = modes.filterValues { it != ByHintMode.ALWAYS }.hashCode()
 
-    override fun toString(): String =
-        ByHintKind.entries.joinToString(prefix = "ByHintModes(", postfix = ")") { "${it.name}=${this[it]}" }
+    override fun toString(): String = modes.entries.joinToString(prefix = "ByHintModes(", postfix = ")") { "${it.key}=${it.value}" }
 
     companion object {
-        /** Every kind on the same mode — what a test usually wants. */
-        fun all(mode: ByHintMode): ByHintModes =
-            ByHintModes(ByHintKind.entries.associateWith { mode })
+        /** Every kind in [kinds] on the same mode — what a test usually wants. */
+        fun all(mode: ByHintMode, kinds: Collection<String>): ByHintModes = ByHintModes(kinds.associateWith { mode }, kinds)
     }
 }

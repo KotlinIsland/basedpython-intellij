@@ -174,6 +174,7 @@ private class ByInlayHintsCollector(
             Unit
         }
         val thread = Thread.currentThread().name
+        val catalog = ByInlayCatalog.getInstance()
         val collected = ArrayList<ByInlayAudit.Collected>(hints.size)
         // Every hint that was built, by the offset it sits at, so that the alignment pass below can
         // find the ones standing at the end of an assignment's target. Keyed by offset and holding a
@@ -212,7 +213,7 @@ private class ByInlayHintsCollector(
             val tooltip = ByInlayHints.tooltipOf(hint) ?: label.takeIf { it != text }
             sink.addInlineElement(
                 offset,
-                kind.relatesToPrecedingText,
+                catalog.relatesToPrecedingText(kind),
                 tooltip?.let { factory.withTooltip(it, presentation) } ?: presentation,
                 false,
             )

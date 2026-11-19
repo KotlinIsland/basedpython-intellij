@@ -11,6 +11,7 @@ import dev.basedpython.pycharm.debug.bpd.ByDebugBackend
 import dev.basedpython.pycharm.lsp.inlay.ByHintKind
 import dev.basedpython.pycharm.lsp.inlay.ByHintMode
 import dev.basedpython.pycharm.lsp.inlay.ByHintModes
+import dev.basedpython.pycharm.lsp.inlay.ByInlayCatalog
 import dev.basedpython.pycharm.lsp.inlay.ByPushKey
 
 /**
@@ -158,6 +159,11 @@ class BasedPythonSettings : PersistentStateComponent<BasedPythonSettings.State> 
   override fun getState(): State = state
   override fun loadState(loaded: State) {
     XmlSerializerUtil.copyBean(loaded, state)
+    // Return-type hints were stored under the plugin's name for them, which was never `by`'s: the
+    // setting switched nothing, since `by` tags them, and reads its option as, `returnTypes`.
+    state.inlayHintModes.remove("inferredReturnTypes")?.let { state.inlayHintModes.putIfAbsent("returnTypes", it) }
+    // The catch-all for kinds the plugin did not know, which it no longer has: every kind is `by`'s.
+    state.inlayHintModes.remove("other")
   }
 
   var byPath: String?
@@ -223,10 +229,11 @@ class BasedPythonSettings : PersistentStateComponent<BasedPythonSettings.State> 
    * the modes existed said.
    */
   fun inlayMode(kind: ByHintKind): ByHintMode =
-    ByHintMode.resolve(state.inlayHintModes[kind.settingsKey], legacyInlayMode(kind))
+    ByHintMode.resolve(state.inlayHintModes[kind.setting], legacyInlayMode(kind))
 
   fun setInlayMode(kind: ByHintKind, mode: ByHintMode) {
-    state.inlayHintModes[kind.settingsKey] = mode.id
+    if (kind.isUntagged) return
+    state.inlayHintModes[kind.setting] = mode.id
   }
 
   /**
@@ -237,11 +244,19 @@ class BasedPythonSettings : PersistentStateComponent<BasedPythonSettings.State> 
    * the second, whatever they actually were.
    */
   private fun legacyInlayMode(kind: ByHintKind): ByHintMode =
-    ByHintMode.of(if (kind.parameterHint) state.inlayParameterHints else state.inlayTypeHints)
+    ByHintMode.of(if (kind.setting in LEGACY_PARAMETER_HINTS) state.inlayParameterHints else state.inlayTypeHints)
 
-  /** Every kind's mode at once, which is how the hints collector and the server config read them. */
+  /**
+   * Every kind's mode at once, which is how the hints collector and the server config read them: each
+   * kind that has a mode, and each the last catalog named, so a kind that only the legacy toggles
+   * switched off is still off.
+   */
   val inlayModes: ByHintModes
-    get() = ByHintModes(ByHintKind.entries.associateWith { inlayMode(it) })
+    get() {
+      val known = ByInlayCatalog.getInstance().catalog?.sourceKinds.orEmpty().map { it.setting }
+      val keys = (known + state.inlayHintModes.keys + LEGACY_PARAMETER_HINTS).filter { it.isNotEmpty() }.toSet()
+      return ByHintModes(keys.associateWith { inlayMode(ByHintKind(it)) }, known)
+    }
 
   var inlayPushKey: ByPushKey
     get() = ByPushKey.fromId(state.inlayPushKey)
@@ -332,6 +347,14 @@ class BasedPythonSettings : PersistentStateComponent<BasedPythonSettings.State> 
     get() = dev.basedpython.pycharm.settings.app.BasedPythonDefaults.effectiveBuffExtraArgs(state.buffExtraArgs)
 
   companion object {
+    /**
+     * The kinds the old "parameter hints" toggle covered — the ones `by` sends as LSP parameters — so
+     * a settings file from before the per-kind modes carries over; every other kind was a "type hint".
+     */
+    private val LEGACY_PARAMETER_HINTS = setOf(
+      "callArgumentNames", "implicitParameters", "implicitSelf", "implicitArguments", "inheritedParameterDefaults",
+    )
+
     @JvmStatic
     fun getInstance(project: Project): BasedPythonSettings = project.service()
   }

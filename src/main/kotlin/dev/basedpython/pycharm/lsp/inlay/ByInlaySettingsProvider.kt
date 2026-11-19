@@ -21,7 +21,8 @@ import javax.swing.JComponent
 
 /**
  * basedpython on *Settings | Editor | Inlay Hints*: one entry, its checkbox the language's switch for
- * every hint, and under it one option for each kind of hint `by` computes ([ByHintKind]).
+ * every hint, and under it one option for each kind of hint `by` computes, as its catalog names them
+ * ([ByInlayCatalog]) — none until a `by` has started once, when the link is all there is.
  *
  * The options are the very settings *Settings | basedpython | Inlay hints* shows, read and written
  * there and nowhere else, so the two pages cannot disagree: an option is checked when its kind is
@@ -30,8 +31,8 @@ import javax.swing.JComponent
  * unchecked. Which kinds wait for the push key, and the key, are on basedpython's page, which the
  * entry links to: the platform's page has a checkbox per option, not a choice of three.
  *
- * No preview: the hints are `by`'s answer about a file of the project, and the page's preview is a
- * file no server has.
+ * No preview here: the page's preview is a file no server has. basedpython's own Inlay Hints page
+ * previews each kind with the example and hints `by` gives in its catalog.
  */
 internal class ByInlaySettingsProvider : InlaySettingsProvider {
 
@@ -46,6 +47,9 @@ internal class ByInlaySettingsModel(private val project: Project) :
     InlayProviderSettingsModel(InlayHintsSettings.instance().hintsEnabled(BasedPythonLanguage), ID, BasedPythonLanguage) {
 
     private val settings get() = BasedPythonSettings.getInstance(project)
+
+    /** The kinds `by` named last; read once, so the cases and the maps below agree. */
+    private val kinds: List<ByHintKindInfo> = ByInlayCatalog.getInstance().catalog?.sourceKinds.orEmpty()
 
     /** The mode of each kind as the page has it now, applied on Apply. */
     private val modes = HashMap<ByHintKind, ByHintMode>()
@@ -83,7 +87,13 @@ internal class ByInlaySettingsModel(private val project: Project) :
                         if (dialog != null && page != null) {
                             dialog.select(page)
                         } else {
-                            ShowSettingsUtil.getInstance().showSettingsDialog(project, BasedPythonBundle.message("inlay.settings.configurable"))
+                            ShowSettingsUtil.getInstance().showSettingsDialog(
+                                project,
+                                java.util.function.Predicate<com.intellij.openapi.options.Configurable> {
+                                    (it as? com.intellij.openapi.options.SearchableConfigurable)?.id == CONFIGURABLE_ID
+                                },
+                                null,
+                            )
                         }
                     },
                 )
@@ -91,10 +101,11 @@ internal class ByInlaySettingsModel(private val project: Project) :
         }
     }
 
-    override val cases: List<ImmediateConfigurable.Case> = ByHintKind.entries.map { kind ->
+    override val cases: List<ImmediateConfigurable.Case> = kinds.map { info ->
+        val kind = info.kind
         ImmediateConfigurable.Case(
-            kind.display,
-            kind.option ?: kind.name,
+            info.title,
+            info.setting,
             { modes[kind]?.isCollected == true },
             { checked ->
                 modes[kind] = if (checked) shownAs[kind] ?: ByHintMode.ALWAYS else ByHintMode.NEVER
@@ -105,19 +116,19 @@ internal class ByInlaySettingsModel(private val project: Project) :
 
     override fun isModified(): Boolean =
         isEnabled != InlayHintsSettings.instance().hintsEnabled(BasedPythonLanguage) ||
-            ByHintKind.entries.any { modes[it] != settings.inlayMode(it) }
+            kinds.any { modes[it.kind] != settings.inlayMode(it.kind) }
 
     override fun apply() {
         InlayHintsSettings.instance().setHintsEnabledForLanguage(BasedPythonLanguage, isEnabled)
-        if (ByHintKind.entries.none { modes[it] != settings.inlayMode(it) }) return
-        for (kind in ByHintKind.entries) settings.setInlayMode(kind, modes.getValue(kind))
+        if (kinds.none { modes[it.kind] != settings.inlayMode(it.kind) }) return
+        for (info in kinds) settings.setInlayMode(info.kind, modes.getValue(info.kind))
         // which kinds `by` computes is read at start, from the modes
         BasedPythonLspReloader.getInstance(project).onSettingsChanged()
     }
 
     override fun reset() {
         isEnabled = InlayHintsSettings.instance().hintsEnabled(BasedPythonLanguage)
-        for (kind in ByHintKind.entries) {
+        for (kind in kinds.map { it.kind }) {
             val mode = settings.inlayMode(kind)
             modes[kind] = mode
             if (mode.isCollected) shownAs[kind] = mode
@@ -127,7 +138,7 @@ internal class ByInlaySettingsModel(private val project: Project) :
     companion object {
         const val ID = "basedpython.inlay.kinds"
 
-        /** basedpython's own settings page, which has each kind's three modes and the push key. */
-        private const val CONFIGURABLE_ID = "dev.basedpython.pycharm.settings"
+        /** basedpython's own Inlay Hints page, which has each kind's three modes and the push key. */
+        private const val CONFIGURABLE_ID = "dev.basedpython.pycharm.settings.inlayHints"
     }
 }

@@ -216,6 +216,13 @@
             key="modules.page.title"
             bundle="messages.BasedPythonBundle"
             provider="dev.basedpython.pycharm.env.modules.ModulesConfigurableProvider"/>
+        <!-- Every kind of inlay hint by computes, grouped, described and previewed as by's catalog
+             says, each never, always or while the push key is held. See settings.ui.ByInlayHintsConfigurable. -->
+        <projectConfigurable
+            parentId="dev.basedpython.pycharm.settings"
+            id="dev.basedpython.pycharm.settings.inlayHints"
+            displayName="Inlay Hints"
+            provider="dev.basedpython.pycharm.settings.ui.ByInlayHintsConfigurableProvider"/>
         <statusBarWidgetFactory
             id="dev.basedpython.pycharm.statusbar"
             implementation="dev.basedpython.pycharm.statusbar.BasedPythonStatusBarWidgetFactory"/>
@@ -950,6 +957,11 @@
         <!-- Each rule by checks as an inspection, named by by/rules when by starts. -->
         <listener
             class="dev.basedpython.pycharm.inspections.rules.ByRuleRefresh"
+            topic="dev.basedpython.pycharm.lsp.ByLspLifecycleListener"/>
+        <!-- The kinds of inlay hint by computes, named by by/inlayHintCatalog when by starts, which
+             the Inlay Hints settings page is built from; see lsp.inlay.ByInlayCatalog. -->
+        <listener
+            class="dev.basedpython.pycharm.lsp.inlay.ByInlayCatalogRefresh"
             topic="dev.basedpython.pycharm.lsp.ByLspLifecycleListener"/>
         <!-- Git merge integration, asked about once by runs and again when the project's version
              control mappings change; see vcs.ByGitMergeOffers. -->

@@ -125,8 +125,8 @@ class ByInlayHintsTest {
 
     @Test
     fun `a hint is filed under the option by tags it with`() {
-        for (kind in ByHintKind.entries.filter { it.option != null }) {
-            assertEquals(kind, ByInlayHints.kindOf(tagged(kind.option!!)), kind.option)
+        for (kind in TEST_HINT_KINDS) {
+            assertEquals(kind, ByInlayHints.kindOf(tagged(kind.setting)), kind.setting)
         }
     }
 
@@ -137,17 +137,17 @@ class ByInlayHintsTest {
      */
     @Test
     fun `the label plays no part in which kind a hint is`() {
-        assertEquals(ByHintKind.REVEALED_TYPES, ByInlayHints.kindOf(tagged("revealedTypes", "list[int]")))
-        assertEquals(ByHintKind.REVEALED_TYPES, ByInlayHints.kindOf(tagged("revealedTypes", "1")))
-        assertEquals(ByHintKind.CALL_TYPE_ARGUMENTS, ByInlayHints.kindOf(tagged("callTypeArguments", "[int]")))
-        assertEquals(ByHintKind.INFERRED_RETURN_TYPES, ByInlayHints.kindOf(tagged("inferredReturnTypes", "-> int")))
-        assertEquals(ByHintKind.ENUM_VALUES, ByInlayHints.kindOf(tagged("enumValues", "1")))
-        assertEquals(ByHintKind.INHERITED_PARAMETER_DEFAULTS, ByInlayHints.kindOf(tagged("inheritedParameterDefaults", "=1")))
-        assertEquals(ByHintKind.PROPERTY_TYPES, ByInlayHints.kindOf(tagged("propertyTypes", ": int")))
+        assertEquals(ByHintKind("revealedTypes"), ByInlayHints.kindOf(tagged("revealedTypes", "list[int]")))
+        assertEquals(ByHintKind("revealedTypes"), ByInlayHints.kindOf(tagged("revealedTypes", "1")))
+        assertEquals(ByHintKind("callTypeArguments"), ByInlayHints.kindOf(tagged("callTypeArguments", "[int]")))
+        assertEquals(ByHintKind("returnTypes"), ByInlayHints.kindOf(tagged("returnTypes", "-> int")))
+        assertEquals(ByHintKind("enumValues"), ByInlayHints.kindOf(tagged("enumValues", "1")))
+        assertEquals(ByHintKind("inheritedParameterDefaults"), ByInlayHints.kindOf(tagged("inheritedParameterDefaults", "=1")))
+        assertEquals(ByHintKind("propertyTypes"), ByInlayHints.kindOf(tagged("propertyTypes", ": int")))
     }
 
     @Test
-    fun `an untagged hint is other, whatever its LSP kind or label`() {
+    fun `an untagged hint is untagged, whatever its LSP kind or label`() {
         val untagged = listOf(
             textHint("  revealed: int", InlayHintKind.Type),
             textHint(": int", InlayHintKind.Type),
@@ -156,22 +156,17 @@ class ByInlayHintsTest {
             textHint("raises ValueError"),
         )
         for (hint in untagged) {
-            assertEquals(ByHintKind.OTHER, ByInlayHints.kindOf(hint), ByInlayHints.labelOf(hint))
+            assertEquals(ByHintKind.UNTAGGED, ByInlayHints.kindOf(hint), ByInlayHints.labelOf(hint))
         }
     }
 
     @Test
-    fun `a kind from a newer by, or a tag that is not a name, is other`() {
-        assertEquals(ByHintKind.OTHER, ByInlayHints.kindOf(tagged("borrowChecks")))
-        assertEquals(ByHintKind.OTHER, ByInlayHints.kindOf(tagged(JsonPrimitive(3))))
-        assertEquals(ByHintKind.OTHER, ByInlayHints.kindOf(tagged(null)))
-        assertEquals(ByHintKind.OTHER, ByInlayHints.kindOf(textHint("int").also { it.data = JsonPrimitive("revealedTypes") }))
-    }
-
-    @Test
-    fun `other is the only kind no by option names`() {
-        assertEquals(listOf(ByHintKind.OTHER), ByHintKind.entries.filter { it.option == null })
-        assertEquals(ByHintKind.OTHER, ByHintKind.ofOption("other"), "the catch-all's settings key is not a tag")
+    fun `a kind this plugin has never heard of is still that kind, and a tag that is not a name is untagged`() {
+        // the kinds are by's: one it added after this plugin was built is configurable by its name
+        assertEquals(ByHintKind("borrowChecks"), ByInlayHints.kindOf(tagged("borrowChecks")))
+        assertEquals(ByHintKind.UNTAGGED, ByInlayHints.kindOf(tagged(JsonPrimitive(3))))
+        assertEquals(ByHintKind.UNTAGGED, ByInlayHints.kindOf(tagged(null)))
+        assertEquals(ByHintKind.UNTAGGED, ByInlayHints.kindOf(textHint("int").also { it.data = JsonPrimitive("revealedTypes") }))
     }
 
     // endregion
@@ -221,34 +216,37 @@ class ByInlayHintsTest {
     fun `each kind reads only its own mode`() {
         val modes = ByHintModes(
             mapOf(
-                ByHintKind.VARIABLE_TYPES to ByHintMode.ON_PUSH,
-                ByHintKind.CALL_ARGUMENT_NAMES to ByHintMode.ALWAYS,
-                ByHintKind.INFERRED_RAISES to ByHintMode.NEVER,
+                "variableTypes" to ByHintMode.ON_PUSH,
+                "callArgumentNames" to ByHintMode.ALWAYS,
+                "inferredRaises" to ByHintMode.NEVER,
             ),
         )
-        assertEquals(ByHintMode.ON_PUSH, modes[ByHintKind.VARIABLE_TYPES])
-        assertEquals(ByHintMode.ALWAYS, modes[ByHintKind.CALL_ARGUMENT_NAMES])
-        assertEquals(ByHintMode.NEVER, modes[ByHintKind.INFERRED_RAISES])
-        assertEquals(ByHintMode.ALWAYS, modes[ByHintKind.OTHER], "an unset kind is on")
+        assertEquals(ByHintMode.ON_PUSH, modes[ByHintKind("variableTypes")])
+        assertEquals(ByHintMode.ALWAYS, modes[ByHintKind("callArgumentNames")])
+        assertEquals(ByHintMode.NEVER, modes[ByHintKind("inferredRaises")])
+        assertEquals(ByHintMode.ALWAYS, modes[ByHintKind("enumValues")], "an unset kind is on, as by has it")
+        assertEquals(ByHintMode.ALWAYS, modes[ByHintKind.UNTAGGED], "a hint from a by without tags is on")
     }
 
     @Test
-    fun `nothing is collected only when every kind is off`() {
-        assertFalse(ByHintModes.all(ByHintMode.NEVER).anyCollected)
-        assertTrue(ByHintModes.all(ByHintMode.ON_PUSH).anyCollected)
+    fun `nothing is collected only when every kind by has is off`() {
+        assertFalse(ByHintModes.all(ByHintMode.NEVER, TEST_HINT_SETTINGS).anyCollected)
+        assertTrue(ByHintModes.all(ByHintMode.ON_PUSH, TEST_HINT_SETTINGS).anyCollected)
+        val oneLeft = ByHintModes(TEST_HINT_SETTINGS.drop(1).associateWith { ByHintMode.NEVER }, TEST_HINT_SETTINGS)
+        assertTrue(oneLeft.anyCollected, "a kind with no mode of its own is on")
+        assertTrue(ByHintModes(TEST_HINT_SETTINGS.associateWith { ByHintMode.NEVER }).anyCollected, "with no catalog, which kinds by has is unknown")
     }
 
     @Test
     fun `the server is asked to skip exactly the kinds set to never`() {
         val modes = ByHintModes(
-            ByHintKind.entries.associateWith {
-                if (it == ByHintKind.REVEALED_TYPES) ByHintMode.NEVER else ByHintMode.ON_PUSH
-            },
+            TEST_HINT_SETTINGS.associateWith { if (it == "revealedTypes") ByHintMode.NEVER else ByHintMode.ON_PUSH },
+            TEST_HINT_SETTINGS,
         )
         val options = modes.serverOptions()
         assertEquals(false, options["revealedTypes"])
         assertEquals(true, options["variableTypes"], "on push is still computed")
-        assertFalse(options.containsKey("other"), "the catch-all is the plugin's, not the server's")
+        assertFalse(options.containsKey(""), "an untagged hint has no option")
     }
 
     // endregion
@@ -256,19 +254,22 @@ class ByInlayHintsTest {
     // region: anchoring
 
     @Test
-    fun `the hints that introduce what follows them anchor forwards, the rest backwards`() {
-        val forwards = setOf(
-            ByHintKind.CALL_ARGUMENT_NAMES,
-            ByHintKind.IMPLICIT_PARAMETERS,
-            ByHintKind.IMPLICIT_SELF,
-            ByHintKind.INFERRED_OVERRIDE,
-            ByHintKind.INFERRED_VARIANCE,
-            ByHintKind.INFERRED_REIFICATION,
-            ByHintKind.PARAMETER_STABILITY,
+    fun `a hint anchors forwards when by says it introduces what follows it, and backwards otherwise`() {
+        assertFalse(ByHintKindInfo(setting = "callArgumentNames", attachesTo = "following").relatesToPrecedingText)
+        assertTrue(ByHintKindInfo(setting = "returnTypes", attachesTo = "preceding").relatesToPrecedingText)
+        assertTrue(ByHintKindInfo(setting = "variableTypes").relatesToPrecedingText, "unsaid is the common case")
+    }
+
+    @Test
+    fun `the catalog lists only the kinds a source file has`() {
+        val catalog = ByInlayHintCatalog(
+            kinds = listOf(
+                ByHintKindInfo(setting = "returnTypes", fileKind = "source"),
+                ByHintKindInfo(setting = "resolvedTemplates", fileKind = "template"),
+                ByHintKindInfo(setting = "variableTypes"),
+            ),
         )
-        for (kind in ByHintKind.entries) {
-            assertEquals(kind !in forwards, kind.relatesToPrecedingText, kind.name)
-        }
+        assertEquals(listOf("returnTypes", "variableTypes"), catalog.sourceKinds.map { it.setting })
     }
 
     // endregion

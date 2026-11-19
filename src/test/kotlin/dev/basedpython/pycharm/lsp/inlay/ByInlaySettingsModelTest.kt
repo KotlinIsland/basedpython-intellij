@@ -27,11 +27,11 @@ class ByInlaySettingsModelTest {
     }
 
     @Test
-    fun `an option for each kind, checked while its kind is shown, and unchecking it is never`() = onEdt {
-        settings.setInlayMode(ByHintKind.VARIABLE_TYPES, ByHintMode.ON_PUSH)
-        settings.setInlayMode(ByHintKind.ENUM_VALUES, ByHintMode.NEVER)
+    fun `an option for each kind, checked while its kind is shown, and unchecking it is never`() = onEdt { withHintCatalog {
+        settings.setInlayMode(ByHintKind("variableTypes"), ByHintMode.ON_PUSH)
+        settings.setInlayMode(ByHintKind("enumValues"), ByHintMode.NEVER)
         val model = ByInlaySettingsModel(fixture.project)
-        assertEquals(ByHintKind.entries.map { it.display }, model.cases.map { it.name })
+        assertEquals(TEST_HINT_SETTINGS.map { "Title of $it" }, model.cases.map { it.name })
         val variables = model.cases.first { it.id == "variableTypes" }
         val enums = model.cases.first { it.id == "enumValues" }
         assertTrue(variables.value)
@@ -41,22 +41,29 @@ class ByInlaySettingsModelTest {
         enums.value = true
         assertTrue(model.isModified())
         // nothing is stored before Apply
-        assertEquals(ByHintMode.ON_PUSH, settings.inlayMode(ByHintKind.VARIABLE_TYPES))
+        assertEquals(ByHintMode.ON_PUSH, settings.inlayMode(ByHintKind("variableTypes")))
 
         model.apply()
-        assertEquals(ByHintMode.NEVER, settings.inlayMode(ByHintKind.VARIABLE_TYPES))
-        assertEquals(ByHintMode.ALWAYS, settings.inlayMode(ByHintKind.ENUM_VALUES))
+        assertEquals(ByHintMode.NEVER, settings.inlayMode(ByHintKind("variableTypes")))
+        assertEquals(ByHintMode.ALWAYS, settings.inlayMode(ByHintKind("enumValues")))
         assertFalse(model.isModified())
-    }
+    } }
 
     @Test
-    fun `checking a kind again before Apply gives it back the mode it had`() = onEdt {
-        settings.setInlayMode(ByHintKind.VARIABLE_TYPES, ByHintMode.ON_PUSH)
+    fun `checking a kind again before Apply gives it back the mode it had`() = onEdt { withHintCatalog {
+        settings.setInlayMode(ByHintKind("variableTypes"), ByHintMode.ON_PUSH)
         val model = ByInlaySettingsModel(fixture.project)
         val variables = model.cases.first { it.id == "variableTypes" }
         variables.value = false
         variables.value = true
         assertFalse(model.isModified())
+    } }
+
+    @Test
+    fun `before any by has named its kinds there is nothing to check`() = onEdt {
+        withHintCatalog(ByInlayHintCatalog()) {
+            assertTrue(ByInlaySettingsModel(fixture.project).cases.isEmpty())
+        }
     }
 
     @Test

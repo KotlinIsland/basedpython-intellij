@@ -27,6 +27,9 @@ import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.env.ByEnvironmentKind
 import dev.basedpython.pycharm.env.ByLaunch
 import dev.basedpython.pycharm.lsp.inlay.ByHintKind
+import dev.basedpython.pycharm.lsp.inlay.TEST_HINT_KINDS
+import dev.basedpython.pycharm.lsp.inlay.TEST_HINT_SETTINGS
+import dev.basedpython.pycharm.lsp.inlay.withHintCatalog
 import dev.basedpython.pycharm.lsp.inlay.ByHintMode
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import dev.basedpython.pycharm.settings.app.BasedPythonAppSettings
@@ -178,10 +181,10 @@ class LspServerDescriptorTest {
     // editor font. What this switches off is only the platform's own small-text-in-a-pill
     // rendering of the same hints, which would otherwise draw them a second time.
     val s = BasedPythonSettings.getInstance(project)
-    for (kind in ByHintKind.entries) s.setInlayMode(kind, ByHintMode.ALWAYS)
+    for (kind in TEST_HINT_KINDS) s.setInlayMode(kind, ByHintMode.ALWAYS)
     assertSame(LspInlayHintDisabled, byDescriptor().lspCustomization.inlayHintCustomizer)
 
-    for (kind in ByHintKind.entries) s.setInlayMode(kind, ByHintMode.NEVER)
+    for (kind in TEST_HINT_KINDS) s.setInlayMode(kind, ByHintMode.NEVER)
     assertSame(LspInlayHintDisabled, byDescriptor().lspCustomization.inlayHintCustomizer)
   }
 
@@ -294,9 +297,9 @@ class LspServerDescriptorTest {
   @Test
   fun `by is told to skip only the kinds of hint set to never`() = onEdt {
     val s = BasedPythonSettings.getInstance(project)
-    s.setInlayMode(ByHintKind.VARIABLE_TYPES, ByHintMode.NEVER)
-    s.setInlayMode(ByHintKind.INFERRED_RAISES, ByHintMode.ON_PUSH)
-    s.setInlayMode(ByHintKind.CALL_ARGUMENT_NAMES, ByHintMode.ALWAYS)
+    s.setInlayMode(ByHintKind("variableTypes"), ByHintMode.NEVER)
+    s.setInlayMode(ByHintKind("inferredRaises"), ByHintMode.ON_PUSH)
+    s.setInlayMode(ByHintKind("callArgumentNames"), ByHintMode.ALWAYS)
 
     val options = byDescriptor().createInitializationOptions()
     @Suppress("UNCHECKED_CAST")
@@ -306,7 +309,6 @@ class LspServerDescriptorTest {
     // On push still needs computing: the inlay is built before the key goes down.
     assertEquals(true, hints["inferredRaises"])
     assertEquals(true, hints["callArgumentNames"])
-    assertFalse(hints.containsKey("other"), "the plugin's catch-all is not one of `by`'s options")
   }
 
   @Test
@@ -377,25 +379,21 @@ class LspServerDescriptorTest {
   }
 
   @Test
-  fun `the option names are the ones by answers to`() = onEdt {
-    // Names `by` does not recognise are reported back to the user as unknown options, so this is
-    // spelling that has to match the server's `InlayHintOptions`, field for field — every field but
-    // the two django-template ones, whose hints this plugin does not draw.
-    @Suppress("UNCHECKED_CAST")
-    val hints =
-      (byDescriptor().createInitializationOptions() as Map<String, Any>)["inlayHints"] as Map<String, Boolean>
-    assertEquals(
-      setOf(
-        "variableTypes", "lambdaParameterTypes", "inheritedParameterTypes", "propertyTypes",
-        "inferredReturnTypes", "callTypeArguments", "typeArgumentNames", "numericPromotions",
-        "revealedTypes", "inferredRaises", "enumValues", "callArgumentNames", "implicitParameters",
-        "implicitSelf", "implicitArguments", "inheritedParameterDefaults", "inferredOverride",
-        "inferredVariance", "inferredReification", "inferredReads", "parameterStability",
-        "derivedDependencies", "inferredInvalidations",
-      ),
-      hints.keys,
-    )
+  fun `the option names are the ones by's catalog names`() = onEdt {
+    // `by` reports an option it does not have back to the user as unknown, so what is sent is the
+    // kinds its catalog names — every one, since each has a mode — and nothing else, even a name a
+    // settings file still holds from an older `by`.
+    val s = BasedPythonSettings.getInstance(project)
+    s.setInlayMode(ByHintKind("borrowChecks"), ByHintMode.NEVER)
+    withHintCatalog {
+      @Suppress("UNCHECKED_CAST")
+      val hints =
+        (byDescriptor().createInitializationOptions() as Map<String, Any>)["inlayHints"] as Map<String, Boolean>
+      assertEquals(TEST_HINT_SETTINGS.toSet(), hints.keys)
+      assertTrue(hints.getValue("returnTypes"), "by's name for return-type hints, not the plugin's old one")
+    }
   }
+
 
   @Test
   fun `by is told this client injects the fragments it reports while language injection is on`() = onEdt {

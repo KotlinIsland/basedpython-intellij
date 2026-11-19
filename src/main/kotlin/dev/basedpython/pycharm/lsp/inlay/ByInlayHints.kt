@@ -82,12 +82,12 @@ object ByInlayHints {
      * things `by` distinguishes, and the label is what the hint says, not what it is: a revealed
      * `list[int]` and a call's `[int]` are one bracket apart, and every label format `by` has ever
      * changed moved hints between settings without anyone noticing. A hint with no tag — from a `by`
-     * that does not send one — or with a name this plugin does not know is [ByHintKind.OTHER].
+     * that does not send one — is [ByHintKind.UNTAGGED].
      */
     fun kindOf(hint: InlayHint): ByHintKind {
-        val data = hint.data as? JsonObject ?: return ByHintKind.OTHER
+        val data = hint.data as? JsonObject ?: return ByHintKind.UNTAGGED
         val tag = data.get(KIND_TAG)?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }
-        return ByHintKind.ofOption(tag?.asString)
+        return tag?.asString?.let(::ByHintKind) ?: ByHintKind.UNTAGGED
     }
 
     /** The member of a hint's `data` that `by` names its kind in. */

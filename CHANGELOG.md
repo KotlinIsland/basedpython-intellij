@@ -2,6 +2,12 @@
 
 ### Added
 
+- *Settings | basedpython | Inlay Hints*: every kind of hint `by` computes, grouped into families,
+  each with a description and a preview of an example with the hints drawn as the editor draws
+  them, by the modes on the page before Apply. Hold the push key over the preview to see the hints
+  set to show while it is held, and click a hint to find its kind. A family, or several kinds, can
+  be set at once, from the switch, the right-click menu or Space. The kinds are `by`'s own list,
+  from `by/inlayHintCatalog`, so a kind `by` adds can be configured without a plugin release.
 - basedpython in PyCharm's New Project dialog, in its Python group beside *Pure Python*, with the
   interpreter choice every Python project there gets. With uv, the new environment is synced from
   the project's `pyproject.toml` and so has `by` from the start.
@@ -26,6 +32,9 @@
 
 ### Fixed
 
+- *Return types* inlay hints follow their setting: the plugin called them by a name `by` does not
+  use, so turning them off did nothing and `by` reported the name as an unknown option. Return-type
+  hints already set under the old name keep their setting.
 - Enter with nothing but whitespace before the caret keeps the caret's column, as it does in a
   `.py` file: on a blank line backspaced out of a suite the new line no longer goes back into it.
 

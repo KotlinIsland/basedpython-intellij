@@ -436,6 +436,14 @@ interface ByServerExtensions {
     fun rules(): CompletableFuture<List<ByRule>?>
 
     /**
+     * Every kind of inlay hint `by` computes: its option name, title, group and description, and an
+     * example program with the hints `by` computes for it. What the Inlay Hints settings page is
+     * built from. A `by` from before the request answers `MethodNotFound`.
+     */
+    @JsonRequest("by/inlayHintCatalog")
+    fun inlayHintCatalog(): CompletableFuture<dev.basedpython.pycharm.lsp.inlay.ByInlayHintCatalog?>
+
+    /**
      * `by`'s whole command line, as data: every command with its options, positionals and
      * subcommands, for completing `by` typed in a terminal ([dev.basedpython.pycharm.terminal.ByCommand]
      * reads it). No parameters. It is the command line of the `by` the server is, so one server's
