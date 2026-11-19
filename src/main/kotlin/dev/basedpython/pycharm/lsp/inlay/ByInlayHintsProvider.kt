@@ -26,6 +26,7 @@ import com.intellij.psi.PsiFile
 import dev.basedpython.pycharm.lang.BasedPythonFile
 import dev.basedpython.pycharm.lang.BasedPythonLanguage
 import dev.basedpython.pycharm.lsp.ByServerDocuments
+import dev.basedpython.pycharm.lsp.ByTemplateFiles
 import dev.basedpython.pycharm.lsp.askBy
 import dev.basedpython.pycharm.lsp.byServerFor
 import dev.basedpython.pycharm.lsp.ext.ByAlignmentGroupsParams
@@ -88,8 +89,9 @@ class ByInlayHintsProvider : InlayHintsProvider<NoSettings>, DumbAware {
         settings: NoSettings,
         sink: InlayHintsSink,
     ): InlayHintsCollector? {
-        if (file !is BasedPythonFile) return null
-        // *Settings | Editor | Inlay Hints*, basedpython's checkbox
+        if (!isByHinted(file)) return null
+        // *Settings | Editor | Inlay Hints*, basedpython's checkbox — a django template's too, since
+        // its hints are `by`'s and are listed with the rest under basedpython
         if (!InlayHintsSettings.instance().hintsEnabled(BasedPythonLanguage)) return null
         val basedPython = BasedPythonSettings.getInstance(file.project)
         val modes = basedPython.inlayModes
@@ -98,6 +100,18 @@ class ByInlayHintsProvider : InlayHintsProvider<NoSettings>, DumbAware {
         if (!modes.anyCollected) return null
         return ByInlayHintsCollector(modes, basedPython.inlayPushKey)
     }
+}
+
+/**
+ * Whether [file] is one whose hints `by` gives and this provider draws: a basedpython source, or a
+ * django template `by` is handed ([ByTemplateFiles]). The provider is registered for the languages a
+ * template file comes in as — HTML, XML, plain text — and this is what keeps it to templates there;
+ * whether `by` serves the file at all is [byServerFor]'s answer, asked when the hints are.
+ */
+internal fun isByHinted(file: PsiFile): Boolean {
+    if (file is BasedPythonFile) return true
+    val virtualFile = file.originalFile.virtualFile ?: return false
+    return ByTemplateFiles.isTemplate(virtualFile)
 }
 
 /**
@@ -145,7 +159,8 @@ private class ByInlayHintsCollector(
         if (!asked.compareAndSet(false, true)) return true
         val run = runs.incrementAndGet()
 
-        val file = element.containingFile as? BasedPythonFile ?: return true
+        val file = element.containingFile ?: return true
+        if (!isByHinted(file)) return true
         val virtualFile = file.originalFile.virtualFile ?: return true
         val document = editor.document
         val server = byServerFor(file.project, virtualFile) ?: return true

@@ -736,6 +736,13 @@
         <!-- `(` after a method's name writes `self` or `cls`, as Python's Insert 'self' does. -->
         <typedHandler
             implementation="dev.basedpython.pycharm.editor.smart.ByMethodReceiverTypedHandler"/>
+        <!-- A django template `by` serves, opened as plain HTML/XML/text: `{%`, `{{` and `{#` close
+             themselves, and comments are django's `{# #}` / `{% comment %}` rather than HTML's.
+             File-scoped, stepping aside where a template language (PyCharm Pro's) owns the file. -->
+        <typedHandler
+            implementation="dev.basedpython.pycharm.editor.djangotemplate.ByDjangoTemplateTypedHandler"/>
+        <multiLangCommenter
+            implementation="dev.basedpython.pycharm.editor.djangotemplate.ByDjangoTemplateCommenter"/>
         <!-- Join Lines (Ctrl+Shift+J) that knows backslashes, brackets, strings and statements, from
              `by`'s outline. -->
         <joinLinesHandler order="first"
@@ -883,6 +890,19 @@
              off; the three toggles stay in Settings | basedpython | Inlay hints. -->
         <codeInsight.inlayProvider
             language="basedpython"
+            isEnabledByDefault="true"
+            implementationClass="dev.basedpython.pycharm.lsp.inlay.ByInlayHintsProvider"/>
+        <!-- The same hints in a django template `by` serves — `{% for book in shelf %}`'s `: Book`, an
+             `{% extends %}`'s resolved file. A template comes in as HTML, XML or plain text by its
+             extension; the provider keeps itself to templates in each (ByInlayHintsProvider.isByHinted).
+             XML covers HTML and XHTML too: a provider is found for a language's base languages as
+             well, so one registered for HTML besides drew every hint twice (measured in 263.7307). -->
+        <codeInsight.inlayProvider
+            language="XML"
+            isEnabledByDefault="true"
+            implementationClass="dev.basedpython.pycharm.lsp.inlay.ByInlayHintsProvider"/>
+        <codeInsight.inlayProvider
+            language="TEXT"
             isEnabledByDefault="true"
             implementationClass="dev.basedpython.pycharm.lsp.inlay.ByInlayHintsProvider"/>
         <!-- Highlight on Caret Movement | Current scope for .by, which the platform finds only from

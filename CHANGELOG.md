@@ -27,6 +27,14 @@
 - basedpython in PyCharm's New Project dialog, in its Python group beside *Pure Python*, with the
   interpreter choice every Python project there gets. With uv, the new environment is synced from
   the project's `pyproject.toml` and so has `by` from the start.
+- Inlay hints in django templates: the type a `{% for %}` binds (`: Book`) and the file an
+  `{% extends %}` or `{% include %}` resolves to, each with its own setting under
+  *Settings | basedpython | Inlay Hints*.
+- Django template editing: *Comment with Line Comment* writes `{# … #}` and *Block Comment*
+  `{% comment %}` … `{% endcomment %}` rather than an HTML comment django renders into the page,
+  and typing `{%`, `{{` or `{#` closes the tag around the caret.
+- Line breakpoints in django templates, on the lines a tag or a variable starts on, for bpd to stop
+  on while django renders the template.
 
 ### Changed
 

@@ -7,12 +7,15 @@ import com.intellij.xdebugger.breakpoints.XBreakpointProperties
 import com.intellij.xdebugger.breakpoints.XLineBreakpoint
 import com.intellij.xdebugger.breakpoints.XLineBreakpointType
 import com.intellij.xdebugger.evaluation.XDebuggerEditorsProvider
+import dev.basedpython.pycharm.editor.djangotemplate.ByDjangoTemplateEditing
+import dev.basedpython.pycharm.editor.djangotemplate.ByTemplateBreakableLines
 import dev.basedpython.pycharm.lang.dialect.BasedPythonSources
 import dev.basedpython.pycharm.util.BasedPythonBundle
 
 /**
  * Line breakpoints in basedpython files — `.by`, and the `.py` files this plugin owns
- * ([BasedPythonSources]).
+ * ([BasedPythonSources]) — and in the django templates `by` serves, where bpd stops while django
+ * renders the template ([ByDjangoTemplateEditing], [ByTemplateBreakableLines]).
  *
  * A type of our own rather than the Python plugin's `PyLineBreakpointType`, which is not available:
  * the IDE this plugin targets does not bundle the Python plugin (FEATURES.md §5), and a session
@@ -63,9 +66,20 @@ class ByLineBreakpointType : XLineBreakpointType<ByBreakpointProperties>(
      * breakpoint fired at import time, in `<module>`.
      */
     override fun canPutAt(file: VirtualFile, line: Int, project: Project): Boolean {
-        if (!BasedPythonSources.isOwnedSource(file)) return false
-        val document = FileDocumentManager.getInstance().getDocument(file) ?: return false
-        return ByBreakableLines.holdsCode(project, document, line)
+        if (BasedPythonSources.isOwnedSource(file)) {
+            val document = FileDocumentManager.getInstance().getDocument(file) ?: return false
+            return ByBreakableLines.holdsCode(project, document, line)
+        }
+        // A django template `by` serves: bpd stops in one while django renders it, by its path on
+        // disk, with the template's frame on the stack. Only while the file is still plain HTML/XML/
+        // text — where a template language (PyCharm Pro's) owns it, its own breakpoint type does.
+        if (ByDjangoTemplateEditing.handles(project, file)) {
+            val document = FileDocumentManager.getInstance().getDocument(file) ?: return false
+            if (line !in 0 until document.lineCount) return false
+            val text = document.immutableCharSequence
+            return ByTemplateBreakableLines.holdsNode(text.subSequence(document.getLineStartOffset(line), document.getLineEndOffset(line)))
+        }
+        return false
     }
 
     override fun getDisplayText(breakpoint: XLineBreakpoint<ByBreakpointProperties>): String =
