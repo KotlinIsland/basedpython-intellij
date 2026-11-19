@@ -96,26 +96,19 @@ class ByCounterpartsRelatedProvider : GotoRelatedProvider() {
     internal companion object {
 
         /**
-         * The declarations of [counterparts] [caret] is in, innermost first, when `by` sends whole
-         * declarations ([ByCounterpartDeclaration.range]); otherwise the ones whose name is on the
-         * caret's line, which is all a name says about where its declaration is.
+         * The declarations of [counterparts] [caret] is in, innermost first: each declaration's
+         * [ByCounterpartDeclaration.range] is the whole of it, decorators and body included, so a
+         * method's body has the method and its class. A declaration whose range no longer fits the
+         * document — the answer raced an edit — is in nothing.
          */
-        fun at(counterparts: ByDocumentCounterparts, document: Document, caret: Int): List<ByCounterpartDeclaration> {
-            val line = document.getLineNumber(caret.coerceIn(0, document.textLength))
-            return counterparts.declarations.orEmpty()
+        fun at(counterparts: ByDocumentCounterparts, document: Document, caret: Int): List<ByCounterpartDeclaration> =
+            counterparts.declarations.orEmpty()
                 .mapNotNull { declaration ->
-                    val whole = declaration.range?.let { offsets(document, it) }
-                    when {
-                        whole != null -> declaration.takeIf { caret in whole.first..whole.second }?.let { it to whole.second - whole.first }
-                        else -> {
-                            val name = declaration.selectionRange?.let { offsets(document, it) } ?: return@mapNotNull null
-                            declaration.takeIf { document.getLineNumber(name.first) == line }?.let { it to 0 }
-                        }
-                    }
+                    val whole = declaration.range?.let { offsets(document, it) } ?: return@mapNotNull null
+                    declaration.takeIf { caret in whole.first..whole.second }?.let { it to whole.second - whole.first }
                 }
                 .sortedBy { it.second }
                 .map { it.first }
-        }
 
         private fun offsets(document: Document, range: Range): Pair<Int, Int>? {
             val start = getOffsetInDocument(document, range.start) ?: return null

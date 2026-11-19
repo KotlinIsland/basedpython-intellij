@@ -41,18 +41,18 @@ class ByCounterpartsRelatedProviderTest {
         return file
     }
 
-    private fun answer(stubUri: String, withRanges: Boolean) = ByDocumentCounterparts(
+    private fun answer(stubUri: String) = ByDocumentCounterparts(
         role = ByDocumentCounterparts.IMPLEMENTATION,
         counterparts = listOf(ByCounterpartModule(stubUri)),
         declarations = listOf(
             ByCounterpartDeclaration(
                 "A", "class", range(0, 6, 0, 7),
-                range = if (withRanges) range(0, 0, 2, 16) else null,
+                range = range(0, 0, 2, 16),
                 targets = listOf(ByCounterpartTarget(stubUri, range(0, 0, 1, 37), range(0, 6, 0, 7))),
             ),
             ByCounterpartDeclaration(
                 "A.f", "function", range(1, 8, 1, 9),
-                range = if (withRanges) range(1, 4, 2, 16) else null,
+                range = range(1, 4, 2, 16),
                 targets = listOf(ByCounterpartTarget(stubUri, range(1, 4, 1, 37), range(1, 8, 1, 9))),
             ),
         ),
@@ -67,30 +67,38 @@ class ByCounterpartsRelatedProviderTest {
     }
 
     @Test
-    fun `the other module is listed from anywhere in this one`() = onEdt {
-        val file = configure { answer(it, withRanges = false) }
+    fun `the other module is listed from the module itself`() = onEdt {
+        val file = configure { answer(it) }
         assertEquals(listOf("mod.pyi | Stub"), items(file, null))
-        assertEquals(listOf("mod.pyi | Stub"), items(file, module.indexOf("return")))
+    }
+
+    /** Each declaration's range is the whole of it, so a body has its method and its class, innermost first. */
+    @Test
+    fun `a body has its declarations' counterparts, innermost first, then the module`() = onEdt {
+        val file = configure { answer(it) }
+        assertEquals(
+            listOf("A.f | mod.pyi | Stub", "A | mod.pyi | Stub", "mod.pyi | Stub"),
+            items(file, module.indexOf("return")),
+        )
     }
 
     @Test
-    fun `on a declaration's line, its counterpart is listed first, at its name`() = onEdt {
-        val file = configure { answer(it, withRanges = false) }
-        assertEquals(listOf("A.f | mod.pyi | Stub", "mod.pyi | Stub"), items(file, module.indexOf("self")))
+    fun `a counterpart is gone to at its name`() = onEdt {
+        val file = configure { answer(it) }
         val target = offEdt {
             ByCounterpartsRelatedProvider().getItems(file.findElementAt(module.indexOf("self"))!!).first().element!!
         }
         assertEquals(stub.indexOf("f(self"), target.textRange.startOffset)
     }
 
-    /** When `by` sends whole declarations, the caret anywhere in one has its counterpart, innermost first. */
+    /** A range that no longer fits the document, an answer that raced an edit, puts the caret in nothing. */
     @Test
-    fun `with whole declarations, a body has its declaration's counterparts`() = onEdt {
-        val file = configure { answer(it, withRanges = true) }
-        assertEquals(
-            listOf("A.f | mod.pyi | Stub", "A | mod.pyi | Stub", "mod.pyi | Stub"),
-            items(file, module.indexOf("return")),
-        )
+    fun `a declaration whose range does not fit the text is in nothing`() = onEdt {
+        val file = configure { uri ->
+            val fresh = answer(uri)
+            fresh.copy(declarations = fresh.declarations!!.map { it.copy(range = range(40, 0, 41, 0)) })
+        }
+        assertEquals(listOf("mod.pyi | Stub"), items(file, module.indexOf("return")))
     }
 
     @Test
@@ -105,9 +113,9 @@ class ByCounterpartsRelatedProviderTest {
             ByDocumentCounterparts(
                 ByDocumentCounterparts.STUB,
                 listOf(ByCounterpartModule(uri)),
-                listOf(ByCounterpartDeclaration("A", "class", range(0, 6, 0, 7), targets = listOf(ByCounterpartTarget(uri, null, range(0, 6, 0, 7))))),
+                listOf(ByCounterpartDeclaration("A", "class", range(0, 6, 0, 7), range = range(0, 0, 1, 37), targets = listOf(ByCounterpartTarget(uri, null, range(0, 6, 0, 7))))),
             ),
         )
-        assertEquals(listOf("A | impl.by | Implementation", "impl.by | Implementation"), items(file, 6))
+        assertEquals(listOf("A | impl.by | Implementation", "impl.by | Implementation"), items(file, stub.indexOf("int")))
     }
 }

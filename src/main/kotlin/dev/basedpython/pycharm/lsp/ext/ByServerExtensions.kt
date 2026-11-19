@@ -1058,9 +1058,8 @@ data class ByCounterpartDeclaration(
     /** Its name, in the document asked about. */
     val selectionRange: Range? = null,
     /**
-     * The whole declaration, decorators and body included, as `by/documentUsageCounts` gives one.
-     * Not in the request's contract yet: when a `by` sends it, Go to Related Symbol offers a
-     * declaration's counterparts from anywhere inside it rather than only from its line.
+     * The whole declaration, decorators and body included, in the document asked about: what Go to
+     * Related Symbol offers a declaration's counterparts from anywhere inside.
      */
     val range: Range? = null,
     /**
