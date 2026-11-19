@@ -1,7 +1,5 @@
 package dev.basedpython.pycharm.debug.hotswap
 
-import com.intellij.execution.ui.ConsoleView
-import com.intellij.execution.ui.ConsoleViewContentType
 import com.intellij.notification.Notification
 import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
@@ -55,10 +53,9 @@ import java.nio.file.Path
  * that cannot be made whole changes nothing at all and comes back naming everything that stood in
  * the way.
  *
- * The refusals are bpd's to explain and it explains them: its DAP adapter writes each one to the
- * `output` stream under category `important`, which is the category this plugin puts where a person
- * cannot miss it. So what is printed from here is the other half — what an *applied* replacement
- * changed about the process, which nothing else says.
+ * Nothing goes on the console either way. A reload that applied is the platform's own tick on the
+ * button. A refused one is a balloon carrying bpd's reasons — one sentence each, in the answer as
+ * `said`, so the wording is bpd's and not re-rendered here from the variants.
  *
  * ## the frame you are stopped in
  *
@@ -66,8 +63,9 @@ import java.nio.file.Path
  * The reload applies there, as HotSwap does on the JVM: the call that is stopped finishes on the code
  * it started with, and the next call runs the edit. bpd refuses that by default, since until the
  * frame returns the process runs two versions of one function, so this asks for it
- * ([ByReplaceCodeArguments.evenUnderALiveFrame]) and bpd says on the console which calls are still on
- * the old code. Refusing would leave the button doing nothing in the one place it is pressed most.
+ * ([ByReplaceCodeArguments.evenUnderALiveFrame]). Which calls are still on the old code comes back in
+ * the answer and is not announced: the next call running the edit is what anyone pressing the button
+ * expects. Refusing would leave the button doing nothing in the one place it is pressed most.
  */
 internal class ByHotSwapProvider(
     private val process: XDebugProcess,
@@ -229,7 +227,6 @@ internal class ByHotSwapProvider(
                 return
             }
             ByReload.Plan.UpToDate -> {
-                process.session.consoleView.say("every edited file already was the code the process is running")
                 // `onSuccessfulReload`, and it is the one place that is honest without anything
                 // having been replaced: the claim being made is that the process matches the source,
                 // and here it does.
@@ -288,21 +285,21 @@ internal class ByHotSwapProvider(
             }
 
             if (replaced?.applied == true) {
-                replaced.report()?.let { process.session.consoleView.say(it) }
                 listener.onSuccessfulReload()
                 return@post
             }
 
-            // Everything written goes back. bpd's own reasons are already on the `output` stream
-            // under `important`, so what the balloon adds is the one thing bpd cannot say: that the
-            // tree is once again what the process is running.
+            // Everything written goes back, and the balloon says why in bpd's own sentences — one
+            // per refusal, carried in the answer as `said`, so the reason is where the user pressed
+            // the button rather than in the program's console.
             val stranded = written.rollback()
-            val why = when {
-                replaced != null -> "see the debug console for why"
-                failure != null -> "the debugger could not do it: $failure"
-                else -> "the debug adapter did not answer the request"
+            val said = replaced?.files?.flatMap { it.said }.orEmpty()
+            val notReloaded = when {
+                said.isNotEmpty() -> said.toMutableList()
+                replaced != null -> mutableListOf("the debugger refused it")
+                failure != null -> mutableListOf("the debugger could not do it: $failure")
+                else -> mutableListOf("the debug adapter did not answer the request")
             }
-            val notReloaded = mutableListOf("nothing was reloaded: $why")
             if (stranded.isNotEmpty()) {
                 notReloaded += "and ${stranded.size} file(s) of the build could not be put back: " +
                     stranded.joinToString(", ") { it.fileName.toString() }
@@ -359,10 +356,8 @@ internal class ByHotSwapProvider(
      * one is raised. Narrower than the platform's, which also clears balloons raised elsewhere,
      * and this plugin only ever raises this one. See docs/internal-api.md.
      *
-     * The *reasons* bpd gave stay on the console and are not repeated here — bpd writes each one to
-     * the `output` stream under category `important`, and a balloon re-rendering that vocabulary is
-     * the duplication the launch's `understands` ([dev.basedpython.pycharm.debug.ByBpdEvents.UNDERSTOOD])
-     * exists to stop.
+     * The reasons are bpd's sentences, as it answered them, and bpd puts nothing about a reload on
+     * the console — so they are said once, here.
      */
     private fun tell(notReloaded: List<String>) {
         if (notReloaded.isEmpty()) return
@@ -387,17 +382,6 @@ internal class ByHotSwapProvider(
     /** The last balloon [tell] raised, so the next hot swap can take it down. */
     @Volatile
     private var lastReport: Notification? = null
-
-    /**
-     * The console, for what an applied replacement changed about the process.
-     *
-     * That belongs in sequence with the rest of the session's account of itself, for the reason a
-     * jump's account does, and bpd's own half of this conversation is already on that stream.
-     */
-    private fun ConsoleView?.say(text: String) {
-        this ?: return
-        print("$text\n", ConsoleViewContentType.SYSTEM_OUTPUT)
-    }
 
     private companion object {
         private val LOG = Logger.getInstance(ByHotSwapProvider::class.java)

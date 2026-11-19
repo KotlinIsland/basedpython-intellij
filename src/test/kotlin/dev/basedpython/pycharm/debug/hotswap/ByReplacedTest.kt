@@ -86,7 +86,8 @@ class ByReplacedTest {
               {"differs": "defines", "added": ["added"], "removed": []},
               {"differs": "names", "added": ["added"], "removed": []},
               {"differs": "instructions"}]}],
-          "replaced": "refused"}}
+          "replaced": "refused"},
+         "said": ["module-level code in `victim.py` changed (adds `added`); only function bodies reload — restart to apply the edit"]}
     """
 
     /** Two frames of the file are in flight, and both are named. */
@@ -219,7 +220,6 @@ class ByReplacedTest {
         assertTrue(r.applied)
         assertTrue(r.files.single().changed.isEmpty())
         assertEquals(4, r.files.single().unchanged.size)
-        assertTrue(r.report()!!.contains("is already up to date"), r.report()!!)
     }
 
     /**
@@ -231,14 +231,14 @@ class ByReplacedTest {
     fun `a rebound breakpoint reports the line it is on now`() {
         val r = parse(envelope(movedFile, rebound = reboundBreakpoint))!!
         assertEquals(listOf(16), r.rebound)
-        assertTrue(r.report()!!.contains("now at line 16"), r.report()!!)
     }
 
     /** The line a function's code begins on now, when the edit above it moved it down the file. */
     @Test
     fun `a function that moved says where from and where to`() {
-        val report = parse(envelope(movedFile))!!.report()!!
-        assertTrue(report.contains("(now at line 13)"), report)
+        val main = parse(envelope(movedFile))!!.files.single().changed.single { it.function == "main" }
+        assertEquals(12, main.wasAt)
+        assertEquals(13, main.nowAt)
     }
 
     /**
@@ -250,7 +250,6 @@ class ByReplacedTest {
     fun `one file refusing means nothing was applied`() {
         val r = parse(envelope(appliedFile, topLevelChangedFile))!!
         assertFalse(r.applied)
-        assertNull(r.report())
     }
 
     @Test
@@ -261,13 +260,18 @@ class ByReplacedTest {
     }
 
     /**
-     * bpd writes every refusal to the `output` stream itself, as its own sentence, and this plugin
-     * shows that stream prominently. A line from here would be the same fact twice.
+     * bpd's sentence for each refusal is read as it wrote it, for the balloon to show. An answer
+     * without them — a bpd from before `said` — reads as none, and the balloon falls back.
      */
     @Test
-    fun `nothing is printed for a refusal`() {
-        assertNull(parse(envelope(topLevelChangedFile))!!.report())
-        assertNull(parse(envelope(runningFile))!!.report())
+    fun `a refusal carries bpd's sentences`() {
+        assertEquals(
+            listOf(
+                "module-level code in `victim.py` changed (adds `added`); only function bodies reload — restart to apply the edit",
+            ),
+            parse(envelope(topLevelChangedFile))!!.files.single().said,
+        )
+        assertTrue(parse(envelope(runningFile))!!.files.single().said.isEmpty())
     }
 
     /**
@@ -284,7 +288,6 @@ class ByReplacedTest {
         )!!
         assertEquals(3, r.remapped?.files)
         assertEquals(2, r.remapped?.breakpoints)
-        assertFalse(r.report()!!.contains("source map"), r.report()!!)
     }
 
     /**
@@ -344,8 +347,5 @@ class ByReplacedTest {
         // `binding.generated.line` is where the interpreter really stops
         assertEquals(listOf(9), r.rebound)
 
-        val report = r.report()!!
-        assertTrue(report.startsWith("reloaded `"), report)
-        assertTrue(report.contains("breakpoint now at line 9"), report)
     }
 }

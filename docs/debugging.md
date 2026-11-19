@@ -674,42 +674,28 @@ that cannot be made whole changes nothing at all and comes back naming *everythi
 the way rather than the first thing, because a client fixing them one at a time is a client asking
 this seventeen times.
 
-### the refusals are bpd's to explain, and it explains them
+### nothing on the console
 
-bpd's DAP adapter writes each reason to the `output` stream under category `important`, which is the
-category this plugin already puts where a person cannot miss it (see `ByAdapterOutput`). So nothing
-in the plugin re-renders them, for the same reason `understands` exists for events: a client
-that reads a fact and shows it, beside an adapter that narrates the same fact, shows everything
-twice. `ByReplaced` therefore reads *that* a replacement was refused and how many reasons there
-were, and leaves the eleven-variant vocabulary of `Unreplaceable` where it is authored.
+A reload is something you pressed a button for, so its answer goes back to the button and none of it
+to the console, which is the program's output.
 
-What the plugin does print is the other half, which nothing else says: what an **applied**
-replacement changed about the process — the functions whose code moved and where to, how many
-function objects held each, and which breakpoints had to bind again. That last one matters and is
-easy to miss: binding walks down from the file's registered root code object, so after a replacement
-the old root describes code nothing will execute; bpd swaps the root and resolves the whole
-breakpoint set again, and a breakpoint on what was a `return` can come back bound to the `def` above
-it, because a breakpoint is a *line of a file* and the edit moved what that line is.
-
-"Nothing needed replacing" is printed too, and is deliberately not rendered as "nothing could be
-replaced". They are different facts about the process and bpd distinguishes them.
+- **Applied:** the platform's own tick on the button, and nothing else.
+- **Refused:** a balloon with the reasons. They are bpd's sentences, one per refusal, carried in the
+  answer as `said`, so the wording lives in bpd and the plugin does not re-render the eleven variants
+  of `Unreplaceable`. e.g. `` `f` is stopped at line 3; let it return, then reload ``.
 
 ### the frame you are stopped in
 
 The case people most want this in is stopped at a breakpoint *inside* the function just edited, and
 the reload applies there, as HotSwap does on the JVM: the call that is stopped finishes on the code
-it started with, and the next call runs the edit. bpd says so on the console, one line per call left
-on the old code:
-
-```
-reloaded, but `f` is stopped at line 3; that call finishes on the old code, and the next call runs the new code
-```
+it started with, and the next call runs the edit. That is not announced — it is what anyone pressing
+the button expects — though bpd reports every such call in the answer (`still_running`).
 
 bpd's own default is to refuse — until that frame returns the process runs two versions of one
 function — and it applies only for a caller that asks by name (`evenUnderALiveFrame`). The plugin
-asks: refusing left the button doing nothing in the one place it is pressed most, and the cost is
-stated on the console rather than hidden. It is not a safety question either way: assigning
-`function.__code__` under a live frame is *accepted* on 3.13 through 3.15.
+asks: refusing left the button doing nothing in the one place it is pressed most. It is not a safety
+question either way: assigning `function.__code__` under a live frame is *accepted* on 3.13 through
+3.15.
 
 ### nothing you edit is the file that is running
 

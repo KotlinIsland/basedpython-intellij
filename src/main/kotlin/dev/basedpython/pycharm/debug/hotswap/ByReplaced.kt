@@ -156,6 +156,8 @@ internal data class ByReplacedFile(
     val unchanged: List<String>,
     /** How many things stood in the way, when it was refused. */
     val refusals: Int,
+    /** bpd's sentence for each refusal, to show the user as it wrote them. */
+    val said: List<String> = emptyList(),
 ) {
     companion object {
         fun parse(element: JsonElement): ByReplacedFile? {
@@ -167,6 +169,7 @@ internal data class ByReplacedFile(
                 changed = outcome?.array("changed")?.mapNotNull { ByRebound.parse(it) }.orEmpty(),
                 unchanged = outcome?.strings("unchanged").orEmpty(),
                 refusals = outcome?.array("because")?.size ?: 0,
+                said = entry.strings("said").orEmpty(),
             )
         }
     }
@@ -217,45 +220,4 @@ internal data class ByRebound(
             )
         }
     }
-}
-
-/**
- * What to tell the user about a replacement, or null when there is nothing worth saying.
- *
- * Null for a refusal: bpd writes every reason to the `output` stream itself, as its own sentence,
- * and this plugin shows that stream where a person cannot miss it. A line here would be the same
- * fact a second time, in worse words.
- *
- * Everything else is said, including the replacement that changed nothing — a user who pressed a
- * button and saw no account of it has been told the process is now what they are reading, which on
- * that path happens to be true and on every other path would be a guess.
- */
-internal fun ByReplaced.report(): String? {
-    if (!applied) return null
-    return buildString {
-        files.joinTo(this, "\n") { it.report() }
-        if (rebound.isNotEmpty()) {
-            val lines = rebound.sorted().joinToString(", ")
-            append(if (rebound.size == 1) "\nbreakpoint now at line $lines" else "\nbreakpoints now at lines $lines")
-        }
-    }
-}
-
-/**
- * One line per file: which functions now run the edit, or that the file already was the code.
- *
- * The source map moving under a `.by` reload is left out: it is how the reload works rather than
- * something it did to the program, and it is in [ByReplaced.remapped] for anything that asks.
- */
-private fun ByReplacedFile.report(): String {
-    val what = file?.substringAfterLast('/') ?: "the file"
-    if (changed.isEmpty()) return "$what is already up to date"
-    return "reloaded ${changed.joinToString(", ") { it.describe() }} in $what"
-}
-
-private fun ByRebound.describe(): String = buildString {
-    append('`')
-    append(function)
-    append('`')
-    if (wasAt != null && nowAt != null && wasAt != nowAt) append(" (now at line $nowAt)")
 }
