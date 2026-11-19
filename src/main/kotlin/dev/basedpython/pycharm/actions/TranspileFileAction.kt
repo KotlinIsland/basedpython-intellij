@@ -11,6 +11,7 @@ import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.Task
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.testFramework.LightVirtualFile
+import dev.basedpython.pycharm.lang.dialect.BasedPythonFileTypeOverrider
 import dev.basedpython.pycharm.lang.BasedPythonFileType
 import dev.basedpython.pycharm.transpile.ByTranspile
 import dev.basedpython.pycharm.util.BasedPythonBundle
@@ -40,7 +41,9 @@ class TranspileFileAction : AnAction() {
                 ) ?: return
                 val pyName = file.nameWithoutExtension + ".py"
                 ApplicationManager.getApplication().invokeLater {
-                    val scratch = LightVirtualFile(pyName, com.intellij.openapi.fileTypes.FileTypeManager.getInstance().getFileTypeByExtension("py"), python)
+                    // Typed as the project's `.py` files are: an in-memory file is not one the
+                    // overrider decides about (see BasedPythonFileTypeOverrider).
+                    val scratch = LightVirtualFile(pyName, BasedPythonFileTypeOverrider.pyFileTypeIn(project), python)
                     OpenFileDescriptor(project, scratch).navigate(true)
                 }
             }

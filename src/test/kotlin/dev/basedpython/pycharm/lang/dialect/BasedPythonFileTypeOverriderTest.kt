@@ -19,6 +19,8 @@ import com.intellij.openapi.fileTypes.FileTypeEvent
 import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.testFramework.PlatformTestUtil
+import com.intellij.testFramework.LightVirtualFile
+import com.intellij.openapi.fileTypes.PlainTextFileType
 import org.junit.jupiter.api.Assertions.assertEquals
 
 /**
@@ -250,6 +252,41 @@ class BasedPythonFileTypeOverriderTest {
         createMarker("pyproject.toml", "[project]\nname = \"based\"\ndependencies = [\"basedpython\"]\n")
 
         assertEquals(ProjectKind.BASEDPYTHON, BasedPythonProjectDetector.kind(project))
+    }
+
+    /**
+     * PythonCore parses expressions into a `LightVirtualFile` `dummy.py` it made itself and typed as
+     * Python (`PyExpressionCodeFragmentImpl`); typing it basedpython made its view provider refuse the
+     * Python PSI PythonCore builds in it — 53 SEVERE `AssertionError`s from PythonCore's type evaluation
+     * in one sandbox session, every one blamed on PythonCore.
+     */
+    @Test
+    fun `an in-memory py of nobody's file is left as its maker typed it`() = onEdt {
+        makeBasedPythonProject()
+        assertNull(overrider.getOverriddenFileType(LightVirtualFile("dummy.py", PlainTextFileType.INSTANCE, "x")))
+        assertNull(overrider.getOverriddenFileType(LightVirtualFile("dummy.py", "x")))
+    }
+
+    /** A diff side, a local history revision, a preview: a copy of a project `.py` is typed as the file is. */
+    @Test
+    fun `an in-memory copy of a project py is typed as the file is`() = onEdt {
+        makeBasedPythonProject()
+        val original = fixtureFile("pkg/copied.py")
+        val copy = LightVirtualFile("copied.py", PlainTextFileType.INSTANCE, "x").apply { originalFile = original }
+        assertSame(BasedPythonFileType.INSTANCE, overrider.getOverriddenFileType(copy))
+
+        settings().pyFileHandling = PyFileHandling.NEVER
+        assertNull(overrider.getOverriddenFileType(copy))
+    }
+
+    /** The transpiled module opened from a `.by` is Python source of the project, typed as its `.py` files are. */
+    @Test
+    fun `the type a py has in the project follows who owns py`() = onEdt {
+        makeBasedPythonProject()
+        assertSame(BasedPythonFileType.INSTANCE, BasedPythonFileTypeOverrider.pyFileTypeIn(project))
+
+        settings().pyFileHandling = PyFileHandling.NEVER
+        assertSame(FileTypeManager.getInstance().getFileTypeByExtension("py"), BasedPythonFileTypeOverrider.pyFileTypeIn(project))
     }
 
     /** Files the platform typed before the change have to be typed again, or open `.py` files keep the old type. */

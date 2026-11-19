@@ -53,6 +53,9 @@
   hints already set under the old name keep their setting.
 - Enter with nothing but whitespace before the caret keeps the caret's column, as it does in a
   `.py` file: on a blank line backspaced out of a suite the new line no longer goes back into it.
+- With *Treat .py files as basedpython* set to always, PyCharm's type evaluation no longer logs
+  errors in its own name: the plugin had taken over the in-memory `dummy.py` PyCharm parses
+  expressions into. Only a project's own `.py` files, and copies of them, are basedpython now.
 
 ## [0.0.6.1]
 
