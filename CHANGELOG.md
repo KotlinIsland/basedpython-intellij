@@ -8,6 +8,12 @@
   set to show while it is held, and click a hint to find its kind. A family, or several kinds, can
   be set at once, from the switch, the right-click menu or Space. The kinds are `by`'s own list,
   from `by/inlayHintCatalog`, so a kind `by` adds can be configured without a plugin release.
+- Stub icons in the gutter: *Has stub in x.pyi* on each declaration a module's stub declares too,
+  *Stub for A.f in x.py* on each declaration of a stub, going there on a click, or offering the
+  places when there are several (overloads, `sys.version_info` branches). In `.by`, `.byi`, `.py`
+  and `.pyi` files alike, library and typeshed stubs included, from `by/documentCounterparts`. In
+  PyCharm they take the place of its own stub icon, so a declaration has one. Go to Related Symbol
+  offers the same counterparts, and the other module from anywhere in the file.
 - basedpython in PyCharm's New Project dialog, in its Python group beside *Pure Python*, with the
   interpreter choice every Python project there gets. With uv, the new environment is synced from
   the project's `pyproject.toml` and so has `by` from the start.

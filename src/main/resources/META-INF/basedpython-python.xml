@@ -12,6 +12,9 @@
   `intellij.python.community.impl`, which a `<depends>` on PythonCore reaches: the platform adds an
   edge to every content module of a plugin depended on that way. IntelliJ IDEA's wizard does not
   read this extension point, and lists basedpython from plugin.xml's `languageGenerator` instead.
+
+  PyCharm's stub icon taken out of the gutter where basedpython's own is on the same name
+  (lsp.counterparts.python.ByPyiMarkerFilter), so a declaration has one.
 -->
 <idea-plugin>
     <extensions defaultExtensionNs="dev.basedpython.ide">
@@ -19,5 +22,6 @@
     </extensions>
     <extensions defaultExtensionNs="com.intellij">
         <directoryProjectGenerator implementation="dev.basedpython.pycharm.project.python.BasedPythonPyCharmGenerator"/>
+        <gutterMarkPreprocessor implementation="dev.basedpython.pycharm.lsp.counterparts.python.ByPyiMarkerFilter"/>
     </extensions>
 </idea-plugin>

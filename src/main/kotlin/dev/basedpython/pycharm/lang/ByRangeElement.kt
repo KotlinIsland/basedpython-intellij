@@ -13,6 +13,9 @@ import com.intellij.psi.impl.FakePsiElement
  * element for an argument or a suite. The APIs this stands in for — Move Element Left/Right, the
  * Unwrap/Remove popup — read nothing of an element but where it is, and that is all this has. It
  * holds the file and two offsets, and is made afresh each time one is asked for; nothing keeps it.
+ *
+ * Go to Related Symbol's counterpart in a stub with no tree of its own — a TextMate or plain-text
+ * `.pyi`, whose one leaf is the whole file — is one too, so going there lands on the name.
  */
 internal open class ByRangeElement(private val file: PsiFile, private val range: TextRange) : FakePsiElement() {
 

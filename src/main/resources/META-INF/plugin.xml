@@ -595,6 +595,12 @@
              contributors only ever produced a second copy of every result. -->
         <gotoRelatedProvider
             implementation="dev.basedpython.pycharm.navigation.BasedPythonRelatedProvider"/>
+        <!-- A stub and its runtime module, and their declarations, from by/documentCounterparts as the
+             gutter's stub icons are. First, so that where PyCharm's stub icon offers the same element
+             through RelatedItemLineMarkerGotoAdapter, the entry kept is this one. -->
+        <gotoRelatedProvider
+            order="first"
+            implementation="dev.basedpython.pycharm.lsp.counterparts.ByCounterpartsRelatedProvider"/>
         <!-- Copy Reference on a `.by` module or a package: its dotted name, `by/moduleName`. First, so
              a package in a basedpython project is named from by's search paths rather than Python's. -->
         <qualifiedNameProvider
@@ -663,6 +669,13 @@
         <codeInsight.lineMarkerProvider
             language="basedpython"
             implementationClass="dev.basedpython.pycharm.lsp.supers.ByInheritorMarkers"/>
+        <!-- The gutter's stub icons, "Has stub in x.pyi" / "Stub for A.f in x.py", from
+             by/documentCounterparts. Every language: a .py and a .pyi are the Python plugin's files
+             in PyCharm, and a .pyi is TextMate's without it; the provider asks only about the files
+             by is given. basedpython-python.xml takes PyCharm's own icon away where this one is. -->
+        <codeInsight.lineMarkerProvider
+            language=""
+            implementationClass="dev.basedpython.pycharm.lsp.counterparts.ByCounterpartMarkers"/>
         <!-- Method Hierarchy (Ctrl+Shift+H): `by/superMembers` up, `textDocument/implementation` down. -->
         <methodHierarchyProvider
             language="basedpython"

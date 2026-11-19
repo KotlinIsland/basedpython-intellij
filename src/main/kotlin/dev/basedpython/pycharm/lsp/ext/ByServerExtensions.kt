@@ -301,6 +301,20 @@ interface ByServerExtensions {
     fun documentUsageCounts(args: ByDocumentUsageCountsParams): CompletableFuture<List<ByDeclarationUsages>?>
 
     /**
+     * What a stub and the module it describes have to do with each other, from either side: whether
+     * the document is a stub with a runtime module or a runtime module with a stub, which file or
+     * files are the other side, and for each declaration of the document that has a counterpart
+     * there, where that counterpart is — what the gutter's stub icons, Go to Related Symbol and the
+     * jump to the other module are drawn from
+     * ([dev.basedpython.pycharm.lsp.counterparts.ByCounterparts]).
+     *
+     * `null` when the document is neither, or is not one the server answers for. A `by` from before
+     * the request answers `MethodNotFound`.
+     */
+    @JsonRequest("by/documentCounterparts")
+    fun documentCounterparts(args: ByDocumentCounterpartsParams): CompletableFuture<ByDocumentCounterparts?>
+
+    /**
      * Every file of the workspace checked, answered as soon as the check is done.
      *
      * The same parameters and report as `workspace/diagnostic`, which `by` long-polls: a request
@@ -999,6 +1013,68 @@ data class ByDocumentUsageCountsParams(
     val textDocument: TextDocumentIdentifier,
     val textHash: String,
     val counts: List<String>,
+)
+
+/**
+ * The document whose counterparts to tell, and the text of it they are to be told for.
+ *
+ * `textDocument` is the request's own; `textHash` is the one every document request may carry,
+ * taken out by the server's dispatcher before the handler reads its params (`asked_text.rs`).
+ */
+data class ByDocumentCounterpartsParams(
+    val textDocument: TextDocumentIdentifier,
+    val textHash: String,
+)
+
+/**
+ * A stub and its runtime module, as `by/documentCounterparts` tells it from one side. Field names
+ * are the wire format.
+ */
+data class ByDocumentCounterparts(
+    /** What the document asked about is: [STUB], or [IMPLEMENTATION] — the runtime module. */
+    val role: String? = null,
+    /** The other side, module by module; never empty in an answer. */
+    val counterparts: List<ByCounterpartModule>? = null,
+    /** Each declaration of the document that has a counterpart on the other side. */
+    val declarations: List<ByCounterpartDeclaration>? = null,
+) {
+    val isStub: Boolean get() = role == STUB
+
+    companion object {
+        const val STUB: String = "stub"
+        const val IMPLEMENTATION: String = "implementation"
+    }
+}
+
+/** A module on the other side, by its URI. */
+data class ByCounterpartModule(val uri: String? = null)
+
+/** A declaration of the document asked about, and its counterparts on the other side. */
+data class ByCounterpartDeclaration(
+    /** Its dotted lexical path in the module: `A.f` for the method `f` of the class `A`. */
+    val name: String? = null,
+    /** `"class"`, `"function"` or `"variable"`. */
+    val kind: String? = null,
+    /** Its name, in the document asked about. */
+    val selectionRange: Range? = null,
+    /**
+     * The whole declaration, decorators and body included, as `by/documentUsageCounts` gives one.
+     * Not in the request's contract yet: when a `by` sends it, Go to Related Symbol offers a
+     * declaration's counterparts from anywhere inside it rather than only from its line.
+     */
+    val range: Range? = null,
+    /**
+     * Where it is declared on the other side: one place, or several — the overloads of a function,
+     * the branches of a `sys.version_info` check. Never empty in an answer.
+     */
+    val targets: List<ByCounterpartTarget>? = null,
+)
+
+/** One counterpart of a declaration: the whole of it, and its name. */
+data class ByCounterpartTarget(
+    val uri: String? = null,
+    val range: Range? = null,
+    val selectionRange: Range? = null,
 )
 
 /** A declaration of the document, with the counts asked for. */
