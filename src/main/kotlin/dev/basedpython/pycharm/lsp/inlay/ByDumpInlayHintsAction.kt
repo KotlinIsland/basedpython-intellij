@@ -26,8 +26,12 @@ private val LOG = Logger.getInstance(ByDumpInlayHintsAction::class.java)
  */
 class ByDumpInlayHintsAction : AnAction() {
 
-    /** EDT: the editor's inlays are read here, and [update] asks for the editor. */
-    override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
+    /**
+     * BGT: [update] only asks for the editor and its file, which the platform answers from a
+     * background thread. On EDT, asking for the file was reported from the Marketplace as a data rule
+     * run on EDT. The inlays are read in [actionPerformed], which runs on EDT whatever this says.
+     */
+    override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
 
     override fun update(e: AnActionEvent) {
         val file = e.getData(CommonDataKeys.VIRTUAL_FILE)

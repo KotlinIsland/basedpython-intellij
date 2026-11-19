@@ -380,6 +380,11 @@ object ByEnvironments {
      * picker still read "uv (managed)".
      *
      * Returns `null` when nothing matches — callers must handle that and not launch.
+     *
+     * The walk-up in step 1 starts from [contextFile]'s content root, which is a project index query
+     * and needs a read action. A caller that knows the directory itself passes it as [searchFrom]
+     * instead, and resolution then takes no lock at all: the git hook customizer, which the platform
+     * calls from places where taking one is reported as an error.
      */
     fun resolve(
         project: Project,
@@ -387,6 +392,7 @@ object ByEnvironments {
         contextFile: VirtualFile? = null,
         kind: ByEnvironmentKind = ByEnvironmentKind.AUTO,
         override: String? = null,
+        searchFrom: Path? = null,
     ): ByLaunch? {
         if (kind == ByEnvironmentKind.AUTO && !override.isNullOrBlank()) {
             val p = guarded { Paths.get(override) }
@@ -405,7 +411,7 @@ object ByEnvironments {
             LOG.warn("Configured $binary override path is not executable, ignoring: $override")
         }
 
-        val startDirs = searchStartDirs(contentRootPath(project, contextFile), basePath(project))
+        val startDirs = searchStartDirs(searchFrom ?: contentRootPath(project, contextFile), basePath(project))
 
         fun venvLaunch(root: Path, k: ByEnvironmentKind) =
             ByLaunch(venvBinary(root, binary), emptyList(), activationEnv(root), root, k)

@@ -2,7 +2,7 @@ package dev.basedpython.pycharm.lsp.inject
 
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ApplicationManager
-import com.intellij.openapi.application.ReadAction
+import com.intellij.openapi.application.readAction
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
 import com.intellij.openapi.editor.Document
@@ -13,7 +13,6 @@ import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiDocumentManager
 import com.intellij.psi.PsiFile
 import com.intellij.util.FileContentUtilCore
-import com.intellij.util.concurrency.AppExecutorUtil
 import com.intellij.util.containers.ContainerUtil
 import dev.basedpython.pycharm.lsp.ByAnswer
 import dev.basedpython.pycharm.lsp.ByLspLifecycleListener
@@ -26,6 +25,9 @@ import dev.basedpython.pycharm.lsp.ext.ByServerExtensions
 import dev.basedpython.pycharm.lsp.runningByServer
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import org.eclipse.lsp4j.TextDocumentIdentifier
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import org.jetbrains.annotations.TestOnly
 
 /**
@@ -56,7 +58,7 @@ import org.jetbrains.annotations.TestOnly
  * heard building its `didOpen`.
  */
 @Service(Service.Level.PROJECT)
-internal class ByInjections(private val project: Project) : Disposable {
+internal class ByInjections(private val project: Project, private val scope: CoroutineScope) : Disposable {
 
     /** What the server said about one document, and the revision it was said about. */
     private class Answer(val stamp: Long, val injections: List<ByInjection>)
@@ -166,12 +168,17 @@ internal class ByInjections(private val project: Project) : Disposable {
      * Asks about [virtualFile] off the EDT, and re-injects if the answer turns out not to be the
      * nothing that was served in the meantime.
      *
-     * The read action is a *non-blocking* one, and that is not a detail. The request inside it waits
-     * on the server for up to [INJECTIONS_TIMEOUT_MS], and a plain `ReadAction.compute` holds the
-     * read lock for all of it with no indicator for `sendRequestSync` to notice a cancellation on —
-     * so a write action starting in that window, which is to say a keystroke, would freeze the EDT
-     * until the server answered. A non-blocking read action gives way to the pending write and is
-     * retried instead.
+     * The read action is a coroutine's, and that is not a detail. The request inside it waits on the
+     * server for up to [INJECTIONS_TIMEOUT_MS], and a plain `ReadAction.compute` holds the read lock
+     * for all of it with nothing for `sendRequestSync` to notice a cancellation on — so a write
+     * action starting in that window, which is to say a keystroke, would freeze the EDT until the
+     * server answered. A coroutine's read action gives way to the pending write and is retried
+     * instead: measured, a write action waited 18 ms on one blocked in `awaitWithCheckCanceled`, as
+     * `sendRequestSync` is, and the read ran again after it.
+     *
+     * Launched in this service's scope, not handed to an executor, which would carry the asker's
+     * thread context and with it any [com.intellij.model.SideEffectGuard]; see
+     * `ByOutlines.askInBackground`, where that was reported from the Marketplace.
      *
      * A call while a request is already out is noted in [askAgain] and asked once that one is done,
      * rather than dropped, so that a pass served nothing while an earlier request was out — one for
@@ -182,15 +189,15 @@ internal class ByInjections(private val project: Project) : Disposable {
         if (byServerFor(project, virtualFile) == null) return
         askAgain.add(virtualFile)
         if (!asking.add(virtualFile)) return
-        AppExecutorUtil.getAppExecutorService().execute {
+        scope.launch(Dispatchers.IO) {
             try {
                 while (askAgain.remove(virtualFile) && !project.isDisposed) {
-                    val found = ReadAction.nonBlocking<List<ByInjection>> {
-                        if (!virtualFile.isValid) return@nonBlocking emptyList()
+                    val found = readAction {
+                        if (!virtualFile.isValid) return@readAction emptyList()
                         val document = FileDocumentManager.getInstance().getDocument(virtualFile)
-                            ?: return@nonBlocking emptyList()
+                            ?: return@readAction emptyList()
                         ask(virtualFile, document, document.modificationStamp)
-                    }.expireWith(this).executeSynchronously()
+                    }
                     if (found.isNotEmpty() && servedNothing.remove(virtualFile)) reinject(virtualFile)
                 }
             } catch (_: ProcessCanceledException) {

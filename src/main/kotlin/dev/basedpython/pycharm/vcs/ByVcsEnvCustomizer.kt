@@ -1,11 +1,10 @@
 package dev.basedpython.pycharm.vcs
 
-import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.components.serviceOrNull
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vcs.VcsEnvCustomizer
+import com.intellij.openapi.vfs.toNioPathOrNull
 import dev.basedpython.pycharm.env.ByEnvironments
-import dev.basedpython.pycharm.env.ByLaunch
 import dev.basedpython.pycharm.lang.dialect.BasedPythonProjectDetector
 import dev.basedpython.pycharm.lsp.BasedPythonBinaries
 import dev.basedpython.pycharm.settings.BasedPythonSettings
@@ -28,9 +27,13 @@ import dev.basedpython.pycharm.settings.BasedPythonSettings
  *
  * Every git command the IDE runs passes through here — status refreshes, log loads — so this is
  * kept to the lookups resolution already does: a few file checks and the cached project verdict.
- * The content-root lookup inside resolution reads the project model, so it is done in a read
- * action; the platform only asks with read locks allowed (`GitHandler` skips the customizers where
- * they are not).
+ *
+ * It takes no lock. Git runs its customizers wherever a git command starts, including inside an
+ * action's `update`, where locks are prohibited: reported from the Marketplace, another plugin's
+ * toolbar widget asked for a repository there, the repository's first `git worktree list` came
+ * through here, and the read action this took for the content-root lookup was reported as an error
+ * four times in four seconds. So the `.venv` walk-up starts from the repository root, which is the
+ * directory git runs the hooks in, rather than from its content root, which is an index query.
  */
 internal class ByVcsEnvCustomizer : VcsEnvCustomizer() {
 
@@ -46,11 +49,11 @@ internal class ByVcsEnvCustomizer : VcsEnvCustomizer() {
         // lookup threw. There is nothing to add to a command then.
         if (project.serviceOrNull<BasedPythonSettings>() == null) return
         if (!BasedPythonProjectDetector.isBasedPythonProject(project)) return
-        val root = context.root
-        val launches = ReadAction.computeBlocking<List<ByLaunch>, RuntimeException> {
-            if (project.isDisposed) return@computeBlocking emptyList()
-            listOfNotNull(BasedPythonBinaries.launchBy(project, root), BasedPythonBinaries.launchBuff(project, root))
-        }
+        val root = context.root?.toNioPathOrNull()
+        val launches = listOfNotNull(
+            BasedPythonBinaries.launchBy(project, searchFrom = root),
+            BasedPythonBinaries.launchBuff(project, searchFrom = root),
+        )
         envs.putAll(ByEnvironments.hookEnvironment(launches, envs["PATH"]))
     }
 }

@@ -25,13 +25,19 @@ object BasedPythonBinaries {
   const val BIN_BY: String = "by"
   const val BIN_BUFF: String = "buff"
 
-  /** Full launch for `by`: executable, any argument prefix (uv), and the environment to run in. */
+  /**
+   * Full launch for `by`: executable, any argument prefix (uv), and the environment to run in.
+   *
+   * With [searchFrom], the venv walk-up starts there instead of at [contextFile]'s content root, and
+   * no lock is taken; see [ByEnvironments.resolve].
+   */
   fun launchBy(
     project: Project,
     contextFile: VirtualFile? = null,
     kind: ByEnvironmentKind = ByEnvironmentKind.AUTO,
+    searchFrom: Path? = null,
   ): ByLaunch? = ByEnvironments.resolve(
-    project, BIN_BY, contextFile, kind, BasedPythonSettings.getInstance(project).effectiveByPath,
+    project, BIN_BY, contextFile, kind, BasedPythonSettings.getInstance(project).effectiveByPath, searchFrom,
   )
 
   /** Full launch for `buff`. */
@@ -39,8 +45,9 @@ object BasedPythonBinaries {
     project: Project,
     contextFile: VirtualFile? = null,
     kind: ByEnvironmentKind = ByEnvironmentKind.AUTO,
+    searchFrom: Path? = null,
   ): ByLaunch? = ByEnvironments.resolve(
-    project, BIN_BUFF, contextFile, kind, BasedPythonSettings.getInstance(project).effectiveBuffPath,
+    project, BIN_BUFF, contextFile, kind, BasedPythonSettings.getInstance(project).effectiveBuffPath, searchFrom,
   )
 
   /** True when `by` can be located. For availability checks (banners, inspections, gating). */

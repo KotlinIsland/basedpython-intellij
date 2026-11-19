@@ -5,6 +5,7 @@ import com.intellij.codeInsight.daemon.DaemonCodeAnalyzer
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ReadAction
+import com.intellij.openapi.application.readAction
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
 import com.intellij.openapi.editor.Document
@@ -13,13 +14,11 @@ import com.intellij.openapi.editor.event.DocumentEvent
 import com.intellij.openapi.editor.event.DocumentListener
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.fileEditor.FileEditorManager
-import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiDocumentManager
 import com.intellij.psi.PsiFile
 import com.intellij.psi.PsiManager
-import com.intellij.util.concurrency.AppExecutorUtil
 import com.intellij.util.containers.ContainerUtil
 import dev.basedpython.pycharm.lang.BasedPythonFile
 import dev.basedpython.pycharm.lsp.ByAnswer
@@ -34,6 +33,9 @@ import dev.basedpython.pycharm.lsp.runningByServer
 import org.eclipse.lsp4j.TextDocumentIdentifier
 import org.jetbrains.annotations.TestOnly
 import java.util.Collections
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 /**
  * What `by` last said about each `.by` document's block structure and strings, per revision.
@@ -74,7 +76,7 @@ import java.util.Collections
  * it did not hold; before that it asked straight away and again 700ms later.
  */
 @Service(Service.Level.PROJECT)
-internal class ByOutlines(private val project: Project) : Disposable {
+internal class ByOutlines(private val project: Project, private val scope: CoroutineScope) : Disposable {
 
     /**
      * Weak keys: a file that is closed and collected takes its answer with it. Keyed by the file
@@ -201,14 +203,27 @@ internal class ByOutlines(private val project: Project) : Disposable {
             ByAnswer.Failed -> return null
         }
         answers[virtualFile] = outline
-        project.messageBus.syncPublisher(ByOutlineListener.TOPIC).outlineArrived(virtualFile)
+        announce(virtualFile)
         return outline
+    }
+
+    /**
+     * Tells [ByOutlineListener]s that [file] has an answer, from this service's own context rather
+     * than the asker's.
+     *
+     * A listener goes on to the EDT, and the asker can be somewhere that is refused: a computation
+     * under [com.intellij.model.SideEffectGuard], such as an intention preview, refuses
+     * `invokeLater`, and a listener's was reported from the Marketplace as a control-flow exception
+     * logged as an error.
+     */
+    private fun announce(file: VirtualFile) {
+        scope.launch { project.messageBus.syncPublisher(ByOutlineListener.TOPIC).outlineArrived(file) }
     }
 
     /**
      * Asks about [document] off the EDT, once at a time per file.
      *
-     * A non-blocking read action, so a keystroke arriving while the server is being waited on
+     * A coroutine's read action, so a keystroke arriving while the server is being waited on
      * cancels the wait and the read is retried against the new text, instead of the keystroke
      * queueing behind the server. An edit that lands after the answer but before the next ask can
      * be let in is caught by comparing stamps once this one is done.
@@ -217,29 +232,31 @@ internal class ByOutlines(private val project: Project) : Disposable {
      * asks once more when it is done. An edit is caught by the stamps either way; what this catches
      * is the ask a new server makes of every file on screen arriving while a request to the old one
      * is still out, which comes back with nothing and would otherwise be the last word.
+     *
+     * Launched in this service's scope, not handed to an executor: an executor carries the thread
+     * context of whoever asked, and with it a [com.intellij.model.SideEffectGuard] that refuses
+     * `invokeLater` — measured, a pooled task started under `computeWithoutSideEffects` is refused
+     * it, a coroutine launched in a service's scope is not — so an ask started from an intention
+     * preview could neither announce its answer nor restart the file's highlighting.
      */
     private fun askInBackground(virtualFile: VirtualFile, document: Document) {
         // Nothing to ask: no thread is worth starting, and in a test there is never a server.
         if (byServerFor(project, virtualFile) == null) return
         askAgain.add(virtualFile)
         if (!asking.add(virtualFile)) return
-        AppExecutorUtil.getAppExecutorService().execute {
+        scope.launch(Dispatchers.IO) {
             var answered: Long? = null
             try {
                 while (askAgain.remove(virtualFile) && !project.isDisposed) {
-                    answered = ReadAction.nonBlocking<Long?> {
-                        ask(virtualFile, document)?.stamp
-                    }.expireWith(this).executeSynchronously()
+                    answered = readAction { ask(virtualFile, document)?.stamp }
                 }
-            } catch (_: ProcessCanceledException) {
-                // The project closed. Nothing to ask for any more.
             } finally {
                 asking.remove(virtualFile)
             }
-            if (project.isDisposed) return@execute
+            if (project.isDisposed) return@launch
             // asked for between the last look at [askAgain] and the request no longer counting as out
-            if (virtualFile in askAgain) return@execute askInBackground(virtualFile, document)
-            if (answered == null) return@execute
+            if (virtualFile in askAgain) return@launch askInBackground(virtualFile, document)
+            if (answered == null) return@launch
             if (answered != document.modificationStamp) {
                 askInBackground(virtualFile, document)
             } else if (servedNothing.remove(virtualFile)) {
