@@ -51,6 +51,11 @@ data class ByHintKindInfo(
     val fileKind: String? = null,
     /** A short program showing the kind, with the hints `by` computes for it; `null` when none can be shown standalone. */
     val example: ByHintExample? = null,
+    /**
+     * The stub [example]'s hints were computed against, for a kind whose hints come from a stub
+     * (`stubTypes`, `stubOnlyMembers`): what the example's module would have beside it as its `.pyi`.
+     */
+    val exampleStub: String? = null,
 ) {
     val kind: ByHintKind get() = ByHintKind(setting)
 

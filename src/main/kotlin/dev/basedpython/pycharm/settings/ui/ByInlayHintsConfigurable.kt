@@ -5,6 +5,7 @@ import com.intellij.codeInsight.daemon.impl.InlayHintsPassFactoryInternal
 import com.intellij.codeInsight.hints.InlayContentListener
 import com.intellij.codeInsight.hints.InlayHintsSettings
 import com.intellij.codeInsight.hints.presentation.InlayPresentation
+import com.intellij.codeInsight.hints.presentation.InputHandler
 import com.intellij.codeInsight.hints.presentation.PresentationRenderer
 import com.intellij.codeInsight.hints.presentation.StaticDelegatePresentation
 import com.intellij.openapi.Disposable
@@ -12,6 +13,7 @@ import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.openapi.editor.Editor
+import com.intellij.openapi.editor.EditorCustomElementRenderer
 import com.intellij.openapi.editor.EditorFactory
 import com.intellij.openapi.editor.EditorKind
 import com.intellij.openapi.editor.Inlay
@@ -47,10 +49,12 @@ import com.intellij.util.ui.tree.TreeUtil
 import dev.basedpython.pycharm.lang.BasedPythonFileType
 import dev.basedpython.pycharm.lang.BasedPythonLanguage
 import dev.basedpython.pycharm.lang.dialect.BasedPythonProjectDetector
+import dev.basedpython.pycharm.lsp.inlay.ByBlockHintPresentation
 import dev.basedpython.pycharm.lsp.inlay.ByHintGroup
 import dev.basedpython.pycharm.lsp.inlay.ByHintKind
 import dev.basedpython.pycharm.lsp.inlay.ByHintKindInfo
 import dev.basedpython.pycharm.lsp.inlay.ByHintMode
+import dev.basedpython.pycharm.lsp.inlay.ByHintPlacement
 import dev.basedpython.pycharm.lsp.inlay.ByInlayCatalog
 import dev.basedpython.pycharm.lsp.inlay.ByInlayHintCatalog
 import dev.basedpython.pycharm.lsp.inlay.ByInlayHintPresentation
@@ -60,6 +64,8 @@ import dev.basedpython.pycharm.lsp.reload.BasedPythonLspReloader
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import java.awt.AlphaComposite
 import java.awt.BorderLayout
+import java.awt.Graphics
+import java.awt.Rectangle
 import java.awt.Graphics2D
 import java.awt.event.KeyAdapter
 import java.awt.event.KeyEvent
@@ -211,6 +217,22 @@ internal class ByInlayHintsConfigurable(private val project: Project) : Searchab
         }
         private val previewHolder = JPanel(BorderLayout())
 
+        /** The stub the selected kinds' examples were computed against, for kinds whose hints come from one. */
+        private val stubDocument = EditorFactory.getInstance().createDocument("")
+        private val stubEditor = EditorFactory.getInstance().createViewer(stubDocument, project, EditorKind.PREVIEW) as EditorEx
+        private val exampleCaption = caption("Module")
+        private val stubHolder = JPanel(BorderLayout(0, JBUI.scale(2))).apply {
+            add(caption("Its stub, which the hints come from"), BorderLayout.NORTH)
+            add(
+                JPanel(BorderLayout()).apply {
+                    border = JBUI.Borders.customLine(JBUI.CurrentTheme.CustomFrameDecorations.separatorForeground(), 1)
+                    add(stubEditor.component, BorderLayout.CENTER)
+                },
+                BorderLayout.CENTER,
+            )
+            isVisible = false
+        }
+
         /** Which kind each drawn inlay is, for a click on one to select it. */
         private val inlayKinds = HashMap<Inlay<*>, ByHintKind>()
 
@@ -268,7 +290,20 @@ internal class ByInlayHintsConfigurable(private val project: Project) : Searchab
                 // rather than stretched over the rest of the page
                 add(
                     JPanel(BorderLayout(0, JBUI.scale(6))).apply {
-                        add(previewHolder, BorderLayout.NORTH)
+                        // the stub, when the kinds' hints come from one, over the module they are drawn in
+                        add(
+                            JPanel(BorderLayout(0, JBUI.scale(6))).apply {
+                                add(stubHolder, BorderLayout.NORTH)
+                                add(
+                                    JPanel(BorderLayout(0, JBUI.scale(2))).apply {
+                                        add(exampleCaption, BorderLayout.NORTH)
+                                        add(previewHolder, BorderLayout.CENTER)
+                                    },
+                                    BorderLayout.CENTER,
+                                )
+                            },
+                            BorderLayout.NORTH,
+                        )
                         add(
                             JBLabel("Hold the push key over the preview to see the hints set to show while it is held. Click a hint to find its kind.").apply {
                                 foreground = UIUtil.getContextHelpForeground()
@@ -315,6 +350,18 @@ internal class ByInlayHintsConfigurable(private val project: Project) : Searchab
         }
 
         private fun configureEditor() {
+            configureViewer(editor)
+            configureViewer(stubEditor)
+            editor.addEditorMouseListener(object : EditorMouseListener {
+                override fun mouseClicked(event: EditorMouseEvent) {
+                    val kind = event.inlay?.let(inlayKinds::get) ?: return
+                    select(kind)
+                }
+            }, this)
+        }
+
+        /** A read-only basedpython editor sized to what it shows, as the preview and the stub are. */
+        private fun configureViewer(editor: EditorEx) {
             editor.highlighter = EditorHighlighterFactory.getInstance().createEditorHighlighter(project, BasedPythonFileType.INSTANCE)
             editor.settings.apply {
                 isLineNumbersShown = false
@@ -333,12 +380,24 @@ internal class ByInlayHintsConfigurable(private val project: Project) : Searchab
             editor.setVerticalScrollbarVisible(false)
             editor.setHorizontalScrollbarVisible(false)
             editor.contentComponent.border = JBUI.Borders.empty(6, 4)
-            editor.addEditorMouseListener(object : EditorMouseListener {
-                override fun mouseClicked(event: EditorMouseEvent) {
-                    val kind = event.inlay?.let(inlayKinds::get) ?: return
-                    select(kind)
-                }
-            }, this)
+        }
+
+        /** Shows the stubs of [kinds] that have one over the preview, or nothing when none has. */
+        private fun showStubs(kinds: List<ByHintKindInfo>) {
+            val stubs = kinds.mapNotNull { info -> info.exampleStub?.takeIf { it.isNotBlank() }?.let { info to it } }
+            stubHolder.isVisible = stubs.isNotEmpty()
+            exampleCaption.isVisible = stubs.isNotEmpty()
+            if (stubs.isEmpty()) return
+            val text = stubs.joinToString("\n") { (info, stub) ->
+                (if (stubs.size > 1) "# ${info.title}\n" else "") + stub.trimEnd('\n') + "\n"
+            }
+            com.intellij.openapi.application.runWriteAction { stubDocument.setText(text) }
+            stubEditor.component.preferredSize = java.awt.Dimension(0, stubEditor.lineHeight * (stubDocument.lineCount + 1) + JBUI.scale(14))
+        }
+
+        private fun caption(text: String) = JBLabel(text).apply {
+            foreground = UIUtil.getContextHelpForeground()
+            font = JBUI.Fonts.smallFont()
         }
 
         /** The tree for [query]: every family with a kind matching it, or every family. */
@@ -453,6 +512,7 @@ internal class ByInlayHintsConfigurable(private val project: Project) : Searchab
         private fun preview(kinds: List<ByHintKindInfo>, emphasise: Boolean) {
             val examples = kinds.mapNotNull { info -> info.example?.takeIf { it.source.isNotEmpty() }?.let { info to it } }
             previewHolder.removeAll()
+            showStubs(examples.map { it.first })
             if (examples.isEmpty()) {
                 inlayKinds.keys.forEach { Disposer.dispose(it) }
                 inlayKinds.clear()
@@ -491,11 +551,31 @@ internal class ByInlayHintsConfigurable(private val project: Project) : Searchab
 
             val chosen = kinds.map { it.kind }.toSet()
             val catalogs = ByInlayCatalog.getInstance()
+            // what the hints drawn as lines of their own take, held whether they show now or only
+            // under the push key, so the preview does not change size when it goes down
+            var blockLines = 0
             for ((offset, hint) in placed.sortedBy { it.first }) {
                 val kind = ByInlayHints.kindOf(hint)
                 val mode = mode(kind)
                 if (!mode.isCollected) continue
                 val label = ByInlayHints.partsOf(hint).joinToString("") { it.text }.ifEmpty { continue }
+                val relates = catalog.kind(kind)?.relatesToPrecedingText ?: catalogs.relatesToPrecedingText(kind)
+                val placement = ByInlayHints.placementOf(hint)
+                if (placement.isBlock) {
+                    val block = ByBlockHintPresentation(editor = editor, text = label, mode = mode, pushKey = pendingPushKey)
+                    val shown: InlayPresentation = if (emphasise && kind !in chosen) Faded(block) else block
+                    val inlay = editor.inlayModel.addBlockElement(
+                        offset,
+                        relates,
+                        placement == ByHintPlacement.ABOVE,
+                        0,
+                        BlockRenderer(shown),
+                    ) ?: continue
+                    shown.addListener(InlayContentListener(inlay))
+                    inlayKinds[inlay] = kind
+                    blockLines += label.count { it == '\n' } + 1
+                    continue
+                }
                 val drawn = ByInlayHintPresentation(
                     editor = editor,
                     text = ByInlayHints.truncate(label),
@@ -507,14 +587,15 @@ internal class ByInlayHintsConfigurable(private val project: Project) : Searchab
                 val presentation: InlayPresentation = if (emphasise && kind !in chosen) Faded(drawn) else drawn
                 val inlay = editor.inlayModel.addInlineElement(
                     offset,
-                    catalog.kind(kind)?.relatesToPrecedingText ?: catalogs.relatesToPrecedingText(kind),
+                    relates,
                     PresentationRenderer(presentation),
                 ) ?: continue
                 presentation.addListener(InlayContentListener(inlay))
                 inlayKinds[inlay] = kind
             }
             // exactly the example's lines: an editor asks a scroll pane for whatever room it is given
-            editor.component.preferredSize = java.awt.Dimension(0, editor.lineHeight * (document.lineCount + 1) + JBUI.scale(14))
+            editor.component.preferredSize =
+                java.awt.Dimension(0, editor.lineHeight * (document.lineCount + blockLines + 1) + JBUI.scale(14))
             previewHolder.revalidate()
             previewHolder.repaint()
         }
@@ -548,6 +629,7 @@ internal class ByInlayHintsConfigurable(private val project: Project) : Searchab
             inlayKinds.keys.forEach { Disposer.dispose(it) }
             inlayKinds.clear()
             EditorFactory.getInstance().releaseEditor(editor)
+            EditorFactory.getInstance().releaseEditor(stubEditor)
         }
 
         private inner class Renderer : ColoredTreeCellRenderer() {
@@ -567,6 +649,27 @@ internal class ByInlayHintsConfigurable(private val project: Project) : Searchab
                     }
                     else -> Unit
                 }
+            }
+        }
+    }
+
+    /**
+     * A hint drawn as lines of its own in the preview, as tall as it is: the platform's
+     * [PresentationRenderer] is for a hint in a line, and takes the line's height.
+     */
+    private class BlockRenderer(private val presentation: InlayPresentation) :
+        EditorCustomElementRenderer, InputHandler by presentation {
+        override fun calcWidthInPixels(inlay: Inlay<*>): Int = presentation.width
+
+        override fun calcHeightInPixels(inlay: Inlay<*>): Int = presentation.height
+
+        override fun paint(inlay: Inlay<*>, g: Graphics, targetRegion: Rectangle, textAttributes: TextAttributes) {
+            val g2 = g.create() as Graphics2D
+            try {
+                g2.translate(targetRegion.x, targetRegion.y)
+                presentation.paint(g2, textAttributes)
+            } finally {
+                g2.dispose()
             }
         }
     }

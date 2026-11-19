@@ -272,5 +272,55 @@ class ByInlayHintsTest {
         assertEquals(listOf("returnTypes", "variableTypes"), catalog.sourceKinds.map { it.setting })
     }
 
+    /** As `by/inlayHintCatalog` writes a kind whose hints come from a stub, through lsp4j's Gson as the request reads it. */
+    @Test
+    fun `a catalog entry carries the stub its example's hints were computed against`() {
+        val gson = org.eclipse.lsp4j.jsonrpc.json.MessageJsonHandler(emptyMap()).gson
+        val json = """{"kinds":[{"setting":"stubOnlyMembers","title":"Stub-only members","group":"stubs",""" +
+            """"example":{"source":"class A:\n    def f(self, a): ...\n","hints":[{"position":{"line":1,"character":31},""" +
+            """"label":"\n    def g(self, a: int) -> None: ...","data":{"kind":"stubOnlyMembers","placement":"below"}}]},""" +
+            """"exampleStub":"class A:\n    def f(self, a: int) -> None: ...\n    def g(self, a: int) -> None: ...\n"},""" +
+            """{"setting":"variableTypes"}]}"""
+        val catalog = gson.fromJson(json, ByInlayHintCatalog::class.java)
+        val stubOnly = catalog.kind(ByHintKind("stubOnlyMembers"))!!
+        assertEquals("class A:\n    def f(self, a: int) -> None: ...\n    def g(self, a: int) -> None: ...\n", stubOnly.exampleStub)
+        assertEquals(ByHintPlacement.BELOW, ByInlayHints.placementOf(stubOnly.example!!.hints!!.single()))
+        assertNull(catalog.kind(ByHintKind("variableTypes"))!!.exampleStub)
+    }
+
+    // endregion
+
+    // region: placement
+
+    private fun placed(placement: JsonElement?, kind: String = "stubOnlyMembers"): InlayHint =
+        InlayHint(Position(0, 0), Either.forLeft("    def g(self) -> None: ...")).also { hint ->
+            hint.data = JsonObject().apply {
+                addProperty("kind", kind)
+                if (placement != null) add("placement", placement)
+            }
+        }
+
+    @Test
+    fun `a hint placed above or below is lines of its own`() {
+        assertEquals(ByHintPlacement.ABOVE, ByInlayHints.placementOf(placed(JsonPrimitive("above"))))
+        assertEquals(ByHintPlacement.BELOW, ByInlayHints.placementOf(placed(JsonPrimitive("below"))))
+        assertTrue(ByInlayHints.placementOf(placed(JsonPrimitive("below"))).isBlock)
+    }
+
+    /** By the placement, not the kind: any kind `by` places on lines of its own is drawn there. */
+    @Test
+    fun `the placement is the hint's, whatever its kind`() {
+        assertEquals(ByHintPlacement.BELOW, ByInlayHints.placementOf(placed(JsonPrimitive("below"), kind = "someKindFromLater")))
+        assertEquals(ByHintPlacement.INLINE, ByInlayHints.placementOf(placed(null)))
+    }
+
+    @Test
+    fun `no data, a placement not known, or one not a string is in the line`() {
+        assertEquals(ByHintPlacement.INLINE, ByInlayHints.placementOf(textHint(": int")))
+        assertEquals(ByHintPlacement.INLINE, ByInlayHints.placementOf(placed(JsonPrimitive("beside"))))
+        assertEquals(ByHintPlacement.INLINE, ByInlayHints.placementOf(placed(JsonPrimitive(1))))
+        assertFalse(ByHintPlacement.INLINE.isBlock)
+    }
+
     // endregion
 }

@@ -14,6 +14,10 @@
   and `.pyi` files alike, library and typeshed stubs included, from `by/documentCounterparts`. In
   PyCharm they take the place of its own stub icon, so a declaration has one. Go to Related Symbol
   offers the same counterparts, and the other module from anywhere in the file.
+- Inlay hints drawn as lines of their own, above or below a line, for any kind `by` places that
+  way: a member a stub declares and its module lacks is drawn where the module would declare it, as
+  faded, highlighted code. The settings page's preview draws them too, under the stub an example's
+  hints come from.
 - basedpython in PyCharm's New Project dialog, in its Python group beside *Pure Python*, with the
   interpreter choice every Python project there gets. With uv, the new environment is synced from
   the project's `pyproject.toml` and so has `by` from the start.

@@ -93,6 +93,24 @@ object ByInlayHints {
     /** The member of a hint's `data` that `by` names its kind in. */
     private const val KIND_TAG = "kind"
 
+    /**
+     * Where the hint goes: in the line at its position, as every LSP hint does, or as lines of its
+     * own above or below the line its position is on — `data.placement`, `"above"` or `"below"`.
+     *
+     * Read from the hint, never from its kind, so that any kind `by` places on lines of its own is
+     * drawn there, the day it does: a member a stub declares and the runtime module lacks
+     * (`stubOnlyMembers`) is the first, and nothing here names it. A placement this plugin does not
+     * know, or none, is [ByHintPlacement.INLINE].
+     */
+    fun placementOf(hint: InlayHint): ByHintPlacement {
+        val data = hint.data as? JsonObject ?: return ByHintPlacement.INLINE
+        val tag = data.get(PLACEMENT_TAG)?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }?.asString
+        return ByHintPlacement.entries.firstOrNull { it.wire != null && it.wire == tag } ?: ByHintPlacement.INLINE
+    }
+
+    /** The member of a hint's `data` that `by` says where a hint goes in. */
+    private const val PLACEMENT_TAG = "placement"
+
     /** The hint's tooltip text, if it has one — lsp4j's `string | MarkupContent`. */
     fun tooltipOf(hint: InlayHint): String? {
         val tooltip = hint.tooltip ?: return null
@@ -107,6 +125,21 @@ object ByInlayHints {
     /** [text] as drawn, cut to [max] characters. */
     fun truncate(text: String, max: Int = MAX_CHARS): String =
         if (text.length <= max) text else text.take(max - ELLIPSIS.length) + ELLIPSIS
+}
+
+/** Where a hint is drawn, as [ByInlayHints.placementOf] reads it; [wire] is `data.placement`. */
+enum class ByHintPlacement(val wire: String?) {
+    /** In the line, at its position. */
+    INLINE(null),
+
+    /** Lines of its own, above the line its position is on. */
+    ABOVE("above"),
+
+    /** Lines of its own, below the line its position is on. */
+    BELOW("below"),
+    ;
+
+    val isBlock: Boolean get() = this != INLINE
 }
 
 /** One run of a hint's label, and the place it names — `null` for the punctuation between names. */

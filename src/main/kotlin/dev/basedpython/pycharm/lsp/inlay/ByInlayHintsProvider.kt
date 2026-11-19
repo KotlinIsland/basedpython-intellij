@@ -193,10 +193,36 @@ private class ByInlayHintsCollector(
             // Ordinarily nothing arrives that is switched off, `by` having been told not to compute
             // it; this is what covers the window before that setting reaches a running server.
             if (!mode.isCollected) continue
+            val edits = hint.textEdits.orEmpty()
+            val accept = if (edits.isEmpty()) null else { { acceptHint(project, document, stamp, edits) } }
+
+            val placement = ByInlayHints.placementOf(hint)
+            if (placement.isBlock) {
+                // Lines of code of their own, above or below the line the position is on: drawn whole,
+                // never cut — a member signature with an ellipsis in it says less than nothing — and
+                // kept out of the alignment and the audit, which are about what is inside a line.
+                val links = ByInlayHints.linksOf(parts, label)
+                val block = ByBlockHintPresentation(
+                    editor = editor,
+                    text = label,
+                    mode = mode,
+                    pushKey = pushKey,
+                    links = links,
+                    navigate = navigate.takeIf { links.isNotEmpty() },
+                    accept = accept,
+                )
+                sink.addBlockElement(
+                    offset,
+                    catalog.relatesToPrecedingText(kind),
+                    placement == ByHintPlacement.ABOVE,
+                    0,
+                    ByInlayHints.tooltipOf(hint)?.let { factory.withTooltip(it, block) } ?: block,
+                )
+                continue
+            }
 
             val text = ByInlayHints.truncate(label)
             val links = ByInlayHints.linksOf(parts, text)
-            val edits = hint.textEdits.orEmpty()
             val presentation = ByInlayHintPresentation(
                 editor = editor,
                 text = text,
@@ -206,7 +232,7 @@ private class ByInlayHintsCollector(
                 pushKey = pushKey,
                 links = links,
                 navigate = navigate.takeIf { links.isNotEmpty() },
-                accept = if (edits.isEmpty()) null else { { acceptHint(project, document, stamp, edits) } },
+                accept = accept,
             )
             // The server's own tooltip when it sent one; otherwise the untruncated text, so a hint
             // that had to be cut can still be read in full.
