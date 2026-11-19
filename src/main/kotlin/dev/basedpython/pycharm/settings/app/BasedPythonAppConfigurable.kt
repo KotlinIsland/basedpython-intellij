@@ -1,122 +1,105 @@
 package dev.basedpython.pycharm.settings.app
 
-import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
-import com.intellij.openapi.options.Configurable
+import com.intellij.openapi.options.BoundConfigurable
 import com.intellij.openapi.project.ProjectManager
-import com.intellij.openapi.ui.TextFieldWithBrowseButton
-import com.intellij.ui.components.JBTextField
+import com.intellij.openapi.ui.DialogPanel
+import com.intellij.openapi.util.Disposer
 import com.intellij.ui.dsl.builder.AlignX
+import com.intellij.ui.dsl.builder.BottomGap
+import com.intellij.ui.dsl.builder.MAX_LINE_LENGTH_WORD_WRAP
+import com.intellij.ui.dsl.builder.Panel
+import com.intellij.ui.dsl.builder.bindSelected
+import com.intellij.ui.dsl.builder.bindText
 import com.intellij.ui.dsl.builder.panel
 import dev.basedpython.pycharm.lang.dialect.BasedPythonProjectDetector
+import dev.basedpython.pycharm.lsp.BasedPythonBinaries
 import dev.basedpython.pycharm.lsp.reload.BasedPythonLspReloader
-import javax.swing.JCheckBox
-import javax.swing.JComponent
+import dev.basedpython.pycharm.settings.ui.BinaryRow
 
 /**
- * Application-level Configurable for basedpython defaults. Lives at
- * Settings → Languages & Frameworks → basedpython Defaults (IDE-wide).
+ * Application-level Configurable for basedpython defaults, at Settings | Languages & Frameworks |
+ * basedpython Defaults.
  *
- * Edits [BasedPythonAppSettings]; every project follows these until its own
- * project-level settings set a value (see [BasedPythonDefaults]).
+ * Edits [BasedPythonAppSettings]; every project follows these until its own page sets a value (see
+ * [BasedPythonDefaults]). Laid out as the project page is — a section per server — so the same
+ * setting is in the same place on both.
  */
-internal class BasedPythonAppConfigurable : Configurable {
+internal class BasedPythonAppConfigurable :
+    BoundConfigurable("basedpython Defaults", "dev.basedpython.pycharm.settings.app") {
 
     private val settings get() = BasedPythonAppSettings.getInstance()
 
-    private val byPathField = TextFieldWithBrowseButton().apply {
-        textField.toolTipText = "The by binary for projects that set none (blank = autodetect)"
-        addBrowseFolderListener(
-            null,
-            FileChooserDescriptorFactory.singleFileOrDir()
-                .withTitle("Select the Default by Binary")
-                .withDescription("Default path to the by language server binary"),
-        )
-    }
-    private val buffPathField = TextFieldWithBrowseButton().apply {
-        textField.toolTipText = "The buff binary for projects that set none (blank = autodetect)"
-        addBrowseFolderListener(
-            null,
-            FileChooserDescriptorFactory.singleFileOrDir()
-                .withTitle("Select the Default buff Binary")
-                .withDescription("Default path to the buff formatter/linter binary"),
-        )
-    }
+    private var uiDisposable = Disposer.newDisposable()
+    private val binaryRows = mutableListOf<BinaryRow>()
 
-    private val byEnabled = JCheckBox("Enable the by language server in projects that do not choose")
-    private val buffEnabled = JCheckBox("Enable the buff (formatter/linter) server in projects that do not choose")
-
-    private val byExtraArgs = JBTextField()
-    private val buffExtraArgs = JBTextField()
-
-    private var rootPanel: JComponent? = null
-
-    override fun getDisplayName(): String = "basedpython Defaults"
-
-    override fun getHelpTopic(): String = "dev.basedpython.pycharm.settings.app"
-
-    override fun createComponent(): JComponent {
-        val panel = panel {
-            group("Default binaries") {
-                row("Default path to by:") { cell(byPathField).align(AlignX.FILL) }
-                row("Default path to buff:") { cell(buffPathField).align(AlignX.FILL) }
+    override fun createPanel(): DialogPanel {
+        Disposer.dispose(uiDisposable)
+        uiDisposable = Disposer.newDisposable()
+        binaryRows.clear()
+        val s = settings
+        return panel {
+            row {
+                comment(
+                    "Every project uses these until it chooses for itself on Languages &amp; Frameworks | basedpython.",
+                    maxLineLength = MAX_LINE_LENGTH_WORD_WRAP,
+                )
+            }.bottomGap(BottomGap.SMALL)
+            group("by: type checker and language server") {
+                row {
+                    checkBox("Run by in projects that have not chosen").bindSelected(s::defaultByEnabled)
+                }
+                server(BasedPythonBinaries.BIN_BY, { s.defaultByPath }, { s.defaultByPath = it }, { s.defaultByExtraArgs }, { s.defaultByExtraArgs = it })
             }
-            group("Default servers") {
-                row { cell(byEnabled) }
-                row { cell(buffEnabled) }
-            }
-            group("Default args") {
-                row("Extra args for by:") { cell(byExtraArgs).align(AlignX.FILL) }
-                row("Extra args for buff:") { cell(buffExtraArgs).align(AlignX.FILL) }
+            group("buff: formatter and linter") {
+                row {
+                    checkBox("Run buff in projects that have not chosen").bindSelected(s::defaultBuffEnabled)
+                }
+                server(BasedPythonBinaries.BIN_BUFF, { s.defaultBuffPath }, { s.defaultBuffPath = it }, { s.defaultBuffExtraArgs }, { s.defaultBuffExtraArgs = it })
             }
         }
-        reset()
-        rootPanel = panel
-        return panel
     }
 
-    override fun isModified(): Boolean {
-        val s = settings
-        return byPathField.text != (s.defaultByPath ?: "") ||
-            buffPathField.text != (s.defaultBuffPath ?: "") ||
-            byEnabled.isSelected != s.defaultByEnabled ||
-            buffEnabled.isSelected != s.defaultBuffEnabled ||
-            byExtraArgs.text != s.defaultByExtraArgs ||
-            buffExtraArgs.text != s.defaultBuffExtraArgs
-    }
-
-    override fun apply() {
-        val changed = isModified
-        val byEnabledChanged = byEnabled.isSelected != settings.defaultByEnabled
-        val s = settings
-        s.defaultByPath = byPathField.text.trim().ifEmpty { null }
-        s.defaultBuffPath = buffPathField.text.trim().ifEmpty { null }
-        s.defaultByEnabled = byEnabled.isSelected
-        s.defaultBuffEnabled = buffEnabled.isSelected
-        s.defaultByExtraArgs = byExtraArgs.text
-        s.defaultBuffExtraArgs = buffExtraArgs.text
-        // Every open project that has not chosen for itself follows these, so its servers are
-        // started again the way a change on its own page restarts them.
-        if (changed) {
-            for (project in ProjectManager.getInstance().openProjects) {
-                BasedPythonLspReloader.getInstance(project).onSettingsChanged()
+    private fun Panel.server(
+        name: String,
+        getPath: () -> String?,
+        setPath: (String?) -> Unit,
+        getArgs: () -> String,
+        setArgs: (String) -> Unit,
+    ) {
+        indent {
+            binaryRows += BinaryRow(null, name, name, { null }, uiDisposable).also { it.addTo(this, getPath, setPath) }
+            row("Extra arguments:") {
+                textField().align(AlignX.FILL).bindText(getArgs, setArgs).applyToComponent { emptyText.text = "None" }
             }
-        }
-        if (byEnabledChanged) {
-            BasedPythonProjectDetector.fileTypesMayHaveChanged("basedpython default for the by server changed")
         }
     }
 
     override fun reset() {
+        super.reset()
+        binaryRows.forEach { it.refresh() }
+    }
+
+    override fun apply() {
         val s = settings
-        byPathField.text = s.defaultByPath.orEmpty()
-        buffPathField.text = s.defaultBuffPath.orEmpty()
-        byEnabled.isSelected = s.defaultByEnabled
-        buffEnabled.isSelected = s.defaultBuffEnabled
-        byExtraArgs.text = s.defaultByExtraArgs
-        buffExtraArgs.text = s.defaultBuffExtraArgs
+        val before = listOf(s.defaultByPath, s.defaultBuffPath, s.defaultByEnabled, s.defaultBuffEnabled, s.defaultByExtraArgs, s.defaultBuffExtraArgs)
+        val byEnabledBefore = s.defaultByEnabled
+        super.apply()
+        val after = listOf(s.defaultByPath, s.defaultBuffPath, s.defaultByEnabled, s.defaultBuffEnabled, s.defaultByExtraArgs, s.defaultBuffExtraArgs)
+        // Every open project that has not chosen for itself follows these, so its servers are
+        // started again the way a change on its own page restarts them.
+        if (after != before) {
+            for (project in ProjectManager.getInstance().openProjects) {
+                BasedPythonLspReloader.getInstance(project).onSettingsChanged()
+            }
+        }
+        if (s.defaultByEnabled != byEnabledBefore) {
+            BasedPythonProjectDetector.fileTypesMayHaveChanged("basedpython default for the by server changed")
+        }
+        binaryRows.forEach { it.refresh() }
     }
 
     override fun disposeUIResources() {
-        rootPanel = null
+        super.disposeUIResources()
+        Disposer.dispose(uiDisposable)
     }
 }

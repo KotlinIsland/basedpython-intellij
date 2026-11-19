@@ -5,6 +5,7 @@ import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.project.DumbAware
+import dev.basedpython.pycharm.lang.dialect.BasedPythonProjectDetector
 
 /**
  * Toggles the per-project basedpython watch-mode flag and posts a notification
@@ -15,7 +16,7 @@ internal class ToggleWatchModeAction : AnAction(), DumbAware {
     override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
 
     override fun update(e: AnActionEvent) {
-        e.presentation.isEnabledAndVisible = e.project != null
+        e.presentation.isEnabledAndVisible = e.project?.let(BasedPythonProjectDetector::hasBasedPython) == true
     }
 
     override fun actionPerformed(e: AnActionEvent) {

@@ -4,6 +4,7 @@ import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.platform.lsp.api.LspClientManager
+import dev.basedpython.pycharm.lang.dialect.BasedPythonProjectDetector
 
 /**
  * Stops and (if needed) restarts both basedpython LSP servers (`by`, `buff`).
@@ -15,7 +16,7 @@ internal class RestartLspAction : AnAction() {
   override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
 
   override fun update(e: AnActionEvent) {
-    e.presentation.isEnabledAndVisible = e.project != null
+    e.presentation.isEnabledAndVisible = e.project?.let(BasedPythonProjectDetector::hasBasedPython) == true
   }
 
   override fun actionPerformed(e: AnActionEvent) {

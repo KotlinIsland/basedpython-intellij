@@ -110,7 +110,7 @@
 
         <!-- ===== Stream B: LSP servers + settings + notifications ===== -->
         <projectService serviceImplementation="dev.basedpython.pycharm.settings.BasedPythonSettings"/>
-        <notificationGroup id="basedpython" displayType="BALLOON"/>
+        <notificationGroup id="basedpython" displayType="BALLOON" key="notification.group.problems"/>
         <platform.lsp.integrationProvider
             implementation="dev.basedpython.pycharm.lsp.ByLspServerSupportProvider"/>
         <platform.lsp.integrationProvider
@@ -193,7 +193,11 @@
                      description="Who provides basedpython log points — the inline Log: field and Add Log Point. auto is this plugin, in every IDE: the IDE's own log points (IntelliJ IDEA, and PyCharm since 263.7355) serve only breakpoint types that support inter-line placement, which basedpython-line cannot claim, and Add Log Point still gives Ctrl+Alt+F8 to the IDE's Add Logpoint wherever that is enabled. ide always gives way."/>
 
         <!-- ===== Stream D: action notification group ===== -->
-        <notificationGroup id="basedpython.Actions" displayType="BALLOON"/>
+        <notificationGroup id="basedpython.Actions" displayType="BALLOON" key="notification.group.actions"/>
+        <!-- What the plugin offers rather than what went wrong or what a command did: the welcome, and
+             setting up by's git merge driver. Its own group so it can be switched off in Settings |
+             Notifications without silencing errors. -->
+        <notificationGroup id="basedpython.Suggestions" displayType="BALLOON" key="notification.group.suggestions"/>
 
         <!-- ===== Stream E: settings UI + status bar ===== -->
         <projectConfigurable

@@ -15,6 +15,7 @@ import com.intellij.util.io.Decompressor
 import com.intellij.util.io.HttpRequests
 import dev.basedpython.pycharm.env.Executables
 import dev.basedpython.pycharm.env.manager.EnvOperations
+import dev.basedpython.pycharm.lang.dialect.BasedPythonProjectDetector
 import dev.basedpython.pycharm.lsp.BasedPythonBinaries
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import dev.basedpython.pycharm.ui.log.BasedPythonLogNotifications
@@ -42,7 +43,8 @@ class DownloadBinariesAction : AnAction() {
 
     override fun update(e: AnActionEvent) {
         val project = e.project
-        e.presentation.isEnabledAndVisible = project != null && missingBinaries(project).isNotEmpty()
+        e.presentation.isEnabledAndVisible = project != null && BasedPythonProjectDetector.hasBasedPython(project) &&
+            missingBinaries(project).isNotEmpty()
     }
 
     /** Names of the binaries that currently fail to resolve for [project]. */

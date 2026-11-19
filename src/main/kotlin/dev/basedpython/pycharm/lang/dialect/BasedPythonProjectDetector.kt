@@ -5,6 +5,7 @@ import com.intellij.openapi.application.edtWriteAction
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
 import com.intellij.openapi.fileTypes.ex.FileTypeManagerEx
+import com.intellij.openapi.project.DumbService
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.io.FileUtil
 import com.intellij.openapi.vfs.LocalFileSystem
@@ -16,6 +17,9 @@ import com.intellij.openapi.vfs.newvfs.events.VFileEvent
 import com.intellij.openapi.vfs.newvfs.events.VFileMoveEvent
 import com.intellij.openapi.vfs.newvfs.events.VFilePropertyChangeEvent
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.psi.search.FileTypeIndex
+import com.intellij.psi.search.GlobalSearchScope
+import dev.basedpython.pycharm.lang.BasedPythonFileType
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -103,6 +107,23 @@ object BasedPythonProjectDetector {
      * which stays true while the server is switched off.
      */
     fun isPythonProject(project: Project): Boolean = kind(project) != ProjectKind.OTHER
+
+    /**
+     * True when [project] has basedpython in it at all: a basedpython marker at its base, or a `.by`
+     * file anywhere — the projects `by` and `buff` start for. Not gated on `byEnabled`, since `buff`
+     * and the settings still apply with `by` off.
+     *
+     * What a basedpython action's `update` asks before it shows. Those actions answer in balloons, so
+     * one offered in a Rust repository or a plain Python project — *Generate api.lock*, *Clean buff
+     * Caches*, *Restart basedpython LSP Servers*, all fourteen of them were enabled in a Cargo project
+     * (measured in the sandbox) — could only ever answer with an error there.
+     *
+     * Needs a read action. While the project is indexing, only the marker counts.
+     */
+    fun hasBasedPython(project: Project): Boolean =
+        kind(project) == ProjectKind.BASEDPYTHON ||
+            (!DumbService.isDumb(project) &&
+                FileTypeIndex.containsFileOfType(BasedPythonFileType.INSTANCE, GlobalSearchScope.projectScope(project)))
 
 
     /**

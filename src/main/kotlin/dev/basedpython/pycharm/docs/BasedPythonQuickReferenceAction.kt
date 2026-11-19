@@ -7,6 +7,7 @@ import com.intellij.openapi.actionSystem.CommonDataKeys
 import com.intellij.openapi.ui.popup.JBPopupFactory
 import com.intellij.openapi.wm.WindowManager
 import com.intellij.ui.awt.RelativePoint
+import dev.basedpython.pycharm.lang.dialect.BasedPythonProjectDetector
 import dev.basedpython.pycharm.util.BasedPythonBundle
 
 /**
@@ -19,7 +20,7 @@ class BasedPythonQuickReferenceAction : AnAction() {
 
     override fun update(e: AnActionEvent) {
         e.presentation.text = BasedPythonBundle.message("action.quickReference.text")
-        e.presentation.isEnabledAndVisible = e.project != null
+        e.presentation.isEnabledAndVisible = e.project?.let(BasedPythonProjectDetector::hasBasedPython) == true
     }
 
     override fun actionPerformed(e: AnActionEvent) {

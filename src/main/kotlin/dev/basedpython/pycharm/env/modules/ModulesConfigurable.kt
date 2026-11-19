@@ -25,6 +25,7 @@ import com.intellij.ui.table.JBTable
 import com.intellij.util.ui.JBUI
 import com.intellij.util.ui.UIUtil
 import dev.basedpython.pycharm.env.manager.EnvService
+import dev.basedpython.pycharm.lang.dialect.BasedPythonProjectDetector
 import dev.basedpython.pycharm.util.BasedPythonBundle
 import java.awt.BorderLayout
 import java.awt.event.MouseEvent
@@ -320,6 +321,9 @@ internal class ModulesConfigurable(private val project: Project) : SearchableCon
 
 /** Creates the page. Registered in plugin.xml as a child of the basedpython settings page. */
 internal class ModulesConfigurableProvider(private val project: Project) : ConfigurableProvider() {
+    /** Only where there is a Python project to have modules: a Cargo project's Settings has no business listing uv workspace members. */
+    override fun canCreateConfigurable(): Boolean = BasedPythonProjectDetector.isPythonProject(project)
+
     override fun createConfigurable(): Configurable = ModulesConfigurable(project)
 }
 
@@ -335,7 +339,7 @@ internal class ShowModulesAction : DumbAwareAction() {
     override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
 
     override fun update(e: AnActionEvent) {
-        e.presentation.isEnabledAndVisible = e.project != null
+        e.presentation.isEnabledAndVisible = e.project?.let(BasedPythonProjectDetector::hasBasedPython) == true
     }
 
     override fun actionPerformed(e: AnActionEvent) {

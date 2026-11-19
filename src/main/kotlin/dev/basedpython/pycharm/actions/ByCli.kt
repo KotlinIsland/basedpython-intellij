@@ -2,6 +2,7 @@ package dev.basedpython.pycharm.actions
 
 import dev.basedpython.pycharm.env.ByLaunch
 import dev.basedpython.pycharm.lsp.BasedPythonBinaries
+import dev.basedpython.pycharm.lsp.BasedPythonNotifications
 import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.execution.process.ProcessOutput
 import com.intellij.openapi.progress.runBlockingMaybeCancellable
@@ -141,14 +142,7 @@ internal object ByCli {
         runBlockingMaybeCancellable { runCapturing(cmd, timeoutMs?.milliseconds) }
 
     fun notifyBinaryMissing(project: Project, name: String) {
-        NotificationGroupManager.getInstance()
-            .getNotificationGroup(NOTIFICATION_GROUP_ID)
-            .createNotification(
-                BasedPythonBundle.message("notification.binaryMissing.title", name),
-                BasedPythonBundle.message("notification.binaryMissing.content", name),
-                NotificationType.WARNING,
-            )
-            .notify(project)
+        BasedPythonNotifications.binaryMissing(project, name).notify(project)
     }
 
     fun notifyInfo(project: Project, title: String, content: String) {

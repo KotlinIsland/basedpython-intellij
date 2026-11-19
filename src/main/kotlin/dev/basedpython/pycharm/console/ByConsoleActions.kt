@@ -38,7 +38,7 @@ internal class ByOpenConsoleAction : DumbAwareAction() {
     }
 
     override fun update(e: AnActionEvent) {
-        e.presentation.isEnabledAndVisible = e.project != null
+        e.presentation.isEnabledAndVisible = e.project?.let(BasedPythonProjectDetector::hasBasedPython) == true
     }
 
     override fun getActionUpdateThread() = ActionUpdateThread.BGT

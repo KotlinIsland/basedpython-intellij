@@ -5,6 +5,7 @@ import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.project.DumbAwareAction
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.wm.ToolWindowManager
+import dev.basedpython.pycharm.lang.dialect.BasedPythonProjectDetector
 
 /**
  * The environment operations that belong on the Tools menu rather than only in the tool window.
@@ -45,7 +46,7 @@ internal class ShowEnvToolWindowAction : DumbAwareAction() {
     override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
 
     override fun update(e: AnActionEvent) {
-        e.presentation.isEnabledAndVisible = e.project != null
+        e.presentation.isEnabledAndVisible = e.project?.let(BasedPythonProjectDetector::hasBasedPython) == true
     }
 
     override fun actionPerformed(e: AnActionEvent) {

@@ -8,6 +8,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
 import dev.basedpython.pycharm.inspections.explain.ExplainRule
 import dev.basedpython.pycharm.inspections.explain.ExplainRuleFix
+import dev.basedpython.pycharm.lang.dialect.BasedPythonProjectDetector
 import dev.basedpython.pycharm.util.BasedPythonBundle
 
 /**
@@ -22,7 +23,7 @@ class ExplainRuleAction : AnAction() {
     override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
 
     override fun update(e: AnActionEvent) {
-        e.presentation.isEnabledAndVisible = e.project != null
+        e.presentation.isEnabledAndVisible = e.project?.let(BasedPythonProjectDetector::hasBasedPython) == true
     }
 
     override fun actionPerformed(e: AnActionEvent) {

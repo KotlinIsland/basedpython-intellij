@@ -5,6 +5,7 @@ import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.project.DumbAware
+import dev.basedpython.pycharm.lang.dialect.BasedPythonProjectDetector
 import dev.basedpython.pycharm.lsp.diagnostics.ByProjectDiagnostics
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 
@@ -24,7 +25,8 @@ class CheckProjectAction : AnAction(), DumbAware {
 
     override fun update(e: AnActionEvent) {
         val project = e.project
-        e.presentation.isEnabledAndVisible = project != null && BasedPythonSettings.getInstance(project).byEnabled
+        e.presentation.isEnabledAndVisible = project != null && BasedPythonSettings.getInstance(project).byEnabled &&
+            BasedPythonProjectDetector.hasBasedPython(project)
     }
 
     override fun actionPerformed(e: AnActionEvent) {

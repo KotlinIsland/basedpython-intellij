@@ -70,8 +70,6 @@ class BasedPythonBundleTest {
             "settings.title",
             "notification.basedPython.title",
             "notification.exitCode",
-            "notification.binaryMissing.title",
-            "notification.binaryMissing.content",
             "notification.action.openSettings",
             "notification.action.documentation",
             "notification.action.dontShowAgain",
@@ -390,8 +388,15 @@ class BasedPythonBundleTest {
 
     @Test
     fun `quoted placeholder uses doubled apostrophes so value is wrapped in single quotes`() {
-        // notification.lspBinaryMissing.title=basedpython: ''{0}'' not found
-        assertEquals("basedpython: 'by' not found", msg("notification.lspBinaryMissing.title", "by"))
+        // notification.lspBinaryMissing.name=''{0}''
+        assertEquals("'by'", msg("notification.lspBinaryMissing.name", "by"))
+        // A lone `&` is a mnemonic marker the bundle turns into nothing (measured in the sandbox: the
+        // balloon read "Languages  Frameworks"), and `&&` is the macOS mnemonic marker, so a literal
+        // one is written `\&`.
+        assertTrue(
+            com.intellij.BundleBase.replaceMnemonicAmpersand(msg("notification.lspBinaryMissing.content", "by"))!!
+                .contains("Settings | Languages & Frameworks | basedpython"),
+        )
         assertEquals("basedpython: 'buff' language server stopped", msg("notification.lspCrashed.title", "buff"))
     }
 

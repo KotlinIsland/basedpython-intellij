@@ -20,9 +20,11 @@ import dev.basedpython.pycharm.util.BasedPythonBundle
  * First-run welcome notification.
  *
  * The first time a basedpython project is opened after the plugin is installed, this shows a
- * single, sticky "Welcome to basedpython" notification with quick links to the
+ * single "Welcome to basedpython" notification with quick links to the
  * settings page and the online documentation. The notification is shown at most
- * once ever, gated by an application-level flag in [PropertiesComponent].
+ * once ever, gated by an application-level flag in [PropertiesComponent] — so it carries no "Don't
+ * show again", which it had while that flag was already set before it showed, and it is a
+ * suggestion rather than a sticky notification that stays on screen until dismissed.
  */
 internal class BasedPythonWelcomeActivity : ProjectActivity {
 
@@ -68,7 +70,7 @@ internal class BasedPythonWelcomeActivity : ProjectActivity {
                 BasedPythonBundle.message("notification.welcome.content"),
                 NotificationType.INFORMATION,
             )
-            .setImportant(true)
+            .setSuggestionType(true)
 
         notification
             .addAction(
@@ -81,17 +83,11 @@ internal class BasedPythonWelcomeActivity : ProjectActivity {
                     BrowserUtil.browse(BasedPythonDocEntries.DOCS_BASE)
                 },
             )
-            .addAction(
-                NotificationAction.createSimple({ BasedPythonBundle.message("notification.action.dontShowAgain") }) {
-                    PropertiesComponent.getInstance().setValue(WELCOME_SHOWN_KEY, true)
-                    notification.expire()
-                },
-            )
             .notify(project)
     }
 
     private companion object {
-        const val NOTIFICATION_GROUP_ID: String = "basedpython.Actions"
+        const val NOTIFICATION_GROUP_ID: String = "basedpython.Suggestions"
         const val WELCOME_SHOWN_KEY: String = "dev.basedpython.pycharm.welcomeShown"
     }
 }

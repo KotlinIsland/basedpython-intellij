@@ -9,6 +9,20 @@
 ### Changed
 
 - A new project's files are not written over files already in its directory.
+- The basedpython settings page is laid out a section per server: whether `by` or `buff` runs, its
+  binary, its arguments and its features together, greyed out as a whole when it is off. It fits
+  the Settings dialog at its default size, where the path fields and Test buttons ran off the right
+  edge. Under each binary it says what will actually run, including when a path set there cannot
+  be run and another is used instead, and Test answers there rather than in a message box. Inlay
+  hints and each server's features fold away, and the inlay hints can all be set at once.
+- A project with no basedpython in it, neither a marker nor a `.by` file, no longer offers
+  basedpython's commands (14 were offered in a Cargo project, each of which could only fail there),
+  nor the Modules settings page outside Python projects; its basedpython settings page says the
+  servers start only for `.by` files there.
+- A missing `by` or `buff` is one notification naming both, with *Configure…* and *Download*.
+- The welcome and the offer to set up the git merge driver are suggestions, in a notification group
+  of their own that can be switched off without silencing errors. The setup offer can be turned
+  back on in Settings after *Don't ask again*.
 
 ### Fixed
 

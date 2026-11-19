@@ -15,6 +15,7 @@ import dev.basedpython.pycharm.actions.ByCli
 import dev.basedpython.pycharm.apilock.ByApiLockAnswer
 import dev.basedpython.pycharm.apilock.ByApiLockScope
 import dev.basedpython.pycharm.apilock.ByApiLocks
+import dev.basedpython.pycharm.lang.dialect.BasedPythonProjectDetector
 import dev.basedpython.pycharm.util.BasedPythonBundle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -31,7 +32,7 @@ class DiffApiLockAction : AnAction() {
     override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
 
     override fun update(e: AnActionEvent) {
-        e.presentation.isEnabledAndVisible = e.project != null
+        e.presentation.isEnabledAndVisible = e.project?.let(BasedPythonProjectDetector::hasBasedPython) == true
     }
 
     override fun actionPerformed(e: AnActionEvent) {

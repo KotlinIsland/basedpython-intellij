@@ -155,12 +155,15 @@ internal class ByGitMergeOffers(private val project: Project, private val scope:
         if (offer == ByGitMergeIntegrations.Offer.None || offered) return
         offered = true
         val repair = offer == ByGitMergeIntegrations.Offer.Repair
-        NotificationGroupManager.getInstance().getNotificationGroup(ByCli.NOTIFICATION_GROUP_ID)
+        // A repair is a problem with the repository as it is; an offer is a suggestion, in the group
+        // that can be switched off without silencing problems.
+        NotificationGroupManager.getInstance().getNotificationGroup(if (repair) ByCli.NOTIFICATION_GROUP_ID else SUGGESTIONS_GROUP_ID)
             .createNotification(
                 BasedPythonBundle.message(if (repair) "gitMerge.offer.repair.title" else "gitMerge.offer.title"),
                 if (repair) ByGitMergeIntegrations.describe(state) else BasedPythonBundle.message("gitMerge.offer.content"),
                 if (repair) NotificationType.WARNING else NotificationType.INFORMATION,
             )
+            .setSuggestionType(!repair)
             .addAction(NotificationAction.createSimpleExpiring(BasedPythonBundle.message(if (repair) "gitMerge.offer.repair" else "gitMerge.offer.enable")) {
                 scope.launch { ByGitMergeIntegrations.enable(project) }
             })
@@ -171,6 +174,8 @@ internal class ByGitMergeOffers(private val project: Project, private val scope:
     }
 
     companion object {
+        private const val SUGGESTIONS_GROUP_ID = "basedpython.Suggestions"
+
         fun getInstance(project: Project): ByGitMergeOffers = project.service()
     }
 }
