@@ -1,8 +1,12 @@
 package dev.basedpython.pycharm.lsp.inlay
 
 import com.google.gson.JsonObject
+import org.eclipse.lsp4j.Command
 import org.eclipse.lsp4j.InlayHint
 import org.eclipse.lsp4j.Location
+import org.eclipse.lsp4j.MarkupContent
+import org.eclipse.lsp4j.MarkupKind
+import org.eclipse.lsp4j.jsonrpc.messages.Either
 
 /**
  * Reading `by`'s `textDocument/inlayHint` replies — the parts that are pure, and so testable
@@ -41,15 +45,38 @@ object ByInlayHints {
      *
      * `by` puts a location on the part of a hint that stands for something declared elsewhere — the
      * `list` and the `int` of `: list[int]`, the parameter a `name=` names, the class an `override`
-     * overrides — and nothing on the punctuation between them.
+     * overrides — and nothing on the punctuation between them. A part may also carry a tooltip of
+     * its own and a command a click on it runs, which LSP allows on any part.
      */
     fun partsOf(hint: InlayHint): List<ByHintPart> {
         val label = hint.label ?: return emptyList()
         return when {
             label.isLeft -> listOf(ByHintPart(label.left.orEmpty(), null))
-            label.isRight -> label.right.orEmpty().map { ByHintPart(it.value.orEmpty(), it.location) }
+            label.isRight -> label.right.orEmpty().map {
+                ByHintPart(it.value.orEmpty(), it.location, tipOf(it.tooltip), it.command?.takeIf { c -> !c.command.isNullOrBlank() })
+            }
             else -> emptyList()
         }
+    }
+
+    /**
+     * The runs of [drawn] that have something of their own to show or do — a place, a tooltip or a
+     * command — as character ranges into it, cut as [linksOf] cuts its links.
+     */
+    fun spansOf(parts: List<ByHintPart>, drawn: String): List<ByHintSpan> {
+        val label = parts.joinToString("") { it.text }
+        val visible = if (drawn == label) drawn.length else drawn.length - ELLIPSIS.length
+        val spans = ArrayList<ByHintSpan>()
+        var start = 0
+        for (part in parts) {
+            val end = start + part.text.length
+            val worthASpan = part.location != null || part.tip != null || part.command != null
+            if (worthASpan && start < visible) {
+                spans += ByHintSpan(start, minOf(end, visible), part.location, part.tip, part.command)
+            }
+            start = end
+        }
+        return spans
     }
 
     /**
@@ -112,14 +139,23 @@ object ByInlayHints {
     private const val PLACEMENT_TAG = "placement"
 
     /** The hint's tooltip text, if it has one — lsp4j's `string | MarkupContent`. */
-    fun tooltipOf(hint: InlayHint): String? {
-        val tooltip = hint.tooltip ?: return null
-        val text = when {
-            tooltip.isLeft -> tooltip.left
-            tooltip.isRight -> tooltip.right?.value
+    fun tooltipOf(hint: InlayHint): String? = tipOf(hint.tooltip)?.text
+
+    /** The hint's tooltip, with whether it is markdown, if it has one. */
+    fun tipOf(hint: InlayHint): ByTip? = tipOf(hint.tooltip)
+
+    /**
+     * A tooltip as LSP sends one, `string | MarkupContent`: a plain string is plain text, and so is
+     * markup whose kind is anything but `markdown`. A blank one is none.
+     */
+    fun tipOf(tooltip: Either<String, MarkupContent>?): ByTip? {
+        tooltip ?: return null
+        val tip = when {
+            tooltip.isLeft -> tooltip.left?.let { ByTip(it, markdown = false) }
+            tooltip.isRight -> tooltip.right?.let { ByTip(it.value.orEmpty(), markdown = it.kind == MarkupKind.MARKDOWN) }
             else -> null
         }
-        return text?.takeIf { it.isNotBlank() }
+        return tip?.takeIf { it.text.isNotBlank() }
     }
 
     /** [text] as drawn, cut to [max] characters. */
@@ -142,8 +178,35 @@ enum class ByHintPlacement(val wire: String?) {
     val isBlock: Boolean get() = this != INLINE
 }
 
-/** One run of a hint's label, and the place it names — `null` for the punctuation between names. */
-data class ByHintPart(val text: String, val location: Location?)
+/**
+ * One run of a hint's label, and the place it names — `null` for the punctuation between names —
+ * with the tooltip and the command `by` gave this run, if any.
+ */
+data class ByHintPart(
+    val text: String,
+    val location: Location?,
+    val tip: ByTip? = null,
+    val command: Command? = null,
+)
+
+/** A tooltip's [text], which is markdown when [markdown] and plain text otherwise. */
+data class ByTip(val text: String, val markdown: Boolean)
+
+/** Characters [start] until [end] of a drawn hint, and what that run of it names, says and does. */
+data class ByHintSpan(
+    val start: Int,
+    val end: Int,
+    val location: Location?,
+    val tip: ByTip?,
+    val command: Command?,
+) {
+    val run: ByHintRun get() = ByHintRun(start, end)
+}
 
 /** Characters [start] until [end] of a drawn hint, which name [location]. */
-data class ByHintLink(val start: Int, val end: Int, val location: Location)
+data class ByHintLink(val start: Int, val end: Int, val location: Location) {
+    val run: ByHintRun get() = ByHintRun(start, end)
+}
+
+/** Characters [start] until [end] of a drawn hint: the run drawn as a hyperlink while the mouse is on it. */
+data class ByHintRun(val start: Int, val end: Int)

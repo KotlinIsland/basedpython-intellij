@@ -3,6 +3,7 @@ package dev.basedpython.pycharm.lsp.inlay
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.JsonPrimitive
+import org.eclipse.lsp4j.Command
 import org.eclipse.lsp4j.InlayHint
 import org.eclipse.lsp4j.InlayHintKind
 import org.eclipse.lsp4j.InlayHintLabelPart
@@ -320,6 +321,55 @@ class ByInlayHintsTest {
         assertEquals(ByHintPlacement.INLINE, ByInlayHints.placementOf(placed(JsonPrimitive("beside"))))
         assertEquals(ByHintPlacement.INLINE, ByInlayHints.placementOf(placed(JsonPrimitive(1))))
         assertFalse(ByHintPlacement.INLINE.isBlock)
+    }
+
+    // endregion
+
+    // region: part tooltips, commands and spans
+
+    @Test
+    fun `a part's tooltip and command are kept, a blank command is none`() {
+        val parts = ByInlayHints.partsOf(
+            hint(
+                Either.forRight(
+                    listOf(
+                        InlayHintLabelPart("override").also {
+                            it.location = location(3)
+                            it.setTooltip(MarkupContent("markdown", "Overrides `Animal.speak`"))
+                            it.command = Command("Show overrides", "by.showOverrides")
+                        },
+                        InlayHintLabelPart(" ").also { it.command = Command("", "") },
+                    ),
+                ),
+                null,
+            ),
+        )
+        assertEquals(ByTip("Overrides `Animal.speak`", markdown = true), parts[0].tip)
+        assertEquals("by.showOverrides", parts[0].command?.command)
+        assertNull(parts[1].command)
+    }
+
+    @Test
+    fun `markup that is not markdown is plain text, and so is a string`() {
+        assertEquals(ByTip("a < b", markdown = false), ByInlayHints.tipOf(Either.forRight(MarkupContent("plaintext", "a < b"))))
+        assertEquals(ByTip("a < b", markdown = false), ByInlayHints.tipOf(Either.forLeft("a < b")))
+        assertNull(ByInlayHints.tipOf(Either.forLeft("  ")))
+    }
+
+    @Test
+    fun `spans cover the parts with a place, a tooltip or a command, cut where the text is cut`() {
+        val parts = listOf(
+            ByHintPart(": ", null),
+            ByHintPart("aaaa", null, ByTip("a", markdown = false)),
+            ByHintPart("[", null),
+            ByHintPart("b".repeat(80), location(2)),
+            ByHintPart("]", location(3)),
+        )
+        val label = parts.joinToString("") { it.text }
+        assertEquals(listOf(2 to 6, 7 to 87, 87 to 88), ByInlayHints.spansOf(parts, label).map { it.start to it.end })
+        val drawn = ByInlayHints.truncate(label)
+        // the ellipsis stands for what it replaced: the long part is cut to what is drawn, `]` is gone
+        assertEquals(listOf(2 to 6, 7 to drawn.length - 1), ByInlayHints.spansOf(parts, drawn).map { it.start to it.end })
     }
 
     // endregion

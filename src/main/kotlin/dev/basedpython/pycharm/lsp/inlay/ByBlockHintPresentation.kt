@@ -52,7 +52,8 @@ import kotlin.math.roundToInt
  * Push-to-hint, clicks and double clicks are [ByInlayHintPresentation]'s: hidden until the push key
  * goes down in [ByHintMode.ON_PUSH], taking no room while hidden; a run of the label that names
  * something ([links]) goes there on Ctrl+click or a middle click and underlines under Ctrl; a double
- * click writes the hint into the source when `by` sent the edit that does ([accept]).
+ * click writes the hint into the source when `by` sent the edit that does ([accept]); a plain click
+ * on a run with a command runs it; the popup trigger opens [ByHintMenu]; hovering shows [tooltip].
  */
 class ByBlockHintPresentation(
     override val editor: Editor,
@@ -62,6 +63,11 @@ class ByBlockHintPresentation(
     links: List<ByHintLink> = emptyList(),
     private val navigate: ((Location) -> Unit)? = null,
     private val accept: (() -> Unit)? = null,
+    private val menu: ByHintMenu? = null,
+    /** What hovering shows; its offsets are the label's as sent, which [ByBlockText.labelOffset] maps back to. */
+    private val tooltip: ByHintTooltip? = null,
+    commands: List<ByHintSpan> = emptyList(),
+    private val runCommand: ((org.eclipse.lsp4j.Command) -> Unit)? = null,
 ) : BasePresentation(), ByHintPush.Watcher {
 
     /** The label as drawn: its tabs laid out to the editor's tab stops, so a column is a character. */
@@ -72,6 +78,9 @@ class ByBlockHintPresentation(
 
     private val links: List<ByHintLink> = links.mapNotNull { shape.mapLink(it) }
 
+    /** The runs with a command of their own, as offsets of [text]. */
+    private val commands: List<ByHintSpan> = commands.mapNotNull { shape.mapSpan(it) }
+
     /** The lexer's runs over [text], with the keys the highlighter gives each; colours are read when painting, so a scheme change is seen. */
     private val runs: List<Run> = lex(shape.text)
 
@@ -79,7 +88,7 @@ class ByBlockHintPresentation(
     private var shown: Boolean = mode.isShown(ByHintPush.getInstance().isHeld(pushKey))
 
     /** The link under the mouse while Ctrl is held. EDT only. */
-    private var hovered: ByHintLink? = null
+    private var hovered: ByHintRun? = null
 
     init {
         if (mode == ByHintMode.ON_PUSH) ByHintPush.getInstance().watch(this)
@@ -189,24 +198,47 @@ class ByBlockHintPresentation(
 
     /** The link drawn at [point], relative to this hint, or `null`. */
     internal fun linkAt(point: Point): ByHintLink? {
-        if (!shown || links.isEmpty() || point.y < 0) return null
+        if (links.isEmpty()) return null
+        val offset = offsetAt(point) ?: return null
+        return links.firstOrNull { offset >= it.start && offset < it.end }
+    }
+
+    /** The offset into [text] of the character drawn at [point], relative to this hint, or `null`. */
+    internal fun offsetAt(point: Point): Int? {
+        if (!shown || point.y < 0) return null
         val index = point.y / editor.lineHeight
         val line = shape.lines.getOrNull(index) ?: return null
         val metrics = metrics(Font.PLAIN)
         val column = (0 until line.length).firstOrNull { point.x < advance(metrics, line, it + 1) } ?: return null
-        val offset = shape.lineStarts[index] + column
-        return links.firstOrNull { offset >= it.start && offset < it.end }
+        return shape.lineStarts[index] + column
+    }
+
+    private fun commandAt(point: Point): ByHintSpan? {
+        if (commands.isEmpty() || runCommand == null) return null
+        val offset = offsetAt(point) ?: return null
+        return commands.firstOrNull { offset >= it.start && offset < it.end }
     }
 
     override fun mouseMoved(event: MouseEvent, translated: Point) {
-        hover(if (isControlDown(event)) linkAt(translated) else null)
+        hover(if (isControlDown(event)) linkAt(translated)?.run else commandAt(translated)?.run)
+        if (shown) tooltip?.moved(event, offsetAt(translated)?.let(shape::labelOffset))
     }
 
     override fun mouseExited() {
         hover(null)
+        tooltip?.exited()
     }
 
     override fun mouseClicked(event: MouseEvent, translated: Point) {
+        val plainClick = SwingUtilities.isLeftMouseButton(event) && event.clickCount == 1 &&
+            !isControlDown(event) && !event.isShiftDown && !event.isAltDown
+        if (plainClick) {
+            val command = commandAt(translated)?.command
+            if (command != null) {
+                runCommand?.invoke(command)
+                return
+            }
+        }
         val navigate = navigate ?: return
         val linkGesture = SwingUtilities.isMiddleMouseButton(event) ||
             SwingUtilities.isLeftMouseButton(event) && isControlDown(event)
@@ -218,13 +250,32 @@ class ByBlockHintPresentation(
 
     /** As [ByInlayHintPresentation.mousePressed]: the second press of a double click, kept from the editor. */
     override fun mousePressed(event: MouseEvent, translated: Point) {
+        if (openMenu(event)) return
         if (accept == null || !shown || !SwingUtilities.isLeftMouseButton(event)) return
         if (event.clickCount != 2 || isControlDown(event)) return
         event.consume()
         accept()
     }
 
-    private fun hover(link: ByHintLink?) {
+    /** The release is the popup trigger on Windows, as the press is elsewhere. */
+    override fun mouseReleased(event: MouseEvent, translated: Point) {
+        openMenu(event)
+    }
+
+    /**
+     * Opens [menu] on the popup trigger over a hint that is drawn, consuming the event so that the
+     * editor neither moves the caret nor opens its own context menu over this one.
+     */
+    private fun openMenu(event: MouseEvent): Boolean {
+        val menu = menu ?: return false
+        if (!shown || !ByHintMenu.isTrigger(event)) return false
+        event.consume()
+        hover(null)
+        menu.show(event)
+        return true
+    }
+
+    private fun hover(link: ByHintRun?) {
         if (link == hovered) return
         hovered = link
         (editor as? EditorEx)?.setCustomCursor(CURSOR_REQUESTOR, if (link == null) null else Cursor.getPredefinedCursor(Cursor.HAND_CURSOR))
@@ -306,6 +357,24 @@ internal class ByBlockText private constructor(val text: String, private val off
     fun mapLink(link: ByHintLink): ByHintLink? {
         if (link.start !in offsets.indices || link.end !in offsets.indices) return null
         return ByHintLink(offsets[link.start], offsets[link.end], link.location)
+    }
+
+    /** [span], an offset range of the label as sent, as one of [text]. */
+    fun mapSpan(span: ByHintSpan): ByHintSpan? {
+        if (span.start !in offsets.indices || span.end !in offsets.indices) return null
+        return span.copy(start = offsets[span.start], end = offsets[span.end])
+    }
+
+    /**
+     * The offset of the label as sent whose character is drawn at [textOffset] of [text]: the last
+     * one laid out at or before it, so a column inside a laid-out tab is the tab's.
+     */
+    fun labelOffset(textOffset: Int): Int {
+        var found = 0
+        for (i in 0 until offsets.size - 1) {
+            if (offsets[i] <= textOffset) found = i else break
+        }
+        return found
     }
 
     companion object {

@@ -112,6 +112,18 @@ class ByBlockHintPresentationTest {
     }
 
     @Test
+    fun `an offset of what is drawn maps back to the label's, a laid-out tab to the tab`() {
+        val shaped = ByBlockText.of("\tdef g(): ...\n\t\tpass", 4)
+        // columns 0 to 3 are the first tab, character 0 of the label
+        assertEquals(listOf(0, 0, 0, 0, 1), (0..4).map(shaped::labelOffset))
+        // `g`, 8 drawn, is 5 of the label; `pass`, 25 drawn, is 16
+        assertEquals(5, shaped.labelOffset(8))
+        assertEquals(16, shaped.labelOffset(25))
+        val span = ByHintSpan(5, 6, null, ByTip("g", markdown = false), null)
+        assertEquals(span.copy(start = 8, end = 9), shaped.mapSpan(span))
+    }
+
+    @Test
     fun `it paints without throwing, on a line with nothing to tint`() = onEdt {
         val block = ByBlockHintPresentation(editor(), "\n\n    x: int")
         val image = BufferedImage(400, 100, BufferedImage.TYPE_INT_ARGB)

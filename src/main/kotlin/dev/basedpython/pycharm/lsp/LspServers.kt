@@ -14,10 +14,12 @@ import com.intellij.openapi.util.Key
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiFile
 import com.intellij.platform.lsp.api.LspClient
+import com.intellij.platform.lsp.api.Lsp4jClient
 import com.intellij.platform.lsp.api.LspClientManager
 import com.intellij.platform.lsp.api.LspIntegrationProvider
 import com.intellij.platform.lsp.api.LspIntegrationProvider.LspClientStarter
 import com.intellij.platform.lsp.api.LspServerListener
+import com.intellij.platform.lsp.api.LspServerNotificationsHandler
 import com.intellij.platform.lsp.api.ProjectWideLspClientDescriptor
 import com.intellij.platform.lsp.api.customization.LspCallHierarchyDisabled
 import com.intellij.platform.lsp.api.customization.LspCodeActionsDisabled
@@ -55,6 +57,7 @@ import dev.basedpython.pycharm.lang.BasedPythonFile
 import dev.basedpython.pycharm.lang.BasedPythonFileType
 import dev.basedpython.pycharm.lang.dialect.BasedPythonProjectDetector
 import dev.basedpython.pycharm.lsp.diagnostics.ByDiagnosticsSupport
+import dev.basedpython.pycharm.lsp.inlay.ByInlayRefresh
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import dev.basedpython.pycharm.inspections.rules.ByRuleConfiguration
 import dev.basedpython.pycharm.settings.app.BasedPythonAppSettings
@@ -225,6 +228,10 @@ internal class ByLspServerDescriptor(
 
   override fun startServerProcess(): BaseProcessHandler<*> =
     super.startServerProcess().mirrorStderrTo(project, "by")
+
+  /** Hears `workspace/inlayHint/refresh` for the hints this plugin draws; see [ByInlayRefresh]. */
+  override fun createLsp4jClient(handler: LspServerNotificationsHandler): Lsp4jClient =
+    ByInlayRefresh.Client(project, handler)
 
   /**
    * Which kinds of inlay hint `by` should bother computing.

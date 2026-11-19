@@ -8,7 +8,7 @@ import com.intellij.codeInsight.hints.InlayHintsSettings
 import com.intellij.codeInsight.hints.InlayHintsSink
 import com.intellij.codeInsight.hints.NoSettings
 import com.intellij.codeInsight.hints.SettingsKey
-import com.intellij.codeInsight.hints.presentation.PresentationFactory
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.editor.Document
 import com.intellij.openapi.editor.Editor
@@ -34,6 +34,8 @@ import dev.basedpython.pycharm.lsp.ext.ByAlignmentMember
 import dev.basedpython.pycharm.lsp.ext.ByServerExtensions
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import dev.basedpython.pycharm.util.BasedPythonBundle
+import org.eclipse.lsp4j.Command
+import org.eclipse.lsp4j.ExecuteCommandParams
 import org.eclipse.lsp4j.InlayHintParams
 import org.eclipse.lsp4j.Location
 import org.eclipse.lsp4j.Range
@@ -176,7 +178,6 @@ private class ByInlayHintsCollector(
             it.textDocumentService.inlayHint(params)
         }.value ?: return true
 
-        val factory = PresentationFactory(editor)
         val project = file.project
         // What the hints were computed against: an edit written into the source is only the right
         // edit for the text it was worked out on, so a double click after a further change does
@@ -186,6 +187,17 @@ private class ByInlayHintsCollector(
         // captured now, so a restart in between does not leave the hint holding a dead one.
         val navigate = { location: Location ->
             byServerFor(project, virtualFile)?.let { navigateToLocation(it, location) }
+            Unit
+        }
+        // Runs a command `by` put on a label part, on the server, the way a part's `command` is meant:
+        // `workspace/executeCommand`, off the EDT the click arrives on.
+        val runCommand = { command: Command ->
+            ApplicationManager.getApplication().executeOnPooledThread {
+                val running = byServerFor(project, virtualFile) ?: return@executeOnPooledThread
+                running.askBy("workspace/executeCommand", COMMAND_TIMEOUT_MS) {
+                    it.workspaceService.executeCommand(ExecuteCommandParams(command.command, command.arguments.orEmpty()))
+                }
+            }
             Unit
         }
         val thread = Thread.currentThread().name
@@ -210,13 +222,24 @@ private class ByInlayHintsCollector(
             if (!mode.isCollected) continue
             val edits = hint.textEdits.orEmpty()
             val accept = if (edits.isEmpty()) null else { { acceptHint(project, document, stamp, edits) } }
+            val fullLinks = ByInlayHints.linksOf(parts, label)
+            val fullSpans = ByInlayHints.spansOf(parts, label)
+            val tip = ByInlayHints.tipOf(hint)
+            val menu = ByHintMenu(
+                project = project,
+                kind = kind,
+                label = label,
+                links = fullLinks,
+                navigate = navigate.takeIf { fullLinks.isNotEmpty() },
+                accept = accept,
+            )
 
             val placement = ByInlayHints.placementOf(hint)
             if (placement.isBlock) {
                 // Lines of code of their own, above or below the line the position is on: drawn whole,
                 // never cut — a member signature with an ellipsis in it says less than nothing — and
                 // kept out of the alignment and the audit, which are about what is inside a line.
-                val links = ByInlayHints.linksOf(parts, label)
+                val links = fullLinks
                 val block = ByBlockHintPresentation(
                     editor = editor,
                     text = label,
@@ -225,19 +248,27 @@ private class ByInlayHintsCollector(
                     links = links,
                     navigate = navigate.takeIf { links.isNotEmpty() },
                     accept = accept,
+                    menu = menu,
+                    tooltip = ByHintTooltip(editor, project, tip, fallback = null, spans = fullSpans),
+                    commands = fullSpans.filter { it.command != null },
+                    runCommand = runCommand,
                 )
                 sink.addBlockElement(
                     offset,
                     catalog.relatesToPrecedingText(kind),
                     placement == ByHintPlacement.ABOVE,
                     0,
-                    ByInlayHints.tooltipOf(hint)?.let { factory.withTooltip(it, block) } ?: block,
+                    block,
                 )
                 continue
             }
 
             val text = ByInlayHints.truncate(label)
             val links = ByInlayHints.linksOf(parts, text)
+            val spans = ByInlayHints.spansOf(parts, text)
+            // The server's own tooltip when it sent one; otherwise the untruncated text, so a hint
+            // that had to be cut can still be read in full.
+            val tooltip = ByHintTooltip(editor, project, tip, fallback = label.takeIf { it != text }, spans = spans)
             val presentation = ByInlayHintPresentation(
                 editor = editor,
                 text = text,
@@ -248,16 +279,12 @@ private class ByInlayHintsCollector(
                 links = links,
                 navigate = navigate.takeIf { links.isNotEmpty() },
                 accept = accept,
+                menu = menu,
+                tooltip = tooltip.takeUnless { it.isEmpty },
+                commands = spans.filter { it.command != null },
+                runCommand = runCommand,
             )
-            // The server's own tooltip when it sent one; otherwise the untruncated text, so a hint
-            // that had to be cut can still be read in full.
-            val tooltip = ByInlayHints.tooltipOf(hint) ?: label.takeIf { it != text }
-            sink.addInlineElement(
-                offset,
-                catalog.relatesToPrecedingText(kind),
-                tooltip?.let { factory.withTooltip(it, presentation) } ?: presentation,
-                false,
-            )
+            sink.addInlineElement(offset, catalog.relatesToPrecedingText(kind), presentation, false)
             drawn.getOrPut(offset) { ArrayList(1) } += presentation
             collected += ByInlayAudit.Collected(offset, text, run, index, thread)
         }
@@ -384,5 +411,8 @@ private class ByInlayHintsCollector(
          * having while this pass is still the current one.
          */
         const val ALIGNMENT_TIMEOUT_MS = 2_000
+
+        /** Bounds a command run from a label part; nothing waits on its answer but the pooled thread. */
+        const val COMMAND_TIMEOUT_MS = 10_000
     }
 }

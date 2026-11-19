@@ -1,6 +1,7 @@
 package dev.basedpython.pycharm.lsp.inlay
 
 import com.intellij.codeInsight.hints.presentation.PresentationListener
+import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.codeInsight.hints.presentation.PresentationRenderer
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.colors.EditorFontType
@@ -328,6 +329,97 @@ class ByInlayHintPresentationTest {
         click(hint, hint.xOf(0, 1), count = 2)
         assertTrue(navigated.isEmpty())
         assertEquals(0, accepted)
+    }
+
+    // endregion
+
+    // region: right click, commands, offsets
+
+    private val menus = mutableListOf<List<String>>()
+
+    private fun menu(editor: Editor) = ByHintMenu(
+        project = fixture.project,
+        kind = ByHintKind("variableTypes"),
+        label = ": list[int]",
+        links = listOf(ByHintLink(2, 6, listLocation)),
+        navigate = { navigated += it },
+        accept = { accepted++ },
+        display = { group, _ -> menus += group.getChildren(ActionManager.getInstance()).map { it.templateText.orEmpty() } },
+    )
+
+    private fun menuHint(mode: ByHintMode = ByHintMode.ALWAYS): ByInlayHintPresentation {
+        val editor = editor()
+        return ByInlayHintPresentation(
+            editor = editor,
+            text = ": list[int]",
+            padLeft = false,
+            padRight = false,
+            mode = mode,
+            menu = menu(editor),
+        )
+    }
+
+    /** The press or release a context menu opens on, as Swing marks it for the platform it runs on. */
+    private fun trigger(presentation: ByInlayHintPresentation, id: Int): MouseEvent {
+        val event = MouseEvent(presentation.editor.contentComponent, id, 0L, 0, 3, 5, 1, true, MouseEvent.BUTTON3)
+        if (id == MouseEvent.MOUSE_PRESSED) presentation.mousePressed(event, Point(3, 5))
+        else presentation.mouseReleased(event, Point(3, 5))
+        return event
+    }
+
+    @Test
+    fun `the popup trigger opens the hint's menu and is kept from the editor`() = onEdt {
+        val hint = menuHint()
+        assertTrue(trigger(hint, MouseEvent.MOUSE_PRESSED).isConsumed)
+        assertTrue(trigger(hint, MouseEvent.MOUSE_RELEASED).isConsumed)
+        assertEquals(2, menus.size)
+        assertEquals("Insert into Code", menus[0].first())
+    }
+
+    @Test
+    fun `a right press that is not the trigger is the editor's`() = onEdt {
+        val hint = menuHint()
+        val event = MouseEvent(hint.editor.contentComponent, MouseEvent.MOUSE_PRESSED, 0L, 0, 3, 5, 1, false, MouseEvent.BUTTON3)
+        hint.mousePressed(event, Point(3, 5))
+        assertFalse(event.isConsumed)
+        assertTrue(menus.isEmpty())
+    }
+
+    @Test
+    fun `a push hint that is not drawn has no menu, the editor's opens`() = onEdt {
+        val hint = menuHint(ByHintMode.ON_PUSH)
+        assertFalse(trigger(hint, MouseEvent.MOUSE_PRESSED).isConsumed)
+        assertTrue(menus.isEmpty())
+    }
+
+    @Test
+    fun `a plain click on a part with a command runs it, elsewhere nothing`() = onEdt {
+        val ran = mutableListOf<String>()
+        val command = org.eclipse.lsp4j.Command("Show", "by.show")
+        val hint = ByInlayHintPresentation(
+            editor = editor(),
+            text = ": list[int]",
+            padLeft = false,
+            padRight = false,
+            commands = listOf(ByHintSpan(2, 6, null, null, command)),
+            runCommand = { ran += it.command },
+        )
+        click(hint, hint.xOf(6, 7))
+        assertTrue(ran.isEmpty())
+        click(hint, hint.xOf(2, 6))
+        assertEquals(listOf("by.show"), ran)
+        // a Ctrl+click is navigation's, not the command's
+        click(hint, hint.xOf(2, 6), navigateModifier)
+        assertEquals(1, ran.size)
+    }
+
+    @Test
+    fun `the offset under the mouse is the character drawn there`() = onEdt {
+        val hint = linkedHint()
+        assertEquals(0, hint.offsetAt(hint.xOf(0, 1)))
+        assertEquals(4, hint.offsetAt(hint.xOf(4, 5)))
+        assertEquals(10, hint.offsetAt(hint.xOf(10, 11)))
+        assertEquals(null, hint.offsetAt(hint.xOf(10, 11) + 200))
     }
 
     // endregion

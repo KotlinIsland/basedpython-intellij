@@ -61,8 +61,14 @@ import org.eclipse.lsp4j.Location
  * (Cmd+click on macOS) or a middle click, and underline while Ctrl is held over them: what the
  * platform's own LSP hints do with a label part's `location`. A double click writes the hint into
  * the source when `by` sent the edit that does it ([accept]), which is what LSP's `textEdits` on a
- * hint are for and how VS Code offers them. What either does is the collector's business, handed in
- * as [navigate] and [accept]; this only decides which of them a click meant.
+ * hint are for and how VS Code offers them. A plain click on a run with a command of its own (a
+ * label part's `command`) runs it, and the run underlines under the mouse to say it will. The popup
+ * trigger opens the hint's own menu ([ByHintMenu]) instead of the editor's. What each does is the
+ * collector's business, handed in as [navigate], [accept], [runCommand] and [menu]; this only
+ * decides which of them a click meant.
+ *
+ * **Hover** shows what [tooltip] has for the character under the mouse — a part's own tooltip, what
+ * `by` says about a place a part names, or the hint's tooltip.
  */
 class ByInlayHintPresentation(
     override val editor: Editor,
@@ -74,6 +80,11 @@ class ByInlayHintPresentation(
     private val links: List<ByHintLink> = emptyList(),
     private val navigate: ((Location) -> Unit)? = null,
     private val accept: (() -> Unit)? = null,
+    private val menu: ByHintMenu? = null,
+    private val tooltip: ByHintTooltip? = null,
+    /** The runs of [text] with a command of their own, which a plain click runs. */
+    private val commands: List<ByHintSpan> = emptyList(),
+    private val runCommand: ((org.eclipse.lsp4j.Command) -> Unit)? = null,
 ) : BasePresentation(), ByHintPush.Watcher {
 
     /**
@@ -108,7 +119,7 @@ class ByInlayHintPresentation(
      * The link under the mouse while Ctrl is held, drawn as a hyperlink; `null` the rest of the time.
      * Mouse events and painting are both on the EDT.
      */
-    private var hovered: ByHintLink? = null
+    private var hovered: ByHintRun? = null
 
     /**
      * Exactly what the same characters would measure as source, and **not a pixel more** — except
@@ -234,7 +245,7 @@ class ByInlayHintPresentation(
      * are drawn in, so the glyphs land where the unbroken string puts them and nothing shifts as the
      * mouse moves over the hint.
      */
-    private fun paintHovered(g: Graphics2D, metrics: FontMetrics, link: ByHintLink, plain: Color?) {
+    private fun paintHovered(g: Graphics2D, metrics: FontMetrics, link: ByHintRun, plain: Color?) {
         val reference = editor.colorsScheme.getAttributes(EditorColors.REFERENCE_HYPERLINK_COLOR)
         val baseline = baseline(metrics)
         val left = leftPadding(metrics)
@@ -266,18 +277,38 @@ class ByInlayHintPresentation(
      * padding, the ellipsis, or a hint that is not drawn at all.
      */
     internal fun linkAt(x: Int): ByHintLink? {
-        if (!shown || links.isEmpty()) return null
+        if (links.isEmpty()) return null
+        val offset = offsetAt(x) ?: return null
+        return links.firstOrNull { offset >= it.start && offset < it.end }
+    }
+
+    /**
+     * The index into [text] of the character drawn at [x], relative to this hint, or `null` over
+     * the padding or a hint that is not drawn at all.
+     */
+    internal fun offsetAt(x: Int): Int? {
+        if (!shown) return null
         val metrics = metrics(font(ByInlayColors.attributes(editor.colorsScheme).fontType))
         val left = leftPadding(metrics)
-        return links.firstOrNull { x >= left + advance(metrics, it.start) && x < left + advance(metrics, it.end) }
+        if (x < left) return null
+        return (0 until text.length).firstOrNull { x < left + advance(metrics, it + 1) }
+    }
+
+    /** The run with a command of its own at [x], or `null`. */
+    private fun commandAt(x: Int): ByHintSpan? {
+        if (commands.isEmpty() || runCommand == null) return null
+        val offset = offsetAt(x) ?: return null
+        return commands.firstOrNull { offset >= it.start && offset < it.end }
     }
 
     override fun mouseMoved(event: MouseEvent, translated: Point) {
-        hover(if (isControlDown(event)) linkAt(translated.x) else null)
+        hover(if (isControlDown(event)) linkAt(translated.x)?.run else commandAt(translated.x)?.run)
+        if (shown) tooltip?.moved(event, offsetAt(translated.x))
     }
 
     override fun mouseExited() {
         hover(null)
+        tooltip?.exited()
     }
 
     /**
@@ -285,6 +316,15 @@ class ByInlayHintPresentation(
      * LSP hint's label part.
      */
     override fun mouseClicked(event: MouseEvent, translated: Point) {
+        val plainClick = SwingUtilities.isLeftMouseButton(event) && event.clickCount == 1 &&
+            !isControlDown(event) && !event.isShiftDown && !event.isAltDown
+        if (plainClick) {
+            val command = commandAt(translated.x)?.command
+            if (command != null) {
+                runCommand?.invoke(command)
+                return
+            }
+        }
         val navigate = navigate ?: return
         val linkGesture = SwingUtilities.isMiddleMouseButton(event) ||
             SwingUtilities.isLeftMouseButton(event) && isControlDown(event)
@@ -304,13 +344,32 @@ class ByInlayHintPresentation(
      * for the click wrote nothing — so the press is where the edit happens.
      */
     override fun mousePressed(event: MouseEvent, translated: Point) {
+        if (openMenu(event)) return
         if (accept == null || !shown || !SwingUtilities.isLeftMouseButton(event)) return
         if (event.clickCount != 2 || isControlDown(event)) return
         event.consume()
         accept()
     }
 
-    private fun hover(link: ByHintLink?) {
+    /** The release is the popup trigger on Windows, as the press is elsewhere. */
+    override fun mouseReleased(event: MouseEvent, translated: Point) {
+        openMenu(event)
+    }
+
+    /**
+     * Opens [menu] on the popup trigger over a hint that is drawn, consuming the event so that the
+     * editor neither moves the caret nor opens its own context menu over this one.
+     */
+    private fun openMenu(event: MouseEvent): Boolean {
+        val menu = menu ?: return false
+        if (!shown || !ByHintMenu.isTrigger(event)) return false
+        event.consume()
+        hover(null)
+        menu.show(event)
+        return true
+    }
+
+    private fun hover(link: ByHintRun?) {
         if (link == hovered) return
         hovered = link
         // A string rather than this object as the requestor: the editor keeps it in a map until it is

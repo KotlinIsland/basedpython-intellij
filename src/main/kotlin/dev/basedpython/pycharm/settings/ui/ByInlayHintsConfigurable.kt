@@ -1,7 +1,5 @@
 package dev.basedpython.pycharm.settings.ui
 
-import com.intellij.codeInsight.daemon.DaemonCodeAnalyzer
-import com.intellij.codeInsight.daemon.impl.InlayHintsPassFactoryInternal
 import com.intellij.codeInsight.hints.InlayContentListener
 import com.intellij.codeInsight.hints.InlayHintsSettings
 import com.intellij.codeInsight.hints.presentation.InlayPresentation
@@ -25,6 +23,7 @@ import com.intellij.openapi.editor.markup.TextAttributes
 import com.intellij.openapi.options.Configurable
 import com.intellij.openapi.options.ConfigurableProvider
 import com.intellij.openapi.options.SearchableConfigurable
+import com.intellij.openapi.options.ShowSettingsUtil
 import com.intellij.openapi.project.DumbAwareAction
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.ComboBox
@@ -54,13 +53,14 @@ import dev.basedpython.pycharm.lsp.inlay.ByHintGroup
 import dev.basedpython.pycharm.lsp.inlay.ByHintKind
 import dev.basedpython.pycharm.lsp.inlay.ByHintKindInfo
 import dev.basedpython.pycharm.lsp.inlay.ByHintMode
+import dev.basedpython.pycharm.lsp.inlay.ByHintModeChange
 import dev.basedpython.pycharm.lsp.inlay.ByHintPlacement
+import dev.basedpython.pycharm.lsp.inlay.ByHintTooltip
 import dev.basedpython.pycharm.lsp.inlay.ByInlayCatalog
 import dev.basedpython.pycharm.lsp.inlay.ByInlayHintCatalog
 import dev.basedpython.pycharm.lsp.inlay.ByInlayHintPresentation
 import dev.basedpython.pycharm.lsp.inlay.ByInlayHints
 import dev.basedpython.pycharm.lsp.inlay.ByPushKey
-import dev.basedpython.pycharm.lsp.reload.BasedPythonLspReloader
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import java.awt.AlphaComposite
 import java.awt.BorderLayout
@@ -108,6 +108,15 @@ internal class ByInlayHintsConfigurable(private val project: Project) : Searchab
 
     private var ui: Ui? = null
 
+    /** The kind to select when the page is built, set by [show] before the dialog builds it. */
+    private var selectOnOpen: ByHintKind? = null
+
+    /** Selects [kind] now if the page is built, and as soon as it is if not. */
+    internal fun selectKind(kind: ByHintKind) {
+        val built = ui
+        if (built != null) built.select(kind) else selectOnOpen = kind
+    }
+
     override fun getId(): String = ID
 
     override fun getDisplayName(): String = "Inlay Hints"
@@ -143,23 +152,8 @@ internal class ByInlayHintsConfigurable(private val project: Project) : Searchab
 
     override fun apply() {
         val catalog = ui?.catalog ?: return
-        val s = settings
-        var neverChanged = false
-        var changed = pendingPushKey != s.inlayPushKey
-        for (info in catalog.sourceKinds) {
-            val before = s.inlayMode(info.kind)
-            val after = mode(info.kind)
-            if (before == after) continue
-            changed = true
-            if ((before == ByHintMode.NEVER) != (after == ByHintMode.NEVER)) neverChanged = true
-            s.setInlayMode(info.kind, after)
-        }
-        s.inlayPushKey = pendingPushKey
+        ByHintModeChange.apply(project, catalog.sourceKinds.associate { it.kind to mode(it.kind) }, pendingPushKey)
         pending.clear()
-        // Which kinds `by` computes is read when it starts, from the modes; the other changes are
-        // only in how the plugin draws what it already has.
-        if (neverChanged) BasedPythonLspReloader.getInstance(project).onSettingsChanged()
-        if (changed) redrawInlayHints()
         ui?.refresh()
     }
 
@@ -172,19 +166,6 @@ internal class ByInlayHintsConfigurable(private val project: Project) : Searchab
     override fun disposeUIResources() {
         ui?.let { Disposer.dispose(it) }
         ui = null
-    }
-
-    /**
-     * Re-collect the inlay hints of every open editor, so a changed mode is visible on Apply.
-     *
-     * A plain daemon restart is not enough: the platform's inlay pass keeps the PSI modification stamp
-     * it last ran against and declines to build a pass at all when the file has not changed since,
-     * which is precisely the case here. [InlayHintsPassFactoryInternal.forceHintsUpdateOnNextPass]
-     * clears that stamp.
-     */
-    private fun redrawInlayHints() {
-        InlayHintsPassFactoryInternal.forceHintsUpdateOnNextPass()
-        DaemonCodeAnalyzer.getInstance(project).restart("basedpython inlay hint settings applied")
     }
 
     /** What a tree row stands for. */
@@ -346,7 +327,9 @@ internal class ByInlayHintsConfigurable(private val project: Project) : Searchab
                 add(top, BorderLayout.NORTH)
                 add(splitter, BorderLayout.CENTER)
             }
-            selectFirstKind()
+            val wanted = selectOnOpen
+            selectOnOpen = null
+            if (wanted == null || nodesFor(setOf(wanted)).isEmpty()) selectFirstKind() else select(wanted)
         }
 
         private fun configureEditor() {
@@ -558,11 +541,22 @@ internal class ByInlayHintsConfigurable(private val project: Project) : Searchab
                 val kind = ByInlayHints.kindOf(hint)
                 val mode = mode(kind)
                 if (!mode.isCollected) continue
-                val label = ByInlayHints.partsOf(hint).joinToString("") { it.text }.ifEmpty { continue }
+                val parts = ByInlayHints.partsOf(hint)
+                val label = parts.joinToString("") { it.text }.ifEmpty { continue }
+                // the tooltip the editor would show, but not what `by` says about a place a part
+                // names: the catalog sends no locations, and there is no server behind the preview
+                val tip = ByInlayHints.tipOf(hint)
                 val relates = catalog.kind(kind)?.relatesToPrecedingText ?: catalogs.relatesToPrecedingText(kind)
                 val placement = ByInlayHints.placementOf(hint)
                 if (placement.isBlock) {
-                    val block = ByBlockHintPresentation(editor = editor, text = label, mode = mode, pushKey = pendingPushKey)
+                    val block = ByBlockHintPresentation(
+                        editor = editor,
+                        text = label,
+                        mode = mode,
+                        pushKey = pendingPushKey,
+                        tooltip = ByHintTooltip(editor, project, tip, null, ByInlayHints.spansOf(parts, label), docs = false)
+                            .takeUnless { it.isEmpty },
+                    )
                     val shown: InlayPresentation = if (emphasise && kind !in chosen) Faded(block) else block
                     val inlay = editor.inlayModel.addBlockElement(
                         offset,
@@ -576,13 +570,16 @@ internal class ByInlayHintsConfigurable(private val project: Project) : Searchab
                     blockLines += label.count { it == '\n' } + 1
                     continue
                 }
+                val text = ByInlayHints.truncate(label)
                 val drawn = ByInlayHintPresentation(
                     editor = editor,
-                    text = ByInlayHints.truncate(label),
+                    text = text,
                     padLeft = hint.paddingLeft == true,
                     padRight = hint.paddingRight == true,
                     mode = mode,
                     pushKey = pendingPushKey,
+                    tooltip = ByHintTooltip(editor, project, tip, label.takeIf { it != text }, ByInlayHints.spansOf(parts, text), docs = false)
+                        .takeUnless { it.isEmpty },
                 )
                 val presentation: InlayPresentation = if (emphasise && kind !in chosen) Faded(drawn) else drawn
                 val inlay = editor.inlayModel.addInlineElement(
@@ -701,6 +698,17 @@ internal class ByInlayHintsConfigurable(private val project: Project) : Searchab
 
     companion object {
         const val ID: String = "dev.basedpython.pycharm.settings.inlayHints"
+
+        /**
+         * Opens Settings on this page with [kind] selected, or the first kind when [kind] is null or
+         * not in the catalog. By class, which finds this page and no other — not by name, for the
+         * reason `BasedPythonSettingsPage.show` gives.
+         */
+        fun show(project: Project, kind: ByHintKind?) {
+            ShowSettingsUtil.getInstance().showSettingsDialog(project, ByInlayHintsConfigurable::class.java) { page ->
+                if (kind != null) page.selectKind(kind)
+            }
+        }
 
         private val MODE_ORDER = listOf(ByHintMode.NEVER, ByHintMode.ON_PUSH, ByHintMode.ALWAYS)
 

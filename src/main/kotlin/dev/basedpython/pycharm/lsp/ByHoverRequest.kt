@@ -1,14 +1,17 @@
 package dev.basedpython.pycharm.lsp
 
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.application.runReadActionBlocking
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.platform.lsp.api.LspClient
 import com.intellij.platform.lsp.api.LspClientManager
 import com.intellij.platform.lsp.api.LspServerState
 import com.intellij.platform.lsp.util.getLsp4jPosition
 import com.intellij.psi.PsiFile
 import org.eclipse.lsp4j.HoverParams
+import org.eclipse.lsp4j.Location
 
 /**
  * The `by` server serving [file], or `null` when there is none — switched off in settings, still
@@ -73,7 +76,29 @@ object ByHoverRequest {
         val server = runningByServer(file.project, virtualFile) ?: return ByHover.NoServer
         ByServerDocuments.ensureOpen(server, file.project, virtualFile)
 
-        val params = HoverParams(server.getDocumentIdentifier(virtualFile), getLsp4jPosition(document, offset))
+        return ask(server, HoverParams(server.getDocumentIdentifier(virtualFile), getLsp4jPosition(document, offset)), timeoutMs)
+    }
+
+    /**
+     * Asks what the server knows about the place [location] names — a declaration a hint's label
+     * links to, say, which may be in a file no editor has open: a library's stub, or typeshed's.
+     *
+     * Off the EDT, like [at]. The file is opened on the server first when the platform would not
+     * have, since `by` answers nothing about a document it was never sent.
+     */
+    fun at(project: Project, location: Location, timeoutMs: Int): ByHover {
+        val start = location.range?.start ?: return ByHover.NoServer
+        val uri = location.uri ?: return ByHover.NoServer
+        val any = LspClientManager.getInstance(project).getClients(ByLspServerSupportProvider::class.java)
+            .firstOrNull { it.state == LspServerState.Running } ?: return ByHover.NoServer
+        val file = (any.descriptor.findFileByUri(uri) ?: VirtualFileManager.getInstance().findFileByUrl(uri))
+            ?.takeIf { it.isValid } ?: return ByHover.NoServer
+        val server = runningByServer(project, file) ?: any
+        runReadActionBlocking { ByServerDocuments.ensureOpen(server, project, file) }
+        return ask(server, HoverParams(server.getDocumentIdentifier(file), start), timeoutMs)
+    }
+
+    private fun ask(server: LspClient, params: HoverParams, timeoutMs: Int): ByHover {
         val answer = server.askBy("textDocument/hover", timeoutMs) { it.textDocumentService.hover(params) }
         val hover = when (answer) {
             is ByAnswer.Answer -> answer.value
