@@ -1,7 +1,6 @@
 package dev.basedpython.pycharm.onboarding
 
 import com.intellij.ide.BrowserUtil
-import com.intellij.ide.util.PropertiesComponent
 import com.intellij.notification.NotificationAction
 import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
@@ -12,6 +11,7 @@ import com.intellij.psi.search.FileTypeIndex
 import com.intellij.psi.search.GlobalSearchScope
 import dev.basedpython.pycharm.docs.BasedPythonDocEntries
 import dev.basedpython.pycharm.lang.BasedPythonFileType
+import dev.basedpython.pycharm.lang.dialect.BasedPythonOptIn
 import dev.basedpython.pycharm.lang.dialect.BasedPythonProjectDetector
 import dev.basedpython.pycharm.settings.ui.BasedPythonSettingsPage
 import dev.basedpython.pycharm.util.BasedPythonBundle
@@ -22,22 +22,22 @@ import dev.basedpython.pycharm.util.BasedPythonBundle
  * The first time a basedpython project is opened after the plugin is installed, this shows a
  * single "Welcome to basedpython" notification with quick links to the
  * settings page and the online documentation. The notification is shown at most
- * once ever, gated by an application-level flag in [PropertiesComponent] — so it carries no "Don't
+ * once ever, gated by an application-level flag ([BasedPythonOptIn.welcomeShown], which answering
+ * the opt-in banner sets too, since that is meeting the plugin already) — so it carries no "Don't
  * show again", which it had while that flag was already set before it showed, and it is a
  * suggestion rather than a sticky notification that stays on screen until dismissed.
  */
 internal class BasedPythonWelcomeActivity : ProjectActivity {
 
     override suspend fun execute(project: Project) {
-        val props = PropertiesComponent.getInstance()
-        if (props.getBoolean(WELCOME_SHOWN_KEY, false)) return
+        if (BasedPythonOptIn.welcomeShown()) return
 
         if (!project.isBasedPythonProject()) return
 
         // Re-check + set the flag together to avoid a duplicate from a second
         // project opening concurrently.
-        if (props.getBoolean(WELCOME_SHOWN_KEY, false)) return
-        props.setValue(WELCOME_SHOWN_KEY, true)
+        if (BasedPythonOptIn.welcomeShown()) return
+        BasedPythonOptIn.markWelcomeShown()
 
         showWelcome(project)
     }
@@ -88,6 +88,5 @@ internal class BasedPythonWelcomeActivity : ProjectActivity {
 
     private companion object {
         const val NOTIFICATION_GROUP_ID: String = "basedpython.Suggestions"
-        const val WELCOME_SHOWN_KEY: String = "dev.basedpython.pycharm.welcomeShown"
     }
 }

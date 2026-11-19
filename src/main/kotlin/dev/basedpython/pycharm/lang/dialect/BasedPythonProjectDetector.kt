@@ -19,6 +19,7 @@ import com.intellij.openapi.vfs.newvfs.events.VFilePropertyChangeEvent
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.search.FileTypeIndex
 import com.intellij.psi.search.GlobalSearchScope
+import com.intellij.ui.EditorNotifications
 import dev.basedpython.pycharm.lang.BasedPythonFileType
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import kotlinx.coroutines.CoroutineScope
@@ -94,11 +95,12 @@ object BasedPythonProjectDetector {
     private const val PYPROJECT_READ_LIMIT = 64 * 1024
 
     /**
-     * True when [project] should be treated as basedpython: the `by` server is enabled and the base
-     * directory carries a basedpython marker.
+     * True when [project] should be treated as basedpython: the `by` server is enabled, and the base
+     * directory carries a basedpython marker or the user chose basedpython for the project's Python
+     * files ([BasedPythonOptIn]).
      */
     fun isBasedPythonProject(project: Project): Boolean =
-        BasedPythonSettings.getInstance(project).byEnabled && kind(project) == ProjectKind.BASEDPYTHON
+        BasedPythonSettings.getInstance(project).byEnabled && BasedPythonOptIn.uses(project)
 
     /**
      * True when [project] looks like Python at all, basedpython or otherwise.
@@ -109,8 +111,8 @@ object BasedPythonProjectDetector {
     fun isPythonProject(project: Project): Boolean = kind(project) != ProjectKind.OTHER
 
     /**
-     * True when [project] has basedpython in it at all: a basedpython marker at its base, or a `.by`
-     * file anywhere — the projects `by` and `buff` start for. Not gated on `byEnabled`, since `buff`
+     * True when [project] has basedpython in it at all: a basedpython marker at its base, the user's
+     * choice of basedpython for its Python files, or a `.by` file anywhere — the projects `by` and `buff` start for. Not gated on `byEnabled`, since `buff`
      * and the settings still apply with `by` off.
      *
      * What a basedpython action's `update` asks before it shows. Those actions answer in balloons, so
@@ -118,10 +120,10 @@ object BasedPythonProjectDetector {
      * Caches*, *Restart basedpython LSP Servers*, all fourteen of them were enabled in a Cargo project
      * (measured in the sandbox) — could only ever answer with an error there.
      *
-     * Needs a read action. While the project is indexing, only the marker counts.
+     * Needs a read action. While the project is indexing, only the marker and the choice count.
      */
     fun hasBasedPython(project: Project): Boolean =
-        kind(project) == ProjectKind.BASEDPYTHON ||
+        BasedPythonOptIn.uses(project) ||
             (!DumbService.isDumb(project) &&
                 FileTypeIndex.containsFileOfType(BasedPythonFileType.INSTANCE, GlobalSearchScope.projectScope(project)))
 
@@ -297,7 +299,12 @@ internal class BasedPythonProjectKindCache(
         if (previous == null) return
         scope.launch(Dispatchers.IO) {
             val now = kind { BasedPythonProjectDetector.scan(project) }
-            if ((now == ProjectKind.BASEDPYTHON) != (previous == ProjectKind.BASEDPYTHON)) {
+            if (now == previous) return@launch
+            // a marker added or removed may answer the question the opt-in banner asks
+            EditorNotifications.getInstance(project).updateAllNotifications()
+            val choice = BasedPythonOptIn.projectChoice(project)
+            val default = BasedPythonOptIn.ideDefault()
+            if (BasedPythonOptIn.uses(now, choice, default) != BasedPythonOptIn.uses(previous, choice, default)) {
                 edtWriteAction {
                     FileTypeManagerEx.getInstanceEx().makeFileTypesChange("basedpython project markers changed") {}
                 }

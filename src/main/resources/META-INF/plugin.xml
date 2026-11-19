@@ -827,6 +827,9 @@
             implementation="dev.basedpython.pycharm.debug.recompose.ByRecompositionPassFactory"/>
         <postStartupActivity
             implementation="dev.basedpython.pycharm.onboarding.BasedPythonWelcomeActivity"/>
+        <!-- Asks above a Python file whether to use basedpython for it, in the project or the IDE. -->
+        <editorNotificationProvider
+            implementation="dev.basedpython.pycharm.onboarding.BasedPythonOptInBannerProvider"/>
         <liveTemplateMacro implementation="dev.basedpython.pycharm.editor.templates.macro.ByModuleNameMacro"/>
         <liveTemplateMacro implementation="dev.basedpython.pycharm.editor.templates.macro.ByHeaderMacro"/>
         <liveTemplateMacro implementation="dev.basedpython.pycharm.editor.templates.macro.ByOutPathMacro"/>

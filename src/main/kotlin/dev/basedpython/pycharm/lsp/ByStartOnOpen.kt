@@ -1,5 +1,6 @@
 package dev.basedpython.pycharm.lsp
 
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.smartReadAction
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.startup.ProjectActivity
@@ -46,4 +47,22 @@ internal suspend fun byServesProject(project: Project): Boolean {
         smartReadAction(project) {
             FileTypeIndex.containsFileOfType(BasedPythonFileType.INSTANCE, GlobalSearchScope.projectScope(project))
         }
+}
+
+/**
+ * Starts `by` and `buff` for a project that has just come to use basedpython for its Python files
+ * ([dev.basedpython.pycharm.lang.dialect.BasedPythonOptIn]), as [ByStartOnOpen] starts `by`.
+ *
+ * Not `stopAndRestartClientsIfNeeded`, which is what a settings change restarts them with: the
+ * platform starts a server again only for open files that are project content
+ * (`LspClientManagerImpl.startIfNeeded`), and a directory IntelliJ IDEA opened with no Python plugin
+ * has no module, so no content — measured in the sandbox: after the restart `by` was not running,
+ * after [startByServer] it was.
+ */
+internal fun startServersForPython(project: Project) {
+    // resolving a binary can mean asking uv
+    ApplicationManager.getApplication().executeOnPooledThread {
+        if (!project.isDisposed) startByServer(project)
+        if (!project.isDisposed) startBuffServer(project)
+    }
 }

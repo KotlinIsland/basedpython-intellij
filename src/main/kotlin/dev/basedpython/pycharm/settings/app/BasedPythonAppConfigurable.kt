@@ -8,9 +8,13 @@ import com.intellij.ui.dsl.builder.AlignX
 import com.intellij.ui.dsl.builder.BottomGap
 import com.intellij.ui.dsl.builder.MAX_LINE_LENGTH_WORD_WRAP
 import com.intellij.ui.dsl.builder.Panel
+import com.intellij.ui.dsl.builder.bindItem
 import com.intellij.ui.dsl.builder.bindSelected
 import com.intellij.ui.dsl.builder.bindText
 import com.intellij.ui.dsl.builder.panel
+import com.intellij.ui.dsl.listCellRenderer.textListCellRenderer
+import dev.basedpython.pycharm.lang.dialect.BasedPythonOptIn
+import dev.basedpython.pycharm.lang.dialect.PythonProjectsDefault
 import dev.basedpython.pycharm.lang.dialect.BasedPythonProjectDetector
 import dev.basedpython.pycharm.lsp.BasedPythonBinaries
 import dev.basedpython.pycharm.lsp.reload.BasedPythonLspReloader
@@ -25,7 +29,10 @@ import dev.basedpython.pycharm.settings.ui.BinaryRow
  * setting is in the same place on both.
  */
 internal class BasedPythonAppConfigurable :
-    BoundConfigurable("basedpython Defaults", "dev.basedpython.pycharm.settings.app") {
+    BoundConfigurable("basedpython Defaults", ID) {
+
+    /** The IDE's choice from the Python projects row, stored in [apply] once the rest is. */
+    private var chosenDefault: PythonProjectsDefault? = null
 
     private val settings get() = BasedPythonAppSettings.getInstance()
 
@@ -41,6 +48,18 @@ internal class BasedPythonAppConfigurable :
             row {
                 comment(
                     "Every project uses these until it chooses for itself on Languages &amp; Frameworks | basedpython.",
+                    maxLineLength = MAX_LINE_LENGTH_WORD_WRAP,
+                )
+            }.bottomGap(BottomGap.SMALL)
+            row("Use basedpython in Python projects:") {
+                comboBox(PythonProjectsDefault.entries, textListCellRenderer("") { it.display })
+                    .bindItem({ s.pythonProjects }, { chosenDefault = it ?: PythonProjectsDefault.ASK })
+            }
+            // a row of its own: under the combo it widened the page past the dialog (measured: 771 px
+            // of a 649 px viewport), since a wrapped comment there still asks for about 560 px
+            row {
+                comment(
+                    "For projects that do not name basedpython. Each can choose otherwise on its own page.",
                     maxLineLength = MAX_LINE_LENGTH_WORD_WRAP,
                 )
             }.bottomGap(BottomGap.SMALL)
@@ -95,11 +114,19 @@ internal class BasedPythonAppConfigurable :
         if (s.defaultByEnabled != byEnabledBefore) {
             BasedPythonProjectDetector.fileTypesMayHaveChanged("basedpython default for the by server changed")
         }
+        chosenDefault?.let { default ->
+            chosenDefault = null
+            if (default != s.pythonProjects) BasedPythonOptIn.chooseForIde(default)
+        }
         binaryRows.forEach { it.refresh() }
     }
 
     override fun disposeUIResources() {
         super.disposeUIResources()
         Disposer.dispose(uiDisposable)
+    }
+
+    companion object {
+        const val ID: String = "dev.basedpython.pycharm.settings.app"
     }
 }

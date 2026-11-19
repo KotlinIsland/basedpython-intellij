@@ -41,6 +41,7 @@ class BasedPythonAppSettings : PersistentStateComponent<BasedPythonAppSettings.S
     var addUnambiguousImportsOnTheFly: Boolean = false,
     var suggestImportableNames: Boolean = true,
     var offerPostfixTemplates: Boolean = true,
+    var pythonProjects: String = "",
   )
 
   private var state = State()
@@ -103,6 +104,18 @@ class BasedPythonAppSettings : PersistentStateComponent<BasedPythonAppSettings.S
   var offerPostfixTemplates: Boolean
     get() = state.offerPostfixTemplates
     set(value) { state.offerPostfixTemplates = value }
+
+  /**
+   * Whether basedpython is used for the Python files of a project that does not name it and has not
+   * chosen for itself — see [dev.basedpython.pycharm.lang.dialect.BasedPythonOptIn]. Stored by id,
+   * blank for the default, *ask*.
+   */
+  var pythonProjects: dev.basedpython.pycharm.lang.dialect.PythonProjectsDefault
+    get() = dev.basedpython.pycharm.lang.dialect.PythonProjectsDefault.fromId(state.pythonProjects)
+    set(value) {
+      state.pythonProjects =
+        if (value == dev.basedpython.pycharm.lang.dialect.PythonProjectsDefault.ASK) "" else value.id
+    }
 
   companion object {
     @JvmStatic

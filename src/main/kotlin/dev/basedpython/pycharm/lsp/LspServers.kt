@@ -457,6 +457,24 @@ internal class ByLspServerDescriptor(
 
 // region: `buff` server (ruff fork — formatter / linter)
 
+/**
+ * Starts `buff` for [project] with no file opened, as [startByServer] starts `by`: switched on and
+ * with a binary, or nothing, after saying the binary is missing. Not through the platform's
+ * `startClientsIfNeeded`, which starts a server only for open files that are project content.
+ */
+internal fun startBuffServer(project: Project) {
+  val settings = BasedPythonSettings.getInstance(project)
+  if (!settings.buffEnabled) return
+  val launch = BasedPythonBinaries.launchBuff(project) ?: run {
+    BasedPythonNotifications.warnBinaryMissing(project, "buff")
+    return
+  }
+  LspClientManager.getInstance(project).ensureClientStarted(
+    BuffLspServerSupportProvider::class.java,
+    BuffLspServerDescriptor(project, launch, splitArgs(settings.effectiveBuffExtraArgs)),
+  )
+}
+
 internal class BuffLspServerSupportProvider : LspIntegrationProvider {
   override fun fileOpened(project: Project, file: VirtualFile, clientStarter: LspClientStarter) {
     if (!file.isBasedPythonSource()) return

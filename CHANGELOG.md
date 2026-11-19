@@ -2,6 +2,12 @@
 
 ### Added
 
+- basedpython for Python projects that do not name it. A banner above a project's `.py` and `.pyi`
+  files asks *Use basedpython for Python files?*: in *This project*, in *All projects*, or *Not
+  here*. A project's answer is kept in its workspace file, not in anything committed; the IDE's is
+  on *basedpython Defaults* (ask, always, never), and each project can answer otherwise on its own
+  page. A project that names basedpython itself uses it whatever was chosen. Before, such a project
+  got nothing at all, `by` and `buff` included, until a marker was written into it by hand.
 - *Settings | basedpython | Inlay Hints*: every kind of hint `by` computes, grouped into families,
   each with a description and a preview of an example with the hints drawn as the editor draws
   them, by the modes on the page before Apply. Hold the push key over the preview to see the hints

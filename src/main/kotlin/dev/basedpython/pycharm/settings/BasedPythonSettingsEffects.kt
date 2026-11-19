@@ -6,6 +6,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.project.RootsChangeRescanningInfo
 import com.intellij.openapi.roots.ex.ProjectRootManagerEx
 import com.intellij.openapi.util.EmptyRunnable
+import com.intellij.ui.EditorNotifications
 import dev.basedpython.pycharm.lang.dialect.BasedPythonProjectDetector
 import dev.basedpython.pycharm.lang.dialect.PyFileHandling
 
@@ -29,6 +30,8 @@ internal object BasedPythonSettingsEffects {
     if (after.pyFileHandling != before.pyFileHandling || after.byEnabled != before.byEnabled) {
       BasedPythonProjectDetector.fileTypesMayHaveChanged("basedpython .py handling changed")
     }
+    // the opt-in banner is not asked where `by` is off
+    if (after.byEnabled != before.byEnabled) EditorNotifications.getInstance(project).updateAllNotifications()
     if (after.indexGeneratedPython != before.indexGeneratedPython) rescanRoots(project)
   }
 

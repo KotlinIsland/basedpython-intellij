@@ -1,13 +1,11 @@
 package dev.basedpython.pycharm.settings.ui
 
-import com.intellij.icons.AllIcons
 import com.intellij.openapi.options.BoundConfigurable
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.ComboBox
 import com.intellij.openapi.ui.DialogPanel
 import com.intellij.openapi.util.Disposer
 import com.intellij.ui.dsl.builder.AlignX
-import com.intellij.ui.dsl.builder.AlignY
 import com.intellij.ui.dsl.builder.BottomGap
 import com.intellij.ui.dsl.builder.MAX_LINE_LENGTH_WORD_WRAP
 import com.intellij.ui.dsl.builder.Panel
@@ -21,8 +19,10 @@ import com.intellij.ui.layout.ComponentPredicate
 import dev.basedpython.pycharm.debug.bpd.ByDebugBackend
 import dev.basedpython.pycharm.debug.dfa.ByDataFlowSession
 import dev.basedpython.pycharm.debug.recompose.ByRecompositionSession
+import dev.basedpython.pycharm.lang.dialect.BasedPythonOptIn
 import dev.basedpython.pycharm.lang.dialect.BasedPythonProjectDetector
 import dev.basedpython.pycharm.lang.dialect.ProjectKind
+import dev.basedpython.pycharm.lang.dialect.ProjectOptIn
 import dev.basedpython.pycharm.lang.dialect.PyFileHandling
 import dev.basedpython.pycharm.lsp.BasedPythonBinaries
 import dev.basedpython.pycharm.lsp.diagnostics.ByProjectDiagnostics
@@ -32,6 +32,7 @@ import dev.basedpython.pycharm.lsp.reload.BasedPythonLspReloader
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import dev.basedpython.pycharm.settings.BasedPythonSettingsEffects
 import dev.basedpython.pycharm.settings.ByImportStyle
+import dev.basedpython.pycharm.settings.app.BasedPythonAppConfigurable
 import dev.basedpython.pycharm.settings.app.BasedPythonAppSettings
 import dev.basedpython.pycharm.util.BasedPythonBundle
 
@@ -58,6 +59,9 @@ internal class BasedPythonConfigurable(private val project: Project) :
     private var uiDisposable = Disposer.newDisposable()
 
     private lateinit var byBinary: BinaryRow
+
+    /** The project's choice from [pythonFilesRow], stored in [apply] once the rest is. */
+    private var chosenOptIn: ProjectOptIn? = null
     private lateinit var buffBinary: BinaryRow
 
     override fun createPanel(): DialogPanel {
@@ -67,7 +71,7 @@ internal class BasedPythonConfigurable(private val project: Project) :
         val app = BasedPythonAppSettings.getInstance()
 
         return panel {
-            projectKindNote()
+            pythonFilesRow()
 
             // by
             group("by: type checker and language server") {
@@ -202,23 +206,38 @@ internal class BasedPythonConfigurable(private val project: Project) :
     }
 
     /**
-     * Says, above everything else, when this project is not one the servers check `.py` in.
+     * Whether basedpython is used for this project's Python files, above everything else
+     * ([BasedPythonOptIn]): the same question the banner above a `.py` file asks.
      *
-     * The page is in every project's Settings, and in a Rust repository, or a Python one that never
-     * names basedpython, a page full of server switches reads as though they were running there.
+     * Not offered where the project names basedpython itself, which is an answer no setting here
+     * overrides. The page is in every project's Settings, and in a Rust repository, or a Python one
+     * that never names basedpython, a page full of server switches read as though they were running
+     * there; this row says first whether they are.
      */
-    private fun Panel.projectKindNote() {
-        val text = when (BasedPythonProjectDetector.kind(project)) {
-            ProjectKind.BASEDPYTHON -> return
-            ProjectKind.PYTHON ->
-                "Nothing here names basedpython, so by and buff check only .by files. Add basedpython to " +
-                    "pyproject.toml to have them check .py too."
-            ProjectKind.OTHER ->
-                "This is not a Python project. by and buff start only if a .by file is opened in it."
+    private fun Panel.pythonFilesRow() {
+        val kind = BasedPythonProjectDetector.kind(project)
+        if (kind == ProjectKind.BASEDPYTHON) return
+        val default = BasedPythonOptIn.ideDefault()
+        val ideAnswer = when {
+            BasedPythonOptIn.uses(kind, ProjectOptIn.UNDECIDED, default) -> "Yes"
+            BasedPythonOptIn.shouldAsk(kind, ProjectOptIn.UNDECIDED, default) -> "Ask"
+            else -> "No"
         }
+        row("Use basedpython for Python files:") {
+            comboBox(
+                ProjectOptIn.entries,
+                textListCellRenderer("") { if (it == ProjectOptIn.UNDECIDED) "$ideAnswer (IDE default)" else it.display },
+            )
+                .bindItem({ BasedPythonOptIn.projectChoice(project) }, { chosenOptIn = it ?: ProjectOptIn.UNDECIDED })
+        }
+        // a row of its own: under the combo, in the second column, it widened the page past the
+        // dialog (measured: 699 px of a 649 px viewport), for the reason [WRAP] gives
         row {
-            icon(AllIcons.General.Information).align(AlignY.TOP)
-            text(text, maxLineLength = WRAP)
+            comment(
+                "If not, by and buff check only .by files here. For every project: <a href='defaults'>basedpython Defaults</a>.",
+                maxLineLength = WRAP,
+                action = { e -> selectInSettings(e.source as? java.awt.Component, BasedPythonAppConfigurable.ID) },
+            )
         }.bottomGap(BottomGap.SMALL)
     }
 
@@ -288,6 +307,10 @@ internal class BasedPythonConfigurable(private val project: Project) :
         if (s.debuggerRecompositions != recompositions) ByRecompositionSession.getInstance(project).settingChanged()
         BasedPythonSettingsEffects.announce(project, before)
         BasedPythonLspReloader.getInstance(project).onSettingsChanged()
+        chosenOptIn?.let { choice ->
+            chosenOptIn = null
+            if (choice != BasedPythonOptIn.projectChoice(project)) BasedPythonOptIn.choose(project, choice)
+        }
         byBinary.refresh()
         buffBinary.refresh()
     }
