@@ -1,4 +1,4 @@
-# The check that runs on every change: compile, test, and run the plugin verifier.
+# The check that runs on every change: compile, test, lint, and run the plugin verifier.
 #
 # Shaped after JetBrains' intellij-platform-plugin-template build.yml, with two deliberate
 # departures: JDK 25 rather than the template's 21 (this build sets no toolchain and ships Java 25
@@ -116,3 +116,30 @@ jobs:
         with:
           name: pluginVerifier-result
           path: build/reports/pluginVerifier
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      # The linter image is ~4 GB, and importing the project downloads the IDE it compiles against
+      # into Qodana's cache, ~8 GB more (measured locally): close to all a stock runner has free.
+      - name: Maximize build space
+        uses: jlumbroso/free-disk-space@v1.3.1
+        with:
+          tool-cache: false
+          large-packages: false
+
+      - uses: actions/checkout@v4
+
+      # DevKit's inspections and the threading one, configured in qodana.yaml. Fails on a Critical or
+      # High problem not in .qodana/baseline.sarif.json, the findings there were when this was set
+      # up, so the build is red for what a change adds rather than for the backlog. The whole
+      # project, not only a pull request's files: pr-mode would miss a call made newly wrong by a
+      # change to the method it calls. No Qodana Cloud token: the community linter runs without one.
+      - name: Run Qodana
+        uses: JetBrains/qodana-action@v2026.3.1
+        with:
+          args: --baseline .qodana/baseline.sarif.json
+          pr-mode: false
+          post-pr-comment: false
+          upload-result: true

@@ -368,6 +368,27 @@ directly to see what it says.
 ./gradlew verifyPlugin -PverifyIde=~/Applications/nightly.app   # plus a local installation
 ```
 
+[Qodana](https://www.jetbrains.com/qodana/) lints the sources with DevKit's inspections, the ones an
+IDE shows a plugin project's code, and DevKit's threading inspection, which is off by default and
+reports a call that breaks a `@RequiresEdt`, `@RequiresReadLock` or `@RequiresBackgroundThread`
+annotation. The profile is in [`qodana.yaml`](qodana.yaml). CI fails on a Critical or High problem
+that is not in [`.qodana/baseline.sarif.json`](.qodana/baseline.sarif.json), the findings there were
+when the lint was set up. Run it locally with Docker running, on a copy of the last commit, since
+the container imports the project as an IDE does and writes its `.idea`, `.gradle` and build output
+into it. The `qodana-cache` volume keeps the import's downloads, which take ten minutes the first
+time; the report is `build/qodana/results/report/index.html`.
+
+```bash
+rm -rf build/qodana && mkdir -p build/qodana/src && git archive HEAD | tar -x -C build/qodana/src
+docker run --rm -v "$PWD/build/qodana/src":/data/project -v "$PWD/build/qodana/results":/data/results \
+  -v qodana-cache:/data/cache jetbrains/qodana-jvm-community:2026.3 scan --baseline .qodana/baseline.sarif.json
+```
+
+No annotation says "takes no lock", so code the platform calls while painting, such as a file-type
+overrider or an inlay renderer, is held to it by tests instead: `withLocksForbidden` in
+`src/test/.../testFramework/Locks.kt` runs code under the lock ban paint runs under and fails on a
+lock taken.
+
 ## Releasing
 
 The version is the tag. Create a GitHub release named `v1.2.3` and publishing it runs
@@ -381,7 +402,8 @@ Publishing needs `PUBLISH_TOKEN` (a Marketplace personal access token) in the re
 `CERTIFICATE_CHAIN`, `PRIVATE_KEY` and `PRIVATE_KEY_PASSWORD` are optional and enable
 [plugin signing](https://plugins.jetbrains.com/docs/intellij/plugin-signing.html); without them the
 IDE warns the user at install time. Every push and pull request runs
-[`build.yml`](.github/workflows/build.yml) — build, `check`, and the IntelliJ Plugin Verifier.
+[`build.yml`](.github/workflows/build.yml) — build, `check`, the Qodana lint, and the IntelliJ Plugin
+Verifier.
 
 ## License
 

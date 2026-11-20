@@ -1,0 +1,30 @@
+# The plugin's lint: DevKit's inspections and the threading one, run headless by Qodana, which is
+# the only way they run outside an editor. The profile is here rather than in a file of its own:
+# the image has no YAML plugin, so a YAML profile file is skipped and the default profile runs,
+# saying nothing.
+version: "1.0"
+linter: jetbrains/qodana-jvm-community:2026.3
+projectJDK: "25"
+plugins:
+  - id: DevKit
+profile:
+  name: empty
+  inspections:
+    - group: "category:Plugin DevKit"
+      enabled: true
+    # Off by default in DevKit: calls between methods annotated @RequiresEdt, @RequiresReadLock,
+    # @RequiresBackgroundThread and the like that break what the annotation says.
+    - inspection: ThreadingConcurrency
+      enabled: true
+      severity: ERROR
+    # The tests drive the platform through its test framework, internal API included; the shipped
+    # plugin's use of internal API is verifyPlugin's to refuse.
+    - inspection: JetBrainsInternalApiUsage
+      ignore:
+        - "src/test/**"
+# What the build fails on: a new Critical (error) or High (warning) problem. The findings there
+# were when this was set up are .qodana/baseline.sarif.json, passed with --baseline.
+failureConditions:
+  severityThresholds:
+    critical: 0
+    high: 0
