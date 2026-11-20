@@ -1,5 +1,6 @@
 package dev.basedpython.pycharm.lsp.ext
 
+import com.google.gson.JsonObject
 import org.eclipse.lsp4j.CodeActionContext
 import org.eclipse.lsp4j.CodeActionParams
 import org.eclipse.lsp4j.DocumentDiagnosticParams
@@ -85,6 +86,21 @@ interface ByServerExtensions {
      */
     @JsonRequest("by/transpileForBuild")
     fun transpileForBuild(args: ByTranspileForBuildParams): CompletableFuture<ByRestage?>
+
+    /**
+     * Every saved `.by` module of an edit transpiled again into the run directory of a program
+     * `by run --in-place` runs, as `by retranspile RUN_DIR FILE…` does it, with the configuration, the
+     * environment and the `PYTHONPATH` the run recorded and out of the files on disk — the sibling of
+     * [transpileForBuild] for a run with no staged tree to rewrite.
+     *
+     * One answer for each document, in their order, each as `by retranspile` prints it: a module
+     * transpiled again (`key`, `byPath`, `lines`, `columns`, `digests`), which a debugger is handed as
+     * it came, or why not (`refused`, `diagnostics`). Kept as the server's own json rather than read
+     * into a class here, because bpd is handed each entry exactly as `by` wrote it and refuses a field
+     * it does not know: the plugin reads which shape an entry is and passes it on untouched.
+     */
+    @JsonRequest("by/retranspile")
+    fun retranspile(args: ByRetranspileParams): CompletableFuture<List<JsonObject>?>
 
     /**
      * Which assignments share an `=` column, so that drawing inlay hints does not take the column
@@ -1604,6 +1620,14 @@ data class ByRestage(
     val sourcemap: String? = null,
     /** Why the set will not be recomputed. Null when it was. */
     val refusals: List<ByRestageRefusal>? = null,
+    /**
+     * Whether the map's line tables moved, which a debugger holding them reads again; null from a `by`
+     * that does not say. A map rewritten only to list the re-staged files leaves the tables as they
+     * were, and a debugger told to read it again then holds a map whose list names files it has not
+     * compiled ([sourcemap] alone is no longer the answer). A `by` from before the field rewrote the
+     * map only when its tables moved, so for that `by` [sourcemap] being set is.
+     */
+    val remap: Boolean? = null,
 )
 
 /** One file's slot in the tree. */
@@ -1625,6 +1649,23 @@ data class ByRestaged(
      * nothing being replaceable and must not be shown as one.
      */
     val changed: Boolean = false,
+)
+
+/**
+ * Which saved modules to transpile again, and which run they are modules of.
+ *
+ * Field names are the wire format and must match `ty_server`'s `RetranspileParams`, which is
+ * `deny_unknown_fields`.
+ */
+data class ByRetranspileParams(
+    /** The saved `.by` modules, which the server reads from disk, as the program would load them. */
+    val textDocuments: List<TextDocumentIdentifier>,
+    /**
+     * The run directory the program runs out of: the directory of the runner `by run` started it as,
+     * which only whatever started the program knows. The server refuses one whose run another `by`
+     * transpiled.
+     */
+    val runDirectory: String,
 )
 
 /** One reason `by` refused the set. */

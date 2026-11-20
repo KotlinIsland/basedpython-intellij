@@ -11,6 +11,7 @@ import com.intellij.openapi.roots.ProjectFileIndex
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.platform.dap.DapSessionExecutor
 import com.intellij.xdebugger.hotswap.HotSwapProvider
+import com.intellij.xdebugger.hotswap.HotSwapResultListener
 import com.intellij.xdebugger.hotswap.HotSwapSession
 import com.intellij.xdebugger.hotswap.SourceFileChangesCollector
 import com.intellij.xdebugger.hotswap.SourceFileChangesListener
@@ -115,9 +116,16 @@ internal class ByHotSwapProvider(
     /**
      * Give the running program everything the user has edited since it started.
      *
+     * ## a program run in place
+     *
+     * `by run --in-place` runs the program against the project's own directories, so a hand-written
+     * `.py` the program imports *is* the file on screen, and a `.by` is imported from its transpile in
+     * `by`'s run cache. Nothing is restaged and nothing written: see [reloadInPlace]. What follows is
+     * a staged run's.
+     *
      * ## nothing you edit is the file that is running
      *
-     * Under `by run` the program runs out of a tree in a temp directory, and every module in it
+     * Under a staged `by run` the program runs out of a tree in a temp directory, and every module in it
      * arrived there from the project: a `.by` because it was **transpiled**, a hand-written `.py`
      * because it was **copied**. `sys.path[0]` is that tree, so what the interpreter compiled is
      * never the file on screen. Measured rather than argued — a project with a `helper.py` beside
@@ -196,6 +204,11 @@ internal class ByHotSwapProvider(
             LOG.error("hot reload is running on the EDT; the LSP request below would freeze the IDE")
         }
 
+        if (run.inPlace) {
+            reloadInPlace(changes.sortedBy { it.path }, directory, listener)
+            return
+        }
+
         // What the edit's slots in the running tree should now hold, asked of `by` because producing
         // those bytes is `by`'s: it owns the transpiler, the line table and the digests. One request
         // for the whole set, because the tree has one `_by_sourcemap.py` and the answer has to be
@@ -252,12 +265,13 @@ internal class ByHotSwapProvider(
                         ByDapRequests.replaceCode,
                         ByReplaceCodeArguments(
                             files = write.replace,
-                            // Whether `_by_sourcemap.py` was just rewritten, which is a fact about
-                            // what was written above rather than a default: when it was, every `.by`
-                            // breakpoint is armed on a generated line that came out of the table it
-                            // replaced, and bpd installs the new one and translates them again, in
-                            // the same message, before it assigns any `__code__`.
-                            remap = write.sourcemap != null,
+                            // Whether the line tables of the `_by_sourcemap.py` just written moved,
+                            // which is `by`'s answer rather than a default: when they did, every
+                            // `.by` breakpoint is armed on a generated line that came out of the
+                            // table it replaced, and bpd installs the new one and translates them
+                            // again, in the same message, before it assigns any `__code__`. A map
+                            // rewritten only to list a re-staged copy is not one bpd reads again.
+                            remap = write.remap,
                             // See "the frame you are stopped in" above
                             evenUnderALiveFrame = true,
                         ).toJson(),
@@ -289,13 +303,7 @@ internal class ByHotSwapProvider(
             // per refusal, carried in the answer as `said`, so the reason is where the user pressed
             // the button rather than in the program's console.
             val stranded = written.rollback()
-            val said = replaced?.files?.flatMap { it.said }.orEmpty()
-            val notReloaded = when {
-                said.isNotEmpty() -> said.toMutableList()
-                replaced != null -> mutableListOf("the debugger refused it")
-                failure != null -> mutableListOf("the debugger could not do it: $failure")
-                else -> mutableListOf("the debug adapter did not answer the request")
-            }
+            val notReloaded = notReloaded(replaced, failure)
             if (stranded.isNotEmpty()) {
                 notReloaded += "and ${stranded.size} file(s) of the build could not be put back: " +
                     stranded.joinToString(", ") { it.fileName.toString() }
@@ -304,6 +312,94 @@ internal class ByHotSwapProvider(
             listener.onFailure()
         }
     }
+
+    /**
+     * Give a program `by run --in-place` runs everything the user has edited, which writes nothing:
+     * there is no tree to restage into, and the run directory and its map are `by`'s.
+     *
+     * A `.by` is transpiled again into the run directory by `by` ([ByRetranspile]), which answers with
+     * the transpile's place and the module's new entry of the map's tables; a file the program imports
+     * from where it is, a hand-written `.py`, needs nothing of `by`, since the code bpd compiles is
+     * the file on disk. Then one `bpd/replaceCode` names every edited file and carries `by`'s answers
+     * as `retranspiled`, which bpd checks against disk as it checks the map before it compiles through
+     * them. `by` refusing any module — a module that no longer checks, a file the run was not
+     * transpiled with — hands bpd nothing, and the reasons are said the way a staged reload's are.
+     */
+    private fun reloadInPlace(changes: List<VirtualFile>, runDirectory: String, listener: HotSwapResultListener) {
+        val (modules, asIs) = changes.partition { it.extension?.lowercase() == BasedPythonSources.BY }
+        val answers = if (modules.isEmpty()) emptyList() else when (val asked = ByRetranspile.ask(project, modules, runDirectory)) {
+            ByRetranspile.Asked.NoAnswer -> {
+                tell(listOf("nothing was reloaded: the `by` language server did not answer"))
+                listener.onFailure()
+                return
+            }
+            ByRetranspile.Asked.SeveralServers -> {
+                tell(
+                    listOf(
+                        "nothing was reloaded: the edited files are served by different `by` language " +
+                            "servers, and a running program is one project's",
+                    ),
+                )
+                listener.onFailure()
+                return
+            }
+            is ByRetranspile.Asked.Answered -> asked.answers
+        }
+        val replace = when (val plan = ByReload.planInPlace(modules.map(::pathOf), asIs.map(::pathOf), answers)) {
+            is ByReload.InPlace.Refused -> {
+                tell(plan.reasons)
+                listener.onFailure()
+                return
+            }
+            is ByReload.InPlace.Replace -> plan
+        }
+        executor.post {
+            var failure: String? = null
+            val replaced = try {
+                ByReplaced.parse(
+                    send(
+                        ByDapRequests.replaceCode,
+                        ByReplaceCodeArguments(
+                            files = replace.files,
+                            // the run's map is never rewritten: what moved rides in `retranspiled`
+                            remap = false,
+                            // See "the frame you are stopped in" above
+                            evenUnderALiveFrame = true,
+                            retranspiled = replace.retranspiled,
+                        ).toJson(),
+                    ),
+                )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                LOG.info("bpd/replaceCode failed", e)
+                failure = ByDapRequests.refusalOf(e)
+                null
+            }
+            if (replaced?.applied == true) {
+                listener.onSuccessfulReload()
+                return@post
+            }
+            // nothing to put back: `by` wrote the transpiles into the run directory, where nothing
+            // the program runs reads one until bpd is handed it
+            tell(notReloaded(replaced, failure))
+            listener.onFailure()
+        }
+    }
+
+    /** What bpd said about a replacement it did not apply, or why it could not be asked, one sentence each. */
+    private fun notReloaded(replaced: ByReplaced?, failure: String?): MutableList<String> {
+        val said = replaced?.files?.flatMap { it.said }.orEmpty()
+        return when {
+            said.isNotEmpty() -> said.toMutableList()
+            replaced != null -> mutableListOf("the debugger refused it")
+            failure != null -> mutableListOf("the debugger could not do it: $failure")
+            else -> mutableListOf("the debug adapter did not answer the request")
+        }
+    }
+
+    /** A file as bpd is handed it: its path on disk, which is what the program's frames name. */
+    private fun pathOf(file: VirtualFile): String = file.fileSystem.getNioPath(file)?.toString() ?: file.path
 
     /**
      * Flush the edits that raised the button, before anything reads a file.

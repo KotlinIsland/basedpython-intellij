@@ -6,6 +6,7 @@ import com.google.gson.JsonParser
 import java.util.concurrent.Executors
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertInstanceOf
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Disabled
@@ -51,6 +52,18 @@ class ByBpdLiveSessionTest {
                 value = 41
                 value += 1
                 print("child", value)
+        """.trimIndent() + "\n"
+
+        /** What `by` writes into a run directory while a program runs out of it; see [writtenByByWhileItRuns]. */
+        const val BY_RETRANSPILED = "retranspiled"
+        const val BY_CHECK = "_by_check.json"
+
+        /** A program that calls an imported module's `value` twice: a reload between the two shows in the second. */
+        val RELOADS = """
+            from calc import value
+
+            print("first", value())
+            print("second", value())
         """.trimIndent() + "\n"
 
         /** A program that starts a Python child and waits on it, as Django's reloader does. */
@@ -316,6 +329,109 @@ class ByBpdLiveSessionTest {
         }
     }
 
+    /**
+     * Hot reload of a program run in place, as the plugin does it: stopped at a breakpoint, a `.by`
+     * the program imported is edited and saved, `by` transpiles it again into the run directory —
+     * here `by retranspile RUN_DIR FILE`, whose answer the language server's `by/retranspile` gives
+     * as it prints it — [dev.basedpython.pycharm.debug.hotswap.ByReload.planInPlace] reads the answer, and one `bpd/replaceCode` built by
+     * the plugin's own [dev.basedpython.pycharm.debug.hotswap.ByReplaceCodeArguments] applies it; the
+     * next call runs the edit. Nothing is written into the run directory but by `by`.
+     */
+    @Test
+    fun `in place an edited by is reloaded from by's answer, and the next call runs it`(@TempDir tempDir: Path) {
+        val dir = tempDir.toRealPath()
+        val calc = dir.resolve("calc.by")
+        Files.writeString(calc, "def value() -> int:\n    return 1\n")
+        val demo = dir.resolve("demo.by")
+        Files.writeString(demo, RELOADS)
+
+        session(dir, module = "demo", inPlace = true) { connection, _, dap ->
+            val thread = stopAtSecondCall(dap, connection, demo)
+            val runDirectory = checkNotNull(ByBpdRecord.runnerDirectoryIn("cwd ${connection.record.cwd}\narg ${connection.record.argv.first()}\n"))
+            val before = snapshot(Path.of(runDirectory))
+            Files.writeString(calc, "def value() -> int:\n    return 2\n")
+            val answer = retranspile(dir, runDirectory, calc)
+
+            val plan = dev.basedpython.pycharm.debug.hotswap.ByReload.planInPlace(listOf(calc.toString()), emptyList(), listOf(answer))
+            val replace = assertInstanceOf(dev.basedpython.pycharm.debug.hotswap.ByReload.InPlace.Replace::class.java, plan) { "$plan" }
+            val replaced = replaceCode(dap, replace.files, replace.retranspiled)
+            assertTrue(replaced?.applied == true, "bpd did not apply the reload: $replaced")
+            val after = snapshot(Path.of(runDirectory))
+            assertEquals(
+                before.filterKeys { !writtenByByWhileItRuns(it) },
+                after.filterKeys { !writtenByByWhileItRuns(it) },
+                "the run directory's own files changed, which nothing may write while a program runs out of it",
+            )
+            val key = Path.of(runDirectory).relativize(Path.of(answer.get("key").asString)).toString()
+            assertTrue(key in after && writtenByByWhileItRuns(key), "by's transpile is not where its answer says: $key")
+
+            dap.request("continue", mapOf("threadId" to thread))
+            dap.until("terminated")
+            val printed = dap.seen.filter { it.event == "output" }.mapNotNull { it.body?.get("output")?.asString }.joinToString("")
+            assertTrue("first 1" in printed && "second 2" in printed, "the next call did not run the edit: $printed")
+        }
+    }
+
+    /** In place a hand-written `.py` the program imports is the file on disk, and is handed to bpd as itself. */
+    @Test
+    fun `in place an edited py is reloaded as itself`(@TempDir tempDir: Path) {
+        val dir = tempDir.toRealPath()
+        val calc = dir.resolve("calc.py")
+        Files.writeString(calc, "def value():\n    return 1\n")
+        val demo = dir.resolve("demo.by")
+        Files.writeString(demo, RELOADS)
+
+        session(dir, module = "demo", inPlace = true) { connection, _, dap ->
+            val thread = stopAtSecondCall(dap, connection, demo)
+            Files.writeString(calc, "def value():\n    return 2\n")
+            val plan = dev.basedpython.pycharm.debug.hotswap.ByReload.planInPlace(emptyList(), listOf(calc.toString()), emptyList())
+            val replace = assertInstanceOf(dev.basedpython.pycharm.debug.hotswap.ByReload.InPlace.Replace::class.java, plan) { "$plan" }
+            val replaced = replaceCode(dap, replace.files, replace.retranspiled)
+            assertTrue(replaced?.applied == true, "bpd did not apply the reload: $replaced")
+            dap.request("continue", mapOf("threadId" to thread))
+            dap.until("terminated")
+            val printed = dap.seen.filter { it.event == "output" }.mapNotNull { it.body?.get("output")?.asString }.joinToString("")
+            assertTrue("first 1" in printed && "second 2" in printed, "the next call did not run the edit: $printed")
+        }
+    }
+
+    /** A `.by` that no longer checks is refused by `by` with its diagnostics, and bpd is handed nothing. */
+    @Test
+    fun `in place an edit that does not check is refused with by's diagnostics`(@TempDir tempDir: Path) {
+        val dir = tempDir.toRealPath()
+        val calc = dir.resolve("calc.by")
+        Files.writeString(calc, "def value() -> int:\n    return 1\n")
+        val demo = dir.resolve("demo.by")
+        Files.writeString(demo, RELOADS)
+
+        session(dir, module = "demo", inPlace = true) { connection, _, dap ->
+            val thread = stopAtSecondCall(dap, connection, demo)
+            val runDirectory = Path.of(connection.record.argv.first()).parent.toString()
+            Files.writeString(calc, "def value() -> int:\n    return \"two\"\n")
+            val plan = dev.basedpython.pycharm.debug.hotswap.ByReload.planInPlace(
+                listOf(calc.toString()), emptyList(), listOf(retranspile(dir, runDirectory, calc)),
+            )
+            val refused = assertInstanceOf(dev.basedpython.pycharm.debug.hotswap.ByReload.InPlace.Refused::class.java, plan) { "$plan" }
+            assertTrue(refused.reasons.single().startsWith("calc.by: "), "$refused")
+            assertTrue(refused.reasons.single().contains("invalid-return-type"), "the checker's sentence is under it: $refused")
+            dap.request("continue", mapOf("threadId" to thread))
+            dap.until("terminated")
+        }
+    }
+
+    /** Launches [connection]'s program with a breakpoint on [demo]'s second `value()` call, and returns the stopped thread. */
+    private fun stopAtSecondCall(dap: Dap, connection: ByBpdConnection, demo: Path): Int {
+        dap.request("initialize", mapOf("adapterID" to "basedpython", "linesStartAt1" to true, "pathFormat" to "path"))
+        dap.until("initialized")
+        dap.request("setBreakpoints", mapOf("source" to mapOf("path" to demo.toString()), "breakpoints" to listOf(mapOf("line" to 4))))
+        dap.request("configurationDone", emptyMap())
+        val launched = dap.request("launch", connection.record.launchArguments(mapOf("stopOnEntry" to false), watchRecompositions = false))
+        assertTrue(launched.get("success").asBoolean, "bpd would not launch: $launched")
+        val stopped = dap.until("stopped")
+        assertEquals("breakpoint", stopped.body?.get("reason")?.asString, "$stopped")
+        return stopped.body!!.get("threadId").asInt
+    }
+
     /** The breakpoints of [stops] set before the launch, then each stopped at in order, in the file and on the line set. */
     private fun stopsAt(dap: Dap, connection: ByBpdConnection, stops: List<Pair<Path, Int>>) {
         dap.request("initialize", mapOf("adapterID" to "basedpython", "linesStartAt1" to true, "pathFormat" to "path"))
@@ -338,6 +454,59 @@ class ByBpdLiveSessionTest {
             dap.request("continue", mapOf("threadId" to thread))
         }
         dap.until("terminated")
+    }
+
+    /** What `by retranspile` prints for [file] of the run out of [runDirectory]: the line `by/retranspile` answers with. */
+    private fun retranspile(dir: Path, runDirectory: String, file: Path): JsonObject {
+        val process = ProcessBuilder(binary(BY).toString(), "retranspile", runDirectory, file.toString())
+            .directory(dir.toFile())
+            .redirectError(ProcessBuilder.Redirect.DISCARD)
+            .start()
+        val out = process.inputStream.bufferedReader().readText()
+        assertTrue(process.waitFor(120, TimeUnit.SECONDS), "`by retranspile` did not finish")
+        return JsonParser.parseString(out.lines().first { it.isNotBlank() }).asJsonObject
+    }
+
+    /** `bpd/replaceCode` of [files] with [retranspiled], as the plugin builds it, and bpd's account of it. */
+    private fun replaceCode(
+        dap: Dap,
+        files: List<String>,
+        retranspiled: List<kotlinx.serialization.json.JsonObject>,
+    ): dev.basedpython.pycharm.debug.hotswap.ByReplaced? {
+        val arguments = dev.basedpython.pycharm.debug.hotswap.ByReplaceCodeArguments(
+            files = files,
+            remap = false,
+            evenUnderALiveFrame = true,
+            retranspiled = retranspiled,
+        ).toJson()
+        @Suppress("UNCHECKED_CAST")
+        val asMap = Gson().fromJson(arguments.toString(), Map::class.java) as Map<String, Any?>
+        val answer = dap.request("bpd/replaceCode", asMap)
+        assertTrue(answer.get("success").asBoolean, "bpd failed the request: $answer")
+        val body = kotlinx.serialization.json.Json.parseToJsonElement(answer.getAsJsonObject("body").toString())
+            as kotlinx.serialization.json.JsonObject
+        return dev.basedpython.pycharm.debug.hotswap.ByReplaced.parse(body)
+    }
+
+    /**
+     * Whether [path], relative to a run directory, is one `by` writes there while a program runs out
+     * of it. A run directory is named by the sha-256 of the files it was made with — the runner, the
+     * map, `_by_project.py`, the runtime, the plugins, `boot/`, `_by_run.json`, the objects list — so
+     * those are never written again under its name, by `by` or by anything else. What `by` writes
+     * into it afterwards is what `by_stage::run_cache` and how-transpilation-works.md's "running a
+     * program in place" document: `retranspiled/`, a transpile and its answer for each module made
+     * again, and `_by_check.json`, what the last check `by retranspile` made found (basedpython
+     * a7732e32). Everything else in the directory is the run's own, and a reload that changed it
+     * changed a run the program is still running out of.
+     */
+    private fun writtenByByWhileItRuns(path: String): Boolean =
+        path == BY_CHECK || path.startsWith("$BY_RETRANSPILED/")
+
+    /** Every file under [directory], by its path from it, with its bytes' hash. */
+    private fun snapshot(directory: Path): Map<String, Int> = Files.walk(directory).use { paths ->
+        paths.filter { Files.isRegularFile(it) && "__pycache__" !in it.toString() }
+            .toList()
+            .associate { directory.relativize(it).toString() to Files.readAllBytes(it).contentHashCode() }
     }
 
     /**

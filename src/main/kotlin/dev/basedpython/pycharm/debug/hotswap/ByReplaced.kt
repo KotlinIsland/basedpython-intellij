@@ -50,11 +50,23 @@ data class ByReplaceCodeArguments(
      * rather than omitted so that the choice is visible at the one place it is made.
      */
     val evenUnderALiveFrame: Boolean = false,
+    /**
+     * What `by retranspile` answered for each edited `.by` of a program run in place, each as `by`
+     * wrote it: the module's new transpile in the run directory and its entry of the map's tables.
+     *
+     * A run in place has no tree to restage into, and its map is never rewritten, since every python
+     * the program starts reads it; so the new transpile comes with the request, and bpd checks each
+     * answer against disk as it checks the map before it takes the place of the `.by`'s entry. A
+     * `.by` named in [files] without its answer is refused, since the code running is the transpile
+     * the run made. Left out when empty, which is every staged reload.
+     */
+    val retranspiled: List<JsonObject> = emptyList(),
 ) {
     fun toJson(): JsonObject = buildJsonObject {
         putJsonArray("files") { files.forEach { add(it) } }
         put("remap", remap)
         put("evenUnderALiveFrame", evenUnderALiveFrame)
+        if (retranspiled.isNotEmpty()) putJsonArray("retranspiled") { retranspiled.forEach { add(it) } }
     }
 }
 

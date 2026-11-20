@@ -241,8 +241,100 @@ class ByReloadTest {
         assertEquals(MAP_BEFORE, Files.readString(dir.resolve(ByReload.BY_SOURCEMAP)))
     }
 
+    /**
+     * `by` fcb4acae3 onward answers whether the map's line tables moved: a copied `.py` reloaded alone
+     * still rewrites the map, to list the re-staged copy, and its tables are what they were. bpd is
+     * told to read them again only when `by` says they moved — it used to be told whenever a map was
+     * written, which read the copy's listing as a move.
+     */
+    @Test
+    fun `bpd is told to remap when by says the tables moved, not whenever a map was written`(@TempDir dir: Path) {
+        tree(dir)
+        val listingOnly = ByRestage(files = listOf(slot(dir, "a.py", "def a():\n    return 2\n")), sourcemap = MAP_AFTER, remap = false)
+        assertFalse(assertInstanceOf(ByReload.Plan.Write::class.java, ByReload.plan(listingOnly)).remap)
+
+        val moved = ByRestage(files = listOf(slot(dir, "a.py", "def a():\n    return 2\n")), sourcemap = MAP_AFTER, remap = true)
+        assertTrue(assertInstanceOf(ByReload.Plan.Write::class.java, ByReload.plan(moved)).remap)
+    }
+
+    /** A `by` from before the answer rewrote the map only when its tables moved, so a map written is a remap. */
+    @Test
+    fun `a by that does not say remaps whenever it rewrote the map`(@TempDir dir: Path) {
+        tree(dir)
+        val rewritten = ByRestage(files = listOf(slot(dir, "a.py", "def a():\n    return 2\n")), sourcemap = MAP_AFTER)
+        assertTrue(assertInstanceOf(ByReload.Plan.Write::class.java, ByReload.plan(rewritten)).remap)
+        val unchanged = ByRestage(files = listOf(slot(dir, "a.py", "def a():\n    return 2\n")), sourcemap = null)
+        assertFalse(assertInstanceOf(ByReload.Plan.Write::class.java, ByReload.plan(unchanged)).remap)
+    }
+
+    /**
+     * A program run in place: every edited file is handed bpd by its path, and `by`'s answer for each
+     * `.by` — captured from `by retranspile` 8d9c9e1cf, which `by/retranspile` answers as it prints — is
+     * passed on as `by` wrote it, every field kept, since bpd refuses one it does not know.
+     */
+    @Test
+    fun `in place every edited file is handed over, with by's answers as it wrote them`() {
+        val plan = ByReload.planInPlace(
+            modules = listOf("/p/calc.by"),
+            asIs = listOf("/p/helper.py"),
+            answers = listOf(com.google.gson.JsonParser.parseString(RETRANSPILED).asJsonObject),
+        )
+        val replace = assertInstanceOf(ByReload.InPlace.Replace::class.java, plan)
+        assertEquals(listOf("/p/calc.by", "/p/helper.py"), replace.files)
+        assertEquals(
+            kotlinx.serialization.json.Json.parseToJsonElement(RETRANSPILED),
+            replace.retranspiled.single(),
+        )
+        val arguments = ByReplaceCodeArguments(replace.files, remap = false, evenUnderALiveFrame = true, retranspiled = replace.retranspiled).toJson()
+        assertEquals(kotlinx.serialization.json.Json.parseToJsonElement(RETRANSPILED), (arguments["retranspiled"] as kotlinx.serialization.json.JsonArray).single())
+    }
+
+    /** A `.py` alone needs nothing of `by`, and a staged reload carries no `retranspiled` at all. */
+    @Test
+    fun `in place a py alone is handed over with no answers`() {
+        val replace = assertInstanceOf(ByReload.InPlace.Replace::class.java, ByReload.planInPlace(emptyList(), listOf("/p/helper.py"), emptyList()))
+        assertEquals(listOf("/p/helper.py"), replace.files)
+        assertFalse(ByReplaceCodeArguments(replace.files, retranspiled = replace.retranspiled).toJson().containsKey("retranspiled"))
+    }
+
+    /** `by` refusing any module hands bpd nothing, and says why with the checker's sentences under it. */
+    @Test
+    fun `in place a refused module refuses the set, with its diagnostics`() {
+        val refused = """{"source":"/p/calc.by","refused":"`/p/calc.by` does not check","diagnostics":["error[invalid-return-type]: Return type does not match"]}"""
+        val plan = ByReload.planInPlace(
+            modules = listOf("/p/calc.by", "/p/other.by"),
+            asIs = emptyList(),
+            answers = listOf(com.google.gson.JsonParser.parseString(refused).asJsonObject, com.google.gson.JsonParser.parseString(RETRANSPILED).asJsonObject),
+        )
+        assertEquals(
+            ByReload.InPlace.Refused(listOf("calc.by: `/p/calc.by` does not check\n  error[invalid-return-type]: Return type does not match")),
+            plan,
+        )
+    }
+
+    @Test
+    fun `in place an answer of the wrong length or shape hands over nothing`() {
+        assertInstanceOf(ByReload.InPlace.Refused::class.java, ByReload.planInPlace(listOf("/p/calc.by"), emptyList(), emptyList()))
+        assertInstanceOf(
+            ByReload.InPlace.Refused::class.java,
+            ByReload.planInPlace(listOf("/p/calc.by"), emptyList(), listOf(com.google.gson.JsonObject())),
+        )
+    }
+
     private companion object {
+        const val RETRANSPILED = RETRANSPILED_ANSWER
+
         const val MAP_BEFORE = "SOURCEMAP = {\n    \"/t/a.py\": (\"/p/a.by\", [0]),\n    \"/t/b.py\": (\"/p/b.by\", [0]),\n}\n"
         const val MAP_AFTER = "SOURCEMAP = {\n    \"/t/a.py\": (\"/p/a.by\", [0, 1]),\n    \"/t/b.py\": (\"/p/b.by\", [0, 1]),\n}\n"
     }
 }
+
+/**
+ * `by retranspile`'s answer for `app/calc.by` of a run in place, from `by` 8d9c9e1cf, with the cache
+ * and project directories shortened to `/cache` and `/p`.
+ */
+private const val RETRANSPILED_ANSWER =
+    """{"source":"/p/calc.by","key":"/cache/basedpython-run/fx-95c8ab702d19b60a/runs/d5f7/retranspiled/a4/b52e.py",""" +
+        """"byPath":"/p/calc.by","lines":"0,1,2,3,4,5,6,7,8,9,10,11",""" +
+        """"columns":"0 85 0 0;0 45 1 0;0 17 2 0,21 22 2 16,40 42 2 21;;;0 26 5 0;0 16 6 0;;;0 38 9 0;0 9 10 0,13 14 10 8,32 34 10 13;0 33 11 0;",""" +
+        """"digests":{"by":"sha256:686dbb76092951be4a0ad944db7226de398ca0ba0b1bd04a0bc9d6ee8e9c8719","py":"sha256:87d1738b2e8844da65ccab4d0e0596859228b4a9da99a85874f40703bdd2a7fc"}}"""

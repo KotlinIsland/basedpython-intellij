@@ -3,6 +3,10 @@ package dev.basedpython.pycharm.debug.hotswap
 import dev.basedpython.pycharm.lsp.ext.ByRestage as ByRestageAnswer
 import dev.basedpython.pycharm.lsp.ext.ByRestageRefusal
 import dev.basedpython.pycharm.lsp.ext.ByRestaged
+import com.google.gson.JsonObject as ByAnswerEntry
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
 import java.io.IOException
 import java.nio.file.Path
 
@@ -33,6 +37,15 @@ internal object ByReload {
             val files: List<ByRestaged>,
             /** The one new `_by_sourcemap.py` for the whole set, or null when it did not change. */
             val sourcemap: String?,
+            /**
+             * Whether the map's line tables moved, which bpd is told so that it reads them again:
+             * `by`'s answer when it gives one ([ByRestageAnswer.remap]), and otherwise whether the map
+             * was rewritten at all, which is what that meant from a `by` before the answer. Not
+             * whether the map was written: one rewritten only to list a re-staged copy leaves the
+             * tables as they were, and bpd told to read it again holds a map listing a copy it never
+             * compiled.
+             */
+            val remap: Boolean,
             /**
              * What `bpd/replaceCode` is given: the files the user edited, as `by` names them.
              *
@@ -75,9 +88,61 @@ internal object ByReload {
         return Plan.Write(
             files = changed,
             sourcemap = answer.sourcemap,
+            remap = answer.remap ?: (answer.sourcemap != null),
             replace = replace.map { it.source ?: it.generated!! },
         )
     }
+
+    /** What to hand bpd for an edit of a program run in place, or why nothing is. */
+    sealed interface InPlace {
+        /** Nothing is handed over. Each entry is a sentence for the user, naming the file it is about. */
+        data class Refused(val reasons: List<String>) : InPlace
+
+        /** One `bpd/replaceCode`: [files] by their paths, and what `by` answered for each `.by` of them. */
+        data class Replace(val files: List<String>, val retranspiled: List<JsonObject>) : InPlace
+    }
+
+    /**
+     * What an edit of a program run in place hands bpd: every edited file by its path — [modules],
+     * the `.by` files `by` was asked to transpile again, and [asIs], the files the program imports
+     * from where they are, a hand-written `.py` — with `by`'s [answers] for the modules, one each in
+     * their order, passed on as `by` wrote them.
+     *
+     * Nothing is handed over when `by` refused any module — a set goes in together or not at all, as
+     * bpd applies one — and every refusal is said, with the checker's sentences under it.
+     */
+    fun planInPlace(modules: List<String>, asIs: List<String>, answers: List<ByAnswerEntry>): InPlace {
+        if (answers.size != modules.size) {
+            return InPlace.Refused(
+                listOf("nothing was reloaded: the `by` language server answered ${answers.size} of ${modules.size} modules"),
+            )
+        }
+        val refused = answers.zip(modules).mapNotNull { (answer, module) ->
+            when {
+                answer.has(KEY) -> null
+                answer.has(REFUSED) -> refusalSentence(
+                    file = answer.stringOrNull(SOURCE) ?: module,
+                    reason = answer.stringOrNull(REFUSED),
+                    diagnostics = answer.getAsJsonArray(DIAGNOSTICS)?.mapNotNull { it.takeIf { it.isJsonPrimitive }?.asString }.orEmpty(),
+                )
+                else -> "${nameOf(module)}: the `by` language server answered with neither a transpile nor a refusal"
+            }
+        }
+        if (refused.isNotEmpty()) return InPlace.Refused(refused)
+        return InPlace.Replace(
+            files = modules + asIs,
+            retranspiled = answers.map { Json.parseToJsonElement(it.toString()).jsonObject },
+        )
+    }
+
+    private fun ByAnswerEntry.stringOrNull(name: String): String? =
+        get(name)?.takeIf { it.isJsonPrimitive }?.asString
+
+    /** The fields of a `by retranspile` answer that say which shape it is, and what it is about. */
+    private const val KEY = "key"
+    private const val REFUSED = "refused"
+    private const val SOURCE = "source"
+    private const val DIAGNOSTICS = "diagnostics"
 
     /**
      * Put a [Plan.Write] into the tree through `tree`, so that [ByBuildTree.rollback] takes back all
@@ -96,11 +161,14 @@ internal object ByReload {
     }
 
     /** A refusal from `by`, with the checker's own sentences under it when that is the reason. */
-    private fun sentence(refusal: ByRestageRefusal): String {
-        val reason = refusal.refused ?: "refused without saying why"
-        val head = refusal.file?.let { "${nameOf(it)}: $reason" } ?: "nothing was reloaded: $reason"
-        if (refusal.diagnostics.isEmpty()) return head
-        return head + refusal.diagnostics.joinToString("\n  ", prefix = "\n  ")
+    private fun sentence(refusal: ByRestageRefusal): String =
+        refusalSentence(refusal.file, refusal.refused, refusal.diagnostics)
+
+    private fun refusalSentence(file: String?, reason: String?, diagnostics: List<String>): String {
+        val why = reason ?: "refused without saying why"
+        val head = file?.let { "${nameOf(it)}: $why" } ?: "nothing was reloaded: $why"
+        if (diagnostics.isEmpty()) return head
+        return head + diagnostics.joinToString("\n  ", prefix = "\n  ")
     }
 
     private fun nameOf(path: String?): String = path?.let { Path.of(it).fileName?.toString() ?: it } ?: "a file"
