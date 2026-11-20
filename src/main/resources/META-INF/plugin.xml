@@ -489,6 +489,14 @@
              by/endpoints; see navigation.endpoints.ByEndpointsProvider. -->
         <microservices.endpointsProvider implementation="dev.basedpython.pycharm.navigation.endpoints.ByFastApiEndpointsProvider"/>
         <microservices.endpointsProvider implementation="dev.basedpython.pycharm.navigation.endpoints.ByDjangoEndpointsProvider"/>
+        <!-- The Django tool window: apps, models and their fields, admin, views, forms, receivers and
+             commands, from by/djangoStructure; see navigation.django. PyCharm Professional's Django
+             Structure window is the Python plugin's, and absent wherever that plugin is. -->
+        <toolWindow id="basedpython Django"
+                    anchor="left"
+                    secondary="true"
+                    icon="AllIcons.Toolwindows.ToolWindowStructure"
+                    factoryClass="dev.basedpython.pycharm.navigation.django.ByDjangoStructureToolWindowFactory"/>
         <!-- The merge window's semantic resolution and Ignore imports and formatting for .by files,
              from by/resolveMergeConflicts and by/diffIgnoredRanges; see vcs.ByMerges. -->
         <diff.merge.conflict.semantic.resolver implementation="dev.basedpython.pycharm.vcs.ByMergeConflictResolver"/>

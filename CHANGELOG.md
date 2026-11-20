@@ -1,5 +1,12 @@
 ## [Unreleased]
 
+### Added
+
+- A *basedpython Django* tool window: a Django project's apps with their models, fields and
+  relations, admin, the views its routes reach, forms, signal receivers and management commands,
+  each opening where it is written. It needs a `by` that answers `by/djangoStructure`, and says so
+  until one does.
+
 ## [0.0.7]
 
 ### Added

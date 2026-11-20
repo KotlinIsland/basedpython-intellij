@@ -474,6 +474,18 @@ interface ByServerExtensions {
     fun endpoints(params: Map<String, Any>): CompletableFuture<List<ByEndpoint>?>
 
     /**
+     * The django projects of the session, as django sees them: each settings module, its installed
+     * apps in order, and per app its models (with their fields and relations), admin classes, the
+     * views a route reaches, forms, serializers, signal receivers and management commands, each
+     * with where it is. `null` when no project is a django one; `MethodNotFound` from a `by` before
+     * the request. What the *Django* tool window draws
+     * ([dev.basedpython.pycharm.navigation.django.ByDjangoStructureToolWindowFactory]); the contract
+     * is `scratch.django.md`'s *`by/djangoStructure` — the contract*.
+     */
+    @JsonRequest("by/djangoStructure")
+    fun djangoStructure(params: Map<String, Any>): CompletableFuture<ByDjangoStructure?>
+
+    /**
      * For each of a merge's conflicts, the text that replaces its lines, or `null` where it cannot be
      * resolved. A `by` from before the request answers `MethodNotFound`.
      */
@@ -1798,6 +1810,103 @@ data class ByEndpointSymbol(
     val uri: String? = null,
     val range: Range? = null,
     val selectionRange: Range? = null,
+)
+
+/** What `by/djangoStructure` answers: every django project of the session. */
+data class ByDjangoStructure(val projects: List<ByDjangoProject> = emptyList())
+
+/** One django project: a settings module and the apps it installs. */
+data class ByDjangoProject(
+    /** The settings module; its name is the dotted path. */
+    val settings: ByEndpointSymbol? = null,
+    /** `ROOT_URLCONF`'s module. */
+    val urlconf: ByEndpointSymbol? = null,
+    /** `INSTALLED_APPS`, in their order. */
+    val apps: List<ByDjangoApp> = emptyList(),
+)
+
+/** An installed app and what django finds in it. */
+data class ByDjangoApp(
+    /** `AppConfig.label`: `polls`, `auth`. */
+    val label: String? = null,
+    /** The app's module: `polls`, `django.contrib.auth`. */
+    val name: String? = null,
+    /** Its `AppConfig` class, when it has one. */
+    val config: ByEndpointSymbol? = null,
+    /** Its package, when found. */
+    val module: ByEndpointSymbol? = null,
+    /** Not in the workspace: `django.contrib.*`, site-packages. Listed with its models only. */
+    val external: Boolean = false,
+    val models: List<ByDjangoModel> = emptyList(),
+    val admins: List<ByDjangoAdmin> = emptyList(),
+    val views: List<ByDjangoView> = emptyList(),
+    val forms: List<ByEndpointSymbol> = emptyList(),
+    val serializers: List<ByEndpointSymbol> = emptyList(),
+    val receivers: List<ByDjangoReceiver> = emptyList(),
+    /** `management/commands/<name>.py`; each one's name is the command's. */
+    val commands: List<ByEndpointSymbol> = emptyList(),
+)
+
+data class ByDjangoModel(
+    /** The class; its name is the class name. */
+    val symbol: ByEndpointSymbol? = null,
+    val abstract: Boolean = false,
+    val proxy: Boolean = false,
+    /** Declared on it, in source order; an inherited one says where from. */
+    val fields: List<ByDjangoField> = emptyList(),
+    /** The admin classes registering it. */
+    val admins: List<ByEndpointSymbol> = emptyList(),
+    /** Registered in the admin at all — `admin.site.register(Tag)` names no class. */
+    val inAdmin: Boolean = false,
+)
+
+data class ByDjangoField(
+    /** The assignment's target. */
+    val symbol: ByEndpointSymbol? = null,
+    /** The field class: `CharField`, `ForeignKey`. */
+    val kind: String? = null,
+    /** What instance access gives, as `by` renders a type: `str`, `int | None`, `Author`. */
+    val type: String? = null,
+    /** `app_label.Model` of the abstract base it comes from. */
+    val inheritedFrom: String? = null,
+    val relation: ByDjangoRelation? = null,
+)
+
+data class ByDjangoRelation(
+    /** `foreignKey`, `oneToOne` or `manyToMany`. */
+    val kind: String? = null,
+    /** `app_label.Model`, resolved. */
+    val target: String? = null,
+    val targetSymbol: ByEndpointSymbol? = null,
+    /** The reverse accessor as django names it: `choices`, `book_set`. */
+    val relatedName: String? = null,
+)
+
+data class ByDjangoAdmin(
+    val symbol: ByEndpointSymbol? = null,
+    /** `app_label.Model` each registers it for; empty for an inline. */
+    val models: List<String> = emptyList(),
+    /** False when nothing registers it. */
+    val registered: Boolean = true,
+    /** A `TabularInline` or `StackedInline`. */
+    val inline: Boolean = false,
+)
+
+data class ByDjangoView(
+    /** The function, or the class of a class-based view. */
+    val symbol: ByEndpointSymbol? = null,
+    /** `function` or `class`. */
+    val kind: String? = null,
+    /** The full paths reaching it, as `by/endpoints` writes them. */
+    val routes: List<String> = emptyList(),
+)
+
+data class ByDjangoReceiver(
+    val symbol: ByEndpointSymbol? = null,
+    /** `post_save`, or the dotted path of a custom `Signal`. */
+    val signal: String? = null,
+    /** `app_label.Model` when `sender=` names one. */
+    val sender: String? = null,
 )
 
 /**
