@@ -7,7 +7,6 @@ import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
 import com.intellij.openapi.editor.Document
 import com.intellij.openapi.fileEditor.FileDocumentManager
-import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiDocumentManager
@@ -25,6 +24,7 @@ import dev.basedpython.pycharm.lsp.ext.ByServerExtensions
 import dev.basedpython.pycharm.lsp.runningByServer
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import org.eclipse.lsp4j.TextDocumentIdentifier
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -200,10 +200,14 @@ internal class ByInjections(private val project: Project, private val scope: Cor
                     }
                     if (found.isNotEmpty() && servedNothing.remove(virtualFile)) reinject(virtualFile)
                 }
-            } catch (_: ProcessCanceledException) {
-                // The project closed, or the file changed under the request. Either way the next
-                // pass asks again against whatever the document says then.
+            } catch (e: CancellationException) {
+                // The scope was cancelled, by the project closing or the plugin unloading, which
+                // the read action ends with a JobCancellationException; a write action does not
+                // land here, since the read action gives way to it and runs again. The coroutine
+                // ends with its cancellation, a ProcessCanceledException being one as well, and
+                // whatever pass asks next asks against what the document says then.
                 servedNothing.remove(virtualFile)
+                throw e
             } finally {
                 asking.remove(virtualFile)
             }

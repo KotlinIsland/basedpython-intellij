@@ -1,6 +1,9 @@
 package dev.basedpython.pycharm.editor.colors
 
+import com.intellij.application.options.colors.ColorSettingsPageEP
 import com.intellij.openapi.options.colors.RainbowColorSettingsPage
+import com.intellij.psi.codeStyle.DisplayPriority
+import com.intellij.psi.codeStyle.DisplayPrioritySortable
 import com.intellij.testFramework.junit5.TestApplication
 import dev.basedpython.pycharm.highlight.BasedPythonHighlightKeys
 import dev.basedpython.pycharm.lang.BasedPythonLanguage
@@ -56,5 +59,21 @@ class BasedPythonColorSettingsPageTest {
         val tags = Regex("<(\\w+)>").findAll(page.demoText).map { it.groupValues[1] }.toSet()
         val known = page.additionalHighlightingTagToDescriptorMap.keys
         assertEquals(emptySet<String>(), tags - known)
+    }
+
+    /**
+     * The `colorSettings` declaration builds the Colors and Fonts node without loading the page, so
+     * the id, name and band it states have to be the ones the page itself answers with.
+     */
+    @Test
+    fun `the declaration states the page's own id, name and band`() {
+        val declarations = ColorSettingsPageEP.EP_NAME.extensionList
+            .filter { it.implementationClass == BasedPythonColorSettingsPage::class.java.name }
+        assertEquals(1, declarations.size, "declarations of the page: $declarations")
+        val declaration = declarations.single()
+        assertEquals(page.id, declaration.pageId)
+        assertEquals(page.displayName, declaration.pageName)
+        val band = (page as? DisplayPrioritySortable)?.priority ?: DisplayPriority.LANGUAGE_SETTINGS
+        assertEquals(band, declaration.priority)
     }
 }

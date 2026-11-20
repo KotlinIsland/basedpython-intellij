@@ -378,6 +378,12 @@ the container imports the project as an IDE does and writes its `.idea`, `.gradl
 into it. The `qodana-cache` volume keeps the import's downloads, which take ten minutes the first
 time; the report is `build/qodana/results/report/index.html`.
 
+Each baseline entry keeps the snippet and context lines of its finding, and the logical location,
+beside the fingerprints. Qodana's fingerprints change with a finding's position, so it is the
+snippets that let a finding that only moved, under a line added above it, match its entry rather
+than fail the build as new; an entry trimmed of them matches only where nothing above it changed.
+A fixed finding's entry is deleted with the fix, so that a run reports nothing ABSENT.
+
 ```bash
 rm -rf build/qodana && mkdir -p build/qodana/src && git archive HEAD | tar -x -C build/qodana/src
 docker run --rm -v "$PWD/build/qodana/src":/data/project -v "$PWD/build/qodana/results":/data/results \

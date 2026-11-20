@@ -6,7 +6,6 @@ import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
 import com.intellij.openapi.fileEditor.FileDocumentManager
-import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.ThrowableComputable
@@ -317,11 +316,11 @@ internal class ByProgramModel(private val project: Project, scope: CoroutineScop
         if (byServerFor(project, file) == null) return
         val key = kind to file
         if (!asking.add(key)) return
+        // A cancellation goes on to executeOnPooledThread, which ends the task quietly on one; the
+        // next caller asks again.
         ApplicationManager.getApplication().executeOnPooledThread {
             try {
                 if (!project.isDisposed) ask()
-            } catch (_: ProcessCanceledException) {
-                // The project closed under the request; the next caller asks again.
             } finally {
                 asking.remove(key)
             }

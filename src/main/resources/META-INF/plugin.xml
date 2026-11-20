@@ -113,7 +113,7 @@
             implementation="dev.basedpython.pycharm.lang.dialect.BasedPythonFileTypeOverrider"/>
 
         <!-- ===== Stream B: LSP servers + settings + notifications ===== -->
-        <projectService serviceImplementation="dev.basedpython.pycharm.settings.BasedPythonSettings"/>
+        <!-- BasedPythonSettings is a light service, registered by its @Service annotation alone. -->
         <notificationGroup id="basedpython" displayType="BALLOON" key="notification.group.problems"/>
         <platform.lsp.integrationProvider
             implementation="dev.basedpython.pycharm.lsp.ByLspServerSupportProvider"/>
@@ -232,7 +232,13 @@
             implementation="dev.basedpython.pycharm.statusbar.BasedPythonStatusBarWidgetFactory"/>
 
         <!-- ===== Stream F: colors + templates ===== -->
-        <colorSettingsPage implementation="dev.basedpython.pycharm.editor.colors.BasedPythonColorSettingsPage"/>
+        <!-- The page's name, which the settings tree is built from without loading the page, is
+             the one BasedPythonColorSettingsPage.getDisplayName gives: the language's name, which is
+             lowercase, as the plugin's own is. -->
+        <!--suppress PluginXmlCapitalization -->
+        <colorSettings
+            implementation="dev.basedpython.pycharm.editor.colors.BasedPythonColorSettingsPage"
+            displayName="basedpython"/>
         <!-- Rainbow parameters and locals, the ones `by` marks functionScope, when semantic
              highlighting is on. -->
         <highlightVisitor implementation="dev.basedpython.pycharm.lsp.semantic.BasedPythonRainbowVisitor"/>
@@ -359,8 +365,10 @@
             implementationClass="dev.basedpython.pycharm.inspections.BinaryNotConfiguredInspection"/>
         <!-- by's diagnostics for Inspect Code and batch (offline, Qodana) runs; see
              ByDiagnosticsInspection. Global, so it runs only in a batch and the editor is not
-             given what the LSP client already shows it. No language: by checks .py as well. -->
+             given what the LSP client already shows it. Any language, the empty id, since by
+             checks .py as well; the platform reads an empty language as it reads none. -->
         <globalInspection
+            language=""
             groupName="basedpython"
             displayName="by diagnostics"
             shortName="BasedPythonByDiagnostics"
@@ -382,7 +390,8 @@
         </intentionAction>
         <!-- by's code actions at the caret, each an intention listed under basedpython by what it
              does, asked of by once per caret by lsp.refactor.ByCodeActionIntentions; the last three
-             show whatever by offers that none of the others names. -->
+             show whatever by offers that none of the others names, so they have no fixed before
+             and after to show in Settings and skip them. -->
         <intentionAction>
             <language>basedpython</language>
             <className>dev.basedpython.pycharm.lsp.refactor.ByInlineVariableIntention</className>
@@ -462,16 +471,19 @@
             <language>basedpython</language>
             <className>dev.basedpython.pycharm.lsp.refactor.ByOtherCodeAction0Intention</className>
             <category>basedpython</category>
+            <skipBeforeAfter>true</skipBeforeAfter>
         </intentionAction>
         <intentionAction>
             <language>basedpython</language>
             <className>dev.basedpython.pycharm.lsp.refactor.ByOtherCodeAction1Intention</className>
             <category>basedpython</category>
+            <skipBeforeAfter>true</skipBeforeAfter>
         </intentionAction>
         <intentionAction>
             <language>basedpython</language>
             <className>dev.basedpython.pycharm.lsp.refactor.ByOtherCodeAction2Intention</className>
             <category>basedpython</category>
+            <skipBeforeAfter>true</skipBeforeAfter>
         </intentionAction>
 
         <!-- ===== Stream L: extra templates ===== -->

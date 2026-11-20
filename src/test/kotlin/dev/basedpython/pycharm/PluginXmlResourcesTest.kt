@@ -201,6 +201,43 @@ class PluginXmlResourcesTest {
     }
 
     /**
+     * Settings > Intentions shows a before and an after beside the description, read from
+     * `before.<ext>.template` and `after.<ext>.template` in the same directory, unless the
+     * registration says `<skipBeforeAfter>`, as one whose change is whatever `by` offers does.
+     */
+    @Test
+    fun `every intention action has a before and an after, or says it has none`() {
+        val registrations = Regex("""<intentionAction>(.*?)</intentionAction>""", RegexOption.DOT_MATCHES_ALL)
+            .findAll(pluginXml)
+            .map { it.groupValues[1] }
+            .toList()
+        assertTrue(registrations.isNotEmpty(), "expected intention actions to be declared")
+        val missing = registrations
+            .filterNot { "<skipBeforeAfter>true</skipBeforeAfter>" in it }
+            .mapNotNull { Regex("""<className>([^<]+)</className>""").find(it)?.groupValues?.get(1)?.substringAfterLast('.') }
+            .filter { name ->
+                val files = listResource("/intentionDescriptions/$name")
+                listOf("before.", "after.").any { prefix -> files.none { it.startsWith(prefix) && it.endsWith(".template") } }
+            }
+        assertTrue(missing.isEmpty(), "intentions with no before.*.template and after.*.template: $missing")
+    }
+
+    /**
+     * An inspection's description is `inspectionDescriptions/<shortName>.html`; without one the
+     * inspection's page in Settings > Inspections is empty.
+     */
+    @Test
+    fun `every inspection has a description`() {
+        val shortNames = Regex("""<(?:localInspection|globalInspection)\s[^>]*?shortName="([^"]+)"""")
+            .findAll(pluginXml)
+            .map { it.groupValues[1] }
+            .toList()
+        assertTrue(shortNames.size >= 3, "expected the inspections to be declared with a shortName: $shortNames")
+        val missing = shortNames.filter { javaClass.getResource("/inspectionDescriptions/$it.html") == null }
+        assertTrue(missing.isEmpty(), "inspections with no inspectionDescriptions/<shortName>.html: $missing")
+    }
+
+    /**
      * A tool window is two names in a string: the factory class the platform instantiates, and the
      * icon, which is either a plugin resource path (`/icons/x.svg`) or a field read reflectively
      * off a class (`AllIcons.Nodes.Class`). Neither is resolved by the compiler, and both fail at

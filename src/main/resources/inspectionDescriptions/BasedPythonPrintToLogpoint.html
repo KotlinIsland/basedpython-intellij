@@ -1,0 +1,16 @@
+<html>
+<body>
+Reports a <code>print(...)</code> statement in a <code>.by</code> file that a log point could stand in for.
+<p>The quick-fix deletes the statement and puts a non-suspending line breakpoint that logs the call's arguments on
+the statement that followed it, which runs at the moment the <code>print</code> did, so the output still reaches
+the run console under the debugger without the call being in the file.</p>
+<p>A <code>print</code> that is the last statement of its block is not reported, since the line after it runs at
+some other time.</p>
+<p>Example:</p>
+<pre><code>print(f"total: {total}")
+save(total)
+</code></pre>
+<p>After the quick-fix is applied, the <code>print</code> line is gone and a log point on <code>save(total)</code>
+logs <code>f"total: {total}"</code>.</p>
+</body>
+</html>
