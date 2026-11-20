@@ -3,7 +3,7 @@ package dev.basedpython.pycharm.run.test
 import dev.basedpython.pycharm.run.ByCommandLineState
 import dev.basedpython.pycharm.run.ByCommonOptions
 import dev.basedpython.pycharm.run.ByTargetAwareConfiguration
-import dev.basedpython.pycharm.run.byRunsInPlace
+import dev.basedpython.pycharm.run.ByInPlace
 import dev.basedpython.pycharm.lsp.byBlocking
 import dev.basedpython.pycharm.lsp.build.ByBuildOutputs
 import dev.basedpython.pycharm.run.model.stagedPath
@@ -103,15 +103,18 @@ class ByTestConfiguration(project: Project, factory: ConfigurationFactory, name:
                 )
             }
         }
-        val inPlace = byRunsInPlace(project, byFlags = "", onTarget = targetName != null)
-        val paths = if (inPlace) opts.paths else stagedPaths(opts)
+        val decision = ByInPlace.of(project, byFlags = "", onTarget = targetName != null)
+        // asked of the project's `by` now for a run here, and once the target's `by` has said for a
+        // run there
+        val stagedHere = if (!decision.waitsForTarget && !decision.value) stagedPaths(opts) else null
         return object : ByCommandLineState(project, opts, environment) {
             // `by run pytest`, not `by test` — see [ByPytest].
             override val subcommand = "run"
 
-            override val inPlace: Boolean = inPlace
+            override val inPlaceDecision: ByInPlace = decision
 
-            override fun buildSubcommandArgs(): List<String> = ByPytest.arguments(paths, inPlace)
+            override fun buildSubcommandArgs(): List<String> =
+                ByPytest.arguments(if (inPlace) opts.paths else stagedHere ?: stagedPaths(opts), inPlace)
 
             override val runnerEnvironment = mapOf(ByPytest.REPORTER_VARIABLE to ByPytest.REPORTER_TEAMCITY)
 
@@ -163,32 +166,20 @@ class ByTestConfiguration(project: Project, factory: ConfigurationFactory, name:
     private fun djangoState(executor: Executor, environment: ExecutionEnvironment): RunProfileState {
         val config = this
         val manage = ByDjangoManage.find(project) ?: throw CantRunException(BasedPythonBundle.message("django.tests.noManage"))
-        val plain = options.plainPytest
-        val inPlace = !plain && byRunsInPlace(project, byFlags = "", onTarget = targetName != null)
-        // a run's targets name the project's files; a `by run` that stages the program names them
-        // where the tree holds them, the tree's root merging the module roots
-        val projectPaths = plain || inPlace
-        val base = if (projectPaths) projectRelative(manage.directory) else ""
-        val paths = ParametersListUtil.parse(if (projectPaths) options.paths else stagedPaths(options))
-        val labels = paths.map { path ->
-            ByDjangoTests.label(path, base) ?: throw CantRunException(BasedPythonBundle.message("django.tests.noLabel", path, manage.directory))
-        }
-        // a module unittest names is the file the project holds for it, a `.by` or a `.py`; in a
-        // staged tree, the python every module is there
-        val moduleFile: (String) -> String = { module ->
-            val by = ByDjangoTests.moduleFile(module, base, ByDjangoTests.BY)
-            if (projectPaths && ByTestSources.findSourceFile(project, by) != null) by else ByDjangoTests.moduleFile(module, base)
-        }
-        val arguments = ByDjangoTests.ARGUMENTS + labels
-        if (plain) {
+        if (options.plainPytest) {
             if (targetName != null) throw CantRunException(BasedPythonBundle.message("target.error.plainPytest"))
+            val run = djangoRun(manage, projectPaths = true)
             val manageFile = manage.directory.resolve(manage.module + ".py").toString()
-            return PlainPythonTestCommandLineState(project, options, environment, listOf(manageFile) + arguments, manage.directory.toString()) { handler, exec ->
+            return PlainPythonTestCommandLineState(project, options, environment, listOf(manageFile) + run.arguments, manage.directory.toString()) { handler, exec ->
                 SMTestRunnerConnectionUtil.createAndAttachConsole(
-                    DJANGO_FRAMEWORK_NAME, handler, djangoConsoleProperties(config, exec, null, moduleFile, labels, projectPaths = true),
+                    DJANGO_FRAMEWORK_NAME, handler, djangoConsoleProperties(config, exec, null, run, projectPaths = true),
                 )
             }
         }
+        val decision = ByInPlace.of(project, byFlags = "", onTarget = targetName != null)
+        // worked out now for a run here, so a test that cannot be labelled is said before anything
+        // starts, and once the target's `by` has said for a run there, as a pytest run's targets are
+        val runHere = if (decision.waitsForTarget) null else djangoRun(manage, projectPaths = decision.value)
         val opts = ByTestOptions().also {
             it.copyFrom(options)
             it.workingDir = manage.directory.toString()
@@ -196,9 +187,11 @@ class ByTestConfiguration(project: Project, factory: ConfigurationFactory, name:
         return object : ByCommandLineState(project, opts, environment) {
             override val subcommand = "run"
 
-            override val inPlace: Boolean = inPlace
+            override val inPlaceDecision: ByInPlace = decision
 
-            override fun buildSubcommandArgs(): List<String> = listOf(manage.module) + arguments
+            private val run: DjangoRun by lazy { runHere ?: djangoRun(manage, projectPaths = inPlace) }
+
+            override fun buildSubcommandArgs(): List<String> = listOf(manage.module) + run.arguments
 
             override val runnerEnvironment = mapOf(ByPytest.REPORTER_VARIABLE to ByPytest.REPORTER_TEAMCITY)
 
@@ -211,7 +204,7 @@ class ByTestConfiguration(project: Project, factory: ConfigurationFactory, name:
                 var result: ExecutionResult? = null
                 ApplicationManager.getApplication().invokeAndWait {
                     val console = SMTestRunnerConnectionUtil.createAndAttachConsole(
-                        DJANGO_FRAMEWORK_NAME, handler, djangoConsoleProperties(config, executor, fromTarget, moduleFile, labels, projectPaths),
+                        DJANGO_FRAMEWORK_NAME, handler, djangoConsoleProperties(config, executor, fromTarget, run, projectPaths = inPlace),
                     )
                     fromTarget?.let { console.addMessageFilter(ByConsoleFilter(project, it)) }
                     result = DefaultExecutionResult(console, handler, *createActions(console, handler, executor))
@@ -219,6 +212,36 @@ class ByTestConfiguration(project: Project, factory: ConfigurationFactory, name:
                 }
                 return checkNotNull(result)
             }
+        }
+    }
+
+    /**
+     * What a Django run names to `manage.py test`, and how the modules its runner prints are named
+     * back as node ids: [labels] and the [arguments] they are part of, and [moduleFile].
+     */
+    private class DjangoRun(val labels: List<String>, val moduleFile: (String) -> String) {
+        val arguments: List<String> get() = ByDjangoTests.ARGUMENTS + labels
+    }
+
+    /**
+     * The Django run of [ByTestOptions.paths] beside [manage], naming the project's files when
+     * [projectPaths] — a plain run, or a `by run` in place — and otherwise the files of the tree a
+     * `by run` stages, where each target is written first ([stagedPaths]) and the tree's root merges
+     * the module roots, so the paths are from its root.
+     *
+     * @throws CantRunException for a target that is no module `manage.py test` can be named.
+     */
+    private fun djangoRun(manage: ByDjangoManage, projectPaths: Boolean): DjangoRun {
+        val base = if (projectPaths) projectRelative(manage.directory) else ""
+        val paths = ParametersListUtil.parse(if (projectPaths) options.paths else stagedPaths(options))
+        val labels = paths.map { path ->
+            ByDjangoTests.label(path, base) ?: throw CantRunException(BasedPythonBundle.message("django.tests.noLabel", path, manage.directory))
+        }
+        // a module unittest names is the file the project holds for it, a `.by` or a `.py`; in a
+        // staged tree, the python every module is there
+        return DjangoRun(labels) { module ->
+            val by = ByDjangoTests.moduleFile(module, base, ByDjangoTests.BY)
+            if (projectPaths && ByTestSources.findSourceFile(project, by) != null) by else ByDjangoTests.moduleFile(module, base)
         }
     }
 
@@ -232,15 +255,14 @@ class ByTestConfiguration(project: Project, factory: ConfigurationFactory, name:
 
     /**
      * The console of a Django run: a tree built by node id, since a failure is only known once every
-     * test has run ([ByUnittestOutputParser]); otherwise as a pytest run's. [moduleFile] is the path a
-     * node id of the run names a module's file by, and [projectPaths] says it is the project's.
+     * test has run ([ByUnittestOutputParser]); otherwise as a pytest run's. [run] names the modules
+     * its runner prints by their files, and [projectPaths] says those are the project's.
      */
     private fun djangoConsoleProperties(
         config: ByTestConfiguration,
         executor: Executor,
         fromTarget: ((String) -> Path?)?,
-        moduleFile: (String) -> String,
-        labels: List<String>,
+        run: DjangoRun,
         projectPaths: Boolean,
     ): SMTRunnerConsoleProperties =
         object : SMTRunnerConsoleProperties(config, DJANGO_FRAMEWORK_NAME, executor), SMCustomMessagesParsing {
@@ -252,7 +274,7 @@ class ByTestConfiguration(project: Project, factory: ConfigurationFactory, name:
                 testFrameworkName: String,
                 consoleProperties: TestConsoleProperties,
             ): OutputToGeneralTestEventsConverter =
-                ByDjangoTestEventsConverter(testFrameworkName, consoleProperties, moduleFile, labels)
+                ByDjangoTestEventsConverter(testFrameworkName, consoleProperties, run.moduleFile, run.labels)
 
             override fun getTestLocator(): SMTestLocator {
                 val locator = ByTestLocator(projectPaths)

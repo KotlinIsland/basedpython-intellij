@@ -149,12 +149,27 @@ class ByRunOnTargetTest {
         assertTrue("copied=print('hi')" in lines, output.stdout)
     }
 
-    /** A `by` on the target that says where it ran and with what. */
-    private fun fakeBy(): Path = dir.resolve("bin/by").also {
+    /**
+     * A `by` on the target that says where it ran and with what.
+     *
+     * Asked `by command-line-flags`, it prints [flags], the table its language server would answer
+     * `initialize` with, and notes where it was asked in [asked]; with no [flags] it refuses the
+     * command as a `by` from before it does, with clap's exit 2.
+     */
+    private fun fakeBy(flags: String? = null): Path = dir.resolve("bin/by").also {
         it.parent.createDirectories()
+        val answer = if (flags == null) {
+            "echo \"error: unrecognized subcommand 'command-line-flags'\" >&2; exit 2"
+        } else {
+            "printf '%s\\n' '$flags'; exit 0"
+        }
         it.writeText(
             """
             #!/bin/sh
+            if [ "${'$'}1" = command-line-flags ]; then
+              echo "${'$'}(pwd -P)" >> '$asked'
+              $answer
+            fi
             echo "cwd=${'$'}(pwd -P)"
             echo "args=${'$'}*"
             echo "reporter=${'$'}BY_TEST_REPORTER"
@@ -162,6 +177,12 @@ class ByRunOnTargetTest {
         )
         it.setPosixFilePermissions(java.nio.file.attribute.PosixFilePermissions.fromString("rwxr-xr-x"))
     }
+
+    /** Where [fakeBy] notes each directory it was asked its flags in, one a line. */
+    private val asked: Path get() = dir.resolve("asked")
+
+    /** The directories [fakeBy] was asked its flags in. */
+    private fun askedIn(): List<String> = if (asked.toFile().exists()) asked.toFile().readLines() else emptyList()
 
     /** Runs [configuration] with Run, as the IDE does, and answers what its `by` printed. */
     private fun runOnTarget(configuration: RunConfiguration): ProcessOutput {
@@ -201,6 +222,154 @@ class ByRunOnTargetTest {
             val lines = runOnTarget(configuration).stdout.lines()
             assertTrue(args in lines, "$args: $lines")
             assertTrue("cwd=$onTarget" in lines, "$args: $lines")
+        }
+        assertEquals(listOf(onTarget), askedIn(), "only the test run, which starts a program, asks the target's by")
+    }
+
+    /**
+     * The target's `by` says its `by run` runs programs in place, so the tests are named as the project
+     * holds them, `.by` included, and `--in-build`, which that `by` refuses, is not passed.
+     */
+    @Test
+    fun `a test run on a target whose by runs in place names the project's tests, without --in-build`() {
+        Path.of(project.basePath!!).createDirectories()
+        withRuntime(fakeBy(flags = IN_PLACE_TABLE).toString())
+        val onTarget = dir.resolve("target/project").let { it.createDirectories(); it.toRealPath().toString() }
+        val configuration = ByTestConfiguration(project, ByTestConfigurationType().testFactory, "tests").apply {
+            defaultTargetName = target.displayName
+            options.paths = "tests/test_calc.by::test_add tests/test_b.py"
+        }
+
+        val lines = runOnTarget(configuration).stdout.lines()
+        assertTrue("args=run --in-place pytest -v tests/test_calc.by::test_add tests/test_b.py" in lines, "$lines")
+        assertEquals(listOf(onTarget), askedIn(), "the target's by is asked in the project's copy")
+    }
+
+    @Test
+    fun `a run on a target is in place exactly when the target's by says so`() {
+        Path.of(project.basePath!!).createDirectories()
+        withRuntime(fakeBy(flags = IN_PLACE_TABLE).toString())
+        val inPlace = runOnTarget(configuration().apply { defaultTargetName = target.displayName }).stdout.lines()
+        assertTrue("args=run --in-place pkg.main" in inPlace, "$inPlace")
+
+        fakeBy(flags = """{"run":{"launcher":true}}""")
+        val notNamed = runOnTarget(configuration().apply { defaultTargetName = target.displayName }).stdout.lines()
+        assertTrue("args=run pkg.main" in notNamed, "$notNamed")
+    }
+
+    /** A `by` from before `by command-line-flags` is run as it can run a program: staged. */
+    @Test
+    fun `a run on a target whose by refuses the question is staged`() {
+        Path.of(project.basePath!!).createDirectories()
+        withRuntime(fakeBy().toString())
+        val run = runOnTarget(configuration().apply { defaultTargetName = target.displayName }).stdout.lines()
+        assertTrue("args=run pkg.main" in run, "$run")
+        val tests = ByTestConfiguration(project, ByTestConfigurationType().testFactory, "tests").apply {
+            defaultTargetName = target.displayName
+            options.paths = "tests/test_b.py"
+        }
+        val lines = runOnTarget(tests).stdout.lines()
+        assertTrue("args=run --in-build pytest -v tests/test_b.py" in lines, "$lines")
+    }
+
+    /** What the user wrote among `by`'s options decides, and the target's `by` is not asked. */
+    @Test
+    fun `a mode written among by's options on a target is not asked about`() {
+        Path.of(project.basePath!!).createDirectories()
+        withRuntime(fakeBy(flags = IN_PLACE_TABLE).toString())
+        val configuration = configuration().apply {
+            defaultTargetName = target.displayName
+            options.extraArgs = "--in-place"
+        }
+        val lines = runOnTarget(configuration).stdout.lines()
+        assertTrue("args=run --in-place pkg.main" in lines, "$lines")
+        assertEquals(emptyList<String>(), askedIn())
+    }
+
+    /**
+     * The whole chain with a real `by` on the target, named by `BASEDPYTHON_BY_UNDER_TEST` (skipped
+     * otherwise): the plugin asks it its flags and runs the program in place, in the project's copy,
+     * with nothing written among the configuration's `by` options.
+     */
+    @Test
+    fun `a real by on the target runs the program in place without being told to`() {
+        val by = System.getenv("BASEDPYTHON_BY_UNDER_TEST")?.let(Path::of)?.takeIf { it.toFile().canExecute() }
+        org.junit.jupiter.api.Assumptions.assumeTrue(by != null, "set BASEDPYTHON_BY_UNDER_TEST to run a real by")
+        val root = Path.of(project.basePath!!).createDirectories()
+        root.resolve("pyproject.toml").writeText("[project]\nname = \"probe\"\nversion = \"0\"\n")
+        root.resolve("pkg").createDirectories()
+        root.resolve("pkg/__init__.py").writeText("")
+        root.resolve("pkg/main.by").writeText(
+            "import os\n\ndef main():\n    print(\"file=\" + __file__)\n    print(\"cwd=\" + os.getcwd())\n",
+        )
+        withRuntime(by.toString())
+        val onTarget = dir.resolve("target/project").let { it.createDirectories(); it.toRealPath().toString() }
+        val configuration = configuration().apply { defaultTargetName = target.displayName }
+
+        val output = runOnTarget(configuration)
+        val lines = output.stdout.lines().map { it.trim() }
+        assertTrue(lines.any { it == "file=$onTarget/pkg/main.by" || it == "file=${dir.resolve("target/project/pkg/main.by")}" }, "${output.stdout}\n${output.stderr}")
+        assertTrue(lines.any { it == "cwd=$onTarget" }, "${output.stdout}\n${output.stderr}")
+    }
+
+    /**
+     * A test run with a real `by` on the target, named by `BASEDPYTHON_BY_UNDER_TEST`, and a python that
+     * has pytest, named by `BASEDPYTHON_PYTHON_UNDER_TEST` (skipped otherwise): the `.by` test is named as
+     * the project holds it and runs, where `--in-build` and a staged path are refused by such a `by`.
+     */
+    @Test
+    fun `a real by on the target runs the tests of a test configuration in place, named as the project holds them`() {
+        val by = System.getenv("BASEDPYTHON_BY_UNDER_TEST")?.let(Path::of)?.takeIf { it.toFile().canExecute() }
+        val python = System.getenv("BASEDPYTHON_PYTHON_UNDER_TEST")
+        org.junit.jupiter.api.Assumptions.assumeTrue(
+            by != null && python != null,
+            "set BASEDPYTHON_BY_UNDER_TEST and BASEDPYTHON_PYTHON_UNDER_TEST, a python with pytest, to run a real by",
+        )
+        val root = Path.of(project.basePath!!).createDirectories()
+        root.resolve("pyproject.toml").writeText("[project]\nname = \"probe\"\nversion = \"0\"\n")
+        root.resolve("tests").createDirectories()
+        root.resolve("tests/test_calc.by").writeText("def test_add():\n    assert 1 + 1 == 2\n")
+        withRuntime(by.toString())
+        val configuration = ByTestConfiguration(project, ByTestConfigurationType().testFactory, "tests").apply {
+            defaultTargetName = target.displayName
+            options.paths = "tests/test_calc.by"
+            options.envVars = mutableMapOf("PYTHON" to python!!)
+        }
+
+        val output = runOnTarget(configuration)
+        assertEquals(0, output.exitCode, "${output.stdout}\n${output.stderr}")
+        assertTrue("tests/test_calc.by::test_add PASSED" in output.stdout, "${output.stdout}\n${output.stderr}")
+    }
+
+    /**
+     * A debug session on a target reads whether the run is in place off the run, once the target's
+     * `by` has said: hot reload of a program run in place goes through `by/retranspile`, and one of a
+     * staged program through `by/transpileForBuild`.
+     */
+    @Test
+    fun `a debug session on a target knows the run is in place when the target's by says so`() {
+        Path.of(project.basePath!!).createDirectories()
+        withRuntime(fakeBy().toString())
+        for ((flags, inPlace) in listOf(IN_PLACE_TABLE to true, null to false)) {
+            fakeBy(flags)
+            val configuration = configuration().apply { defaultTargetName = target.displayName }
+            val environment = ExecutionEnvironmentBuilder.create(project, DefaultDebugExecutor.getDebugExecutorInstance(), configuration).build()
+            assertInstanceOf(dev.basedpython.pycharm.debug.ByTargetDebugRunner::class.java, environment.runner)
+            val state = environment.state as dev.basedpython.pycharm.run.ByCommandLineState
+            dev.basedpython.pycharm.debug.ByDapLaunchArgumentsProvider().getLaunchArguments(project, configuration)
+            val setup = dev.basedpython.pycharm.debug.ByDebugSetups.getInstance(project).peek(configuration)!!
+            try {
+                val onTarget = setup.onTarget!!
+                state.targetInfrastructure = onTarget
+                val descriptor = dev.basedpython.pycharm.debug.ByDebugAdapterDescriptor(project)
+                descriptor.configureProfileState(environment, state)
+                environment.prepareTargetEnvironment(state, TargetProgressIndicator.EMPTY)
+
+                assertEquals(inPlace, descriptor.run?.inPlace, "flags $flags")
+                assertEquals(inPlace, "--in-place" in state.buildCommand(onTarget.arguments()), "flags $flags")
+            } finally {
+                setup.delete()
+            }
         }
     }
 
@@ -393,6 +562,11 @@ class ByRunOnTargetTest {
         assertEquals("/opt/venv/bin/by", type.duplicateConfig(original).byPath)
     }
 }
+
+/** What `by command-line-flags` prints for a `by` that runs every program in place (`by` 4a8b90853). */
+private const val IN_PLACE_TABLE =
+    """{"repl":{"events":true,"inPlace":true,"module":true,"sessionFile":true},""" +
+        """"run":{"coverage":true,"inPlace":true,"launcher":true,"notes":true,"profile":true}}"""
 
 /** A run target that is a directory here: the project is copied to [DirTargetConfiguration.projectRootOnTarget]. */
 private class DirTargetType : TargetEnvironmentType<DirTargetConfiguration>(ID) {

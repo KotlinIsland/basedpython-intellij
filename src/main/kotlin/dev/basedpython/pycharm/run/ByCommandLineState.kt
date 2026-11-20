@@ -6,6 +6,7 @@ import dev.basedpython.pycharm.env.ByLaunch
 import dev.basedpython.pycharm.lsp.BasedPythonBinaries
 import dev.basedpython.pycharm.lsp.ByCommandFlags
 import dev.basedpython.pycharm.run.ergonomics.ByConsoleFilter
+import dev.basedpython.pycharm.run.target.ByTargetFlags
 import dev.basedpython.pycharm.run.target.ByTargetLaunch
 import dev.basedpython.pycharm.run.target.ByTargetPaths
 import dev.basedpython.pycharm.run.target.byTargetCommandLine
@@ -178,13 +179,20 @@ abstract class ByCommandLineState(
     protected open val startsProgram: Boolean get() = subcommandStartsProgram(subcommand)
 
     /**
+     * How this `by run` decides [inPlace] ([ByInPlace]); null for a command that never runs in place.
+     */
+    internal open val inPlaceDecision: ByInPlace? get() = null
+
+    /**
      * Whether this `by run` runs the program in place — against the project's own directories, its
      * `.by` modules imported from their transpiles in `by`'s run cache — rather than out of a tree
-     * staged into a temporary directory; decided as the state is made ([byRunsInPlace]). It adds
-     * `--in-place` to the command, and is what a debug session of the run reads to know which of the
-     * two the program it reloads code into runs from.
+     * staged into a temporary directory ([inPlaceDecision]). For a run here it is decided as the state
+     * is made; for a run on a target, from the target's own `by` once the target exists
+     * ([handleCreatedTargetEnvironment]), which is before the process is started. It adds `--in-place`
+     * to the command, and is what a debug session of the run reads, once the program has started, to
+     * know which of the two the program it reloads code into runs from.
      */
-    open val inPlace: Boolean get() = false
+    open val inPlace: Boolean get() = inPlaceDecision?.value ?: false
 
     /** Set while a target is being prepared for this run; see [prepareTargetEnvironmentRequest]. */
     private var targetLaunch: ByTargetLaunch? = null
@@ -219,9 +227,38 @@ abstract class ByCommandLineState(
     }
 
     override fun handleCreatedTargetEnvironment(targetEnvironment: TargetEnvironment, targetProgressIndicator: TargetProgressIndicator) {
-        val paths = targetLaunch?.created(targetEnvironment, targetProgressIndicator) ?: return
+        val launch = targetLaunch ?: return
+        val paths = launch.created(targetEnvironment, targetProgressIndicator)
         targetPaths = paths
+        inPlaceDecision?.takeIf(ByInPlace::waitsForTarget)?.let { decision ->
+            targetProgressIndicator.addSystemLine(BasedPythonBundle.message("run.askingFlags"))
+            val workDir = targetWorkDirectory(paths)
+            decision.decide(
+                ByTargetFlags.ask(
+                    targetEnvironment,
+                    byTargetCommandLine(
+                        request = targetEnvironment.request,
+                        byPath = launch.byPath,
+                        arguments = listOf(ByCommandFlags.PRINT_COMMAND),
+                        workDirectory = workDir,
+                        environment = byTargetEnvironment(options, workDir, startsProgram = false, paths.platform.pathSeparator, fileEnvironment()),
+                    ),
+                ),
+            )
+        }
         targetInfrastructure?.created(targetEnvironment, targetProgressIndicator, paths)
+    }
+
+    /**
+     * The working directory's counterpart on the target, where `by` runs there.
+     *
+     * @throws ExecutionException when it is outside the project, and so was never uploaded.
+     */
+    private fun targetWorkDirectory(paths: ByTargetPaths): String {
+        val localWorkDir = Path.of(options.workingDir.ifBlank { paths.localRoot.toString() })
+        return paths.toTarget(localWorkDir) ?: throw ExecutionException(
+            BasedPythonBundle.message("target.error.workingDirOutsideProject", localWorkDir, paths.localRoot),
+        )
     }
 
     override fun startProcess(): ProcessHandler {
@@ -263,10 +300,7 @@ abstract class ByCommandLineState(
         if (launch == null || paths == null) throw ExecutionException(BasedPythonBundle.message("target.error.notPrepared"))
         val target = environment.getPreparedTargetEnvironment(this, TargetProgressIndicator.EMPTY)
 
-        val localWorkDir = Path.of(options.workingDir.ifBlank { paths.localRoot.toString() })
-        val workDir = paths.toTarget(localWorkDir) ?: throw ExecutionException(
-            BasedPythonBundle.message("target.error.workingDirOutsideProject", localWorkDir, paths.localRoot),
-        )
+        val workDir = targetWorkDirectory(paths)
         val commandLine = byTargetCommandLine(
             request = target.request,
             byPath = launch.byPath,
@@ -319,28 +353,51 @@ abstract class ByCommandLineState(
 }
 
 /**
- * Whether a `by run` of [project] runs its program in place ([ByCommandLineState.inPlace]).
+ * Whether a `by run` runs its program in place ([ByCommandLineState.inPlace]), as far as it is known.
  *
- * [byFlags], `by`'s own flags as the user wrote them, decide it first when they name `--in-place` or
- * `--in-build`, which `by` refuses together. Otherwise it runs in place exactly when the project's
- * `by` says its `by run` takes `--in-place` ([ByCommandFlags.runsInPlace]), and out of a staged tree
- * when it says it does not, or no `by` answers: a `by` from before it, whose `by run` stages every
- * program, is run the way it can run one. Never on a run target, whose `by` is the target's and not
- * the one whose language server answers here, so what its `by run` takes is not known.
- *
- * [flags] asks the server, from whichever thread the run is started on ([ByCommandFlags.ofBlocking]),
- * and only when the written flags and the target leave it open.
+ * `by`'s own flags as the user wrote them decide it first when they name `--in-place` or `--in-build`,
+ * which `by` refuses together. Otherwise it runs in place exactly when the `by` that runs it says its
+ * `by run` takes `--in-place` ([ByCommandFlags.runsInPlace]), and out of a staged tree when it says it
+ * does not, or nothing answers: a `by` from before it, whose `by run` stages every program, is run the
+ * way it can run one. For a run here that `by` is the one whose language server answers for the
+ * project, asked as the state is made ([of]). On a run target it is the target's own, which is asked
+ * once the target exists ([ByTargetFlags], [decide]): until then the decision [waitsForTarget].
  */
-internal fun byRunsInPlace(
-    project: Project,
-    byFlags: String,
-    onTarget: Boolean,
-    flags: () -> ByCommandFlags = { ByCommandFlags.ofBlocking(project, BasedPythonBundle.message("run.askingFlags")) },
-): Boolean {
-    val written = ParametersListUtil.parse(byFlags)
-    if (ByCommandFlags.IN_PLACE_FLAG in written) return true
-    if (IN_BUILD_FLAG in written || onTarget) return false
-    return flags().runsInPlace
+internal class ByInPlace private constructor(@Volatile private var known: Boolean?) {
+
+    /** Whether the run is in place; false while it [waitsForTarget], which nothing reads it during. */
+    val value: Boolean get() = known ?: false
+
+    /** Whether this is a run on a target whose `by` decides it and has not yet been asked. */
+    val waitsForTarget: Boolean get() = known == null
+
+    /** Decides a run that [waitsForTarget] by what the target's `by` said, [flags]. */
+    fun decide(flags: ByCommandFlags) {
+        if (known == null) known = flags.runsInPlace
+    }
+
+    companion object {
+        /**
+         * The decision for a `by run` of [project] with `by`'s own flags [byFlags], [onTarget] or here.
+         *
+         * [flags] asks the project's server, from whichever thread the run is started on
+         * ([ByCommandFlags.ofBlocking]), and only for a run here that the written flags leave open.
+         */
+        fun of(
+            project: Project,
+            byFlags: String,
+            onTarget: Boolean,
+            flags: () -> ByCommandFlags = { ByCommandFlags.ofBlocking(project, BasedPythonBundle.message("run.askingFlags")) },
+        ): ByInPlace {
+            val written = ParametersListUtil.parse(byFlags)
+            return when {
+                ByCommandFlags.IN_PLACE_FLAG in written -> ByInPlace(true)
+                IN_BUILD_FLAG in written -> ByInPlace(false)
+                onTarget -> ByInPlace(null)
+                else -> ByInPlace(flags().runsInPlace)
+            }
+        }
+    }
 }
 
 /** `by run --in-build`: the staged tree as the program's working directory. Refused with `--in-place`. */

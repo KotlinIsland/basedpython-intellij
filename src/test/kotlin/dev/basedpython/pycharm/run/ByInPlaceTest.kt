@@ -19,7 +19,8 @@ import org.junit.jupiter.api.Test
  *
  * In place exactly when the project's `by` says, in its `initialize` answer, that its `by run` takes
  * `--in-place` (`by` a32cdb0b6: `{"run": {"inPlace": true, …}}`); a `by` that says nothing of it — the
- * bundled 0.0.1 among them — stages the program as it always has.
+ * bundled 0.0.1 among them — stages the program as it always has. On a run target the target's own
+ * `by` says, once the target exists: `ByRunOnTargetTest`.
  */
 @TestFixtures
 class ByInPlaceTest {
@@ -33,29 +34,47 @@ class ByInPlaceTest {
     @Test
     fun `a by whose by run takes --in-place runs the program in place`() {
         val flags = saying("""{"run": {"inPlace": true, "inBuild": true}, "repl": {"inPlace": true}}""")
-        assertTrue(byRunsInPlace(fixture.project, byFlags = "", onTarget = false) { flags })
+        assertTrue(ByInPlace.of(fixture.project, byFlags = "", onTarget = false) { flags }.value)
         assertTrue(flags.replsInPlace)
     }
 
     @Test
     fun `a by that does not say so stages it, as does one that answers nothing`() {
-        assertFalse(byRunsInPlace(fixture.project, byFlags = "", onTarget = false) { saying("""{"run": {"inBuild": true}}""") })
-        assertFalse(byRunsInPlace(fixture.project, byFlags = "", onTarget = false) { ByCommandFlags.NONE })
+        assertFalse(ByInPlace.of(fixture.project, byFlags = "", onTarget = false) { saying("""{"run": {"inBuild": true}}""") }.value)
+        assertFalse(ByInPlace.of(fixture.project, byFlags = "", onTarget = false) { ByCommandFlags.NONE }.value)
         assertFalse(saying("""{"run": {"inPlace": true}}""").replsInPlace, "repl's flag is its own")
     }
 
-    /** The target's `by` is not the one whose server answers here, so what its `by run` takes is not known. */
+    /**
+     * The target's `by` is not the one whose server answers here, so the server is not asked: the
+     * target's `by` is, once the target exists, and says for the run.
+     */
     @Test
-    fun `a run on a target is staged, and the server is not asked`() {
-        assertFalse(byRunsInPlace(fixture.project, byFlags = "", onTarget = true) { error("asked the server about a target's by") })
+    fun `a run on a target waits for the target's by, and the server is not asked`() {
+        val never = { error("asked the server about a target's by") }
+        val inPlace = ByInPlace.of(fixture.project, byFlags = "", onTarget = true, flags = never)
+        assertTrue(inPlace.waitsForTarget)
+        inPlace.decide(saying("""{"run": {"inPlace": true}}"""))
+        assertFalse(inPlace.waitsForTarget)
+        assertTrue(inPlace.value)
+        inPlace.decide(ByCommandFlags.NONE)
+        assertTrue(inPlace.value, "decided once, by the target's first answer")
+
+        val staged = ByInPlace.of(fixture.project, byFlags = "", onTarget = true, flags = never)
+        staged.decide(ByCommandFlags.NONE)
+        assertFalse(staged.value, "a target's by that says nothing stages the program")
     }
 
     /** `by` refuses `--in-place` with `--in-build`, so a mode the user wrote is the one the run has. */
     @Test
     fun `a mode written among by's flags decides, and the server is not asked`() {
         val never = { error("asked the server about a mode the user wrote") }
-        assertTrue(byRunsInPlace(fixture.project, byFlags = "--soundness none --in-place", onTarget = false, flags = never))
-        assertFalse(byRunsInPlace(fixture.project, byFlags = "--in-build", onTarget = false, flags = never))
+        for (onTarget in listOf(false, true)) {
+            val inPlace = ByInPlace.of(fixture.project, byFlags = "--soundness none --in-place", onTarget = onTarget, flags = never)
+            assertTrue(inPlace.value && !inPlace.waitsForTarget)
+            val staged = ByInPlace.of(fixture.project, byFlags = "--in-build", onTarget = onTarget, flags = never)
+            assertFalse(staged.value || staged.waitsForTarget)
+        }
     }
 
     @Test

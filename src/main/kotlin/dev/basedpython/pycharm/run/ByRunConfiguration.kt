@@ -114,11 +114,11 @@ class ByRunConfiguration(project: Project, factory: ConfigurationFactory, name: 
         if (!askForArguments(executor)) return null
         val opts = options
         val hint = ByMissingArgumentsHint(this, environment)
-        val inPlace = byRunsInPlace(project, opts.extraArgs, onTarget = targetName != null)
+        val inPlace = ByInPlace.of(project, opts.extraArgs, onTarget = targetName != null)
         return object : ByCommandLineState(project, opts, environment) {
             override val subcommand = "run"
 
-            override val inPlace: Boolean = inPlace
+            override val inPlaceDecision: ByInPlace = inPlace
 
             override fun buildSubcommandArgs(): List<String> = runSubcommandArgs(opts)
 

@@ -1,6 +1,8 @@
 package dev.basedpython.pycharm.lsp
 
 import com.google.gson.JsonObject
+import com.google.gson.JsonParseException
+import com.google.gson.JsonParser
 import com.intellij.openapi.project.Project
 import com.intellij.platform.lsp.api.LspClientManager
 import com.intellij.platform.lsp.api.LspServerState
@@ -16,7 +18,8 @@ import org.eclipse.lsp4j.InitializeResult
  * with no `experimental` at all — a `by` from before it — is one this `by` does not take.
  *
  * Asked of the server rather than of `by repl --help`: the server is the `by` the project resolves, and
- * asking it starts nothing and parses no text written for people.
+ * asking it starts nothing and parses no text written for people. A `by` on a run target is not that
+ * one, and is asked itself, with `by command-line-flags`, which prints the same table ([ofPrinted]).
  */
 internal class ByCommandFlags private constructor(private val experimental: JsonObject?) {
 
@@ -44,6 +47,18 @@ internal class ByCommandFlags private constructor(private val experimental: Json
         /** What the `initialize` answer [result] says. */
         fun of(result: InitializeResult?): ByCommandFlags =
             ByCommandFlags(result?.capabilities?.experimental as? JsonObject)
+
+        /**
+         * What a `by` printed for `by command-line-flags` ([PRINT_COMMAND]): the table its server answers
+         * `initialize` with, as json on one line. Anything but a json object says nothing.
+         */
+        fun ofPrinted(stdout: String): ByCommandFlags = ByCommandFlags(
+            try {
+                JsonParser.parseString(stdout) as? JsonObject
+            } catch (_: JsonParseException) {
+                null
+            },
+        )
 
         /**
          * What the project's running `by` says, starting it first when it is not running, as
@@ -74,6 +89,12 @@ internal class ByCommandFlags private constructor(private val experimental: Json
                 .firstOrNull { it.state == LspServerState.Running }
                 ?.let { of(it.initializeResult) }
                 ?: NONE
+
+        /**
+         * The hidden command that prints what [of] reads from `initialize`; a `by` from before it refuses
+         * it, which is a `by` that says nothing ([NONE]).
+         */
+        const val PRINT_COMMAND: String = "command-line-flags"
 
         const val RUN: String = "run"
 

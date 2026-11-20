@@ -137,12 +137,21 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
      * record its wrapper writes, and whether the run configuration runs it in place. A child's is its
      * parent's. Null for a debugpy session.
      */
-    private val run: ByBpdRun?
+    internal val run: ByBpdRun?
         get() = child?.run ?: setup?.takeIf { it.backend == ByDebugBackend.BPD }?.let { ByBpdRun(it.infoFile, runsInPlace) }
 
-    /** Whether the run configuration's `by run` runs the program in place, as [configureProfileState] read it off the state. */
+    /**
+     * The state of the run this session debugs, as [configureProfileState] was handed it: whether its
+     * `by run` runs the program in place is read off it when asked rather than then, since a run on a
+     * target learns it from the target's `by` once the target exists, after this session is set up
+     * and before the program starts.
+     */
     @Volatile
-    private var runsInPlace: Boolean = false
+    private var commandLine: ByCommandLineState? = null
+
+    /** Whether the run configuration's `by run` runs the program in place ([ByCommandLineState.inPlace]). */
+    private val runsInPlace: Boolean
+        get() = commandLine?.inPlace ?: false
 
     /** What a bpd session's wrapper recorded, once [launchDebugAdapter] has read it. */
     @Volatile
@@ -250,7 +259,7 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
 
         val commandLine = state as? ByCommandLineState
             ?: throw ExecutionException(BasedPythonBundle.message("debug.error.unsupportedState"))
-        runsInPlace = commandLine.inPlace
+        this.commandLine = commandLine
 
         // The platform ends the session's process when the session ends, and the adapter ends a
         // session itself when the program has finished — at which point `by run` is on its way out
