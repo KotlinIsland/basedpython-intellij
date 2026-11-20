@@ -711,8 +711,9 @@ question either way: assigning `function.__code__` under a live frame is *accept
 
 ### a program run in place
 
-`by run --in-place` — what every `by run` the plugin starts is, when the project's `by` says its
-`by run` takes the flag — runs the program against the project's own directories: a hand-written `.py`
+`by run --in-place` — what every `by run` the plugin starts is, when the `by` that runs it says its
+`by run` takes the flag: the project's, in its language server's `initialize` answer, or on a run
+target the target's own, asked with `by command-line-flags` once the target exists — runs the program against the project's own directories: a hand-written `.py`
 is imported from where it is, and a `.by` from its transpile in `by`'s run cache, whose run directory
 holds the runner and the map. There is no tree to restage into, and the map is never rewritten, since
 every python the program starts reads it. So a reload writes nothing:

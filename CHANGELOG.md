@@ -28,7 +28,9 @@
   `subprocess` work, and a breakpoint in a project file stops in such a child; tests are named and
   run by their `.by` files (`tests/test_calc.by::test_add`), and `--lf` reruns the tests that
   failed. Hot reload of a debugged program run in place has `by` transpile each edited `.by` again
-  and writes nothing itself. A `by` that does not run programs in place runs them as before.
+  and writes nothing itself. A `by` that does not run programs in place runs them as before. On a
+  run target the target's own `by` is asked how it runs a program, so a container or a remote
+  machine whose `by` runs programs in place runs, tests and debugs them in place too.
 
 ### Changed
 
