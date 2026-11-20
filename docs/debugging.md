@@ -227,7 +227,11 @@ was ever involved — while `by` itself resolved that same import happily when t
 editor said the code was fine and the run said it was not. `ByCommandLineState` now puts the run's
 working directory on `PYTHONPATH`, which is what `python main.py` would have given the program
 anyway. It goes *behind* the debugger's bootstrap directory (which must stay first — prepending a
-directory prepends its `sitecustomize.py`, and `site` imports exactly one), and the transpiled tree
+directory prepends its `sitecustomize.py`, and `site` imports exactly one; the bootstrap runs the one
+it displaced, the next on `sys.path` *after* its own directory — in a child of a run in place, whose
+`PYTHONPATH` starts with the run directory's `boot/`, the first other one is `boot`'s, which ran first
+and handed over to the bootstrap, so taking it, as the bootstrap once did, meant the environment's own
+never ran), and the transpiled tree
 is still `sys.path[0]`, so a generated module continues to win over a stale `.py` of the same name
 lying beside the source it came from. Only `by run` and test configurations get it: `by build` and
 `by check` start no interpreter, and `PYTHONPATH` is a variable `by` itself reads.
@@ -306,8 +310,8 @@ exactly as long as the program does. So bpd cannot be handed the program from ou
 
 `by run --launcher <wrapper>` is how it gets there. `by run` discovers the interpreter exactly as it
 does for a plain run, probes its version itself, and starts `<wrapper> <python> _by_runner.py
-<module> <args…>` once, for the program. The wrapper records the interpreter, the directory the
-runner is in and the arguments, then starts `bpd dap --listen`; the IDE reads the record and sends it
+<module> <args…>` once, for the program. The wrapper records the interpreter, the directory it was
+started in and the arguments, then starts `bpd dap --listen`; the IDE reads the record and sends it
 back as the `launch` request. The IDE never names an interpreter: it used to put the wrapper in
 `--python`'s place, which switched `by run`'s discovery off and left the IDE guessing which
 interpreter the run would have used.
@@ -318,6 +322,14 @@ uncaught exception stopped in the program's outermost frame — and since `by` f
 map names the runner as `LAUNCHER`, which bpd reads itself. Only the latest `by` is supported, so
 the field would say again what the map already does; measured against `by` caabe9cac, the stacks
 are the same with it and without it.
+
+The wrapper stays in the directory `by run` started it in, which bpd inherits and starts the program
+in: the directory the user ran it from, as with no debugger. It used to `cd` to the runner first,
+which made the program's working directory the staged tree, and for a run in place the run directory
+in `by`'s cache — measured with real `by` and bpd, `os.getcwd()` printed
+`~/.cache/ty/basedpython-run/<project>/runs/<digest>`, and a child started as `python child.py` was
+not found there. The runner is named by its absolute path; its directory, where the map is, is read
+off that path (`ByBpdRecord.runnerDirectoryOf`), not off the working directory.
 
 What the wrapper `exec`s is `bpd dap --listen` with `by run`'s standard input, which is what the
 run console writes typed lines to, so the launch says `inheritStdin` and `input()` reads the
@@ -697,9 +709,36 @@ asks: refusing left the button doing nothing in the one place it is pressed most
 question either way: assigning `function.__code__` under a live frame is *accepted* on 3.13 through
 3.15.
 
+### a program run in place
+
+`by run --in-place` — what every `by run` the plugin starts is, when the project's `by` says its
+`by run` takes the flag — runs the program against the project's own directories: a hand-written `.py`
+is imported from where it is, and a `.by` from its transpile in `by`'s run cache, whose run directory
+holds the runner and the map. There is no tree to restage into, and the map is never rewritten, since
+every python the program starts reads it. So a reload writes nothing:
+
+1. **Save**, as below.
+2. **Ask `by` to transpile each edited `.by` again**, `by/retranspile` with the documents and the
+   run directory — the runner's directory, read off the record. `by` checks each module out of the
+   file on disk with the gate `by run` uses, in the configuration and environment the run recorded,
+   writes the transpile into the run directory's `retranspiled/`, and answers with its place and the
+   module's entry of the map's tables, as `by retranspile` prints it. Measured at 81 ms for a module
+   of a django project. A `.py` needs nothing of `by`.
+3. **One `bpd/replaceCode`** naming every edited file, with `by`'s answers as `retranspiled`, passed
+   on as `by` wrote them. bpd checks each against disk as it checks the map before it compiles
+   through it; a `.by` named without its answer is refused, since the code running is the transpile
+   the run made.
+4. **A module `by` refuses** — one that no longer checks, a `.by` added since the run started —
+   hands bpd nothing, and the reasons are said in the balloon with the checker's sentences under
+   them. Nothing is put back, because nothing the program reads was written.
+
+Measured with real `by` and bpd (`ByBpdLiveSessionTest`): stopped between two calls of a function,
+the function's `.by` edited to return 2 was applied and the second call printed 2, as was a `.py`
+edited the same way, and the run directory changed only under `retranspiled/`.
+
 ### nothing you edit is the file that is running
 
-Under `by run` the program runs out of a tree in a temp directory, and every module in it arrived
+Under a staged `by run` the program runs out of a tree in a temp directory, and every module in it arrived
 there from the project: a `.by` because it was **transpiled**, a hand-written `.py` because it was
 **copied**. `sys.path[0]` is that tree. Measured rather than argued — a project with a `helper.py`
 beside its `main.by` reports both `__file__`s inside `/var/folders/.../T/.tmpXXXX/`.
@@ -723,8 +762,11 @@ and no code object in the process is named after the copy. Handing bpd the copy 
    `by/transpileForBuild`, carrying the build directory the wrapper recorded. It answers with the
    generated python, the whole rewritten `_by_sourcemap.py`, and both digests. It **writes nothing**.
 3. **Write it into the tree**, remembering every byte replaced.
-4. **One `bpd/replaceCode`** over the edited files, with `remap` set when the map was rewritten and
-   `evenUnderALiveFrame` set.
+4. **One `bpd/replaceCode`** over the edited files, with `remap` set when `by` answers that the
+   map's line tables moved, and `evenUnderALiveFrame` set. A map rewritten only to list a re-staged
+   copy — a `.py` reloaded alone — leaves the tables as they were, so it was wrong to set `remap`
+   whenever a map was written, as this used to; a `by` from before the answer rewrote the map only
+   when the tables moved, so from it a rewritten map still is a remap.
 5. **On any refusal, put the tree back.** A tree holding code the process is not running is a tree
    that lies: bpd reads the map out of it to say which `.by` line a frame is on, and reads the
    generated python to prove a frame's code object is still in it. bpd is honest about the mismatch

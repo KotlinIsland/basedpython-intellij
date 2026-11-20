@@ -21,6 +21,14 @@
   run from the editor.
 - Django's test runner, `manage.py test`, for a Django project without pytest-django, chosen by `by`
   or in *Settings | basedpython | Tests*, with tracebacks, navigation and *Rerun Failed Tests*.
+- Programs run in place, with a `by` that runs them so: a run configuration, a test run, coverage,
+  a debug session and the basedpython Console run the program against the project's own
+  directories rather than out of a copy of the project in a temporary directory. A python the
+  program starts imports the project's `.by` modules too, so `runserver`'s reloader child and
+  `subprocess` work, and a breakpoint in a project file stops in such a child; tests are named and
+  run by their `.by` files (`tests/test_calc.by::test_add`), and `--lf` reruns the tests that
+  failed. Hot reload of a debugged program run in place has `by` transpile each edited `.by` again
+  and writes nothing itself. A `by` that does not run programs in place runs them as before.
 
 ### Changed
 
@@ -36,6 +44,12 @@
   `enum` writes a `case` member and `cdef` a class method (`class def`).
 - With several projects open, editing a file in one no longer sends it to `by` and `buff` in the
   others, where `by` showed *ty encountered a problem* on each edit.
+- A program debugged under bpd runs in the directory it was started from, as it does with no
+  debugger, rather than in the directory `by run` transpiled into.
+- Hot reload of a hand-written `.py` alone no longer tells bpd to read the build's line tables
+  again, which they had not moved.
+- In a python a debugged program starts, under debugpy, the environment's own `sitecustomize` runs
+  again when `by run` puts one of its own ahead of the debugger's.
 
 ### Removed
 
