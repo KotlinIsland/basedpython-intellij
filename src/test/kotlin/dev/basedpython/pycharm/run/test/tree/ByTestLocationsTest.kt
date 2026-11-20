@@ -26,6 +26,15 @@ class ByTestLocationsTest {
         )
     }
 
+    /** `by run --in-place pytest` collects a `.by` where the project holds it, and names its tests by it. */
+    @Test
+    fun `a node id of a by collected in place keeps its path`() {
+        assertEquals(
+            ByTestLocation("tests/test_calc.by", listOf("TestGroup", "test_add")),
+            ByTestLocations.parse("tests/test_calc.by::TestGroup::test_add[1-2]"),
+        )
+    }
+
     /** unittest reports `mymod.MathTest`, which is a module, not a path. */
     @Test
     fun `a node id that is not a py path resolves to nothing`() {

@@ -7,7 +7,6 @@ import com.intellij.openapi.util.Key
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VfsUtilCore
 import dev.basedpython.pycharm.run.model.ByProgramModel
-import dev.basedpython.pycharm.run.test.ByDjangoTests
 
 /**
  * Bridges a run of django's `manage.py test -v 2` into a results tree built by node id.
@@ -22,20 +21,20 @@ import dev.basedpython.pycharm.run.test.ByDjangoTests
  * By node id because unittest prints every failure's traceback after the last test: a failed test stays
  * open until its traceback has been read, while the tests after it, in other classes, run and finish.
  *
- * @param base the directory `manage.py` is in, as the run's node ids are written: relative to the
- *   project for a plain run, `""` for a `by run`'s staged tree
+ * @param moduleFile the path a node id of the run names a module's file by: relative to the project
+ *   for a plain run or a `by run` in place, to a `by run`'s staged tree otherwise
  * @param labels what the run named to `manage.py test`
  */
 class ByDjangoTestEventsConverter(
     testFrameworkName: String,
     consoleProperties: TestConsoleProperties,
-    base: String,
+    moduleFile: (String) -> String,
     labels: List<String> = emptyList(),
 ) : OutputToGeneralTestEventsConverter(testFrameworkName, consoleProperties) {
 
     /** A file's suite is named after the `.by` `by` staged it from, as a pytest run's is. */
     private val parser = ByUnittestOutputParser(
-        moduleFile = { ByDjangoTests.moduleFile(it, base) },
+        moduleFile = moduleFile,
         fileSuiteName = { path ->
             val project = consoleProperties.project
             val source = ByProgramModel.getInstance(project).stagedFile(path)

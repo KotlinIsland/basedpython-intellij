@@ -20,6 +20,7 @@ import dev.basedpython.pycharm.lang.dialect.BasedPythonProjectDetector
 import dev.basedpython.pycharm.run.model.ByProgramModel
 import dev.basedpython.pycharm.run.model.ByTestItem
 import dev.basedpython.pycharm.run.test.ByTestOptions
+import dev.basedpython.pycharm.run.test.ByTestTargets
 import dev.basedpython.pycharm.util.BasedPythonBundle
 import javax.swing.Icon
 
@@ -62,7 +63,7 @@ internal class ByRunAnythingProvider : RunAnythingCommandLineProvider() {
         return when {
             completed.isEmpty() -> SUBCOMMANDS.asSequence()
             completed == listOf(RUN) -> (model.moduleNames().orEmpty().sorted() + PYTEST).asSequence()
-            completed.size >= 2 && completed[0] == RUN && completed[1] == PYTEST -> testTargets(model).asSequence()
+            completed.size >= 2 && completed[0] == RUN && completed[1] == PYTEST -> testTargets(project, model).asSequence()
             else -> emptySequence()
         }
     }
@@ -135,14 +136,15 @@ internal class ByRunAnythingProvider : RunAnythingCommandLineProvider() {
         return context.getPath()?.takeIf { it != project.basePath }.orEmpty()
     }
 
-    private fun testTargets(model: ByProgramModel): List<String> =
+    /** The project's tests by the node ids a test configuration names them by ([ByTestTargets]). */
+    private fun testTargets(project: Project, model: ByProgramModel): List<String> =
         model.projectTests()?.byFile.orEmpty().flatMap { (file, tests) ->
-            val staged = model.stagedPath(file) ?: return@flatMap emptyList()
-            listOf(staged) + tests.flatMap { it.nodeIds(staged) }
+            val target = ByTestTargets.of(project, file) ?: return@flatMap emptyList()
+            listOf(target) + tests.flatMap { it.nodeIds(target) }
         }.sorted()
 
-    private fun ByTestItem.nodeIds(staged: String): List<String> =
-        listOf(staged + "::" + symbols.joinToString("::")) + children.flatMap { it.nodeIds(staged) }
+    private fun ByTestItem.nodeIds(file: String): List<String> =
+        listOf(file + "::" + symbols.joinToString("::")) + children.flatMap { it.nodeIds(file) }
 
     internal companion object {
         const val BY = "by"

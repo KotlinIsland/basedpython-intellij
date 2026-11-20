@@ -194,18 +194,18 @@ class RunConfigurationProducerTest {
             .createConfigurationFromContext(contextFor(file))
         assertNotNull(fromContext, "the pytest producer should fire on a `def test_…` line")
         val config = fromContext!!.configuration as ByTestConfiguration
-        assertEquals("test_thing.py::test_addition", config.options.paths)
-        assertEquals("pytest test_thing.py::test_addition", config.name)
+        assertEquals("test_thing.by::test_addition", config.options.paths)
+        assertEquals("pytest test_thing.by::test_addition", config.name)
     }
 
     /**
-     * `by run` stages a src-layout project's `src/tests/test_staged.by` as `tests/test_staged.py`:
-     * the path inside the staged tree follows the module tree, not the directory tree. The target is
-     * where `by/buildOutput` says the file lands — `by run` and `by build` lay a source out with the
-     * same `transpiled_destination` — and not the source's own path with its extension swapped.
+     * A test is targeted by the `.by` as the project holds it, which is what `by run --in-place pytest`
+     * collects and names it by — not where `by run` would stage it, which follows the module tree: a
+     * src-layout project's `src/tests/test_staged.by` is staged as `tests/test_staged.py`. A run that
+     * is not in place names it there itself ([dev.basedpython.pycharm.run.test.ByTestTargets.staged]).
      */
     @Test
-    fun `a src-layout test is targeted where by stages it`() = onEdt {
+    fun `a src-layout test is targeted by its own path`() = onEdt {
         val file = addTestFile(
             "src/tests/test_staged.by",
             "def test_addition():\n    assert 1 + 1 == 2\n",
@@ -214,21 +214,23 @@ class RunConfigurationProducerTest {
         val config = producer<ByTestFromFileProducer>().createConfigurationFromContext(contextFor(file))
             ?.configuration as? ByTestConfiguration
         assertNotNull(config)
-        assertEquals("tests/test_staged.py::test_addition", config!!.options.paths)
+        assertEquals("src/tests/test_staged.by::test_addition", config!!.options.paths)
         assertEquals(
-            listOf("--in-build", "pytest", "-v", "tests/test_staged.py::test_addition"),
-            ByPytest.arguments(config.options.paths),
+            listOf("pytest", "-v", "src/tests/test_staged.by::test_addition"),
+            ByPytest.arguments(config.options.paths, inPlace = true),
         )
     }
 
-    /** Until `by` has said where a file is staged, there is no target to give pytest, and no guess is made. */
+    /** A target is the file's own path, so a test is runnable before `by` has said where it would stage it. */
     @Test
-    fun `a test file by has not placed produces nothing`() = onEdt {
+    fun `a test file by has not placed is targeted all the same`() = onEdt {
         val file = fixture.addFileToProject("tests/test_unplaced.by", "def test_addition():\n    assert 1 + 1 == 2\n")
         val items = ByReplies.testItems(file.text)
         model.rememberTestItems(file.virtualFile, items)
         model.rememberProjectTests(file.virtualFile, items)
-        assertNull(producer<ByTestFromFileProducer>().createConfigurationFromContext(contextFor(file)))
+        val config = producer<ByTestFromFileProducer>().createConfigurationFromContext(contextFor(file))
+            ?.configuration as? ByTestConfiguration
+        assertEquals("tests/test_unplaced.by::test_addition", config?.options?.paths)
     }
 
     @Test
@@ -241,7 +243,7 @@ class RunConfigurationProducerTest {
             .createConfigurationFromContext(ConfigurationContext(element))
         assertNotNull(fromContext, "the pytest producer should fire on a nested `def test_…` method")
         val config = fromContext!!.configuration as ByTestConfiguration
-        assertEquals("test_thing.py::TestMath::test_add", config.options.paths)
+        assertEquals("test_thing.by::TestMath::test_add", config.options.paths)
     }
 
     @Test
@@ -270,7 +272,7 @@ class RunConfigurationProducerTest {
             val config = producer<ByTestFromFileProducer>().createConfigurationFromContext(context)
                 ?.configuration as? ByTestConfiguration
             assertNotNull(config, "a test file should be runnable as a whole")
-            assertEquals("tests/test_whole.py", config!!.options.paths)
+            assertEquals("tests/test_whole.by", config!!.options.paths)
         }
     }
 
@@ -289,7 +291,7 @@ class RunConfigurationProducerTest {
         val config = producer<ByTestFromFileProducer>().createConfigurationFromContext(ConfigurationContext(element))
             ?.configuration as? ByTestConfiguration
         assertNotNull(config)
-        assertEquals("tests/test_nested.py", config!!.options.paths)
+        assertEquals("tests/test_nested.by", config!!.options.paths)
     }
 
     @Test
@@ -443,11 +445,11 @@ class RunConfigurationProducerTest {
         // the list Ctrl+Shift+R runs the first of, offering a chooser when it has more than one
         val configurations = PreferredProducerFind.getConfigurationsFromContext(context.location, context, true, false)
 
-        assertEquals(listOf("pytest test_context.py::test_addition"), configurations?.map { it.configuration.name })
+        assertEquals(listOf("pytest test_context.by::test_addition"), configurations?.map { it.configuration.name })
     }
 
     @Test
-    fun `a directory runs every test file under it, each by the path by stages it at`() = onEdt {
+    fun `a directory runs every test file under it, each by its own path`() = onEdt {
         val text = "def test_addition():\n    assert 1 + 1 == 2\n"
         addTestFile("tests/test_a.by", text, staged = "tests/test_a.py")
         addTestFile("tests/unit/test_b.by", text, staged = "tests_unit/test_b.py")
@@ -458,7 +460,7 @@ class RunConfigurationProducerTest {
         val test = producer<ByTestFromFileProducer>().createConfigurationFromContext(context)
         val configuration = test?.configuration as ByTestConfiguration
 
-        assertEquals("tests/test_a.py tests_unit/test_b.py", configuration.options.paths)
+        assertEquals("tests/test_a.by tests/unit/test_b.by", configuration.options.paths)
         assertEquals("pytest in tests", configuration.name)
     }
 }

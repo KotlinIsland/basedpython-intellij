@@ -26,7 +26,7 @@ class ByTargetTestLocatorTest {
         val file = fixture.addFileToProject("tests/test_shapes.by", "\n\n\ndef test_area():\n    assert True\n")
         val localRoot = Path.of(file.virtualFile.parent.parent.path)
         val paths = ByTargetPaths(localRoot, "/opt/project", Platform.UNIX)
-        return ByTargetTestLocator(paths::toLocal)
+        return ByTargetTestLocator(ByTestLocator(projectPaths = false), paths::toLocal)
             .getLocation("file", path, fixture.project, GlobalSearchScope.allScope(fixture.project))
     }
 

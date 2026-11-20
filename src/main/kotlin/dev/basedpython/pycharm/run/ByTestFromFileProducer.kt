@@ -6,7 +6,7 @@ import dev.basedpython.pycharm.run.test.ByTestConfiguration
 import dev.basedpython.pycharm.run.test.ByTestConfigurationType
 import dev.basedpython.pycharm.run.test.ByTestRunner
 import dev.basedpython.pycharm.run.test.ByTestRunners
-import dev.basedpython.pycharm.run.test.tree.ByTestSources
+import dev.basedpython.pycharm.run.test.ByTestTargets
 import dev.basedpython.pycharm.lang.dialect.BasedPythonSources
 import com.intellij.execution.actions.ConfigurationContext
 import com.intellij.execution.actions.LazyRunConfigurationProducer
@@ -21,14 +21,15 @@ import com.intellij.util.execution.ParametersListUtil
 
 /**
  * Right-click a test file `by` serves (or click the "Run test" gutter icon) → produce a configuration
- * that runs `by run --in-build pytest -v <path>[::Class][::test_name]`; right-click a directory →
+ * that runs `by run --in-place pytest -v <path>[::Class][::test_name]`; right-click a directory →
  * one that runs every test file under it.
  *
- * The target is the node id pytest gives the test in the tree `by run` stages: the file as `by`
- * stages it ([ByProgramModel.stagedPath]), then the names `by/testItems` gives the test. A `.py` that
- * `by` serves — a basedpython project's, or any when `.py` is treated as basedpython — is not staged by
- * the `by run` this plugin bundles, so its tests run on the project's interpreter
- * ([ByTestOptions.plainPytest]), named by their path in the project. Without this, such a file had no
+ * The target is the node id pytest gives the test in a run in place: the file by its path from the
+ * project ([ByTestTargets]), then the names `by/testItems` gives the test. A run that is not in place
+ * writes a `.by` where `by` stages it when it starts ([dev.basedpython.pycharm.run.test.ByPytest]). A
+ * `.py` that `by` serves — a basedpython project's, or any when `.py` is treated as basedpython — is
+ * not staged by the `by run` this plugin bundles, so its tests run on the project's interpreter
+ * ([ByTestOptions.plainPytest]), named by the same path. Without this, such a file had no
  * way to run a test in IntelliJ IDEA, where no Python plugin's pytest configuration is there to.
  *
  * What runs them is [ByTestRunners]' choice: pytest, or django's `manage.py test` for a `unittest`
@@ -83,7 +84,7 @@ private class TestTarget(val paths: String, val plain: Boolean, val runner: ByTe
     val name: String = (if (runner == ByTestRunner.DJANGO) "Django tests " else "pytest ") + scope
 }
 
-/** A file's target: its node id, and whether it is named in the project rather than the staged tree. */
+/** A file's target: its node id, and whether it runs on the project's interpreter rather than through `by run`. */
 private class FileTarget(val path: String, val plain: Boolean, val runner: ByTestRunner)
 
 /**
@@ -91,10 +92,9 @@ private class FileTarget(val path: String, val plain: Boolean, val runner: ByTes
  * or [fileTargetFor] a file's or a test's.
  *
  * A directory in the project view runs every test file under it, as `.py`'s *Run 'Python tests in
- * tests'* does: each by the path `by run` stages it at, which follows the module tree rather than
- * the directories, so the directory is never a path pytest is given itself. Which files hold tests
- * is the project-wide `by/testItems` answer; null while it, or any of those files' staged path, is
- * not known yet.
+ * tests'* does: each by its own path, so that a run that is not in place can name each where `by`
+ * stages it, which follows the module tree rather than the directories. Which files hold tests is the
+ * project-wide `by/testItems` answer; null while it is not known yet.
  */
 private fun testTargetFor(context: ConfigurationContext): TestTarget? {
     val directory = (context.psiLocation as? PsiDirectory)?.virtualFile
@@ -108,16 +108,16 @@ private fun testTargetFor(context: ConfigurationContext): TestTarget? {
     // `.by` and `.py` are two commands; a directory holding both is not one run of either
     val plain = files.none { it.extension == BY_EXTENSION }
     if (!plain && files.any { it.extension != BY_EXTENSION }) return null
-    val paths = files.map { file -> (if (plain) ByTestSources.relativePath(project, file) else model.stagedPath(file)) ?: return null }
+    val paths = files.map { file -> ByTestTargets.of(project, file) ?: return null }
     val runners = files.map { file -> ByTestRunners.forFile(project, file, unittest = tests.getValue(file).any { it.holdsUnittest }) }.toSet()
     val runner = runners.singleOrNull() ?: ByTestRunner.PYTEST
     return TestTarget(ParametersListUtil.join(paths), plain, runner, "in ${directory.name}")
 }
 
 /**
- * Builds the pytest target for [context], or null when the context holds no test. Returns
- * `<staged>`, `<staged>::test_name`, or `<staged>::Class::test_name`, where `<staged>` is the path
- * `by run` stages the file at — null too while `by` has not said where that is.
+ * Builds the pytest target for [context], or null when the context holds no test. Returns `<file>`,
+ * `<file>::test_name`, or `<file>::Class::test_name`, where `<file>` is the file's path from the
+ * project ([ByTestTargets.of]).
  *
  * Which declarations are tests is `by/testItems`' answer ([ByProgramModel]), the same one the gutter
  * icons are drawn from: an icon whose producer declined would leave a green arrow that runs nothing.
@@ -139,7 +139,7 @@ private fun fileTargetFor(context: ConfigurationContext): FileTarget? {
     val project = context.project
     val model = ByProgramModel.getInstance(project)
     val plain = file.extension != BY_EXTENSION
-    val staged = (if (plain) ByTestSources.relativePath(project, file) else model.stagedPath(file)) ?: return null
+    val path = ByTestTargets.of(project, file) ?: return null
     fun target(path: String, unittest: Boolean) = FileTarget(path, plain, ByTestRunners.forFile(project, file, unittest))
 
     val psiFile = element.containingFile
@@ -150,12 +150,12 @@ private fun fileTargetFor(context: ConfigurationContext): FileTarget? {
         if (items.isEmpty()) return null
         val line = document.getLineNumber(offset)
         val item = items.innermostAt(line, offset - document.getLineStartOffset(line))
-            ?: return target(staged, items.any { it.holdsUnittest })
-        return target(staged + "::" + item.symbols.joinToString("::"), item.holdsUnittest)
+            ?: return target(path, items.any { it.holdsUnittest })
+        return target(path + "::" + item.symbols.joinToString("::"), item.holdsUnittest)
     }
 
     val items = model.testItems(file) ?: model.projectTests()?.let { it.byFile[file].orEmpty() } ?: return null
-    return target(staged, items.any { it.holdsUnittest }).takeIf { items.isNotEmpty() }
+    return target(path, items.any { it.holdsUnittest }).takeIf { items.isNotEmpty() }
 }
 
 private const val BY_EXTENSION = "by"

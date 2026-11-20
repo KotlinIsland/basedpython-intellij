@@ -8,6 +8,7 @@ import com.intellij.execution.testframework.sm.runner.SMTestProxy
 import com.intellij.openapi.util.Disposer
 import com.intellij.testFramework.PlatformTestUtil
 import com.intellij.testFramework.junit5.fixture.TestFixtures
+import dev.basedpython.pycharm.run.test.ByDjangoTests
 import dev.basedpython.pycharm.run.test.ByRerunTargets
 import dev.basedpython.pycharm.run.test.ByTestConfiguration
 import dev.basedpython.pycharm.run.test.ByTestConfigurationType
@@ -62,7 +63,7 @@ class ByDjangoTestOutputTest {
         val root = SMTestProxy.SMRootTestProxy()
         root.setTestConsoleProperties(properties)
         val processor = GeneralIdBasedToSMTRunnerEventsConvertor(project, root, FRAMEWORK)
-        val converter = ByDjangoTestEventsConverter(FRAMEWORK, properties, "")
+        val converter = ByDjangoTestEventsConverter(FRAMEWORK, properties, { ByDjangoTests.moduleFile(it, "") })
         Disposer.register(fixture.testRootDisposable, converter)
         Disposer.register(fixture.testRootDisposable, processor)
         converter.setProcessor(processor)

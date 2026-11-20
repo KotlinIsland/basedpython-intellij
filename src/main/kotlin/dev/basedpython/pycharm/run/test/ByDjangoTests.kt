@@ -16,24 +16,30 @@ internal object ByDjangoTests {
 
     /**
      * The label of [nodeId], whose path is relative to [base] — `""`, or the directory `manage.py` is in
-     * with a trailing `/` — or null when the path is not a `.py` under it: such a module cannot be
-     * named to the runner.
+     * with a trailing `/` — or null when the path is not a `.py` or a `.by` under it: such a module
+     * cannot be named to the runner. A `.by` is a run in place's, which imports it under the same
+     * dotted name.
      */
     fun label(nodeId: String, base: String): String? {
         val parts = nodeId.split("::")
         val path = parts.first()
-        if (!path.startsWith(base) || !path.endsWith(PY)) return null
-        val module = path.removePrefix(base).removeSuffix(PY).removeSuffix(INIT).trim('/')
+        val suffix = listOf(PY, BY).firstOrNull { path.endsWith(it) }
+        if (!path.startsWith(base) || suffix == null) return null
+        val module = path.removePrefix(base).removeSuffix(suffix).removeSuffix(INIT).trim('/')
         if (module.isEmpty() || module.split('/').any { !it.isIdentifier() }) return null
         return (listOf(module.replace('/', '.')) + parts.drop(1)).joinToString(".")
     }
 
-    /** The path a node id names the file of [module] by, relative to the same [base] as [label]'s. */
-    fun moduleFile(module: String, base: String): String = base + module.replace('.', '/') + PY
+    /**
+     * The path a node id names the file of [module] by, relative to the same [base] as [label]'s, with
+     * [extension]: `.py` in a staged tree and for a plain run, and in place whichever the project holds.
+     */
+    fun moduleFile(module: String, base: String, extension: String = PY): String = base + module.replace('.', '/') + extension
 
     private fun String.isIdentifier(): Boolean =
         isNotEmpty() && (first().isLetter() || first() == '_') && all { it.isLetterOrDigit() || it == '_' }
 
     private const val PY = ".py"
+    const val BY = ".by"
     private const val INIT = "/__init__"
 }

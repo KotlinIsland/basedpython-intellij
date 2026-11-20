@@ -208,4 +208,16 @@ class ByUnittestOutputParserTest {
         assertEquals(null, ByDjangoTests.label("other/polls/tests.py", "site/"))
         assertEquals(null, ByDjangoTests.label("my-app/tests.py", ""))
     }
+
+    /**
+     * A run in place names a `.by` test module as the project holds it, and django's runner imports it
+     * under the same dotted name, so it is labelled as its `.py` would be; a node id the run reports
+     * for a module names the `.by` when that is the file the project holds.
+     */
+    @Test
+    fun `a by of a run in place is labelled as its py would be`() {
+        assertEquals("polls.tests.QuestionTests.test_create", ByDjangoTests.label("site/polls/tests.by::QuestionTests::test_create", "site/"))
+        assertEquals("polls", ByDjangoTests.label("site/polls/__init__.by", "site/"))
+        assertEquals("site/polls/tests.by", ByDjangoTests.moduleFile("polls.tests", "site/", ByDjangoTests.BY))
+    }
 }

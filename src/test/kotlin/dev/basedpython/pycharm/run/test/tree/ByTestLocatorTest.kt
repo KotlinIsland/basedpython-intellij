@@ -62,8 +62,8 @@ class ByTestLocatorTest {
             )
         }
 
-    private fun locate(nodeId: String): Pair<PsiFile, Int>? {
-        val location = ByTestLocator.getLocation(
+    private fun locate(nodeId: String, projectPaths: Boolean = false): Pair<PsiFile, Int>? {
+        val location = ByTestLocator(projectPaths).getLocation(
             ByTestLocator.PROTOCOL,
             nodeId,
             project,
@@ -95,6 +95,35 @@ class ByTestLocatorTest {
         val (found, offset) = checkNotNull(locate("tests/test_srclayout.py::test_top[1-2]"))
         assertEquals(file.virtualFile, found.virtualFile)
         assertEquals(source.lastIndexOf("test_top"), offset)
+    }
+
+    /**
+     * `by run --in-place pytest` names a test by the `.by` the project holds — whatever its layout, a
+     * `src/tests/test_inplace.by` is `src/tests/test_inplace.by` — which is the file itself.
+     */
+    @Test
+    fun `a test of a run in place is found where its node id says`() = onEdt {
+        val file = addStagedTestFile("src/tests/test_inplace.by", "tests/test_inplace.py")
+        val (found, offset) = checkNotNull(locate("src/tests/test_inplace.by::test_top[1-2]", projectPaths = true))
+        assertEquals(file.virtualFile, found.virtualFile)
+        assertEquals(source.lastIndexOf("test_top"), offset)
+    }
+
+    /** A staged tree holds no `.by`, so even a locator that looks there first finds one in the project. */
+    @Test
+    fun `a by node id names the project's file whichever run reported it`() = onEdt {
+        val file = addStagedTestFile("tests/test_either.by", "tests/test_either.py")
+        assertEquals(file.virtualFile, checkNotNull(locate("tests/test_either.by::TestGroup::test_in_class")).first.virtualFile)
+    }
+
+    /** The node view's in-place nodes open the file they name, `.by` and `.py` alike. */
+    @Test
+    fun `the node view opens a node collected in place`() = onEdt {
+        val file = addStagedTestFile("src/tests/test_node.by", "tests/test_node.py")
+        assertTrue(ByTestNodeActions.navigate(project, "src/tests/test_node.by::test_top", ByTestSource.IN_PLACE))
+        val editor = checkNotNull(FileEditorManager.getInstance(project).selectedTextEditor)
+        assertEquals(file.virtualFile, editor.virtualFile)
+        assertEquals(source.lastIndexOf("test_top"), editor.caretModel.offset)
     }
 
     @Test

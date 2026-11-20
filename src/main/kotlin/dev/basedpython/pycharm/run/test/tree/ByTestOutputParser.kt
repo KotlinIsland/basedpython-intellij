@@ -108,12 +108,13 @@ class ByTestOutputParser(
     /**
      * The `by_test://` URL for a node id, already split on `::`.
      *
-     * Emitted exactly as pytest reported it. The node id names the *transpiled* tree, whose layout
-     * follows the module tree rather than the project's directories; mapping it back to a source is
-     * [ByTestLocator]'s job, from what `by` says that layout is.
+     * Emitted exactly as pytest reported it. The node id names the project's `.by` in a run in place,
+     * and in a staged run the *transpiled* tree, whose layout follows the module tree rather than the
+     * project's directories; mapping it back to a source is [ByTestLocator]'s job, from what `by` says
+     * that layout is.
      */
     private fun locationHint(parts: List<String>): String? {
-        if (parts.isEmpty() || !parts[0].endsWith(".py", ignoreCase = true)) return null
+        if (parts.isEmpty() || !ByTestLocations.namesTestFile(parts[0])) return null
         return ByTestLocator.PROTOCOL + "://" + parts.joinToString("::")
     }
 

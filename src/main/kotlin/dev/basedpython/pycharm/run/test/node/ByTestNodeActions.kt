@@ -25,10 +25,11 @@ internal object ByTestNodeActions {
     /**
      * Runs everything, which takes one launch per kind of test the tree holds.
      *
-     * The two halves are two different commands — `by run pytest` cannot see a `.py` test and plain
-     * pytest is not given the transpiled tree — so "run all" in a project with both is genuinely two
-     * runs, and pretending otherwise would silently skip half the suite. A project with one kind
-     * gets one run, which is every project until it isn't.
+     * A tree collected in place is one kind, every test of the project, and one run. A staged
+     * collection's two halves are two different commands — `by run pytest` of a staged tree cannot
+     * see a `.py` test and plain pytest is not given the transpiled tree — so "run all" in a project
+     * with both is genuinely two runs, and pretending otherwise would silently skip half the suite. A
+     * project with one kind gets one run, which is every project until it isn't.
      */
     fun runAll(project: Project, executor: Executor, sources: Set<ByTestSource>) {
         val kinds = sources.ifEmpty { setOf(ByTestSource.TRANSPILED) }
@@ -48,8 +49,9 @@ internal object ByTestNodeActions {
         executor: Executor,
         source: ByTestSource = ByTestSource.TRANSPILED,
     ) {
-        // Either kind of target is already what its pytest run takes: a transpiled one names the file
-        // where `by run` stages it, and one plain pytest collected names the file in the project.
+        // Every kind of target is already what its pytest run takes: a transpiled one names the file
+        // where `by run` stages it, and one collected in place or by plain pytest names the file in
+        // the project.
         val plain = source == ByTestSource.PYTHON
         val paths = target.orEmpty()
         val runner = runnerFor(project, target, source)
@@ -83,7 +85,7 @@ internal object ByTestNodeActions {
     private fun runnerFor(project: Project, target: String?, source: ByTestSource): ByTestRunner {
         if (target.isNullOrBlank()) return ByTestRunners.forProject(project)
         val location = ByTestLocations.parse(target) ?: return ByTestRunners.forProject(project)
-        val place = ByTestSources.locate(project, target, transpiled = source == ByTestSource.TRANSPILED)
+        val place = ByTestSources.locate(project, target, staged = source == ByTestSource.TRANSPILED)
             ?: return ByTestRunners.forProject(project)
         val model = ByProgramModel.getInstance(project)
         val items = model.projectTests()?.byFile?.get(place.file).orEmpty()
@@ -93,7 +95,7 @@ internal object ByTestNodeActions {
 
     /**
      * Opens the declaration [target] was collected from — in the `.by` `by run` staged it from, or the
-     * `.py` itself — and reports whether it could.
+     * file it names in the project — and reports whether it could.
      *
      * The same resolution the test tree of a *run* navigates with ([ByTestSources.locate]), so both
      * views land on the same name for the same node id.
@@ -103,7 +105,7 @@ internal object ByTestNodeActions {
         target: String?,
         source: ByTestSource = ByTestSource.TRANSPILED,
     ): Boolean {
-        val place = target?.let { ByTestSources.locate(project, it, transpiled = source == ByTestSource.TRANSPILED) }
+        val place = target?.let { ByTestSources.locate(project, it, staged = source == ByTestSource.TRANSPILED) }
             ?: return false
         OpenFileDescriptor(project, place.file, place.offset).navigate(true)
         return true

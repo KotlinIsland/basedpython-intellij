@@ -18,11 +18,42 @@ class ByPytestCollectTest {
 
     @Test
     fun `the command is by run --in-build pytest --collect-only -q`() {
-        assertEquals(listOf("--in-build", "pytest", "--collect-only", "-q"), ByPytestCollect.arguments())
+        assertEquals(listOf("--in-build", "pytest", "--collect-only", "-q"), ByPytestCollect.arguments(inPlace = false))
         assertEquals(
             listOf("run", "--in-build", "pytest", "--collect-only", "-q"),
-            byArguments("run", "--min-version", "", ByPytestCollect.arguments(), ""),
+            byArguments("run", "--min-version", "", ByPytestCollect.arguments(inPlace = false), ""),
         )
+    }
+
+    @Test
+    fun `in place the command is by run --in-place pytest --collect-only -q`() {
+        assertEquals(
+            listOf("run", "--in-place", "pytest", "--collect-only", "-q"),
+            byArguments("run", "--min-version", "", ByPytestCollect.arguments(inPlace = true), ""),
+        )
+    }
+
+    /**
+     * Captured from `by` 8d9c9e1cf (`by run --in-place pytest --collect-only -q`, pytest 9.2.0) on a
+     * project with `tests/test_calc.by`: the `.by` named as the project holds it, where the same run
+     * staged names `tests/test_calc.py`.
+     */
+    @Test
+    fun `in place a node id names the project's own file, a by among them`() {
+        val stdout = """
+            tests/test_calc.by::test_add
+            tests/test_calc.by::test_square_fails
+            tests/test_calc.by::test_add_default
+
+            3 tests collected in 0.01s
+        """.trimIndent()
+        val collection = ByPytestCollect.parse(stdout, "", 0, ByTestSource.IN_PLACE)
+        assertEquals(
+            listOf("tests/test_calc.by::test_add", "tests/test_calc.by::test_square_fails", "tests/test_calc.by::test_add_default"),
+            collection.nodes.map { it.nodeId },
+        )
+        assertTrue(collection.nodes.all { it.source == ByTestSource.IN_PLACE })
+        assertTrue(collection.errors.isEmpty())
     }
 
     @Test

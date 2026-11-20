@@ -19,6 +19,8 @@ import dev.basedpython.pycharm.run.model.walk
  */
 internal object ByTestSources {
 
+    private const val BY_EXTENSION = ".by"
+
     /** A file, and the offset of a test's name in it — `0` for the file itself. */
     data class Place(val file: VirtualFile, val offset: Int)
 
@@ -26,19 +28,23 @@ internal object ByTestSources {
      * Where [nodeId] was declared, or null when it names no file this project holds.
      *
      * The file is the one `by` says `by run` stages at the node id's path
-     * ([ByProgramModel.stagedFile]) when [transpiled] allows it, and otherwise the `.py` plain pytest
-     * collected at that path in the project. The place in it is the name `by/testItems` gave the test
-     * whose names the node id carries: the checker knows which of two `def test_x` pytest collects, a
-     * search of the text does not. A test `by` has not described is the file itself.
+     * ([ByProgramModel.stagedFile]) when [staged] allows it, and otherwise the file at that path in
+     * the project — what plain pytest and `by run --in-place pytest` collect, `.by` and `.py` alike. A
+     * node id naming a `.by` is always the project's: a staged tree holds the python of each `.by`
+     * and no `.by` at all. The place in it is the name `by/testItems` gave the test whose names the
+     * node id carries: the checker knows which of two `def test_x` pytest collects, a search of the
+     * text does not. A test `by` has not described is the file itself.
      *
-     * @param transpiled true for a node id from `by run pytest`, false for one from plain pytest, null
-     *   when the caller cannot tell — a staged file is then looked for first
+     * @param staged true for a node id from a `by run pytest` of a staged tree, false for one that
+     *   names the project's files — plain pytest, or `by run` in place — and null when the caller
+     *   cannot tell, when a staged file is looked for first
      */
-    fun locate(project: Project, nodeId: String, transpiled: Boolean?): Place? {
+    fun locate(project: Project, nodeId: String, staged: Boolean?): Place? {
         val location = ByTestLocations.parse(nodeId) ?: return null
         val model = ByProgramModel.getInstance(project)
-        val file = (if (transpiled != false) model.stagedFile(location.file) else null)
-            ?: (if (transpiled != true) findSourceFile(project, location.file) else null)
+        val inTree = staged != false && !location.file.endsWith(BY_EXTENSION, ignoreCase = true)
+        val file = (if (inTree) model.stagedFile(location.file) else null)
+            ?: (if (staged != true || !inTree) findSourceFile(project, location.file) else null)
             ?: return null
         if (location.symbols.isEmpty()) return Place(file, 0)
         // Waits for the file's current answer off the EDT; on it, an answer for an older revision is

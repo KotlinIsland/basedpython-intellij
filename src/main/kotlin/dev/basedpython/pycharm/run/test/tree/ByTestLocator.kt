@@ -24,12 +24,20 @@ import java.nio.file.Path
  * Every failure degrades to "not navigable" rather than throwing: a node the IDE cannot open is a
  * missing convenience, an exception during tree building is a broken run.
  */
-object ByTestLocator : SMTestLocator {
+class ByTestLocator(
+    /**
+     * Whether the run's node ids name the project's own files — pytest run in the project, by
+     * `by run --in-place` or plainly — rather than files of the tree `by run` stages.
+     */
+    private val projectPaths: Boolean,
+) : SMTestLocator {
 
-    const val PROTOCOL: String = "by_test"
+    companion object {
+        const val PROTOCOL: String = "by_test"
 
-    /** The protocol of the locations `by`'s test reporter writes, `file://<path>:<line>`. */
-    private const val FILE_PROTOCOL: String = "file"
+        /** The protocol of the locations `by`'s test reporter writes, `file://<path>:<line>`. */
+        private const val FILE_PROTOCOL: String = "file"
+    }
 
     override fun getLocation(
         protocol: String,
@@ -39,8 +47,9 @@ object ByTestLocator : SMTestLocator {
     ): List<Location<*>> {
         if (protocol == FILE_PROTOCOL) return FileUrlProvider.INSTANCE.getLocation(protocol, path, project, scope)
         if (protocol != PROTOCOL) return emptyList()
-        // The URL does not say which kind of run reported it, so a staged file is looked for first.
-        val place = ByTestSources.locate(project, path, transpiled = null) ?: return emptyList()
+        // The URL does not say which kind of run reported it; the run does. One of a staged tree
+        // looks for a staged file first, and the project's file after it, as it always has.
+        val place = ByTestSources.locate(project, path, staged = if (projectPaths) false else null) ?: return emptyList()
         val psiFile = PsiManager.getInstance(project).findFile(place.file) ?: return emptyList()
         val element: PsiElement = psiFile.findElementAt(place.offset)?.takeIf { place.offset > 0 } ?: psiFile
         return listOf(PsiLocation.fromPsiElement(element))
@@ -54,7 +63,11 @@ object ByTestLocator : SMTestLocator {
  * outside the project, which was never uploaded, is not navigable. A `by_test://` URL carries a node
  * id, relative to the tree pytest ran in, and is resolved as on this machine.
  */
-class ByTargetTestLocator(private val fromTarget: (String) -> Path?) : SMTestLocator {
+class ByTargetTestLocator(
+    /** What resolves a node id, which names a path relative to where pytest ran rather than the target's. */
+    private val nodeIds: ByTestLocator,
+    private val fromTarget: (String) -> Path?,
+) : SMTestLocator {
 
     override fun getLocation(
         protocol: String,
@@ -62,7 +75,7 @@ class ByTargetTestLocator(private val fromTarget: (String) -> Path?) : SMTestLoc
         project: Project,
         scope: GlobalSearchScope,
     ): List<Location<*>> {
-        if (protocol != FILE_PROTOCOL) return ByTestLocator.getLocation(protocol, path, project, scope)
+        if (protocol != FILE_PROTOCOL) return nodeIds.getLocation(protocol, path, project, scope)
         val (file, position) = splitPosition(path)
         val local = fromTarget(file) ?: return emptyList()
         return FileUrlProvider.INSTANCE.getLocation(protocol, FileUtil.toSystemIndependentName(local.toString()) + position, project, scope)

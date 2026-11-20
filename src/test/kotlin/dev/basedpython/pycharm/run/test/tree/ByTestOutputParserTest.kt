@@ -304,4 +304,15 @@ class ByTestOutputParserTest {
             events.filterIsInstance<ByTestEvent.SuiteFinished>(),
         )
     }
+
+    /** A run in place reports the `.by` itself, which the tree's nodes link to as they do a `.py`. */
+    @Test
+    fun `a by node id of a run in place is navigable`() {
+        val events = ByTestOutputParser().parseAll("tests/test_calc.by::test_add PASSED [ 50%]")
+        assertEquals(
+            ByTestEvent.TestSuiteStarted("tests/test_calc.by", "by_test://tests/test_calc.by"),
+            events.first(),
+        )
+        assertTrue(events.contains(ByTestEvent.TestStarted("test_add", "by_test://tests/test_calc.by::test_add")))
+    }
 }

@@ -3,8 +3,13 @@ package dev.basedpython.pycharm.run.test
 import dev.basedpython.pycharm.run.ByCommandLineState
 import dev.basedpython.pycharm.run.ByCommonOptions
 import dev.basedpython.pycharm.run.ByTargetAwareConfiguration
+import dev.basedpython.pycharm.run.byRunsInPlace
+import dev.basedpython.pycharm.lsp.byBlocking
+import dev.basedpython.pycharm.lsp.build.ByBuildOutputs
+import dev.basedpython.pycharm.run.model.stagedPath
 import dev.basedpython.pycharm.run.ergonomics.ByConsoleFilter
 import dev.basedpython.pycharm.run.test.tree.ByTargetTestLocator
+import dev.basedpython.pycharm.run.test.tree.ByTestSources
 import dev.basedpython.pycharm.util.BasedPythonBundle
 import com.intellij.execution.CantRunException
 import com.intellij.openapi.application.ApplicationManager
@@ -94,15 +99,19 @@ class ByTestConfiguration(project: Project, factory: ConfigurationFactory, name:
             val arguments = listOf("-m", ByPytest.MODULE, ByPytest.VERBOSE) + ParametersListUtil.parse(opts.paths)
             return PlainPythonTestCommandLineState(project, opts, environment, arguments) { handler, exec ->
                 SMTestRunnerConnectionUtil.createAndAttachConsole(
-                    FRAMEWORK_NAME, handler, testConsoleProperties(config, exec, fromTarget = null),
+                    FRAMEWORK_NAME, handler, testConsoleProperties(config, exec, fromTarget = null, projectPaths = true),
                 )
             }
         }
+        val inPlace = byRunsInPlace(project, byFlags = "", onTarget = targetName != null)
+        val paths = if (inPlace) opts.paths else stagedPaths(opts)
         return object : ByCommandLineState(project, opts, environment) {
             // `by run pytest`, not `by test` — see [ByPytest].
             override val subcommand = "run"
 
-            override fun buildSubcommandArgs(): List<String> = ByPytest.arguments(opts.paths)
+            override val inPlace: Boolean = inPlace
+
+            override fun buildSubcommandArgs(): List<String> = ByPytest.arguments(paths, inPlace)
 
             override val runnerEnvironment = mapOf(ByPytest.REPORTER_VARIABLE to ByPytest.REPORTER_TEAMCITY)
 
@@ -129,7 +138,7 @@ class ByTestConfiguration(project: Project, factory: ConfigurationFactory, name:
                 var result: ExecutionResult? = null
                 ApplicationManager.getApplication().invokeAndWait {
                     val console = SMTestRunnerConnectionUtil.createAndAttachConsole(
-                        FRAMEWORK_NAME, handler, testConsoleProperties(config, executor, fromTarget),
+                        FRAMEWORK_NAME, handler, testConsoleProperties(config, executor, fromTarget, projectPaths = inPlace),
                     )
                     // built here rather than by the state, so the filter linking the target's paths,
                     // which the state adds to a console of its own, is added here
@@ -155,11 +164,20 @@ class ByTestConfiguration(project: Project, factory: ConfigurationFactory, name:
         val config = this
         val manage = ByDjangoManage.find(project) ?: throw CantRunException(BasedPythonBundle.message("django.tests.noManage"))
         val plain = options.plainPytest
-        // node ids a plain run names are relative to the project, `by run`'s to the tree it stages
-        val base = if (plain) projectRelative(manage.directory) else ""
-        val paths = ParametersListUtil.parse(options.paths)
+        val inPlace = !plain && byRunsInPlace(project, byFlags = "", onTarget = targetName != null)
+        // a run's targets name the project's files; a `by run` that stages the program names them
+        // where the tree holds them, the tree's root merging the module roots
+        val projectPaths = plain || inPlace
+        val base = if (projectPaths) projectRelative(manage.directory) else ""
+        val paths = ParametersListUtil.parse(if (projectPaths) options.paths else stagedPaths(options))
         val labels = paths.map { path ->
             ByDjangoTests.label(path, base) ?: throw CantRunException(BasedPythonBundle.message("django.tests.noLabel", path, manage.directory))
+        }
+        // a module unittest names is the file the project holds for it, a `.by` or a `.py`; in a
+        // staged tree, the python every module is there
+        val moduleFile: (String) -> String = { module ->
+            val by = ByDjangoTests.moduleFile(module, base, ByDjangoTests.BY)
+            if (projectPaths && ByTestSources.findSourceFile(project, by) != null) by else ByDjangoTests.moduleFile(module, base)
         }
         val arguments = ByDjangoTests.ARGUMENTS + labels
         if (plain) {
@@ -167,7 +185,7 @@ class ByTestConfiguration(project: Project, factory: ConfigurationFactory, name:
             val manageFile = manage.directory.resolve(manage.module + ".py").toString()
             return PlainPythonTestCommandLineState(project, options, environment, listOf(manageFile) + arguments, manage.directory.toString()) { handler, exec ->
                 SMTestRunnerConnectionUtil.createAndAttachConsole(
-                    DJANGO_FRAMEWORK_NAME, handler, djangoConsoleProperties(config, exec, null, base, labels),
+                    DJANGO_FRAMEWORK_NAME, handler, djangoConsoleProperties(config, exec, null, moduleFile, labels, projectPaths = true),
                 )
             }
         }
@@ -177,6 +195,8 @@ class ByTestConfiguration(project: Project, factory: ConfigurationFactory, name:
         }
         return object : ByCommandLineState(project, opts, environment) {
             override val subcommand = "run"
+
+            override val inPlace: Boolean = inPlace
 
             override fun buildSubcommandArgs(): List<String> = listOf(manage.module) + arguments
 
@@ -191,7 +211,7 @@ class ByTestConfiguration(project: Project, factory: ConfigurationFactory, name:
                 var result: ExecutionResult? = null
                 ApplicationManager.getApplication().invokeAndWait {
                     val console = SMTestRunnerConnectionUtil.createAndAttachConsole(
-                        DJANGO_FRAMEWORK_NAME, handler, djangoConsoleProperties(config, executor, fromTarget, base, labels),
+                        DJANGO_FRAMEWORK_NAME, handler, djangoConsoleProperties(config, executor, fromTarget, moduleFile, labels, projectPaths),
                     )
                     fromTarget?.let { console.addMessageFilter(ByConsoleFilter(project, it)) }
                     result = DefaultExecutionResult(console, handler, *createActions(console, handler, executor))
@@ -212,15 +232,16 @@ class ByTestConfiguration(project: Project, factory: ConfigurationFactory, name:
 
     /**
      * The console of a Django run: a tree built by node id, since a failure is only known once every
-     * test has run ([ByUnittestOutputParser]); otherwise as a pytest run's. [base] is where `manage.py`
-     * is, as the node ids of the run are written.
+     * test has run ([ByUnittestOutputParser]); otherwise as a pytest run's. [moduleFile] is the path a
+     * node id of the run names a module's file by, and [projectPaths] says it is the project's.
      */
     private fun djangoConsoleProperties(
         config: ByTestConfiguration,
         executor: Executor,
         fromTarget: ((String) -> Path?)?,
-        base: String,
+        moduleFile: (String) -> String,
         labels: List<String>,
+        projectPaths: Boolean,
     ): SMTRunnerConsoleProperties =
         object : SMTRunnerConsoleProperties(config, DJANGO_FRAMEWORK_NAME, executor), SMCustomMessagesParsing {
             init {
@@ -231,22 +252,52 @@ class ByTestConfiguration(project: Project, factory: ConfigurationFactory, name:
                 testFrameworkName: String,
                 consoleProperties: TestConsoleProperties,
             ): OutputToGeneralTestEventsConverter =
-                ByDjangoTestEventsConverter(testFrameworkName, consoleProperties, base, labels)
+                ByDjangoTestEventsConverter(testFrameworkName, consoleProperties, moduleFile, labels)
 
-            override fun getTestLocator(): SMTestLocator = fromTarget?.let(::ByTargetTestLocator) ?: ByTestLocator
+            override fun getTestLocator(): SMTestLocator {
+                val locator = ByTestLocator(projectPaths)
+                return fromTarget?.let { ByTargetTestLocator(locator, it) } ?: locator
+            }
 
             override fun createRerunFailedTestsAction(consoleView: ConsoleView): AbstractRerunFailedTestsAction =
                 ByRerunFailedTestsAction(consoleView, this)
         }
 
     /**
+     * [ByTestOptions.paths] as pytest is handed them in the tree `by run` stages, for a run that is
+     * not in place: each `.by` target named where `by` says the tree holds it ([ByTestTargets.staged]),
+     * asked of the project's `by` from whichever thread the run is started on.
+     *
+     * @throws CantRunException when `by` does not say where a `.by` target is staged — no `by` is
+     *   running, or it does not place the file — since a target pytest cannot find runs nothing.
+     */
+    private fun stagedPaths(opts: ByTestOptions): String {
+        val sources = ByTestTargets.sources(opts.paths)
+        if (sources.isEmpty()) return opts.paths
+        val staged = byBlocking(project, BasedPythonBundle.message("run.askingFlags")) {
+            val outputs = ByBuildOutputs.getInstance(project)
+            val where = sources.associateWith { source ->
+                ByTestSources.findSourceFile(project, source)?.let { outputs.of(it)?.stagedPath }
+            }
+            ByTestTargets.staged(opts.paths) { where[it] }
+        }
+        return when (staged) {
+            is ByTestTargets.Staged.Paths -> staged.paths
+            is ByTestTargets.Staged.Unknown -> throw CantRunException(BasedPythonBundle.message("test.error.stagedUnknown", staged.source))
+        }
+    }
+
+    /**
      * Wires the `by`-specific output parser and source locator into the SM test runner; [fromTarget]
-     * translates the paths a run on a run target reports, null for a run on this machine.
+     * translates the paths a run on a run target reports, null for a run on this machine, and
+     * [projectPaths] says the node ids the run reports name the project's own files, as those of
+     * plain pytest and of `by run --in-place` do.
      */
     private fun testConsoleProperties(
         config: ByTestConfiguration,
         executor: Executor,
         fromTarget: ((String) -> Path?)?,
+        projectPaths: Boolean,
     ): SMTRunnerConsoleProperties =
         object : SMTRunnerConsoleProperties(config, FRAMEWORK_NAME, executor), SMCustomMessagesParsing {
             override fun createTestEventsConverter(
@@ -255,7 +306,10 @@ class ByTestConfiguration(project: Project, factory: ConfigurationFactory, name:
             ): OutputToGeneralTestEventsConverter =
                 ByTestEventsConverter(testFrameworkName, consoleProperties)
 
-            override fun getTestLocator(): SMTestLocator = fromTarget?.let(::ByTargetTestLocator) ?: ByTestLocator
+            override fun getTestLocator(): SMTestLocator {
+                val locator = ByTestLocator(projectPaths)
+                return fromTarget?.let { ByTargetTestLocator(locator, it) } ?: locator
+            }
 
             override fun createRerunFailedTestsAction(consoleView: ConsoleView): AbstractRerunFailedTestsAction =
                 ByRerunFailedTestsAction(consoleView, this)

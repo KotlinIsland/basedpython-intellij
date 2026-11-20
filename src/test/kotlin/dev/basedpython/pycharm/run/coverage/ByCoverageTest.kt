@@ -56,7 +56,7 @@ class ByCoverageTest {
             subcommand = "run",
             pythonVersionFlag = "--min-version",
             pythonVersion = "",
-            subcommandArgs = ByPytest.arguments("tests/test_calc.py"),
+            subcommandArgs = ByPytest.arguments("tests/test_calc.py", inPlace = false),
             extraArgs = "-x",
             infrastructureArgs = listOf(ByCoverageProgramRunner.COVERAGE_FLAG, "/tmp/report.lcov"),
             extraArgsForProgram = true,

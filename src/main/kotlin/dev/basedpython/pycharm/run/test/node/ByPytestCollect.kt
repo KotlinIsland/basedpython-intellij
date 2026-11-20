@@ -1,31 +1,37 @@
 package dev.basedpython.pycharm.run.test.node
 
+import dev.basedpython.pycharm.lsp.ByCommandFlags
 import dev.basedpython.pycharm.run.test.ByPytest
 
 /**
  * Something that stopped a test from being collected.
  *
- * @param target the pytest target it happened in — a path naming the *transpiled* `.py`, as pytest
- *   reports it — or null when nothing narrower than the run itself is to blame (a `by` diagnostic,
- *   a missing binary).
+ * @param target the pytest target it happened in, as pytest reports it — the project's `.by` or `.py`
+ *   in a run in place, the *transpiled* `.py` in a staged one — or null when nothing narrower than
+ *   the run itself is to blame (a `by` diagnostic, a missing binary).
  */
 internal data class ByCollectionError(val target: String?, val message: String)
 
 /**
  * Which pytest run a node id came from, which is the difference between a path that stands for a
- * `.by` source and one that *is* the file on disk.
+ * `.by` source and one that *is* the file on disk, and how the node is run.
  *
- * Two runs are needed because `by run` transpiles only `.by` files into the tree pytest walks
- * (`by build`: "Transpile all .by files"), so a project whose tests live in `.py` files hands it an
- * empty tree — while plain `pytest` in the project collects them all. Until `by run` can be told to
- * include them, the view collects from both and combines.
+ * A `by` whose `by run` takes `--in-place` collects every test of the project in one run: pytest in
+ * the project's own directories, `.by` and `.py` test modules alike, each named as the project holds
+ * it ([IN_PLACE]). One whose `by run` stages the project needs two, because that tree holds the
+ * python of each `.by` and pytest walks it (`by build`: "Transpile all .by files") — a project whose
+ * tests live in `.py` files hands it nothing to collect, while plain `pytest` in the project collects
+ * them all — so the view collects from both and combines ([TRANSPILED], [PYTHON]).
  */
 internal enum class ByTestSource {
-    /** From `by run pytest`: the path names a transpiled `.py` standing for a `.by` source. */
+    /** From `by run pytest` of a staged tree: the path names a transpiled `.py` standing for a `.by` source. */
     TRANSPILED,
 
     /** From plain `pytest` in the project: the path names a real `.py` file. */
     PYTHON,
+
+    /** From `by run --in-place pytest`: the path names the project's own file, `.by` or `.py`. */
+    IN_PLACE,
 }
 
 /** One collected test, and where it was collected from. */
@@ -42,7 +48,8 @@ internal data class ByCollection(
 }
 
 /**
- * Reads the test tree out of `by run --in-build pytest --collect-only -q`.
+ * Reads the test tree out of `by run --in-place pytest --collect-only -q`, or of `by run --in-build
+ * pytest --collect-only -q` from a `by` whose `by run` stages the project.
  *
  * Quiet mode is what makes this parseable: plain `--collect-only` prints an indented
  * `<Module …>` / `<Class …>` / `<Function …>` listing whose shape varies with pytest's version and
@@ -80,13 +87,16 @@ internal object ByPytestCollect {
     const val QUIET: String = "-q"
 
     /**
-     * The arguments that follow `by run`.
+     * The arguments that follow `by run`, for a `by` whose `by run` runs [inPlace] or not.
      *
-     * [ByPytest.IN_BUILD] for the same reason a run needs it: collection walks the working directory,
-     * and without it that is the project, where every test is still a `.by` — measured, a bare
-     * `by run pytest --collect-only` collected 0 items in a src layout and a flat layout alike.
+     * In place, `--in-place`: collection walks the project, where `by`'s pytest plugin collects each
+     * `.by` test module. Otherwise [ByPytest.IN_BUILD], for the same reason a run needs it: collection
+     * walks the working directory, and without it that is the project, where every test is still a
+     * `.by` — measured, a bare `by run pytest --collect-only` collected 0 items in a src layout and a
+     * flat layout alike.
      */
-    fun arguments(): List<String> = listOf(ByPytest.IN_BUILD, ByPytest.MODULE, COLLECT_ONLY, QUIET)
+    fun arguments(inPlace: Boolean): List<String> =
+        listOf(if (inPlace) ByCommandFlags.IN_PLACE_FLAG else ByPytest.IN_BUILD, ByPytest.MODULE, COLLECT_ONLY, QUIET)
 
     /**
      * The arguments for the plain-pytest half, run as `python -m pytest` in the project itself.
@@ -99,14 +109,15 @@ internal object ByPytestCollect {
         listOf("-m", ByPytest.MODULE, COLLECT_ONLY, QUIET) + buildDirectories.map { "--ignore=$it" }
 
     /**
-     * A node id line: a path ending in `.py`, optionally followed by `::`-separated names.
+     * A node id line: a path ending in `.py`, or `.by` in a run in place, optionally followed by
+     * `::`-separated names.
      *
      * The path may not contain whitespace, but everything after `::` may — a parametrized case is
      * `test_add[1 - 2]` whenever the parameters render with spaces. Anchoring at both ends is what
      * keeps the lines of a failure report out: `_____ ERROR collecting tests/test_x.py _____` and
      * `tests/test_x.py:6: in <module>` both carry a `.py`, and neither is one of these.
      */
-    private val NODE_ID = Regex("""^(\S+\.py)(?:::(.+))?$""")
+    private val NODE_ID = Regex("""^(\S+\.(?:py|by))(?:::(.+))?$""")
 
     /** A short-summary error line: `ERROR tests/test_x.py - RuntimeError: boom`. */
     private val ERROR_LINE = Regex("""^ERROR\s+(\S+?)(?:\s+-\s+(.*))?$""")

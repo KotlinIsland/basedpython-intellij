@@ -19,17 +19,31 @@ import org.junit.jupiter.api.Test
  */
 class ByPytestTest {
 
+    /**
+     * In place pytest runs in the project, where `by`'s pytest plugin collects a `.by` itself, so a
+     * target names the `.by` and no `--in-build` comes before `pytest`. `--in-place` is the state's
+     * to add, as for every `by run` ([dev.basedpython.pycharm.run.ByCommandLineState.inPlace]).
+     */
+    @Test
+    fun `a run in place hands pytest the project's own files`() {
+        assertEquals(listOf("pytest", "-v"), ByPytest.arguments("", inPlace = true))
+        assertEquals(
+            listOf("pytest", "-v", "tests/test_calc.by::test_add", "tests/test_plain.py"),
+            ByPytest.arguments("tests/test_calc.by::test_add tests/test_plain.py", inPlace = true),
+        )
+    }
+
     @Test
     fun `no targets runs the whole project`() {
-        assertEquals(listOf("--in-build", "pytest", "-v"), ByPytest.arguments(""))
-        assertEquals(listOf("--in-build", "pytest", "-v"), ByPytest.arguments("   "))
+        assertEquals(listOf("--in-build", "pytest", "-v"), ByPytest.arguments("", inPlace = false))
+        assertEquals(listOf("--in-build", "pytest", "-v"), ByPytest.arguments("   ", inPlace = false))
     }
 
     @Test
     fun `a node id is passed on as it is`() {
         assertEquals(
             listOf("--in-build", "pytest", "-v", "tests/test_math.py::TestGroup::test_one"),
-            ByPytest.arguments("tests/test_math.py::TestGroup::test_one"),
+            ByPytest.arguments("tests/test_math.py::TestGroup::test_one", inPlace = false),
         )
     }
 
@@ -37,7 +51,7 @@ class ByPytestTest {
     fun `several targets are split on whitespace`() {
         assertEquals(
             listOf("--in-build", "pytest", "-v", "a/test_one.py", "b/test_two.py::test_x"),
-            ByPytest.arguments("a/test_one.py b/test_two.py::test_x"),
+            ByPytest.arguments("a/test_one.py b/test_two.py::test_x", inPlace = false),
         )
     }
 
@@ -45,13 +59,13 @@ class ByPytestTest {
     fun `a quoted target with a space stays one argument`() {
         assertEquals(
             listOf("--in-build", "pytest", "-v", "my tests/test_x.py"),
-            ByPytest.arguments(""""my tests/test_x.py""""),
+            ByPytest.arguments(""""my tests/test_x.py"""", inPlace = false),
         )
     }
 
     @Test
     fun `a directory target is left alone`() {
-        assertEquals(listOf("--in-build", "pytest", "-v", "tests"), ByPytest.arguments("tests"))
+        assertEquals(listOf("--in-build", "pytest", "-v", "tests"), ByPytest.arguments("tests", inPlace = false))
     }
 
     /**
@@ -60,7 +74,7 @@ class ByPytestTest {
      */
     @Test
     fun `--in-build comes before the module`() {
-        val args = ByPytest.arguments("tests/test_math.py")
+        val args = ByPytest.arguments("tests/test_math.py", inPlace = false)
         assertEquals(ByPytest.IN_BUILD, args.first())
         assertEquals(ByPytest.MODULE, args[1])
     }
@@ -73,7 +87,7 @@ class ByPytestTest {
             subcommand = "run",
             pythonVersionFlag = "--min-version",
             pythonVersion = "3.12",
-            subcommandArgs = ByPytest.arguments("tests/test_math.py::test_add"),
+            subcommandArgs = ByPytest.arguments("tests/test_math.py::test_add", inPlace = false),
             extraArgs = "",
         )
         assertEquals(
@@ -88,7 +102,7 @@ class ByPytestTest {
     @Test
     fun `extra args are forwarded to pytest after the targets`() {
         // The test configuration's extra args are pytest's, which it says with `extraArgsForProgram`.
-        val args = byArguments("run", "--min-version", "", ByPytest.arguments("tests"), "-k slow", extraArgsForProgram = true)
+        val args = byArguments("run", "--min-version", "", ByPytest.arguments("tests", inPlace = false), "-k slow", extraArgsForProgram = true)
         assertEquals(listOf("run", "--in-build", "pytest", "-v", "tests", "-k", "slow"), args)
     }
 }

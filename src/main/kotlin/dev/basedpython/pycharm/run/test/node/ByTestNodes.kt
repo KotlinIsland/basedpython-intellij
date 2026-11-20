@@ -33,7 +33,7 @@ internal enum class ByTestNodeKind {
  *   root (which is "everything") and for an error with no file
  * @param source which pytest run found it, which decides how [target] is read and how it is run:
  *   a [ByTestSource.TRANSPILED] path names a file in the tree `by run` stages, a
- *   [ByTestSource.PYTHON] one is the file itself
+ *   [ByTestSource.PYTHON] or [ByTestSource.IN_PLACE] one is the file itself
  * @param detail a grey (or red, for [ByTestNodeKind.ERROR]) suffix
  */
 internal data class ByTestNode(
@@ -110,7 +110,7 @@ internal object ByTestNodes {
             val isFile = index == segments.lastIndex
             current = current.child(
                 key = segment,
-                // A transpiled file is named as the `.by` the user edits; a `.py` collected in the
+                // A transpiled file is named as the `.by` the user edits; a file collected in the
                 // project already is the file they edit.
                 name = if (isFile && source == ByTestSource.TRANSPILED) sourceName(path) ?: segment else segment,
                 kind = if (isFile) ByTestNodeKind.FILE else ByTestNodeKind.DIRECTORY,

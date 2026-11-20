@@ -15,6 +15,7 @@ import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.platform.ide.progress.withBackgroundProgress
 import dev.basedpython.pycharm.actions.ByCli
 import dev.basedpython.pycharm.env.ByEnvironments
+import dev.basedpython.pycharm.lsp.ByCommandFlags
 import dev.basedpython.pycharm.lsp.build.ByBuildOutputs
 import dev.basedpython.pycharm.run.model.ByProgramModel
 import dev.basedpython.pycharm.run.model.ByProjectTests
@@ -207,19 +208,31 @@ internal class ByTestNodeService(
         setState(State.Collected(buildTree(staticCollection(tests)), fromPytest = false))
     }
 
-    /** The server's answer, as the node ids pytest would report for it. */
-    private fun staticCollection(tests: ByProjectTests): ByCollection = ByCollection(
-        nodes = tests.byFile.flatMap { (file, items) ->
-            if (!file.isValid) return@flatMap emptyList()
-            val transpiled = file.extension == BY_EXTENSION
-            // A `.by` is collected where `by run` stages it, which is how every node id the tree and
-            // a run speak in names it; a `.py` is collected by plain pytest in the project, as itself.
-            val nodePath = (if (transpiled) model.stagedPath(file) else ByTestSources.relativePath(project, file))
-                ?: return@flatMap emptyList()
-            val source = if (transpiled) ByTestSource.TRANSPILED else ByTestSource.PYTHON
-            items.flatMap(::leaves).map { ByCollectedNode("$nodePath::${it.symbols.joinToString("::")}", source) }
-        },
-    )
+    /**
+     * The server's answer, as the node ids pytest would report for it: in place when the server that
+     * gave it says its `by run` takes `--in-place` ([ByCommandFlags.runsInPlace]), as [collect] would
+     * collect, so a node's target and the outcomes a run reports for it are spelled alike.
+     */
+    private fun staticCollection(tests: ByProjectTests): ByCollection {
+        val inPlace = ByCommandFlags.ofRunning(project).runsInPlace
+        return ByCollection(
+            nodes = tests.byFile.flatMap { (file, items) ->
+                if (!file.isValid) return@flatMap emptyList()
+                val transpiled = file.extension == BY_EXTENSION
+                // In place every test module is collected where the project holds it. Otherwise a
+                // `.by` is collected where `by run` stages it, which is how every node id the tree and
+                // a run speak in names it, and a `.py` by plain pytest in the project, as itself.
+                val nodePath = (if (transpiled && !inPlace) model.stagedPath(file) else ByTestSources.relativePath(project, file))
+                    ?: return@flatMap emptyList()
+                val source = when {
+                    inPlace -> ByTestSource.IN_PLACE
+                    transpiled -> ByTestSource.TRANSPILED
+                    else -> ByTestSource.PYTHON
+                }
+                items.flatMap(::leaves).map { ByCollectedNode("$nodePath::${it.symbols.joinToString("::")}", source) }
+            },
+        )
+    }
 
     private fun leaves(item: ByTestItem): List<ByTestItem> =
         if (item.isClass) item.children.flatMap(::leaves) else listOf(item)
@@ -261,16 +274,22 @@ internal class ByTestNodeService(
         return true
     }
 
-    /** One `by run --in-build pytest --collect-only -q`, and the plain-pytest half, as a [ByCollection]. */
+    /**
+     * One `by run --in-place pytest --collect-only -q`, which collects every test of the project, or
+     * from a `by` whose `by run` stages the project, `by run --in-build pytest --collect-only -q` and
+     * the plain-pytest half, as a [ByCollection].
+     */
     private suspend fun collect(): ByCollection {
         val cwd = project.basePath?.let { Paths.get(it) }
-        val arguments = ByPytestCollect.arguments()
+        val inPlace = ByCommandFlags.of(project, waitForNewStart = true).runsInPlace
+        val arguments = ByPytestCollect.arguments(inPlace)
+        val label = if (inPlace) IN_PLACE_LABEL else BY_RUN_LABEL
         val startedAtDisplay = LocalTime.now().format(STARTED_AT_FORMAT)
         val command = ByCli.commandLine(project, SUBCOMMAND, *arguments.toTypedArray(), cwd = cwd)
         if (command == null) {
             val message = BasedPythonBundle.message("testNodes.error.binaryMissing")
             lastRuns = listOf(ByCollectionRun(
-                label = BY_RUN_LABEL,
+                label = label,
                 commandLine = "by $SUBCOMMAND ${arguments.joinToString(" ")}",
                 workingDirectory = cwd?.toString(),
                 exitCode = -1,
@@ -283,14 +302,17 @@ internal class ByTestNodeService(
             return failure(message)
         }
 
-        val (output, run) = runRecorded(BY_RUN_LABEL, command, cwd, startedAtDisplay)
+        val (output, run) = runRecorded(label, command, cwd, startedAtDisplay)
         lastRuns = listOf(run)
         if (output == null) {
             return failure(BasedPythonBundle.message("testNodes.error.timeout", TIMEOUT.inWholeSeconds))
         }
 
-        val collection = ByPytestCollect.parse(output.stdout, output.stderr, output.exitCode) +
-            collectPythonTests(cwd)
+        val collection = if (inPlace) {
+            ByPytestCollect.parse(output.stdout, output.stderr, output.exitCode, ByTestSource.IN_PLACE)
+        } else {
+            ByPytestCollect.parse(output.stdout, output.stderr, output.exitCode) + collectPythonTests(cwd)
+        }
         if (collection.errors.isNotEmpty()) {
             // The tree only has room for one line per error; the whole report is worth keeping.
             BasedPythonLog.getInstance(project).warn(
@@ -420,8 +442,11 @@ internal class ByTestNodeService(
 
         private const val UNKNOWN_FAILURE = "collection failed"
 
-        /** How the two halves of a collection are named in *View Collection Output*. */
+        /** How the two halves of a staged collection are named in *View Collection Output*. */
         private const val BY_RUN_LABEL = "by run pytest (tests transpiled from .by)"
+
+        /** And the one collection in place. */
+        private const val IN_PLACE_LABEL = "by run --in-place pytest (every test, where the project holds it)"
         private const val PLAIN_PYTEST_LABEL = "plain pytest (tests already in .py)"
 
         /** Clock time in the output header; seconds are as precise as this needs to be. */
