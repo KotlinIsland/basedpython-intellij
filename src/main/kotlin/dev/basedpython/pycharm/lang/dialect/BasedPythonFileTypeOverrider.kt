@@ -5,6 +5,8 @@ import com.intellij.openapi.fileTypes.FileTypeManager
 import com.intellij.openapi.fileTypes.impl.FileTypeOverrider
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.project.ProjectLocator
+import com.intellij.openapi.project.ProjectManager
+import com.intellij.openapi.util.io.FileUtil
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.testFramework.LightVirtualFile
 import dev.basedpython.pycharm.lang.BasedPythonFileType
@@ -37,8 +39,7 @@ import dev.basedpython.pycharm.settings.BasedPythonSettings
  *     this overrider that has to stand back. Python source the plugin makes in memory itself says
  *     its type through [pyFileTypeIn].
  *
- * Resolving a `Project` from a `VirtualFile` here is best-effort via
- * [ProjectLocator.guessProjectForFile]; a null project means "don't override".
+ * Which project a file is decided by is [projectOf]'s answer, and no project means "don't override".
  */
 class BasedPythonFileTypeOverrider : FileTypeOverrider {
 
@@ -46,7 +47,7 @@ class BasedPythonFileTypeOverrider : FileTypeOverrider {
         // Cheap extension gate first — bail before touching project services.
         if (!isOverridableExtension(file.extension)) return null
         val decided = if (file is LightVirtualFile) file.originalFile ?: return null else file
-        val project = ProjectLocator.getInstance().guessProjectForFile(decided) ?: return null
+        val project = projectOf(decided) ?: return null
         return decideFor(project, decided.extension)
     }
 
@@ -70,6 +71,38 @@ class BasedPythonFileTypeOverrider : FileTypeOverrider {
             handling = BasedPythonSettings.getInstance(project).pyFileHandling,
             pythonLanguageAvailable = PyFileHandling.isPythonLanguageAvailable(),
         )
+
+        /**
+         * The open project [file] is decided by, found without taking a lock.
+         *
+         * Not [ProjectLocator.guessProjectForFile], which this used to be: with more than one
+         * project open it asks each project's file index whether the file is in its content, under a
+         * read lock, and a file's type is asked for while Swing paints — the Jupyter minimap asks
+         * whether an editor's file is a notebook from `MinimapPanel.paint`, where the platform
+         * forbids the lock, and reported *"Attempt to take read lock"* through this overrider.
+         *
+         * So the answer is the platform's where that is lock-free — the project a caller pinned
+         * for the file ([ProjectLocator.getPreferredProject]), or the only project open, which then
+         * decides every `.py` the IDE opens, its libraries' too — and otherwise the open project
+         * whose base directory holds the file, the deepest where they nest. The base directory is
+         * also what the project's basedpython-ness is read from ([BasedPythonProjectDetector]).
+         * What that gives up, with several projects open, is a `.py` under a content root outside
+         * its project's base directory, which the file index would have placed.
+         *
+         * No annotation says "takes no lock"; `withLocksForbidden` in the tests is what holds this
+         * and [getOverriddenFileType] to it.
+         */
+        internal fun projectOf(file: VirtualFile): Project? {
+            ProjectLocator.getPreferredProject(file)?.let { return it }
+            val open = ProjectManager.getInstanceIfCreated()?.openProjects.orEmpty().filterNot { it.isDisposed }
+            open.singleOrNull()?.let { return it }
+            val path = file.path
+            return open
+                .mapNotNull { project -> project.basePath?.let { project to it } }
+                .filter { (_, base) -> FileUtil.isAncestor(base, path, false) }
+                .maxByOrNull { (_, base) -> base.length }
+                ?.first
+        }
 
         /** True when [extension] is the one extension this overrider acts on. */
         fun isOverridableExtension(extension: String?): Boolean =

@@ -6,6 +6,7 @@ import com.intellij.psi.PsiDocumentManager
 import com.intellij.psi.TokenType
 import com.intellij.psi.tree.TokenSet
 import com.intellij.psi.util.PsiTreeUtil
+import com.intellij.util.concurrency.annotations.RequiresReadLock
 import dev.basedpython.pycharm.lang.BasedPythonTokenTypes
 
 /**
@@ -33,6 +34,7 @@ internal object ByBreakableLines {
         BasedPythonTokenTypes.STRING,
     )
 
+    @RequiresReadLock
     fun holdsCode(project: Project, document: Document, line: Int): Boolean {
         if (line < 0 || line >= document.lineCount) return false
         if (line > 0 && continuesOnto(document, line - 1)) return false

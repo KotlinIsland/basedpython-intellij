@@ -3,6 +3,7 @@ package dev.basedpython.pycharm.debug
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.util.concurrency.annotations.RequiresReadLock
 import com.intellij.xdebugger.breakpoints.XBreakpointProperties
 import com.intellij.xdebugger.breakpoints.XLineBreakpoint
 import com.intellij.xdebugger.breakpoints.XLineBreakpointType
@@ -64,7 +65,12 @@ class ByLineBreakpointType : XLineBreakpointType<ByBreakpointProperties>(
      * blank and comment lines included, and a breakpoint on a blank line inside a function was moved
      * by the debugger to the next line with code, which was the module-level `def` after it: the
      * breakpoint fired at import time, in `<module>`.
+     *
+     * Needs the read lock, as every platform type's does — it reads the document and the PSI — and
+     * the platform's own callers hold it. `XDebuggerUtil.canPutBreakpointAt` asserts nothing, so a
+     * caller on a pooled thread without it fails here, as it fails in Kotlin's and PyCharm's types.
      */
+    @RequiresReadLock
     override fun canPutAt(file: VirtualFile, line: Int, project: Project): Boolean {
         if (BasedPythonSources.isOwnedSource(file)) {
             val document = FileDocumentManager.getInstance().getDocument(file) ?: return false
