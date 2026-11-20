@@ -71,7 +71,7 @@ class ByBpdRecordTest {
                 "args" to listOf("app.main", "--verbose"),
                 // said in the launch, which cannot reach bpd after the program has started, so
                 // neither has to overtake the platform's own configuration requests
-                "understands" to listOf("bpd/moved", "bpd/recomposition"),
+                "understands" to listOf("bpd/moved", "bpd/restarting", "bpd/recomposition"),
                 "watchRecompositions" to true,
             ),
             ready.launchArguments(mapOf("stopOnEntry" to false), watchRecompositions = true),

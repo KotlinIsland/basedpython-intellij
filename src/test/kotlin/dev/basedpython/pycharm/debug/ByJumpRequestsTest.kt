@@ -38,7 +38,7 @@ class ByJumpRequestsTest {
         val said = java.util.Collections.synchronizedList(mutableListOf<String>())
         val received = withFakeAdapter(
             respond = respond,
-            handlers = { ByBpdEvents.register(this, bpdEvents(onMoved = requests::moved, onRecomposed = {})) },
+            handlers = { ByBpdEvents.register(this, bpdEvents(onMoved = requests::moved, onRestarting = {}, onRecomposed = {})) },
         ) { session, adapter ->
             requests.move(session.server, ThreadId(1), source, 7) { said += it }
             afterGoto(adapter, said)

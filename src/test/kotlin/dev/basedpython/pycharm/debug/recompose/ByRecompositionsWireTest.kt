@@ -123,7 +123,7 @@ class ByRecompositionsWireTest {
     @Test
     fun `the event bpd is told this reads is the one that reaches the reader`() {
         val arrived = CompletableDeferred<ByEvent>()
-        val events = bpdEvents(onMoved = {}, onRecomposed = { arrived.complete(it) })
+        val events = bpdEvents(onMoved = {}, onRestarting = {}, onRecomposed = { arrived.complete(it) })
         val event = withFakeAdapter(
             respond = bpd(),
             handlers = { ByBpdEvents.register(this, events) },

@@ -187,7 +187,7 @@ class ByJumpToCursorAction : DumbAwareAction() {
         val (editor, file) = caret(e) ?: return
         jumps.jump(file, editor.caretModel.logicalPosition.line) { message ->
             ApplicationManager.getApplication().invokeLater {
-                if (!editor.isDisposed) HintManager.getInstance().showErrorHint(editor, message)
+                if (!editor.isDisposed) HintManager.getInstance().showErrorHint(editor, ByBpdProse.html(message))
             }
         }
     }

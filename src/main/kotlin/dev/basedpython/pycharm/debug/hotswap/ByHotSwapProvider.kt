@@ -17,6 +17,7 @@ import com.intellij.xdebugger.hotswap.HotSwapResultListener
 import com.intellij.xdebugger.hotswap.HotSwapSession
 import com.intellij.xdebugger.hotswap.SourceFileChangesCollector
 import com.intellij.xdebugger.hotswap.SourceFileChangesListener
+import dev.basedpython.pycharm.debug.ByBpdProse
 import dev.basedpython.pycharm.debug.ByDapRequests
 import dev.basedpython.pycharm.debug.send
 import dev.basedpython.pycharm.debug.bpd.ByBpdRecord
@@ -357,7 +358,8 @@ internal class ByHotSwapProvider(
      * and this plugin only ever raises this one. See docs/internal-api.md.
      *
      * The reasons are bpd's sentences, as it answered them, and bpd puts nothing about a reload on
-     * the console — so they are said once, here.
+     * the console — so they are said once, here. The balloon reads its content as HTML, so each is
+     * rendered by [ByBpdProse] and they are separated by `<br>`, which a `\n` was not.
      */
     private fun tell(notReloaded: List<String>) {
         if (notReloaded.isEmpty()) return
@@ -365,7 +367,7 @@ internal class ByHotSwapProvider(
             .getNotificationGroup(NOTIFICATION_GROUP)
             .createNotification(
                 BasedPythonBundle.message("notification.hotswap.notReloaded.title"),
-                notReloaded.joinToString("\n"),
+                notReloaded.joinToString("<br>") { ByBpdProse.html(it) },
                 NotificationType.WARNING,
             )
         expireLastReport()

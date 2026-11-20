@@ -151,7 +151,7 @@ internal fun ByMoved.report(): String? = when {
         if (boundToNone.isNotEmpty()) {
             append(
                 "; ${boundToNone.joinToString(", ")} held nothing before the move and " +
-                    "hold `None` now, which cpython does to every unbound local of a frame it moves",
+                    "hold None now, which cpython does to every unbound local of a frame it moves",
             )
         }
     }

@@ -21,7 +21,7 @@ internal object ByBpdEvents {
      * way this can lose information: each name here has a reader in [bpdEvents], and
      * `ByRecompositionsWireTest` pins the pair.
      */
-    val UNDERSTOOD: List<String> = listOf(ByMoved.EVENT, ByRecompositions.EVENT)
+    val UNDERSTOOD: List<String> = listOf(ByMoved.EVENT, ByRestarting.EVENT, ByRecompositions.EVENT)
 
     /** Binds every one of [events] to the platform's client, which dispatches each by its name. */
     fun register(handlers: DapClientHandlersBuilder, events: List<ByBpdEvent>) {
@@ -46,9 +46,11 @@ internal object ByBpdEvents {
  */
 internal fun bpdEvents(
     onMoved: (ByMoved) -> Unit,
+    onRestarting: (ByRestarting) -> Unit,
     onRecomposed: (ByEvent) -> Unit,
 ): List<ByBpdEvent> = listOf(
     ByBpdEvent(ByMoved.EVENT) { ByMoved.parse(it)?.let(onMoved) },
+    ByBpdEvent(ByRestarting.EVENT) { ByRestarting.parse(it)?.let(onRestarting) },
     ByBpdEvent(ByRecompositions.EVENT) { ByRecompositions.parseEvent(it)?.let(onRecomposed) },
 )
 

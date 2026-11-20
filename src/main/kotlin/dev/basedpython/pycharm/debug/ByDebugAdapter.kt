@@ -42,6 +42,7 @@ import kotlinx.coroutines.launch
 import com.intellij.util.PathUtil
 import com.intellij.xdebugger.XDebugSession
 import com.intellij.xdebugger.breakpoints.XBreakpointHandler
+import com.intellij.xdebugger.frame.XDropFrameHandler
 import com.intellij.xdebugger.ui.XDebugTabLayouter
 import com.intellij.execution.ui.RunnerLayoutUi
 import com.intellij.ui.content.Content
@@ -187,6 +188,7 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
                 builder,
                 bpdEvents(
                     onMoved = ::report,
+                    onRestarting = ::report,
                     onRecomposed = { event ->
                         recompositionLink?.let { ByRecompositionSession.getInstance(project).append(it, event) }
                     },
@@ -390,6 +392,21 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
         val console = executionResult?.executionConsole as? ConsoleView ?: return
         val type =
             if (moved.refused) ConsoleViewContentType.ERROR_OUTPUT
+            else ConsoleViewContentType.SYSTEM_OUTPUT
+        console.print("$text\n", type)
+    }
+
+    /**
+     * Puts what a Reset Frame did on the run console, beside a jump's report and for the same
+     * reasons: in sequence with the session, and only when there is something a person could not
+     * see from the frame now on screen ([ByRestarting.report]). A refusal is error output, since
+     * bpd answers it with `success` and the platform shows nothing.
+     */
+    private fun report(restarting: ByRestarting) {
+        val text = restarting.report() ?: return
+        val console = executionResult?.executionConsole as? ConsoleView ?: return
+        val type =
+            if (restarting is ByRestarting.Refused) ConsoleViewContentType.ERROR_OUTPUT
             else ConsoleViewContentType.SYSTEM_OUTPUT
         console.print("$text\n", type)
     }
@@ -695,6 +712,13 @@ internal class ByDapXDebugProcess(
     }
 
     override fun getBreakpointHandlers(): Array<XBreakpointHandler<*>> = handlers
+
+    /** Reset Frame, with bpd's refusal rendered rather than handed on raw ([ByDropFrameHandler]). */
+    private val dropFrames: XDropFrameHandler? by lazy {
+        super.getDropFrameHandler()?.let { ByDropFrameHandler(it, session.project) }
+    }
+
+    override fun getDropFrameHandler(): XDropFrameHandler? = dropFrames
 
     /** The *Console* tab with a basedpython prompt under the run's console ([ByDebugPrompt]). */
     override fun createTabLayouter(): XDebugTabLayouter = object : XDebugTabLayouter() {
