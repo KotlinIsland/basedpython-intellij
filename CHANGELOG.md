@@ -6,6 +6,14 @@
   relations, admin, the views its routes reach, forms, signal receivers and management commands,
   each opening where it is written. It needs a `by` that answers `by/djangoStructure`, and says so
   until one does.
+- Django gutter icons: a view's routes and templates, a `path()`'s view, a model's admin and an admin's
+  model, and the views rendering a template.
+- A *Django Server (basedpython)* run configuration, made once for a Django project, *Tools | Run
+  manage.py Task…* with command completion, and *Tools | Django Console*.
+- The Endpoints view's *HTTP Client* and *OpenAPI* tabs for basedpython routes.
+- Folding in a Django template, and its blocks in the Structure view above the HTML, from `by`.
+- *Django* in the New Project wizard, *New | Django App*, a model diagram with the Diagrams plugin,
+  and `DATABASES` as data sources with the Database plugin.
 
 ## [0.0.7]
 

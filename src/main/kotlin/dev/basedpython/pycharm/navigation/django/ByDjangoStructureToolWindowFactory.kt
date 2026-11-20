@@ -73,6 +73,9 @@ internal object ByDjangoStructureToolWindow {
     /** Must match the `id` in plugin.xml. */
     const val ID: String = "basedpython Django"
 
+    /** The group of plugin.xml whose actions the window's toolbar shows after its own. */
+    const val TOOLBAR_GROUP: String = "basedpython.DjangoStructureToolbar"
+
     /**
      * Whether the project looks like a django one before anyone has asked `by`: a `manage.py` at
      * its root, or django among the dependencies its root declares. Asked while the project opens,
@@ -216,6 +219,11 @@ internal class ByDjangoStructurePanel(private val project: Project) : SimpleTool
         val expander = DefaultTreeExpander(tree)
         add(CommonActionsManager.getInstance().createExpandAllAction(expander, tree))
         add(CommonActionsManager.getInstance().createCollapseAllAction(expander, tree))
+        // the optional descriptors' actions: DATABASES as data sources, with the Database plugin
+        (ActionManager.getInstance().getAction(ByDjangoStructureToolWindow.TOOLBAR_GROUP) as? DefaultActionGroup)?.let { more ->
+            addSeparator()
+            add(more)
+        }
     }
 
     private class Renderer : ColoredTreeCellRenderer() {

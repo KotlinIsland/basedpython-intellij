@@ -70,6 +70,12 @@ dependencies {
     // The terminal, whose new shells start with the project's `by` and `buff` on `PATH`. An optional
     // dependency in plugin.xml (basedpython-terminal.xml).
     bundledPlugin("org.jetbrains.plugins.terminal")
+    // Database Tools, which a django project's DATABASES are made data sources of. An optional
+    // dependency in plugin.xml (basedpython-database.xml).
+    bundledPlugin("com.intellij.database")
+    // Diagrams, which a django project's models are drawn in. An optional dependency in plugin.xml
+    // (basedpython-diagram.xml).
+    bundledPlugin("com.intellij.diagram")
     // Spellchecker ships as a platform module, not a bundled plugin.
     bundledModule("intellij.spellchecker")
     // IntelliLang, the platform's language injection, also a platform module: which injections in a

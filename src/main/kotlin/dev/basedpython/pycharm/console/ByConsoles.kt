@@ -44,6 +44,9 @@ internal class ByConsoles(private val project: Project, val scope: CoroutineScop
     /** Which tab holds which session; the tabs are this tool window's, the map this service's. */
     private val tabs = WeakHashMap<Content, ByConsoleSession>()
 
+    /** What each tab's session was started with, so Rerun starts the same kind again. */
+    private val setups = WeakHashMap<Content, ByConsoleSetup>()
+
     /** Keeps [session], one a run started in its own tab, among the project's: its Enter and completion are found here. */
     fun adopt(session: ByConsoleSession) {
         sessions += session
@@ -65,13 +68,26 @@ internal class ByConsoles(private val project: Project, val scope: CoroutineScop
     }
 
     /**
+     * Shows a running session started with [setup] — the selected tab's when it is one, a new tab's
+     * otherwise — as the *Django Console* is shown: a plain console beside it stays a plain one.
+     */
+    fun show(setup: ByConsoleSetup) {
+        val toolWindow = ToolWindowManager.getInstance(project).getToolWindow(TOOL_WINDOW_ID) ?: return
+        toolWindow.activate(null)
+        val running = synchronized(tabs) {
+            toolWindow.contentManager.contents.firstOrNull { setups[it] == setup && tabs[it]?.isRunning == true }
+        }
+        if (running != null) toolWindow.contentManager.setSelectedContent(running, true) else start(toolWindow, setup = setup)
+    }
+
+    /**
      * Starts a session in a new tab of [toolWindow], in place of [replacing] when it is given, and hands
      * it to [then] once its console exists.
      */
-    fun start(toolWindow: ToolWindow, replacing: Content? = null, then: (ByConsoleSession) -> Unit = {}) {
+    fun start(toolWindow: ToolWindow, replacing: Content? = null, setup: ByConsoleSetup = ByConsoleSetup.PLAIN, then: (ByConsoleSession) -> Unit = {}) {
         scope.launch {
             val process = try {
-                withContext(Dispatchers.IO) { ByConsoleSession.startProcess(project) }
+                withContext(Dispatchers.IO) { ByConsoleSession.startProcess(project, fileEnvironment = setup.environment) }
             } catch (e: ExecutionException) {
                 NotificationGroupManager.getInstance().getNotificationGroup("basedpython")
                     .createNotification(BasedPythonBundle.message("console.notStarted", e.message.orEmpty()), NotificationType.ERROR)
@@ -83,25 +99,30 @@ internal class ByConsoles(private val project: Project, val scope: CoroutineScop
                 val session = ByConsoleSession.build(project, process)
                 sessions += session
                 Disposer.register(session) { sessions -= session }
-                val content = ContentFactory.getInstance().createContent(panel(session, toolWindow), title(toolWindow), false)
+                val content = ContentFactory.getInstance().createContent(panel(session, toolWindow), title(toolWindow, setup), false)
                 content.setDisposer(session)
                 content.preferredFocusableComponent = session.console.preferredFocusableComponent
-                synchronized(tabs) { tabs[content] = session }
+                synchronized(tabs) {
+                    tabs[content] = session
+                    setups[content] = setup
+                }
                 val manager = toolWindow.contentManager
                 manager.addContent(content, replacing?.let(manager::getIndexOfContent) ?: -1)
                 replacing?.let { manager.removeContent(it, true) }
                 manager.setSelectedContent(content, true)
                 // Enter and completion ask `by`; it is started here so it is up by the first Enter
                 startByServer(project)
+                setup.startup?.let { startup -> session.whenReady { session.execute(startup) } }
                 then(session)
             }
         }
     }
 
-    private fun title(toolWindow: ToolWindow): String {
+    private fun title(toolWindow: ToolWindow, setup: ByConsoleSetup): String {
         val taken = toolWindow.contentManager.contents.map { it.displayName }.toSet()
+        val base = setup.title ?: BasedPythonBundle.message("console.tab")
         return generateSequence(1) { it + 1 }
-            .map { if (it == 1) BasedPythonBundle.message("console.tab") else BasedPythonBundle.message("console.tab.numbered", it) }
+            .map { if (it == 1) base else BasedPythonBundle.message("console.tab.numbered", base, it) }
             .first { it !in taken }
     }
 
@@ -128,7 +149,8 @@ internal class ByConsoles(private val project: Project, val scope: CoroutineScop
         override fun actionPerformed(e: AnActionEvent) {
             session.stop()
             val content = synchronized(tabs) { tabs.entries.firstOrNull { it.value === session }?.key }
-            start(toolWindow, replacing = content)
+            val setup = synchronized(tabs) { content?.let(setups::get) } ?: ByConsoleSetup.PLAIN
+            start(toolWindow, replacing = content, setup = setup)
         }
         override fun getActionUpdateThread() = ActionUpdateThread.BGT
     }
@@ -156,5 +178,20 @@ internal class ByConsoles(private val project: Project, val scope: CoroutineScop
         private const val TOOLBAR_PLACE = "basedpythonConsole"
 
         fun getInstance(project: Project): ByConsoles = project.service()
+    }
+}
+
+/**
+ * What a console's `by repl` is started with: the tab's [title] (the plain console's when null), the
+ * [environment] it gets beside the project's, and a [startup] statement run as the first input, as
+ * the *Django Console* sets `DJANGO_SETTINGS_MODULE` and runs `django.setup()`.
+ */
+internal data class ByConsoleSetup(
+    val title: String? = null,
+    val environment: Map<String, String> = emptyMap(),
+    val startup: String? = null,
+) {
+    companion object {
+        val PLAIN = ByConsoleSetup()
     }
 }

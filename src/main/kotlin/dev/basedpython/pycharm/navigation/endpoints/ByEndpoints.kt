@@ -4,9 +4,12 @@ import com.intellij.microservices.endpoints.EndpointType
 import com.intellij.microservices.endpoints.HTTP_SERVER_TYPE
 import com.intellij.microservices.endpoints.EndpointsFilter
 import com.intellij.microservices.endpoints.EndpointsProvider
+import com.intellij.microservices.endpoints.EndpointsUrlTargetProvider
 import com.intellij.microservices.endpoints.FrameworkPresentation
 import com.intellij.microservices.endpoints.SearchScopeEndpointsFilter
 import com.intellij.microservices.endpoints.presentation.HttpMethodPresentation
+import com.intellij.microservices.oas.OpenApiSpecification
+import com.intellij.microservices.url.UrlTargetInfo
 import com.intellij.navigation.ItemPresentation
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
@@ -69,13 +72,15 @@ internal data class ByEndpointGroup(val application: String?, val endpoints: Lis
 /**
  * The Endpoints tool window's rows for a basedpython project, one framework a provider, from
  * `by/endpoints`: each route with its methods and whole path, every prefix it is mounted under
- * included, in the file its handler is written in, opening at the handler. Which decorator or
+ * included, in the file its handler is written in, opening at the handler, with the *HTTP Client*
+ * and *OpenAPI* tabs drawn from the same answer. Which decorator or
  * `path()` is a route, and what it is mounted under, is `by`'s, read through what the code means.
  *
  * A route whose handler is in a file this plugin does not own — a `.py` the Python plugin reads in
  * PyCharm — is left to that plugin's own providers, so no route is listed twice.
  */
-internal abstract class ByEndpointsProvider(private val framework: String, title: String) : EndpointsProvider<ByEndpointGroup, ByEndpoint> {
+internal abstract class ByEndpointsProvider(private val framework: String, title: String) :
+    EndpointsUrlTargetProvider<ByEndpointGroup, ByEndpoint> {
 
     override val presentation: FrameworkPresentation = FrameworkPresentation("basedpython-$framework", title, BasedPythonIcons.Logo)
 
@@ -108,6 +113,17 @@ internal abstract class ByEndpointsProvider(private val framework: String, title
     override fun getNavigationElement(group: ByEndpointGroup, endpoint: ByEndpoint): PsiElement? = handlerName(endpoint)
 
     override fun getDocumentationElement(group: ByEndpointGroup, endpoint: ByEndpoint): PsiElement? = handlerName(endpoint)
+
+    /**
+     * The route as a URL, which the view's *HTTP Client* tab and *Generate Request in HTTP Client*
+     * write a request from; [ByEndpointUrls] says how.
+     */
+    override fun getUrlTargetInfo(group: ByEndpointGroup, endpoint: ByEndpoint): Iterable<UrlTargetInfo> =
+        listOf(ByUrlTargetInfo(endpoint) { handlerName(endpoint) })
+
+    /** The route as an OpenAPI path, for the view's *OpenAPI* tab. */
+    override fun getOpenApiSpecification(group: ByEndpointGroup, endpoint: ByEndpoint): OpenApiSpecification =
+        OpenApiSpecification(listOf(ByEndpointUrls.openApi(endpoint)))
 
     /** The routes of [framework] whose handler is in a file of this plugin's. */
     private fun routes(project: Project): List<ByEndpoint> =

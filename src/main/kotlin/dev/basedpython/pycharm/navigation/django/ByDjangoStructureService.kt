@@ -1,13 +1,18 @@
 package dev.basedpython.pycharm.navigation.django
 
+import com.intellij.codeInsight.daemon.DaemonCodeAnalyzer
 import com.intellij.openapi.Disposable
+import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.application.readAction
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
 import com.intellij.platform.lsp.api.LspClientManager
 import com.intellij.platform.lsp.api.LspServerState
+import com.intellij.psi.util.PsiModificationTracker
 import dev.basedpython.pycharm.lsp.ByAnswer
+import dev.basedpython.pycharm.lsp.ByLspLifecycleListener
 import dev.basedpython.pycharm.lsp.ByLspServerSupportProvider
 import dev.basedpython.pycharm.lsp.askBy
 import dev.basedpython.pycharm.lsp.ext.ByDjangoStructure
@@ -59,11 +64,35 @@ internal class ByDjangoStructureService(private val project: Project, private va
 
     private val asks = Channel<Unit>(Channel.CONFLATED)
 
+    /** The last answer and the PSI modification count it was asked at, for [fresh]. */
+    private class Stamped(val stamp: Long, val state: State)
+
+    @Volatile
+    private var stamped: Stamped? = null
+
+    private val freshLock = Any()
+
     init {
+        // a restarted `by` may be another build: what the last one said, even that it has no
+        // `by/djangoStructure`, is not this one's answer
+        project.messageBus.connect(scope).subscribe(
+            ByLspLifecycleListener.TOPIC,
+            object : ByLspLifecycleListener {
+                override fun serverInitialized(serverName: String) {
+                    stamped = null
+                    _state.compareAndSet(State.Unsupported, State.Idle)
+                    // the gutter's django icons, asked of a `by` that was not up yet, are asked again
+                    DaemonCodeAnalyzer.getInstance(project).restart(this@ByDjangoStructureService)
+                }
+            },
+        )
         scope.launch {
             for (ask in asks) {
                 delay(SETTLE_MS)
-                _state.value = withContext(Dispatchers.IO) { ask() }
+                val stamp = readAction { PsiModificationTracker.getInstance(project).modificationCount }
+                val state = withContext(Dispatchers.IO) { ask() }
+                stamped = Stamped(stamp, state)
+                _state.value = state
             }
         }
     }
@@ -79,9 +108,39 @@ internal class ByDjangoStructureService(private val project: Project, private va
         return watching
     }
 
+    /** The last structure `by` answered with, however old; never asks. */
+    fun current(): ByDjangoStructure? = (_state.value as? State.Ready)?.structure
+
     /** Ask `by` again, soon; asks that arrive before this one is sent are the same ask. */
     fun refresh() {
         asks.trySend(Unit)
+    }
+
+    /**
+     * The structure as the project's code is now, asking and waiting when the last answer is from
+     * before the latest change; for the gutter's slow pass, which must not draw an icon where an edit
+     * has since moved its name. Every pass after one change shares one ask. Null off a django project,
+     * from a `by` without the request, and on the EDT when there is no answer for now yet.
+     */
+    fun fresh(): ByDjangoStructure? {
+        val stamp = PsiModificationTracker.getInstance(project).modificationCount
+        stamped?.takeIf { it.stamp == stamp }?.let { return (it.state as? State.Ready)?.structure }
+        if (ApplicationManager.getApplication().isDispatchThread) return null
+        // a `by` from before the request says so once per server, not once per pass
+        if (_state.value == State.Unsupported) return null
+        if (!ByDjangoStructureToolWindow.looksLikeDjango(project) && _state.value !is State.Ready) return null
+        synchronized(freshLock) {
+            stamped?.takeIf { it.stamp == stamp }?.let { return (it.state as? State.Ready)?.structure }
+            val state = ask()
+            // a failed ask is asked again by the next pass rather than remembered for this revision
+            if (state is State.Failed) return null
+            val first = state is State.Ready && _state.value !is State.Ready
+            stamped = Stamped(stamp, state)
+            _state.value = state
+            // the passes of this revision that ran before `by` answered drew nothing; draw them again
+            if (first) DaemonCodeAnalyzer.getInstance(project).restart(this)
+            return (state as? State.Ready)?.structure
+        }
     }
 
     private fun ask(): State {

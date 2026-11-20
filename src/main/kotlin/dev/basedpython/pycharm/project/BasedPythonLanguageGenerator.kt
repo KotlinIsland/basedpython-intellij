@@ -61,7 +61,16 @@ internal class BasedPythonScaffoldStep(parent: NewProjectWizardStep) : AbstractN
      */
     private val gitMerge = propertyGraph.property(true)
 
+    /** Which project to write: a plain basedpython one, or a django one ([ByDjangoScaffold]). */
+    private val template = propertyGraph.property(BasedPythonProjectScaffold.Template.PLAIN)
+
     override fun setupUI(builder: Panel) {
+        with(builder) {
+            row(BasedPythonBundle.message("wizard.template")) {
+                segmentedButton(BasedPythonProjectScaffold.Template.entries) { text = BasedPythonBundle.message(it.key) }
+                    .bind(template)
+            }
+        }
         if (gitData == null) return
         with(builder) {
             row("") {
@@ -75,7 +84,7 @@ internal class BasedPythonScaffoldStep(parent: NewProjectWizardStep) : AbstractN
     override fun setupProject(project: Project) {
         if (gitData?.git == true && gitMerge.get()) BasedPythonSettings.getInstance(project).enableGitMergeIntegration = true
         val basePath = project.basePath ?: return
-        BasedPythonProjectScaffold.write(Path.of(basePath), project.name)
+        BasedPythonProjectScaffold.write(Path.of(basePath), project.name, template.get())
         val baseDir = LocalFileSystem.getInstance().refreshAndFindFileByPath(basePath) ?: return
         VfsUtil.markDirtyAndRefresh(false, true, true, baseDir)
         WriteAction.runAndWait<Throwable> {
@@ -108,8 +117,8 @@ internal object BasedPythonProjectScaffold {
      * interpreter reads the disk, not the VFS. The caller refreshes the VFS when it reads the files
      * back through it.
      */
-    fun write(baseDir: Path, projectName: String) {
-        for ((relativePath, content) in files(projectName)) {
+    fun write(baseDir: Path, projectName: String, template: Template = Template.PLAIN) {
+        for ((relativePath, content) in files(projectName, template)) {
             val file = baseDir.resolve(relativePath)
             if (Files.exists(file)) continue
             Files.createDirectories(file.parent)
@@ -117,8 +126,19 @@ internal object BasedPythonProjectScaffold {
         }
     }
 
+    /** A project the wizard can write; [key] names it in the bundle. */
+    enum class Template(val key: String) {
+        PLAIN("wizard.template.plain"),
+        DJANGO("wizard.template.django"),
+    }
+
     /** The file a new project is opened at. */
     const val ENTRY_POINT = "src/main.by"
+
+    fun files(projectName: String, template: Template): Map<String, String> = when (template) {
+        Template.PLAIN -> files(projectName)
+        Template.DJANGO -> ByDjangoScaffold.files(projectName)
+    }
 
     fun files(projectName: String): Map<String, String> = linkedMapOf(
         "pyproject.toml" to pyprojectToml(projectName),

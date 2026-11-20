@@ -99,6 +99,20 @@ internal class ByConsoleSession private constructor(
             console.attachToProcess(handler)
         }
 
+    /** Done once `by repl` first waits for an input; at once with a `by` that cannot say. */
+    private val firstInput = java.util.concurrent.CompletableFuture<Unit>().also { if (events == null) it.complete(Unit) }
+
+    /**
+     * Runs [action] on the EDT once `by repl` first waits for an input, as the *Django Console*'s
+     * `django.setup()` waits. Run before that, an input printed to the history reached the process
+     * twice on one line, once as the console's user input and once framed (measured in 263.7307).
+     */
+    fun whenReady(action: () -> Unit) {
+        firstInput.thenRun {
+            ApplicationManager.getApplication().invokeLater({ if (isRunning) action() }, project.disposed)
+        }
+    }
+
     /** The console's input file, which completion is asked from. */
     val inputFile: VirtualFile get() = console.virtualFile
 
@@ -114,6 +128,7 @@ internal class ByConsoleSession private constructor(
         })
         events?.listen { event ->
             if (event is ByReplEvents.Event.Waiting) {
+                if (event.reading == ByReplEvents.Reading.INPUT) firstInput.complete(Unit)
                 reader.reading(event.reading)
                 ApplicationManager.getApplication().invokeLater({ if (!console.consoleEditor.isDisposed) console.prompt = promptFor(event.reading) }, project.disposed)
             }

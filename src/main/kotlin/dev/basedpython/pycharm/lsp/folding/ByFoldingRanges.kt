@@ -18,6 +18,7 @@ import com.intellij.psi.PsiDocumentManager
 import com.intellij.psi.PsiFile
 import com.intellij.util.concurrency.AppExecutorUtil
 import com.intellij.util.containers.ContainerUtil
+import dev.basedpython.pycharm.editor.djangotemplate.ByDjangoTemplateEditing
 import dev.basedpython.pycharm.lang.BasedPythonFile
 import dev.basedpython.pycharm.lsp.ByAnswer
 import dev.basedpython.pycharm.lsp.ByLspLifecycleListener
@@ -32,7 +33,7 @@ import org.jetbrains.annotations.TestOnly
 import java.util.Collections
 
 /**
- * What `by` last said about each `.by` document's folding ranges, per revision: the answer to
+ * What `by` last said about each `.by` document's — and django template's — folding ranges, per revision: the answer to
  * `textDocument/foldingRange`, with basedpython's own kinds and the text to fold to.
  *
  * Asked by the folding builder rather than by the platform's LSP folding, which asks only once a
@@ -144,7 +145,7 @@ internal class ByFoldingRanges(private val project: Project) : Disposable {
     private fun refold(editor: Editor) {
         ReadAction.nonBlocking<Runnable?> {
             val psi = PsiDocumentManager.getInstance(project).getPsiFile(editor.document)
-            if (psi !is BasedPythonFile || forFile(psi) == null) return@nonBlocking null
+            if (psi == null || !(psi is BasedPythonFile || ByDjangoTemplateEditing.handles(psi)) || forFile(psi) == null) return@nonBlocking null
             CodeFoldingManager.getInstance(project).updateFoldRegionsAsync(editor, true)
         }
             .withDocumentsCommitted(project)

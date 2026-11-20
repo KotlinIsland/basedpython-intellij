@@ -28,6 +28,10 @@
     <depends optional="true" config-file="basedpython-git.xml">Git4Idea</depends>
     <!-- A terminal's shell started with the project's by and buff on PATH; see basedpython-terminal.xml. -->
     <depends optional="true" config-file="basedpython-terminal.xml">org.jetbrains.plugins.terminal</depends>
+    <!-- A django project's DATABASES as data sources of the Database tool window; see basedpython-database.xml. -->
+    <depends optional="true" config-file="basedpython-database.xml">com.intellij.database</depends>
+    <!-- A django project's models as a diagram; see basedpython-diagram.xml. -->
+    <depends optional="true" config-file="basedpython-diagram.xml">com.intellij.diagram</depends>
 
     <!-- The platform's Debug Adapter Protocol client, which `.by` debugging is built on. A platform
          module rather than a plugin, so it is declared the v2 way; the legacy <depends> entries
@@ -684,6 +688,15 @@
         <codeInsight.lineMarkerProvider
             language=""
             implementationClass="dev.basedpython.pycharm.lsp.counterparts.ByCounterpartMarkers"/>
+        <!-- The gutter's django icons: view <-> path(), model <-> admin, view <-> template, from
+             by/endpoints and by/djangoStructure. A template comes in as XML (which covers HTML) or
+             plain text. See navigation.django.ByDjangoMarkers. -->
+        <codeInsight.lineMarkerProvider language="basedpython"
+            implementationClass="dev.basedpython.pycharm.navigation.django.ByDjangoMarkers"/>
+        <codeInsight.lineMarkerProvider language="XML"
+            implementationClass="dev.basedpython.pycharm.navigation.django.ByDjangoMarkers"/>
+        <codeInsight.lineMarkerProvider language="TEXT"
+            implementationClass="dev.basedpython.pycharm.navigation.django.ByDjangoMarkers"/>
         <!-- Method Hierarchy (Ctrl+Shift+H): `by/superMembers` up, `textDocument/implementation` down. -->
         <methodHierarchyProvider
             language="basedpython"
@@ -751,6 +764,28 @@
             implementation="dev.basedpython.pycharm.editor.djangotemplate.ByDjangoTemplateTypedHandler"/>
         <multiLangCommenter
             implementation="dev.basedpython.pycharm.editor.djangotemplate.ByDjangoTemplateCommenter"/>
+        <!-- A django template's folding and Structure view, from by's foldingRange and documentSymbol.
+             Folding is registered for each language a template comes in as: unlike line markers and
+             inlay providers, a folding builder registered for XML is not found for HTML (measured in
+             263.7307: LanguageFolding.allForLanguage(HTML) held XmlFoldingBuilder alone). The structure
+             factory is registered first for each, since the platform asks only the first; it hands
+             every other file on unchanged. -->
+        <lang.foldingBuilder language="HTML"
+            implementationClass="dev.basedpython.pycharm.editor.djangotemplate.ByTemplateFoldingBuilder"/>
+        <lang.foldingBuilder language="XHTML"
+            implementationClass="dev.basedpython.pycharm.editor.djangotemplate.ByTemplateFoldingBuilder"/>
+        <lang.foldingBuilder language="XML"
+            implementationClass="dev.basedpython.pycharm.editor.djangotemplate.ByTemplateFoldingBuilder"/>
+        <lang.foldingBuilder language="TEXT"
+            implementationClass="dev.basedpython.pycharm.editor.djangotemplate.ByTemplateFoldingBuilder"/>
+        <lang.psiStructureViewFactory language="HTML" order="first"
+            implementationClass="dev.basedpython.pycharm.editor.djangotemplate.ByTemplateStructureViewFactory"/>
+        <lang.psiStructureViewFactory language="XHTML" order="first"
+            implementationClass="dev.basedpython.pycharm.editor.djangotemplate.ByTemplateStructureViewFactory"/>
+        <lang.psiStructureViewFactory language="XML" order="first"
+            implementationClass="dev.basedpython.pycharm.editor.djangotemplate.ByTemplateStructureViewFactory"/>
+        <lang.psiStructureViewFactory language="TEXT" order="first"
+            implementationClass="dev.basedpython.pycharm.editor.djangotemplate.ByTemplateStructureViewFactory"/>
         <!-- Join Lines (Ctrl+Shift+J) that knows backslashes, brackets, strings and statements, from
              `by`'s outline. -->
         <joinLinesHandler order="first"
@@ -956,6 +991,12 @@
         <!-- `by run|check|build|repl` in Run Anything, completing modules and tests from by's own
              answers; see run.ByRunAnythingProvider. -->
         <runAnything.executionProvider implementation="dev.basedpython.pycharm.run.ByRunAnythingProvider"/>
+        <!-- Django: `manage.py <command>` in Run Anything, its names from by/djangoStructure; a Django
+             Server run configuration type (manage.py runserver through by run), and one made once
+             for a django project that has none. See run.django. -->
+        <runAnything.executionProvider implementation="dev.basedpython.pycharm.run.django.ByManageRunAnythingProvider"/>
+        <configurationType implementation="dev.basedpython.pycharm.run.django.ByDjangoServerConfigurationType"/>
+        <postStartupActivity implementation="dev.basedpython.pycharm.run.django.ByDjangoServerConfigurationActivity"/>
         <!-- A basedpython console: `by repl` over its standard streams, behind a language console
              typed in basedpython. See console.ByConsoles. -->
         <toolWindow id="basedpython Console"
@@ -1077,6 +1118,20 @@
                 class="dev.basedpython.pycharm.console.ByOpenConsoleAction"
                 icon="/icons/basedpython.svg">
             <add-to-group group-id="ToolsMenu" anchor="first"/>
+        </action>
+        <!-- Django's Tools: Run manage.py Task… (Run Anything with `manage.py ` typed) and the Django
+             Console (a basedpython console with django set up), shown in a django project. -->
+        <action id="basedpython.RunManageTask" class="dev.basedpython.pycharm.run.django.ByRunManageTaskAction">
+            <add-to-group group-id="ToolsMenu" anchor="after" relative-to-action="basedpython.OpenConsole"/>
+        </action>
+        <!-- What the basedpython Django tool window's toolbar shows after its own actions: filled by
+             the optional descriptors (basedpython-database.xml). -->
+        <group id="basedpython.DjangoStructureToolbar"/>
+        <action id="basedpython.NewDjangoApp" class="dev.basedpython.pycharm.run.django.ByNewDjangoAppAction">
+            <add-to-group group-id="NewGroup" anchor="last"/>
+        </action>
+        <action id="basedpython.DjangoConsole" class="dev.basedpython.pycharm.run.django.ByDjangoConsoleAction">
+            <add-to-group group-id="ToolsMenu" anchor="after" relative-to-action="basedpython.RunManageTask"/>
         </action>
         <action id="basedpython.ExecuteInConsole"
                 class="dev.basedpython.pycharm.console.ByExecuteInConsoleAction">

@@ -1802,6 +1802,20 @@ data class ByEndpoint(
     val declaration: ByEndpointSymbol? = null,
     /** The FastAPI application serving it, or the urlconf django starts at; absent for a router no application includes. */
     val application: ByEndpointSymbol? = null,
+    /** Each parameter written in [path], in order; empty from a `by` that sends none. */
+    val parameters: List<ByEndpointParameter> = emptyList(),
+)
+
+/**
+ * A path parameter: its [name], the python [type] its value arrives as (`int` for django's
+ * `<int:pk>`, the annotation for FastAPI's), and the stretch of [ByEndpoint.path] it is written as,
+ * [start] to [end] in UTF-16 units — `<int:pk>` or `{pk}` whole.
+ */
+data class ByEndpointParameter(
+    val name: String? = null,
+    val type: String? = null,
+    val start: Int = 0,
+    val end: Int = 0,
 )
 
 /** A declaration by its qualified [name], where it is, and its name's range as [selectionRange]. */
@@ -1823,6 +1837,39 @@ data class ByDjangoProject(
     val urlconf: ByEndpointSymbol? = null,
     /** `INSTALLED_APPS`, in their order. */
     val apps: List<ByDjangoApp> = emptyList(),
+    /** The `manage.py` that sets this settings module, which commands, the server and the console run through. */
+    val manage: ByEndpointSymbol? = null,
+    /** Every command `manage.py` runs — django's own, each installed app's — by name. */
+    val commands: List<ByDjangoCommand> = emptyList(),
+    /** `DATABASES`, by alias. */
+    val databases: List<ByDjangoDatabase> = emptyList(),
+)
+
+/** A management command: what `manage.py <name>` runs. */
+data class ByDjangoCommand(
+    val name: String? = null,
+    /** The label of the app defining it, `django` for django's own. */
+    val app: String? = null,
+    /** Its `help`, when that is a literal. */
+    val help: String? = null,
+    /** The `Command` class. */
+    val symbol: ByEndpointSymbol? = null,
+)
+
+/**
+ * One of `DATABASES`, as the settings write it: never its password. [name] is `NAME`, which for
+ * sqlite is a file, given absolute as django resolves it when the settings build it from `BASE_DIR`.
+ */
+data class ByDjangoDatabase(
+    val alias: String? = null,
+    /** `ENGINE`'s dotted path: `django.db.backends.sqlite3`, `django.db.backends.postgresql`. */
+    val engine: String? = null,
+    val name: String? = null,
+    val host: String? = null,
+    val port: String? = null,
+    val user: String? = null,
+    /** Where the entry is written. */
+    val symbol: ByEndpointSymbol? = null,
 )
 
 /** An installed app and what django finds in it. */
@@ -1899,6 +1946,8 @@ data class ByDjangoView(
     val kind: String? = null,
     /** The full paths reaching it, as `by/endpoints` writes them. */
     val routes: List<String> = emptyList(),
+    /** The templates it renders — `template_name`, `render(request, "…")` — each named as written and at its file. */
+    val templates: List<ByEndpointSymbol> = emptyList(),
 )
 
 data class ByDjangoReceiver(

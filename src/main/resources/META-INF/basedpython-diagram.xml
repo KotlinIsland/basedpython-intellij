@@ -1,0 +1,15 @@
+<!--
+  Loaded only when the Diagrams plugin is present: a django project's models as a diagram, from
+  by/djangoStructure (diagram.ByDjangoDiagramProvider), opened from the basedpython Django tool window.
+  Optional because basedpython does not need the Diagrams plugin, which IntelliJ IDEA Ultimate bundles.
+-->
+<idea-plugin>
+    <extensions defaultExtensionNs="com.intellij">
+        <diagram.Provider implementation="dev.basedpython.pycharm.diagram.ByDjangoDiagramProvider"/>
+    </extensions>
+    <actions>
+        <action id="basedpython.ShowDjangoDiagram" class="dev.basedpython.pycharm.diagram.ByShowDjangoDiagramAction">
+            <add-to-group group-id="basedpython.DjangoStructureToolbar"/>
+        </action>
+    </actions>
+</idea-plugin>

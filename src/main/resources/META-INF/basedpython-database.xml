@@ -1,0 +1,14 @@
+<!--
+  Loaded only when the Database plugin is present: a django project's DATABASES, as by/djangoStructure
+  reads them, made data sources of its tool window (database.ByDjangoDataSourcesAction), from the
+  basedpython Django tool window's toolbar and Tools. Optional because basedpython does not need a
+  database plugin.
+-->
+<idea-plugin>
+    <actions>
+        <action id="basedpython.DjangoDataSources" class="dev.basedpython.pycharm.database.ByDjangoDataSourcesAction">
+            <add-to-group group-id="basedpython.DjangoStructureToolbar"/>
+            <add-to-group group-id="ToolsMenu" anchor="after" relative-to-action="basedpython.DjangoConsole"/>
+        </action>
+    </actions>
+</idea-plugin>
