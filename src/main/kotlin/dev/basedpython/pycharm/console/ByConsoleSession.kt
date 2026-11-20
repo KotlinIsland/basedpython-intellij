@@ -305,8 +305,11 @@ internal class ByConsoleSession private constructor(
          *
          * `--events` when this `by` takes it, as its language server says ([ByCommandFlags]): a `by`
          * that does not refuses the flag and starts no session, and is talked to as it was before,
-         * every line an input. [waitForNewStart] is [awaitByServer]'s, for asking a `by` that is not
-         * running yet: false under a modal progress, where a new start cannot finish.
+         * every line an input. `--in-place` likewise ([ByCommandFlags.replsInPlace]): the session
+         * imports the project's modules where they are, as a `by run` in place does, and a python it
+         * starts imports them too; a `by` without it stages the project for the session, as before.
+         * [waitForNewStart] is [awaitByServer]'s, for asking a `by` that is not running yet: false
+         * under a modal progress, where a new start cannot finish.
          *
          * @throws com.intellij.execution.ExecutionException when no `by` can be found or started.
          */
@@ -325,11 +328,7 @@ internal class ByConsoleSession private constructor(
                 byCommandLine(
                     project = project,
                     options = options,
-                    arguments = buildList {
-                        addAll(listOf("repl", "--session-file", sessionFile.toString()))
-                        if (events != null) addAll(listOf("--events", events.port.toString()))
-                        if (module != null) addAll(listOf("--module", module))
-                    },
+                    arguments = replArguments(sessionFile, flags, events?.port, module),
                     infrastructureEnv = events?.let { mapOf(ByReplEvents.ENV_TOKEN to it.token) }.orEmpty(),
                     // the session imports the project's modules as a program does
                     startsProgram = true,
@@ -346,6 +345,19 @@ internal class ByConsoleSession private constructor(
             ProcessTerminatedListener.attach(handler)
             return Started(handler, sessionFile, events)
         }
+
+        /**
+         * `by repl`'s arguments for a session written to [sessionFile], with what this `by` takes of
+         * them ([flags]): `--in-place` when its `by repl` takes it, `--events` on [eventsPort] when one
+         * was opened, and [module] to start in.
+         */
+        internal fun replArguments(sessionFile: Path, flags: ByCommandFlags, eventsPort: Int?, module: String?): List<String> =
+            buildList {
+                addAll(listOf("repl", "--session-file", sessionFile.toString()))
+                if (flags.replsInPlace) add(ByCommandFlags.IN_PLACE_FLAG)
+                if (eventsPort != null) addAll(listOf("--events", eventsPort.toString()))
+                if (module != null) addAll(listOf("--module", module))
+            }
 
         /**
          * The console for a process [startProcess] started. On the EDT. [ownsConsole] when the console

@@ -2,6 +2,8 @@ package dev.basedpython.pycharm.lsp
 
 import com.google.gson.JsonObject
 import com.intellij.openapi.project.Project
+import com.intellij.platform.lsp.api.LspClientManager
+import com.intellij.platform.lsp.api.LspServerState
 import org.eclipse.lsp4j.InitializeResult
 
 /**
@@ -25,6 +27,16 @@ internal class ByCommandFlags private constructor(private val experimental: Json
         return value.isJsonPrimitive && value.asJsonPrimitive.isBoolean && value.asBoolean
     }
 
+    /**
+     * Whether `by run --in-place` runs a program against the project's own directories, its `.by`
+     * modules imported from their transpiles in `by`'s run cache, rather than out of a tree staged
+     * into a temporary directory. A `by` whose server also answers `by/retranspile`.
+     */
+    val runsInPlace: Boolean get() = takes(RUN, IN_PLACE)
+
+    /** Whether `by repl --in-place` runs a session against the project's own directories. */
+    val replsInPlace: Boolean get() = takes(REPL, IN_PLACE)
+
     companion object {
         /** What a `by` takes that has said nothing: no flag at all. */
         val NONE: ByCommandFlags = ByCommandFlags(null)
@@ -43,7 +55,35 @@ internal class ByCommandFlags private constructor(private val experimental: Json
                 is ByServerStart.Unavailable -> NONE
             }
 
+        /**
+         * What the project's running `by` says, from whichever thread a run is started on: on the EDT
+         * under a modal, cancellable progress titled [title], where a `by` that is not running is asked
+         * to start but not waited for, since a start cannot finish under a modal progress; elsewhere
+         * it is started and waited for.
+         */
+        fun ofBlocking(project: Project, title: String): ByCommandFlags =
+            byBlocking(project, title) { waitForNewStart -> of(project, waitForNewStart) }
+
+        /**
+         * What the project's `by` says if it is running, starting nothing and waiting for nothing:
+         * [NONE] while none is. For what reads an answer `by` has already given, such as the tests a
+         * running server reported.
+         */
+        fun ofRunning(project: Project): ByCommandFlags =
+            LspClientManager.getInstance(project).getClients(ByLspServerSupportProvider::class.java)
+                .firstOrNull { it.state == LspServerState.Running }
+                ?.let { of(it.initializeResult) }
+                ?: NONE
+
+        const val RUN: String = "run"
+
         const val REPL: String = "repl"
+
+        /** `by run --in-place` and `by repl --in-place`; see [runsInPlace]. */
+        const val IN_PLACE: String = "inPlace"
+
+        /** How [IN_PLACE] is spelled on `by`'s command line. */
+        const val IN_PLACE_FLAG: String = "--in-place"
 
         /** `by repl --events PORT`: what the session reads its standard input for. */
         const val REPL_EVENTS: String = "events"

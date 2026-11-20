@@ -4,6 +4,7 @@ import dev.basedpython.pycharm.env.ByEnvironmentKind
 import dev.basedpython.pycharm.env.ByEnvironments
 import dev.basedpython.pycharm.env.ByLaunch
 import dev.basedpython.pycharm.lsp.BasedPythonBinaries
+import dev.basedpython.pycharm.lsp.ByCommandFlags
 import dev.basedpython.pycharm.run.ergonomics.ByConsoleFilter
 import dev.basedpython.pycharm.run.target.ByTargetLaunch
 import dev.basedpython.pycharm.run.target.ByTargetPaths
@@ -176,6 +177,15 @@ abstract class ByCommandLineState(
      */
     protected open val startsProgram: Boolean get() = subcommandStartsProgram(subcommand)
 
+    /**
+     * Whether this `by run` runs the program in place — against the project's own directories, its
+     * `.by` modules imported from their transpiles in `by`'s run cache — rather than out of a tree
+     * staged into a temporary directory; decided as the state is made ([byRunsInPlace]). It adds
+     * `--in-place` to the command, and is what a debug session of the run reads to know which of the
+     * two the program it reloads code into runs from.
+     */
+    open val inPlace: Boolean get() = false
+
     /** Set while a target is being prepared for this run; see [prepareTargetEnvironmentRequest]. */
     private var targetLaunch: ByTargetLaunch? = null
 
@@ -296,10 +306,45 @@ abstract class ByCommandLineState(
         pythonVersion = options.pythonVersion,
         subcommandArgs = buildSubcommandArgs(),
         extraArgs = options.extraArgs,
-        infrastructureArgs = infrastructureArgs,
+        infrastructureArgs = inPlaceArgs() + infrastructureArgs,
         extraArgsForProgram = extraArgsForProgram,
     )
+
+    /** `--in-place` when the run is [inPlace] and `by`'s own flags the user wrote do not already say so. */
+    private fun inPlaceArgs(): List<String> {
+        if (!inPlace) return emptyList()
+        if (!extraArgsForProgram && ByCommandFlags.IN_PLACE_FLAG in ParametersListUtil.parse(options.extraArgs)) return emptyList()
+        return listOf(ByCommandFlags.IN_PLACE_FLAG)
+    }
 }
+
+/**
+ * Whether a `by run` of [project] runs its program in place ([ByCommandLineState.inPlace]).
+ *
+ * [byFlags], `by`'s own flags as the user wrote them, decide it first when they name `--in-place` or
+ * `--in-build`, which `by` refuses together. Otherwise it runs in place exactly when the project's
+ * `by` says its `by run` takes `--in-place` ([ByCommandFlags.runsInPlace]), and out of a staged tree
+ * when it says it does not, or no `by` answers: a `by` from before it, whose `by run` stages every
+ * program, is run the way it can run one. Never on a run target, whose `by` is the target's and not
+ * the one whose language server answers here, so what its `by run` takes is not known.
+ *
+ * [flags] asks the server, from whichever thread the run is started on ([ByCommandFlags.ofBlocking]),
+ * and only when the written flags and the target leave it open.
+ */
+internal fun byRunsInPlace(
+    project: Project,
+    byFlags: String,
+    onTarget: Boolean,
+    flags: () -> ByCommandFlags = { ByCommandFlags.ofBlocking(project, BasedPythonBundle.message("run.askingFlags")) },
+): Boolean {
+    val written = ParametersListUtil.parse(byFlags)
+    if (ByCommandFlags.IN_PLACE_FLAG in written) return true
+    if (IN_BUILD_FLAG in written || onTarget) return false
+    return flags().runsInPlace
+}
+
+/** `by run --in-build`: the staged tree as the program's working directory. Refused with `--in-place`. */
+internal const val IN_BUILD_FLAG: String = "--in-build"
 
 /**
  * The environment `by` gets on a run target: the user's variables, unbuffered output, and — when it
@@ -391,6 +436,11 @@ internal fun byCommandLine(
     // Behind the transpiled output, never in front of it: the temp tree stays `sys.path[0]`, so
     // a generated module still wins over a stale `.py` of the same name left lying beside the
     // source it was generated from.
+    //
+    // A run in place needs none of this — its runner puts the project's module roots where python
+    // puts a script's directory, and imports each `.py` from where it is — and it does no harm
+    // there: the roots come first, and the directory behind them is one of them in a project whose
+    // root is a module root.
     val prefixes = pythonPathPrefix + listOfNotNull(wd.takeIf { startsProgram })
     if (prefixes.isNotEmpty()) {
         cmd.withEnvironment(PYTHONPATH, composePythonPath(prefixes, inheritedPythonPath(options)))

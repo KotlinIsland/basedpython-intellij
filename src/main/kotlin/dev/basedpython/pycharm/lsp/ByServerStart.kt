@@ -1,7 +1,10 @@
 package dev.basedpython.pycharm.lsp
 
 import com.intellij.ide.trustedProjects.TrustedProjects
+import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.progress.runBlockingCancellable
 import com.intellij.openapi.project.Project
+import com.intellij.platform.ide.progress.runWithModalProgressBlocking
 import com.intellij.platform.lsp.api.LspClient
 import com.intellij.platform.lsp.api.LspClientManager
 import com.intellij.platform.lsp.api.LspServerState
@@ -86,6 +89,22 @@ internal suspend fun awaitByServer(
         connection.disconnect()
     }
 }
+
+/**
+ * [block], which asks the project's `by` something, run to its answer from whichever thread asks: on
+ * the EDT under a modal, cancellable progress titled [title], elsewhere by blocking the thread
+ * cancellably. [block] is told whether to wait for a `by` that has to be started first — not under a
+ * modal progress, where a start cannot finish — and passes that on to [awaitByServer].
+ *
+ * For the steps of starting a run that a run configuration's platform calls make synchronously, on a
+ * thread the platform chooses: a `RunProfile.getState` that has to know what `by` takes.
+ */
+internal fun <T> byBlocking(project: Project, title: String, block: suspend (waitForNewStart: Boolean) -> T): T =
+    if (ApplicationManager.getApplication().isDispatchThread) {
+        runWithModalProgressBlocking(project, title) { block(false) }
+    } else {
+        runBlockingCancellable { block(true) }
+    }
 
 /**
  * How long [awaitByServer] waits for `by` to answer `initialize` by default.
