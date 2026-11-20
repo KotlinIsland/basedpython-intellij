@@ -5,7 +5,9 @@ import java.security.SecureRandom
 /**
  * The files of a new django project and of a new app in one, as `django-admin startproject` and
  * `manage.py startapp` write them, laid out for a basedpython project: the project's `pyproject.toml`
- * with django among its dependencies and `basedpython` among its development ones.
+ * with django among its dependencies and `basedpython` and `django-stubs` among its development ones.
+ * Without the stubs `by` reads django's unannotated source and reports correct code — a model has no
+ * `objects`, `IntegerField(default=0)` is refused — and `by repl` refuses what `by check` reports.
  *
  * Written here rather than by running django's commands: a new project has no environment to run
  * them in yet, and an app made by `by run manage startapp` is written into the tree `by run` stages
@@ -13,9 +15,9 @@ import java.security.SecureRandom
  * `models.py` and `admin.py` by importing them, which a `.by` module answers only under `by run`.
  *
  * Every file passes `buff check` and `buff format --check` as written — consecutive assignments
- * aligned, as `buff` aligns them — as the plain scaffold's do ([BasedPythonProjectScaffold]); and
- * django's own `manage.py check` with the app installed. `BasedPythonProjectScaffoldLiveTest` runs
- * all three.
+ * aligned, as `buff` aligns them — as the plain scaffold's do ([BasedPythonProjectScaffold]); `by check`,
+ * with a model queried through its manager added to the app; and django's own `manage.py check` with
+ * the app installed. `BasedPythonProjectScaffoldLiveTest` runs all four.
  */
 internal object ByDjangoScaffold {
 
@@ -93,7 +95,7 @@ requires-python = ">=3.10"
 dependencies = ["django>=5.2"]
 
 [dependency-groups]
-dev = ["basedpython"]
+dev = ["basedpython", "django-stubs"]
 
 [tool.ruff]
 line-length = 88
@@ -116,7 +118,7 @@ import os
 import sys
 
 
-def main() -> None:
+def main():
     ""${'"'}Run administrative tasks.""${'"'}
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "$pkg.settings")
     from django.core.management import execute_from_command_line

@@ -12,7 +12,8 @@
   manage.py Task…* with command completion, and *Tools | Django Console*.
 - The Endpoints view's *HTTP Client* and *OpenAPI* tabs for basedpython routes.
 - Folding in a Django template, and its blocks in the Structure view above the HTML, from `by`.
-- *Django* in the New Project wizard, *New | Django App*, a model diagram with the Diagrams plugin,
+- *Django* in the New Project wizard, `django-stubs` among its dev dependencies so `by` reads Django
+  without false errors; *New | Django App*, a model diagram with the Diagrams plugin,
   and `DATABASES` as data sources with the Database plugin.
 
 ## [0.0.7]

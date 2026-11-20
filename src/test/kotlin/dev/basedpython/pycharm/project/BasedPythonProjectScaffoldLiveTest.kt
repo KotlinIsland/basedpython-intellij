@@ -2,6 +2,8 @@ package dev.basedpython.pycharm.project
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assumptions.assumeTrue
+import org.junit.jupiter.api.Disabled
+import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.EnumSource
@@ -26,6 +28,22 @@ internal class BasedPythonProjectScaffoldLiveTest {
     const val BUFF = "BASEDPYTHON_BUFF_UNDER_TEST"
     const val UV = "BASEDPYTHON_UV_UNDER_TEST"
     const val TIMEOUT_SECONDS = 120L
+    val POLLS_MODELS = """
+from django.db import models
+
+
+class Question(models.Model):
+    text = models.CharField(max_length=200)
+
+
+class Choice(models.Model):
+    question = models.ForeignKey(Question, on_delete=models.CASCADE)
+    votes    = models.IntegerField(default=0)
+
+
+def questions_about(word: str) -> int:
+    return Question.objects.filter(text__contains=word).count()
+""".trimStart()
   }
 
   @TempDir
@@ -92,4 +110,32 @@ internal class BasedPythonProjectScaffoldLiveTest {
       assertEquals(0, checkExit, checkOutput)
     }
   }
+
+  /** The `by` the dev dependencies install reports nothing, warnings included, which it exits 1 on. */
+  private fun byChecksClean(template: BasedPythonProjectScaffold.Template) {
+    val uv = binary(UV)
+    assumeTrue(uv != null, "$UV is not set")
+    val project = scaffold(template)
+    val (syncExit, syncOutput) = run(project, uv.toString(), "sync")
+    assertEquals(0, syncExit, syncOutput)
+    if (template == BasedPythonProjectScaffold.Template.DJANGO) {
+      // a model queried through its default manager, which by reports as missing without django-stubs
+      Files.writeString(project.resolve("polls/models.py"), POLLS_MODELS)
+    }
+    val (exit, output) = run(project, project.resolve(".venv/bin/by").toString(), "check", "--output-format", "concise")
+    assertEquals(0, exit, output)
+  }
+
+  @Test
+  fun `by reports nothing on the plain project`() = byChecksClean(BasedPythonProjectScaffold.Template.PLAIN)
+
+  /**
+   * With django-stubs the model's `objects` and `IntegerField(default=0)` are clean, but by 0.0.3
+   * (c2f7fc12b, and fd6eb3971) reports every `from django…` in the project's own package as
+   * `misplaced-dependency` — "`django` comes from `django_stubs`, which is declared in dependency
+   * group `dev`" — though django itself is a runtime dependency and a stubs package belongs in dev.
+   */
+  @Test
+  @Disabled("by reports a stubs package in the dev group as misplaced-dependency; see the doc")
+  fun `by reports nothing on the django project`() = byChecksClean(BasedPythonProjectScaffold.Template.DJANGO)
 }
