@@ -1,5 +1,7 @@
 ## [Unreleased]
 
+## [0.0.7]
+
 ### Added
 
 - basedpython for Python projects that do not name it. A banner above a project's `.py` and `.pyi`
@@ -43,6 +45,10 @@
 
 ### Changed
 
+- Bundles `by` and `buff` from basedpython 0.0.3 and `bpd` from basedpython-debugger 0.0.1a5,
+  where 0.0.6.1 bundled basedpython 0.0.1 and basedpython-debugger 0.0.1a4. basedpython 0.0.1 has
+  neither the inlay hint catalog the *Inlay Hints* page lists nor the stub counterparts the gutter
+  icons come from.
 - A new project's files are not written over files already in its directory.
 - The basedpython settings page is laid out a section per server: whether `by` or `buff` runs, its
   binary, its arguments and its features together, greyed out as a whole when it is off. It fits
