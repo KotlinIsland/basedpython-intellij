@@ -126,23 +126,28 @@ class ByBpdRecordTest {
     }
 
     /**
-     * The directory `by run` chose, which hot reload cannot work without.
+     * The directory of the runner `by run` chose, which hot reload cannot work without: the staged
+     * tree's top, or a run in place's run directory, each with `_by_sourcemap.py` beside the runner.
      *
      * Read out of the record on demand rather than held as a value, and this is why: the wrapper
-     * writes it only once `by run` has picked a temp directory, which is **after** the IDE has
-     * built the debug process. A value captured at construction is a read of a file that does not
-     * exist, and the first real session did exactly that — every reload answered that the build
-     * directory was not known.
+     * writes it only once `by run` has started the program, which is **after** the IDE has built the
+     * debug process. A value captured at construction is a read of a file that does not exist, and
+     * the first real session did exactly that — every reload answered that the build directory was
+     * not known.
+     *
+     * Not the record's `cwd`: that is the program's working directory, where the user ran it, which
+     * the wrapper no longer leaves for the runner's (it used to `cd` there, which made the staged tree
+     * or the run cache the program's working directory).
      */
     @Test
-    fun `the build directory is read out of a finished record`(@TempDir dir: Path) {
+    fun `the runner's directory is read out of a finished record`(@TempDir dir: Path) {
         val record = dir.resolve("bpd-record")
         Files.writeString(
             record,
-            "cwd /var/folders/x/T/.tmpAbC123\narg _by_runner.py\narg main\n$announcement\n",
+            "python python3\ncwd /p/project\narg /cache/basedpython-run/p-1/runs/9f3e/_by_runner.py\narg --path\narg /p/project\narg main\n$announcement\n",
         )
 
-        assertEquals("/var/folders/x/T/.tmpAbC123", ByBpdRecord.buildDirectoryOf(record))
+        assertEquals("/cache/basedpython-run/p-1/runs/9f3e", ByBpdRecord.runnerDirectoryOf(record))
     }
 
     /**
@@ -151,12 +156,19 @@ class ByBpdRecordTest {
      * own rather than waiting for the record to be complete.
      */
     @Test
-    fun `the build directory is readable before bpd has announced itself`(@TempDir dir: Path) {
+    fun `the runner's directory is readable before bpd has announced itself`(@TempDir dir: Path) {
         val record = dir.resolve("bpd-record")
-        Files.writeString(record, "cwd /var/folders/x/T/.tmpHalf\narg _by_runner.py\n")
+        Files.writeString(record, "cwd /p/project\narg /var/folders/x/T/.tmpHalf/_by_runner.py\n")
 
-        assertEquals("/var/folders/x/T/.tmpHalf", ByBpdRecord.buildDirectoryOf(record))
+        assertEquals("/var/folders/x/T/.tmpHalf", ByBpdRecord.runnerDirectoryOf(record))
         assertInstanceOf(ByBpdRecord.Incomplete::class.java, ByBpdRecord.parse(Files.readString(record)))
+    }
+
+    /** A runner named relatively is in the directory `by run` named it from. */
+    @Test
+    fun `a relatively named runner is resolved against the working directory`() {
+        assertEquals("/p/project/build", ByBpdRecord.runnerDirectoryIn("cwd /p/project\narg build/_by_runner.py\n"))
+        assertEquals("/p/project", ByBpdRecord.runnerDirectoryIn("cwd /p/project\narg _by_runner.py\n"))
     }
 
     /**
@@ -164,19 +176,19 @@ class ByBpdRecordTest {
      * reload button and must never cost the session that asked.
      */
     @Test
-    fun `a record that is not there or has no directory yet is null`(@TempDir dir: Path) {
-        assertEquals(null, ByBpdRecord.buildDirectoryOf(dir.resolve("never-written")))
+    fun `a record that is not there or names no runner yet is null`(@TempDir dir: Path) {
+        assertEquals(null, ByBpdRecord.runnerDirectoryOf(dir.resolve("never-written")))
 
         val empty = dir.resolve("empty").also { Files.writeString(it, "") }
-        assertEquals(null, ByBpdRecord.buildDirectoryOf(empty))
+        assertEquals(null, ByBpdRecord.runnerDirectoryOf(empty))
 
-        // the wrapper has started writing but the `cwd` line is not there yet
-        val partial = dir.resolve("partial").also { Files.writeString(it, "arg _by_runner.py\n") }
-        assertEquals(null, ByBpdRecord.buildDirectoryOf(partial))
+        // the wrapper has started writing but the runner's line is not there yet
+        val partial = dir.resolve("partial").also { Files.writeString(it, "cwd /p/project\n") }
+        assertEquals(null, ByBpdRecord.runnerDirectoryOf(partial))
 
-        // and a `cwd` with nothing after it is not a directory
-        val blank = dir.resolve("blank").also { Files.writeString(it, "cwd \n") }
-        assertEquals(null, ByBpdRecord.buildDirectoryOf(blank))
+        // and a relative runner with nowhere to resolve it from is no directory
+        val blank = dir.resolve("blank").also { Files.writeString(it, "arg _by_runner.py\n") }
+        assertEquals(null, ByBpdRecord.runnerDirectoryOf(blank))
     }
 }
 

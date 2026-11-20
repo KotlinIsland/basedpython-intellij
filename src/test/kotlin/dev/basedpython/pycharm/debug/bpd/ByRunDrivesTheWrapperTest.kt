@@ -84,8 +84,6 @@ class ByRunDrivesTheWrapperTest {
             script,
             "#!/bin/sh\n" +
                 """printf 'pwd %s\n' "${'$'}PWD" > "$saw"""" + "\n" +
-                """if [ -f _by_runner.py ]; then echo 'runner yes' >> "$saw";""" +
-                """ else echo 'runner no' >> "$saw"; fi""" + "\n" +
                 """echo '{"listening":{"host":"127.0.0.1","port":51234,""" +
                 """"header":"x-bpd-token","token":"tok"}}'""" + "\n",
         )
@@ -94,7 +92,15 @@ class ByRunDrivesTheWrapperTest {
     }
 
     @Test
-    fun `by run discovers the interpreter itself and hands it and the program to the wrapper`(@TempDir dir: Path) {
+    fun `by run discovers the interpreter itself and hands it and the program to the wrapper`(@TempDir dir: Path) =
+        drive(dir, mode = emptyList())
+
+    /** The same, of a `by run --in-place`, whose runner is in the run directory in `by`'s cache. */
+    @Test
+    fun `by run in place hands the wrapper the runner in its run directory`(@TempDir dir: Path) =
+        drive(dir, mode = listOf("--in-place"))
+
+    private fun drive(dir: Path, mode: List<String>) {
         val by = by()
         assumeTrue(
             by != null,
@@ -115,7 +121,7 @@ class ByRunDrivesTheWrapperTest {
         val saw = dir.resolve("bpd-saw")
         // no `--python`: the interpreter is `by run`'s to choose. A project with no environment of
         // its own takes `PYTHON`, which is how this test names one without the IDE naming it
-        val process = ProcessBuilder(by.toString(), "run", "--launcher", wrapper.toString(), "demo")
+        val process = ProcessBuilder(listOf(by.toString(), "run") + mode + listOf("--launcher", wrapper.toString(), "demo"))
             .directory(dir.toFile())
             .redirectErrorStream(true)
             .apply {
@@ -161,25 +167,21 @@ class ByRunDrivesTheWrapperTest {
             "the module is what `by run` forwards after the shim: ${ready.argv}",
         )
 
-        // 3. bpd was started *in* the transpiled tree, not in the project. The source map lives in
-        //    that tree and the launch request names the program relative to it, so a bpd started
-        //    anywhere else launches nothing at all
+        // 3. bpd was started where `by run` started the wrapper — the program's working directory,
+        //    the project, as with no debugger — and the record says so; the runner is named by its
+        //    absolute path, which is where bpd finds the map and hot reload the run's directory
         val seen = if (Files.exists(saw)) Files.readString(saw) else ""
-        assertTrue(
-            seen.contains("runner yes"),
-            "bpd could not see `_by_runner.py` from where it was started, so the launch " +
-                "request's relative program name resolves to nothing. it saw:\n$seen",
-        )
-        // and the directory the wrapper recorded is the one bpd really stood in — the record is
-        // what the IDE reads, so a record naming somewhere else would be a lie it acts on
         assertTrue(
             seen.contains("pwd ${ready.cwd}\n"),
             "the record says bpd was started in ${ready.cwd}, but it saw:\n$seen",
         )
-        assertTrue(
-            Path.of(ready.cwd) != dir,
-            "bpd was started in the project directory rather than the tree `by run` transpiled " +
-                "into: ${ready.cwd}",
+        assertEquals(
+            dir.toRealPath(),
+            Path.of(ready.cwd).toRealPath(),
+            "bpd was started somewhere other than the directory `by run` runs the program in",
         )
+        val runner = Path.of(ready.argv.first())
+        assertTrue(runner.isAbsolute, "`by run` names the runner relatively: $runner")
+        assertEquals(runner.parent.toString(), ByBpdRecord.runnerDirectoryIn(Files.readString(record)))
     }
 }

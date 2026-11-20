@@ -259,6 +259,88 @@ class ByBpdLiveSessionTest {
     }
 
     /**
+     * A program `by run --in-place` runs: a `.by` breakpoint and a `.py` one, both set before the
+     * launch as the platform sets them, bind and stop at the project's own files — the `.py` is the
+     * file the program imports, and the `.by` is reported through the run directory's map — and the
+     * program runs in the directory `by run` was started in.
+     */
+    @Test
+    fun `in place a by breakpoint and a py breakpoint stop at the project's files`(@TempDir tempDir: Path) {
+        val dir = tempDir.toRealPath()
+        val helper = dir.resolve("helper.py")
+        Files.writeString(helper, "def double(value):\n    twice = value * 2\n    return twice\n")
+        val demo = dir.resolve("demo.by")
+        Files.writeString(demo, "import os\nfrom helper import double\n\nlimit = double(5)\nprint(limit)\nprint(\"cwd\", os.getcwd())\n")
+
+        session(dir, module = "demo", inPlace = true) { connection, _, dap ->
+            assertTrue(
+                Files.exists(Path.of(connection.record.argv.first()).resolveSibling("_by_run.json")),
+                "the runner is not in a run directory of `by`'s cache: ${connection.record.argv}",
+            )
+            assertEquals(dir, Path.of(connection.record.cwd).toRealPath(), "the program runs where `by run` was started")
+            stopsAt(dap, connection, listOf(helper to 2, demo to 5))
+            val printed = dap.seen.filter { it.event == "output" }.mapNotNull { it.body?.get("output")?.asString }.joinToString("")
+            assertTrue("10" in printed, "the program ran on to the end after both stops: $printed")
+            // where the user ran it, as with no debugger — not the run directory the runner is in
+            assertTrue("cwd $dir\n" in printed, "the program ran somewhere other than where `by run` was started: $printed")
+        }
+    }
+
+    /**
+     * In place a child the program starts imports the project's own `work.py`, so a breakpoint set on
+     * it in the child's session binds and stops there — which a staged run's child cannot do (see the
+     * disabled staged test above).
+     */
+    @Test
+    fun `in place a breakpoint in a project file stops the child that imports it`(@TempDir tempDir: Path) {
+        val dir = tempDir.toRealPath()
+        val work = dir.resolve("work.py")
+        Files.writeString(work, WORK)
+        Files.writeString(dir.resolve("child.py"), "import work\n\nwork.run()\n")
+        Files.writeString(dir.resolve("demo.by"), STARTS_A_CHILD)
+
+        session(dir, module = "demo", inPlace = true) { connection, _, dap ->
+            takeUpTheChild(connection, dap, breakpoint = work to 3) { _, childDap ->
+                val arrival = childDap.until("stopped")
+                childDap.request("continue", mapOf("threadId" to arrival.body!!.get("threadId").asInt))
+                val hit = childDap.until("stopped")
+                assertEquals("breakpoint", hit.body?.get("reason")?.asString, "$hit")
+                val thread = hit.body!!.get("threadId").asInt
+                val top = childDap.request("stackTrace", mapOf("threadId" to thread))
+                    .getAsJsonObject("body").getAsJsonArray("stackFrames")[0].asJsonObject
+                assertEquals(work.toString(), top.getAsJsonObject("source").get("path").asString, "$top")
+                assertEquals(3, top.get("line").asInt, "$top")
+                childDap.request("continue", mapOf("threadId" to thread))
+                childDap.until("terminated")
+            }
+        }
+    }
+
+    /** The breakpoints of [stops] set before the launch, then each stopped at in order, in the file and on the line set. */
+    private fun stopsAt(dap: Dap, connection: ByBpdConnection, stops: List<Pair<Path, Int>>) {
+        dap.request("initialize", mapOf("adapterID" to "basedpython", "linesStartAt1" to true, "pathFormat" to "path"))
+        dap.until("initialized")
+        for ((file, line) in stops) {
+            val set = dap.request("setBreakpoints", mapOf("source" to mapOf("path" to file.toString()), "breakpoints" to listOf(mapOf("line" to line))))
+            assertTrue(set.get("success").asBoolean, "the breakpoint in ${file.fileName} was refused: $set")
+        }
+        dap.request("configurationDone", emptyMap())
+        val launched = dap.request("launch", connection.record.launchArguments(mapOf("stopOnEntry" to false), watchRecompositions = false))
+        assertTrue(launched.get("success").asBoolean, "bpd would not launch: $launched")
+        for ((file, line) in stops) {
+            val stopped = dap.until("stopped")
+            assertEquals("breakpoint", stopped.body?.get("reason")?.asString, "$stopped")
+            val thread = stopped.body!!.get("threadId").asInt
+            val top = dap.request("stackTrace", mapOf("threadId" to thread))
+                .getAsJsonObject("body").getAsJsonArray("stackFrames")[0].asJsonObject
+            assertEquals(file.toString(), top.getAsJsonObject("source").get("path").asString, "the stop is in ${file.fileName}: $top")
+            assertEquals(line, top.get("line").asInt, "and on the line the breakpoint was set on: $top")
+            dap.request("continue", mapOf("threadId" to thread))
+        }
+        dap.until("terminated")
+    }
+
+    /**
      * The parent launched with `debugChildren`, bpd's `startDebugging` answered and read by
      * [ByChildSession.parse], and the child's session opened on a second connection in the
      * platform's order — [breakpoint], `configurationDone`, then the `attach` bpd's configuration
@@ -287,7 +369,7 @@ class ByBpdLiveSessionTest {
         assertEquals("attach", arguments.get("request").asString, "$asked")
         val configuration = kotlinx.serialization.json.Json.parseToJsonElement(arguments.getAsJsonObject("configuration").toString())
             as kotlinx.serialization.json.JsonObject
-        val parsed = ByChildSession.parse(configuration, connection.record, recordFile = null)
+        val parsed = ByChildSession.parse(configuration, connection.record, run = null)
         assertTrue(parsed is ByChildSession.Parsed.Child, "the plugin refused bpd's own request: $parsed")
         val child = (parsed as ByChildSession.Parsed.Child).session
         dap.answer(asked)
@@ -322,6 +404,7 @@ class ByBpdLiveSessionTest {
     private fun session(
         dir: Path,
         module: String,
+        inPlace: Boolean = false,
         body: (connection: ByBpdConnection, python: String, dap: Dap) -> Unit,
     ) {
         val by = binary(BY)
@@ -338,7 +421,8 @@ class ByBpdLiveSessionTest {
 
         // the interpreter is `by run`'s to choose: a project with no environment of its own takes
         // `PYTHON`, and the wrapper is only ever handed what `by run` chose
-        val byRun = ProcessBuilder(by.toString(), "run", "--launcher", wrapper.toString(), module)
+        val mode = if (inPlace) listOf(dev.basedpython.pycharm.lsp.ByCommandFlags.IN_PLACE_FLAG) else emptyList()
+        val byRun = ProcessBuilder(listOf(by.toString(), "run") + mode + listOf("--launcher", wrapper.toString(), module))
             .directory(dir.toFile())
             .redirectErrorStream(true)
             .redirectOutput(dir.resolve("by-run.log").toFile())

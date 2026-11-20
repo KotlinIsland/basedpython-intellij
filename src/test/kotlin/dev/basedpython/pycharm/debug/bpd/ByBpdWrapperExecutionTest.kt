@@ -95,35 +95,44 @@ class ByBpdWrapperExecutionTest {
         assertEquals("x-bpd-token", ready.tokenHeader)
     }
 
+    /**
+     * bpd stays where `by run` started the wrapper, which is the directory the program runs in — the
+     * one the user ran it from, as for a run with no debugger. The wrapper used to `cd` to the
+     * runner's directory, which made the staged tree the program's working directory, and in a run in
+     * place `by`'s run cache. The runner is named absolutely and recorded so, which is where bpd finds
+     * the map, and where hot reload reads the run's directory from.
+     */
     @Test
-    fun `an absolutely named runner puts bpd in the tree the runner is in`(@TempDir dir: Path) {
-        // `by run` runs from the project root and names the shim absolutely. bpd inherits this
-        // process's directory and the launch request names the program relative to it, so the
-        // wrapper has to go and stand there. It did not once, and the session died on
-        // `can't open file '<project>/_by_runner.py'`.
+    fun `bpd runs the program where by run started it, not where the runner is`(@TempDir dir: Path) {
         val script = wrapper(dir)
         val tree = Files.createDirectory(dir.resolve("transpiled"))
         Files.writeString(tree.resolve("_by_runner.py"), "")
+        val project = Files.createDirectory(dir.resolve("project"))
         val bpd = stub(
             dir.resolve("toolchain/bpd"),
             """printf 'PWD %s\n' "${'$'}PWD"""" + "\necho '$announcement'",
         )
         val record = dir.resolve("record")
 
-        run(dir, script, record, listOf("python3", tree.resolve("_by_runner.py").toString(), "demo"), besideBy = bpd)
+        run(project, script, record, listOf("python3", tree.resolve("_by_runner.py").toString(), "demo"), besideBy = bpd)
 
         val written = Files.readString(record)
         val ready = assertInstanceOf(ByBpdRecord.Ready::class.java, ByBpdRecord.parse(written)) {
             "record was:\n$written"
         }
         assertEquals(
-            tree.toRealPath().toString(),
+            project.toRealPath().toString(),
             Path.of(ready.cwd).toRealPath().toString(),
-            "the wrapper recorded a directory that is not the runner's: $written",
+            "the wrapper recorded a directory that is not the one `by run` started it in: $written",
         )
         assertTrue(
             written.contains("PWD ${ready.cwd}"),
             "bpd was started somewhere other than the directory recorded for it: $written",
+        )
+        assertEquals(
+            tree.toRealPath().toString(),
+            ByBpdRecord.runnerDirectoryIn(written)?.let { Path.of(it).toRealPath().toString() },
+            "the runner's directory is read off the runner's path: $written",
         )
     }
 

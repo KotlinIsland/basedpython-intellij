@@ -30,6 +30,13 @@ package dev.basedpython.pycharm.debug.bpd
  * So the wrapper records what it was asked to run — the interpreter, the arguments and the working
  * directory, none of which the IDE can know before `by run` has chosen them — and then serves DAP.
  *
+ * It stays in the directory `by run` started it in, which bpd inherits and starts the program in:
+ * that is the program's working directory, the directory the user ran it from, as for a run with no
+ * debugger. It used to stand in the runner's directory instead, which made that the program's: the
+ * staged tree, where a relative path the program wrote landed beside the copy, and in a run in place
+ * the run directory in `by`'s cache. The runner is named by its absolute path, which is where bpd
+ * finds the map beside it.
+ *
  * ## Which `bpd`
  *
  * The one beside the `by` the run starts when the IDE found one there ([ENV_BPD]), else the one
@@ -87,7 +94,7 @@ object ByBpdWrapper {
     /** The prefix on the line naming the interpreter `by run` chose. */
     const val PYTHON_PREFIX: String = "python "
 
-    /** The prefix on the line naming the directory `by run` chose. */
+    /** The prefix on the line naming the directory `by run` started the program in. */
     const val CWD_PREFIX: String = "cwd "
 
     /** The prefix on each line naming one argument of the program. */
@@ -155,13 +162,9 @@ object ByBpdWrapper {
           exit 127
         fi
 
-        # Stand where the runner is before anything else: bpd inherits this directory and the
-        # `launch` request names the program relative to it. `by run` runs from the project root and
-        # names the runner absolutely; `dirname` of a bare `_by_runner.py` is `.`, so either works.
-        cd "$(dirname "$1")"
-
-        # Record it: the IDE cannot know the interpreter or the temp directory `by run` chose, and
-        # it sends these back as the `launch` request.
+        # Record it: the IDE cannot know the interpreter or the runner `by run` chose, and it sends
+        # these back as the `launch` request. The directory is the one `by run` started this in,
+        # which bpd inherits and the program runs in, as it would with no debugger.
         {
           printf '@PYTHON@ %s\n' "${'$'}python"
           printf '@CWD@ %s\n' "${'$'}PWD"

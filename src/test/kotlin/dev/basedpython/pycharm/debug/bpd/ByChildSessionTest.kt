@@ -47,11 +47,11 @@ class ByChildSessionTest {
 
     @Test
     fun `bpd's request for a child is taken up at the parent's listener with bpd's own arguments`() {
-        val parsed = ByChildSession.parse(request(), parent, recordFile = Path.of("/tmp/record"))
+        val parsed = ByChildSession.parse(request(), parent, run = ByBpdRun(Path.of("/tmp/record"), inPlace = true))
         val child = assertInstanceOf(ByChildSession.Parsed.Child::class.java, parsed).session
 
         assertSame(parent, child.parent, "the connection is made with what the IDE already trusted")
-        assertEquals(Path.of("/tmp/record"), child.recordFile)
+        assertEquals(ByBpdRun(Path.of("/tmp/record"), inPlace = true), child.run, "a child runs out of its parent's directory, in place as its parent does")
         assertFalse(child.stopsOnEntry)
         // the arguments go back to bpd on the `attach` as it wrote them, the session an integer
         assertEquals(2L, child.configuration["bpdSession"])
@@ -65,35 +65,35 @@ class ByChildSessionTest {
 
     @Test
     fun `a child asked to stop on entry is left where bpd holds it`() {
-        val parsed = ByChildSession.parse(request(extra = ""","stopOnEntry":true"""), parent, recordFile = null)
+        val parsed = ByChildSession.parse(request(extra = ""","stopOnEntry":true"""), parent, run = null)
         assertTrue(assertInstanceOf(ByChildSession.Parsed.Child::class.java, parsed).session.stopsOnEntry)
     }
 
     @Test
     fun `an address other than the parent's listener is refused rather than dialled`() {
-        val parsed = ByChildSession.parse(request(port = 4711), parent, recordFile = null)
+        val parsed = ByChildSession.parse(request(port = 4711), parent, run = null)
         val why = assertInstanceOf(ByChildSession.Parsed.Refused::class.java, parsed).why
         assertTrue("127.0.0.1:4711" in why && "127.0.0.1:51234" in why, why)
     }
 
     @Test
     fun `a token other than the parent's is refused`() {
-        val parsed = ByChildSession.parse(request(token = "other"), parent, recordFile = null)
+        val parsed = ByChildSession.parse(request(token = "other"), parent, run = null)
         assertInstanceOf(ByChildSession.Parsed.Refused::class.java, parsed)
     }
 
     @Test
     fun `a request naming no session is refused`() {
-        val parsed = ByChildSession.parse(request(session = "null"), parent, recordFile = null)
+        val parsed = ByChildSession.parse(request(session = "null"), parent, run = null)
         assertInstanceOf(ByChildSession.Parsed.Refused::class.java, parsed)
     }
 
     @Test
     fun `a session bpd dialled cannot take a child up`() {
         val dialled = ByBpdRecord.Chosen(python = parent.python, cwd = parent.cwd, argv = parent.argv)
-        val parsed = ByChildSession.parse(request(), dialled, recordFile = null)
+        val parsed = ByChildSession.parse(request(), dialled, run = null)
         assertInstanceOf(ByChildSession.Parsed.Refused::class.java, parsed)
-        assertInstanceOf(ByChildSession.Parsed.Refused::class.java, ByChildSession.parse(request(), null, recordFile = null))
+        assertInstanceOf(ByChildSession.Parsed.Refused::class.java, ByChildSession.parse(request(), null, run = null))
     }
 
     @Test

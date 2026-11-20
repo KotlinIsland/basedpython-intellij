@@ -17,7 +17,7 @@ import com.intellij.xdebugger.hotswap.SourceFileChangesListener
 import dev.basedpython.pycharm.debug.ByBpdProse
 import dev.basedpython.pycharm.debug.ByDapRequests
 import dev.basedpython.pycharm.debug.send
-import dev.basedpython.pycharm.debug.bpd.ByBpdRecord
+import dev.basedpython.pycharm.debug.bpd.ByBpdRun
 import dev.basedpython.pycharm.lang.dialect.BasedPythonSources
 import dev.basedpython.pycharm.util.BasedPythonBundle
 import kotlinx.coroutines.CancellationException
@@ -69,15 +69,15 @@ internal class ByHotSwapProvider(
     private val project: Project,
     private val executor: DapSessionExecutor,
     /**
-     * The file the wrapper writes the directory `by run` chose into.
+     * The program: the file the wrapper writes the runner `by run` chose into, and whether it runs in
+     * place.
      *
-     * Read when the button is pressed rather than held as a value, because it is not knowable
-     * before then: `by run` chooses its temp directory after the IDE has built this, so a value
-     * captured at construction is a read of a file that does not exist yet. That was the first
-     * thing this feature got wrong in a real session — every reload answered that the build
-     * directory was not known.
+     * The directory is read when the button is pressed rather than held as a value, because it is not
+     * knowable before then: `by run` chooses it after the IDE has built this, so a value captured at
+     * construction is a read of a file that does not exist yet. That was the first thing this feature
+     * got wrong in a real session — every reload answered that the build directory was not known.
      */
-    private val recordFile: java.nio.file.Path?,
+    private val run: ByBpdRun?,
 ) : HotSwapProvider<VirtualFile> {
 
     /**
@@ -170,8 +170,8 @@ internal class ByHotSwapProvider(
             return
         }
 
-        val directory = recordFile?.let { ByBpdRecord.buildDirectoryOf(it) }
-        if (directory == null) {
+        val directory = run?.runnerDirectory()
+        if (run == null || directory == null) {
             // The enabler offers this for bpd sessions only, and a bpd session is one `by run`
             // started — so this is a record that could not be read rather than a session of a shape
             // that was never meant to work. The path is named because without it there is nothing
@@ -179,7 +179,7 @@ internal class ByHotSwapProvider(
             tell(
                 listOf(
                     "nothing was reloaded: the directory `by run` is running this program out of " +
-                        "is not known — nothing readable in ${recordFile ?: "the session's record"}",
+                        "is not known — nothing readable in ${run?.record ?: "the session's record"}",
                 ),
             )
             listener.onFailure()

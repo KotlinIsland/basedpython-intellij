@@ -18,7 +18,7 @@ data class ByDebuggeeInfo(
     val port: Int = 0,
     /** `sys.executable` of the debuggee — the interpreter `by run` actually chose. */
     val python: String? = null,
-    /** `by run`'s temp directory: the transpiled output and `_by_sourcemap.py` live here. */
+    /** The runner's directory — a staged run's temp tree, or a run in place's run directory in `by`'s cache — where `_by_sourcemap.py` is. */
     val runDir: String? = null,
     /**
      * `by run`'s runner, `_by_runner.py` in [runDir], as python names it in the runner's frames —

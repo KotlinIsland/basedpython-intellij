@@ -36,7 +36,6 @@ import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.longOrNull
-import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -53,8 +52,8 @@ import java.util.concurrent.ConcurrentHashMap
  * @property parent what the parent session's wrapper recorded: the address and token the child's
  *   connection is made with ([ByBpdConnection.child])
  * @property configuration the `attach` arguments, bpd's own, as the platform takes start arguments
- * @property recordFile the parent's record file, through which a hot reload in the child finds
- *   `by run`'s build directory — the child runs from the same one
+ * @property run the parent's program, through which a hot reload in the child finds where `by run`
+ *   runs it from — the child runs from the same directory
  * @property stopsOnEntry whether the configuration asked for a stop before the program runs: bpd
  *   holds a taken-up child and announces where it is held whatever the configuration says, so it is
  *   the IDE that lets the child go, unless the user asked to stop there
@@ -62,7 +61,7 @@ import java.util.concurrent.ConcurrentHashMap
 internal class ByChildSession(
     val parent: ByBpdRecord.Ready,
     val configuration: Map<String, Any?>,
-    val recordFile: Path?,
+    val run: ByBpdRun?,
     val stopsOnEntry: Boolean,
 ) {
 
@@ -85,7 +84,7 @@ internal class ByChildSession(
          * is not one bpd makes — every session of a debuggee shares one listener and one token — and
          * the IDE does not dial an address because the debuggee's adapter named it.
          */
-        fun parse(configuration: JsonObject, parent: ByBpdRecord.Launch?, recordFile: Path?): Parsed {
+        fun parse(configuration: JsonObject, parent: ByBpdRecord.Launch?, run: ByBpdRun?): Parsed {
             val ready = parent as? ByBpdRecord.Ready
                 ?: return Parsed.Refused(
                     "this client reached bpd by having bpd dial it, and a child's session would need a " +
@@ -111,7 +110,7 @@ internal class ByChildSession(
             val stopsOnEntry = (configuration["stopOnEntry"] as? JsonPrimitive)?.booleanOrNull == true
             @Suppress("UNCHECKED_CAST")
             val arguments = plain(configuration) as Map<String, Any?>
-            return Parsed.Child(ByChildSession(ready, arguments, recordFile, stopsOnEntry))
+            return Parsed.Child(ByChildSession(ready, arguments, run, stopsOnEntry))
         }
 
         /**
@@ -147,11 +146,11 @@ internal class ByChildSession(
  * descriptor the child as it is built ([take]).
  *
  * @param parent what the parent session's wrapper recorded, once it has
- * @param recordFile the parent's record file
+ * @param run the parent's program, once its session has one
  */
 internal class ByStartDebuggingSupport(
     private val parent: () -> ByBpdRecord.Launch?,
-    private val recordFile: () -> Path?,
+    private val run: () -> ByBpdRun?,
 ) : DapStartDebuggingSupport() {
 
     /** The tabs of this session's children that have ended, for the next child to take over. */
@@ -166,7 +165,7 @@ internal class ByStartDebuggingSupport(
         }
         val configuration = args.configuration as? JsonObject
             ?: throw DapRequestFailedException("the startDebugging configuration is not a JSON object")
-        val child = when (val parsed = ByChildSession.parse(configuration, parent(), recordFile())) {
+        val child = when (val parsed = ByChildSession.parse(configuration, parent(), run())) {
             is ByChildSession.Parsed.Refused -> {
                 LOG.warn("refused bpd's startDebugging: ${parsed.why}")
                 throw DapRequestFailedException(parsed.why)

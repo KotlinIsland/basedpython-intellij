@@ -51,6 +51,7 @@ import com.jetbrains.dap.protocol.OutputEventArguments
 import dev.basedpython.pycharm.actions.ByCli
 import dev.basedpython.pycharm.debug.bpd.ByBpdConnection
 import dev.basedpython.pycharm.debug.bpd.ByBpdRecord
+import dev.basedpython.pycharm.debug.bpd.ByBpdRun
 import dev.basedpython.pycharm.debug.bpd.ByBpdWrapper
 import dev.basedpython.pycharm.debug.bpd.ByChildSession
 import dev.basedpython.pycharm.debug.bpd.ByStartDebuggingSupport
@@ -128,8 +129,20 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
      */
     private val children = ByStartDebuggingSupport(
         parent = { bpdRecord ?: child?.parent },
-        recordFile = { setup?.infoFile ?: child?.recordFile },
+        run = { run },
     )
+
+    /**
+     * The program this session debugs under bpd, once [configureProfileState] has seen the run: the
+     * record its wrapper writes, and whether the run configuration runs it in place. A child's is its
+     * parent's. Null for a debugpy session.
+     */
+    private val run: ByBpdRun?
+        get() = child?.run ?: setup?.takeIf { it.backend == ByDebugBackend.BPD }?.let { ByBpdRun(it.infoFile, runsInPlace) }
+
+    /** Whether the run configuration's `by run` runs the program in place, as [configureProfileState] read it off the state. */
+    @Volatile
+    private var runsInPlace: Boolean = false
 
     /** What a bpd session's wrapper recorded, once [launchDebugAdapter] has read it. */
     @Volatile
@@ -237,6 +250,7 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
 
         val commandLine = state as? ByCommandLineState
             ?: throw ExecutionException(BasedPythonBundle.message("debug.error.unsupportedState"))
+        runsInPlace = commandLine.inPlace
 
         // The platform ends the session's process when the session ends, and the adapter ends a
         // session itself when the program has finished — at which point `by run` is on its way out
@@ -440,11 +454,11 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
             // the safe way to be wrong: it costs at most a duplicate of output the console already
             // has, and a hot reload button for a session nothing could have been reloaded in.
             backend = backend,
-            // The *path*, not what is in it. The wrapper writes the temp directory `by run` chose
+            // The record's *path*, not what is in it. The wrapper writes the runner `by run` chose
             // into this file, and `by run` has not chosen one yet when the process is built — so
             // reading it here is reading a file that does not exist. It is read when hot reload
             // asks, by which time the program is running and the record is complete.
-            recordFile = setup?.infoFile ?: child?.recordFile,
+            run = run,
             recompositionLink = link,
             letsArrivalGo = child?.stopsOnEntry == false,
         ).also { process = it }
@@ -637,15 +651,16 @@ internal class ByDapXDebugProcess(
     startRequestArguments: Map<String, Any?>,
     val backend: ByDebugBackend?,
     /**
-     * The file the wrapper writes what `by run` chose into.
+     * The program a bpd session debugs: the file the wrapper writes what `by run` chose into, and
+     * whether `by run` runs it in place.
      *
-     * Where the build directory comes from, and the one thing about a bpd session the IDE cannot
+     * Where the program's directory comes from, and the one thing about a bpd session the IDE cannot
      * work out for itself: the directory is chosen inside `by run`, so nothing here knows it until
-     * the program has started. Kept as the path rather than its contents because this is built
-     * *before* that happens — see [dev.basedpython.pycharm.debug.bpd.ByBpdRecord.buildDirectoryOf].
-     * Null for a session that is not one of `by run`'s.
+     * the program has started. Kept as the record's path rather than its contents because this is
+     * built *before* that happens — see [ByBpdRun.runnerDirectory]. Null for a session that is not
+     * bpd's.
      */
-    val recordFile: java.nio.file.Path?,
+    val run: ByBpdRun?,
     /** What this session's recomposition requests are sent through, and known by. */
     internal val recompositionLink: ByRecompositionLink,
     /**

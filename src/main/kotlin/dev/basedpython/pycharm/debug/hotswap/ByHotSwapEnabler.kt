@@ -29,7 +29,7 @@ internal class ByHotSwapEnabler : HotSwapInDebugSessionEnabler {
         return ByHotSwapProvider(
             project = dap.session.project,
             executor = dap.dapDebugSession,
-            recordFile = dap.recordFile,
+            run = dap.run,
         )
     }
 }
