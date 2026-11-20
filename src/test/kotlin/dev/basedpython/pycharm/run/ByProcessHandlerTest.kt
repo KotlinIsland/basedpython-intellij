@@ -175,6 +175,56 @@ class ByProcessHandlerTest {
         assertTrue(handler.waitFor(10_000))
     }
 
+    /**
+     * `by` passes the signal to the program alone, so a process the program started and left
+     * running outlives them both, holding the output pipe it inherited, which the handler reads
+     * until its last writer closes it. Ubuntu's sh, dash, runs `sh -c 'sleep 600'` that way, `sleep`
+     * a child it does not pass a SIGTERM to, where macOS's execs the `sleep`: how the tests above
+     * failed on Linux alone, the handler never announcing the end. Here the shell leaves its child
+     * behind on either.
+     */
+    @Test
+    fun `Stop ends what by leaves running when the signal ends it`() {
+        val handler = started("sleep 600 & wait") { false }
+        val left = descendants(handler, atLeast = 1).single()
+
+        handler.destroyProcess()
+
+        assertTrue(handler.waitFor(10_000), "what by left running kept the process from ending")
+        assertTrue(left.onExit().completeOnTimeout(left, 10, java.util.concurrent.TimeUnit.SECONDS).get().let { !it.isAlive })
+        assertEquals(143, handler.exitCode, "by's own end on the SIGTERM")
+    }
+
+    /**
+     * Below a `by` the signal has ended, the platform finds nothing to kill by parent: its kill only
+     * closes the pipes the handler reads, which on macOS ends the handler with the process still
+     * running and on Linux does not even end the handler.
+     */
+    @Test
+    fun `a second Stop kills what by left running that does not end on the signal`() {
+        val handler = started("sh -c 'trap \"\" TERM; while :; do sleep 0.05; done' & wait") { false }
+        // with the loop's `sleep` below it, the trap is set
+        val left = descendants(handler, atLeast = 2).single { it.parent().map(ProcessHandle::pid).orElse(-1) == handler.process.pid() }
+        handler.destroyProcess()
+        assertFalse(handler.waitFor(300), "what by left running should have ignored the signal")
+        assertTrue(left.isAlive, "what by left running should have ignored the signal")
+
+        handler.killProcess()
+
+        assertTrue(handler.waitFor(10_000), "the second Stop left the process running")
+        assertTrue(left.onExit().completeOnTimeout(left, 10, java.util.concurrent.TimeUnit.SECONDS).get().let { !it.isAlive }, "the second Stop left what by left running")
+    }
+
+    private fun descendants(handler: ByProcessHandler, atLeast: Int): List<ProcessHandle> {
+        val deadline = System.currentTimeMillis() + 10_000
+        while (System.currentTimeMillis() < deadline) {
+            val found = handler.process.toHandle().descendants().toList()
+            if (found.size >= atLeast) return found
+            Thread.sleep(20)
+        }
+        error("by started fewer than $atLeast processes")
+    }
+
     private fun started(script: String, finishesOnItsOwn: () -> Boolean): ByProcessHandler =
         ByProcessHandler(GeneralCommandLine("sh", "-c", script), finishesOnItsOwn = finishesOnItsOwn).also { it.startNotify() }
 }

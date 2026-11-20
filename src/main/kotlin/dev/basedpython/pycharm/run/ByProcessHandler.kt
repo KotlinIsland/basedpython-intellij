@@ -59,9 +59,43 @@ internal class ByProcessHandler(
      * process writes to, so whatever it printed on the way out was lost and the next write killed
      * it with SIGPIPE (exit 141). This sends the signal and leaves the pipes to close when the
      * process has ended.
+     *
+     * What ran below `by` as the signal was sent and is still running once `by` has ended gets a
+     * SIGTERM of its own then, see [stoppedTree]: `by` passes the signal to the program alone, so a
+     * process the program started and did not end itself outlives both, holding the output pipe it
+     * inherited, and the handler, whose reader blocks on that pipe until its last writer closes it,
+     * never announced the end. Measured with the JDK's own pipes, on Linux and macOS alike: a read
+     * in flight as the process died stayed blocked while an orphaned `sleep` lived and returned the
+     * end once it was signalled. Nor could the second Stop reach it: the platform kills the tree
+     * below the process by parent, and an orphan's parent is no longer `by`.
      */
-    override fun destroyProcessGracefully(): Boolean =
-        ProcessHandle.of(process.pid()).map(ProcessHandle::destroy).orElse(false)
+    override fun destroyProcessGracefully(): Boolean {
+        val by = ProcessHandle.of(process.pid()).orElse(null) ?: return false
+        stoppedTree = by.descendants().toList()
+        if (!by.destroy()) return false
+        process.onExit().thenRun { survivors().forEach(ProcessHandle::destroy) }
+        return true
+    }
+
+    /**
+     * Every process below `by` when Stop sent it the signal: those `by` leaves behind when it ends
+     * are what [destroyProcessGracefully] signals then and [killProcess] kills. Taken as the signal
+     * is sent because once `by` has ended its orphans are no longer found below it.
+     */
+    @Volatile
+    private var stoppedTree: List<ProcessHandle> = emptyList()
+
+    /** Those of [stoppedTree] still running; a [ProcessHandle] knows its process from a reused pid. */
+    private fun survivors(): List<ProcessHandle> = stoppedTree.filter(ProcessHandle::isAlive)
+
+    /**
+     * The second Stop: the platform's kill of the tree below `by`, and of whatever `by` left behind
+     * when the first Stop ended it, with what each of those has started since.
+     */
+    override fun killProcess() {
+        super.killProcess()
+        survivors().flatMap { listOf(it) + it.descendants().toList() }.forEach(ProcessHandle::destroyForcibly)
+    }
 
     /** Set, and never cleared, once a request to end the process came after what it ran had ended. */
     @Volatile
