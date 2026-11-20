@@ -85,6 +85,56 @@ class ByDebugBootstrapRunTest {
     }
 
     /**
+     * A python a program `by run --in-place` runs starts, debugged under debugpy: its `PYTHONPATH`
+     * holds the run directory's `boot/` first, which the runner put there, then the bootstrap's
+     * directory and the environment's, which it inherited. `site` imports `boot/sitecustomize.py`,
+     * which (`by` 8d9c9e1cf's `_by_boot`) installs the import support once and runs the next
+     * `sitecustomize` after `boot/` — this bootstrap — which runs the next after its own: the
+     * environment's. It used to run the first other one, `boot`'s again, a no-op, so the
+     * environment's never ran in such a child.
+     */
+    @Test
+    fun `in a child of a run in place the environment's sitecustomize runs after the bootstrap`() {
+        val log = dir.resolve("ran")
+        val boot = Files.createDirectories(dir.resolve("run/boot"))
+        // what `by run --in-place` writes, its chaining as `_by_boot` does it
+        Files.writeString(boot.resolve("sitecustomize.py"), "import _by_boot\n")
+        Files.writeString(
+            boot.resolve("_by_boot.py"),
+            """
+            import importlib.machinery, importlib.util, os, sys
+            open(${Gson().toJson(log.toString())}, "a").write("boot\n")
+            here = os.path.dirname(os.path.abspath(__file__))
+            after = sys.path[[os.path.abspath(entry or ".") for entry in sys.path].index(here) + 1:]
+            spec = importlib.machinery.PathFinder.find_spec("sitecustomize", after)
+            module = importlib.util.module_from_spec(spec)
+            sys.modules["sitecustomize"] = module
+            spec.loader.exec_module(module)
+            """.trimIndent() + "\n",
+        )
+        val bootstrap = Files.createDirectories(dir.resolve("bootstrap"))
+        Files.write(
+            bootstrap.resolve("sitecustomize.py"),
+            checkNotNull(javaClass.getResourceAsStream("/debug/sitecustomize.py")).use { it.readBytes() },
+        )
+        val environment = Files.createDirectories(dir.resolve("environment"))
+        Files.writeString(environment.resolve("sitecustomize.py"), "open(${Gson().toJson(log.toString())}, \"a\").write(\"environment\\n\")\n")
+
+        val process = ProcessBuilder(PYTHON, "-s", "-c", "pass")
+            .apply {
+                environment().clear()
+                environment()["PATH"] = System.getenv("PATH").orEmpty()
+                environment()["PYTHONPATH"] = listOf(boot, bootstrap, environment).joinToString(java.io.File.pathSeparator)
+            }
+            .redirectErrorStream(true)
+            .start()
+        val out = process.inputStream.bufferedReader().readText()
+        check(process.waitFor(60, TimeUnit.SECONDS)) { "$PYTHON did not finish" }
+        assertEquals(0, process.exitValue(), out)
+        assertEquals(listOf("boot", "environment"), Files.readAllLines(log), "the sitecustomizes that ran, in order: $out")
+    }
+
+    /**
      * Runs the bootstrap's activation as the runner's `sitecustomize` would, in a run directory
      * holding `_by_runner.py` and a `_by_sourcemap.py` of [sourcemap] (`RUN` standing for that
      * directory), and returns its report with what pydevd was asked under `pydevd`.

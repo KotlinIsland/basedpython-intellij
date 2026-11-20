@@ -191,11 +191,28 @@ def _activate(port):
     debugpy.wait_for_client()
 
 
+def _same_directory(entry, directory):
+    try:
+        return os.path.normcase(os.path.realpath(entry or os.getcwd())) == os.path.normcase(os.path.realpath(directory))
+    except Exception:
+        return False
+
+
 def _find_shadowed_sitecustomize():
     """The ``sitecustomize.py`` this one displaced, if there was one.
 
     Prepending a directory to ``PYTHONPATH`` also prepends its ``sitecustomize``, and ``site``
     imports exactly one. Environments that ship their own would silently stop being customised.
+
+    The one displaced is the next on ``sys.path`` *after* this one's directory, and only after it.
+    One ahead of it would have been imported in its place — so it is either not there or it is what
+    ran first and handed over to this one. That is a child of a ``by run --in-place`` program: the
+    runner puts its run directory's ``boot/`` at the head of the program's ``PYTHONPATH``, so a python
+    the program starts imports ``boot/sitecustomize.py``, which installs ``by``'s import support and
+    runs the next ``sitecustomize`` after ``boot/``, this one. Taking the first other one, as this
+    used to, ran ``boot``'s again — a no-op, since it imports a module that is already imported — and
+    the environment's own never ran in such a child. A directory not found on ``sys.path`` at all
+    gives none: there is no "after" to look in.
 
     Resolved *before* anything else runs, because ``sys.path`` does not stay still: importing
     debugpy puts pydevd's own ``pydev_sitecustomize`` on it, and that file is not a user
@@ -203,12 +220,16 @@ def _find_shadowed_sitecustomize():
     it ends by deleting ``sys.modules['sitecustomize']`` and re-importing, which from here would
     find *this* module again. Skipped by name as well, belt and braces.
     """
-    for entry in sys.path:
+    entries = list(sys.path)
+    own = next((index for index, entry in enumerate(entries) if _same_directory(entry, _HERE)), None)
+    if own is None:
+        return None
+    for entry in entries[own + 1:]:
         try:
             directory = os.path.abspath(entry or os.getcwd())
         except Exception:
             continue
-        if directory == _HERE or "pydev_sitecustomize" in directory:
+        if _same_directory(directory, _HERE) or "pydev_sitecustomize" in directory:
             continue
         candidate = os.path.join(directory, "sitecustomize.py")
         if os.path.isfile(candidate):
