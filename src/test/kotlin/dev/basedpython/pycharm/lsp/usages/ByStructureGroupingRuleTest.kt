@@ -1,7 +1,6 @@
 package dev.basedpython.pycharm.lsp.usages
 
 import com.intellij.icons.AllIcons
-import com.intellij.openapi.util.TextRange
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import com.intellij.usageView.UsageInfo
 import com.intellij.usages.UsageInfo2UsageAdapter

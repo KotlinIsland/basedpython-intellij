@@ -168,13 +168,13 @@ internal class ByMethodHierarchyTreeStructure(
     }
 }
 
+/** `Class.member`, or the member alone where `by` does not say its class. */
+internal val ByDeclared.name: String get() = container?.let { "$it.$member" } ?: member
+
 /**
  * One class's declaration of the member: the class, marked as Java marks a class that defines the
  * method, and where it is. Or, with no [node], a [message] saying why there is no tree.
  */
-/** `Class.member`, or the member alone where `by` does not say its class. */
-internal val ByDeclared.name: String get() = container?.let { "$it.$member" } ?: member
-
 internal class ByMethodNodeDescriptor(
     project: Project,
     parent: HierarchyNodeDescriptor?,

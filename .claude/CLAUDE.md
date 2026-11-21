@@ -10,4 +10,4 @@ code the platform can call while painting (file type overriders, icons, tab titl
 
 MCP Steroid scripts run on a pooled thread holding no lock: wrap model reads in `readAction {}`, and read an error with `Script__jonnyzzz` frames as the script's mistake, not the plugin's
 
-DevKit's inspections, threading included, run in CI through Qodana (qodana.yaml, README's lint section): a new Critical or High finding fails the build, and the baseline is the backlog, not a place to put new findings
+DevKit's inspections, threading included, and the Kotlin/JVM probable-bug, dead-code, bundle and i18n ones run in CI through Qodana (qodana.yaml, README's lint section): a new Critical or High finding fails the build, and the baseline is the backlog, not a place to put new findings

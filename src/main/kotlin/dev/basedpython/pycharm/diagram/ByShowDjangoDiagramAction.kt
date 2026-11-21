@@ -43,7 +43,7 @@ internal class ByShowDjangoDiagramAction : DumbAwareAction(
         // a diagram opened by its file is drawn unlaid, every node at the origin (measured in
         // 263.7307); the plugin's own Show Diagram lays it out as it opens, so this does the same
         for (editor in FileEditorManager.getInstance(project).getEditors(file).filterIsInstance<DiagramFileEditor>()) {
-            editor.viewBuilder?.queryUpdate()?.withDataReload()?.withPresentationUpdate()?.withRelayout()?.runAsync()
+            editor.viewBuilder.queryUpdate().withDataReload().withPresentationUpdate().withRelayout().runAsync()
         }
     }
 }

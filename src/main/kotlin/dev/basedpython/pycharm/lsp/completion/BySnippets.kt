@@ -13,7 +13,7 @@ import com.intellij.openapi.project.Project
  */
 internal object BySnippets {
 
-    /** A run of text, or a tab stop: [index] 0 is where the caret ends, the rest are stopped at in order. */
+    /** A run of text, or a tab stop: [Stop.index] 0 is where the caret ends, the rest are stopped at in order. */
     sealed interface Part {
         data class Text(val text: String) : Part
         data class Stop(val index: Int, val placeholder: String) : Part

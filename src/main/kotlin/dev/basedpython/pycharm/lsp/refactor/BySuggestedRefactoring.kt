@@ -201,7 +201,7 @@ internal data class ByParameterShape(val stars: String, val section: Int, val ha
 }
 
 /**
- * A `def`'s signature: its name, its parameters each with what follows its name as [type] and its
+ * A `def`'s signature: its name, its parameters each with what follows its name as its `type` and its
  * [ByParameterShape], and its return annotation; a class's, its name.
  */
 private class BySignatureStateChanges(support: SuggestedRefactoringSupport) : SuggestedRefactoringStateChanges(support) {
@@ -428,7 +428,7 @@ internal class ByChangeSignatureExecution(support: SuggestedRefactoringSupport) 
  * The name a `.by` definition declares, as the declaration the platform renames: a token's range,
  * followed through edits by a marker.
  *
- * Made by [ByRenameAvailability] for the suggestion on screen and dropped with it; nothing keeps
+ * Made by [BySignatureAvailability] for the suggestion on screen and dropped with it; nothing keeps
  * one. [setName] is how the platform puts the old name back before it renames: it rewrites the
  * name's text, and nothing else.
  */

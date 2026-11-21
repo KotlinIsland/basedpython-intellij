@@ -23,7 +23,7 @@ private const val DEBUGPY = "debugpy"
  * How to put `debugpy` where the debugger will find it.
  *
  * "Where" is not a matter of taste: the bootstrap runs inside whichever interpreter `by run`
- * chose, and that is the only one that counts. [python] is what that process reported as its own
+ * chose, and that is the only one that counts. [plan]'s `python` is what that process reported as its own
  * `sys.executable`, so installing into it cannot miss.
  */
 sealed interface ByDebugpyInstall {

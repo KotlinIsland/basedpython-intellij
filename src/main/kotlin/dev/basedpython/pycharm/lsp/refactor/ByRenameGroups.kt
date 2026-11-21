@@ -9,7 +9,6 @@ import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiManager
 import com.intellij.refactoring.rename.UnresolvableCollisionUsageInfo
 import com.intellij.ui.dsl.builder.panel
-import com.intellij.usageView.UsageInfo
 import com.intellij.util.concurrency.annotations.RequiresReadLock
 import com.intellij.util.concurrency.annotations.RequiresWriteLock
 import dev.basedpython.pycharm.util.BasedPythonBundle

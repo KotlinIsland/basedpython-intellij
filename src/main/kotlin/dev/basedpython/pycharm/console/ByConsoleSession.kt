@@ -29,6 +29,8 @@ import dev.basedpython.pycharm.lsp.awaitByServer
 import dev.basedpython.pycharm.run.ByCommonOptions
 import dev.basedpython.pycharm.run.ByProcessHandler
 import dev.basedpython.pycharm.run.byCommandLine
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.atomic.AtomicInteger
@@ -316,8 +318,9 @@ internal class ByConsoleSession private constructor(
             waitForNewStart: Boolean = true,
         ): Started {
             val flags = ByCommandFlags.of(project, waitForNewStart)
+            // before the events' socket is opened, which a cancellation here would leave open
+            val sessionFile = withContext(Dispatchers.IO) { Files.createTempFile("basedpython-console", ".by") }
             val events = if (flags.takes(ByCommandFlags.REPL, ByCommandFlags.REPL_EVENTS)) ByReplEvents.open() else null
-            val sessionFile = Files.createTempFile("basedpython-console", ".by")
             val commandLine = try {
                 byCommandLine(
                     project = project,

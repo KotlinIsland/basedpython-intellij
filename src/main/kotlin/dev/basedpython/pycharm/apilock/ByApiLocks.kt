@@ -71,10 +71,12 @@ internal object ByApiLocks {
             is ByAnswer.Answer -> ByApiLockAnswer.Lock(answer.value)
             ByAnswer.None -> ByApiLockAnswer.Not(BasedPythonBundle.message("apiLock.noProject"))
             ByAnswer.Failed -> ByApiLockAnswer.Not(
-                when {
-                    refusal != null && isMethodNotFound(refusal!!) -> BasedPythonBundle.message("apiLock.unsupported")
-                    refusal != null -> BasedPythonBundle.message("apiLock.refused", refusal!!.message.orEmpty())
-                    else -> BasedPythonBundle.message("apiLock.noAnswer")
+                refusal.let { why ->
+                    when {
+                        why != null && isMethodNotFound(why) -> BasedPythonBundle.message("apiLock.unsupported")
+                        why != null -> BasedPythonBundle.message("apiLock.refused", why.message.orEmpty())
+                        else -> BasedPythonBundle.message("apiLock.noAnswer")
+                    }
                 },
             )
         }

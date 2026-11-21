@@ -27,7 +27,6 @@ internal class ByHotSwapEnabler : HotSwapInDebugSessionEnabler {
         val dap = process as? ByDapXDebugProcess ?: return null
         if (dap.backend != ByDebugBackend.BPD) return null
         return ByHotSwapProvider(
-            process = dap,
             project = dap.session.project,
             executor = dap.dapDebugSession,
             recordFile = dap.recordFile,

@@ -31,7 +31,7 @@ class ByMethodNavigation : MethodNavigationOffsetProvider {
                 for (statement in statements) {
                     val name = statement.name
                     val def = name != null && statement.clauses.firstOrNull()?.keyword?.let { text.subSequence(it.startOffset, it.endOffset) } == "def"
-                    if (def && (atTop || inClass)) offsets += name!!.startOffset
+                    if (def && (atTop || inClass)) offsets += name.startOffset
                     val isClass = name != null && !def
                     for (clause in statement.clauses) {
                         // a function's own body holds no methods; a class's does, and so does a block at its level

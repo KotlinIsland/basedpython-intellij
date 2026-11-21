@@ -1,7 +1,6 @@
 package dev.basedpython.pycharm.format
 
 import com.intellij.application.options.CodeStyle
-import com.intellij.psi.codeStyle.CodeStyleSettings
 import com.intellij.psi.codeStyle.modifier.TransientCodeStyleSettings
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.lang.BasedPythonLanguage

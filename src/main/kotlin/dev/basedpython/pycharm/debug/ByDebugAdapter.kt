@@ -164,7 +164,8 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
         /**
          * A session on a run target reports the target's paths — `by run`'s source maps name the
          * files where it ran — and is given breakpoints in them; translated through where the
-         * project is there ([ByBpdOnTarget.paths]). A session here is the platform's own.
+         * project is there ([dev.basedpython.pycharm.debug.bpd.ByBpdOnTarget.paths]). A session
+         * here is the platform's own.
          */
         override val sourcesSupport: DapSourcesSupport = object : DapSourcesSupport() {
             override fun createVirtualFileResolver(): DapVirtualFileResolver = ByTargetFileResolver { setup?.onTarget?.paths }
@@ -200,8 +201,8 @@ class ByDebugAdapterDescriptor(private val project: Project) : DebugAdapterDescr
     /**
      * The line and exception breakpoint types.
      *
-     * On the descriptor rather than on [ByBreakpointsSupport], because 263.5701 declares it here and
-     * nowhere else.
+     * On the descriptor rather than on the session's breakpoint support, because 263.5701 declares
+     * it here and nowhere else.
      */
     override val breakpointsDescription: DapBreakpointsDescription = object : DapBreakpointsDescription(
         sourceBreakpointType = ByLineBreakpointType::class.java,

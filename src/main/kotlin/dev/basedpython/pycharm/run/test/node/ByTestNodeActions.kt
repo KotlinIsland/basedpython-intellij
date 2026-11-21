@@ -18,13 +18,6 @@ import dev.basedpython.pycharm.run.test.tree.ByTestSources
 internal object ByTestNodeActions {
 
     /**
-     * Runs [target] (null meaning the whole project) under [executor].
-     *
-     * The configuration is created as a temporary one, the same thing the gutter icons and
-     * right-click Run produce: it shows up in the run combo box, can be edited or saved from
-     * there, and is evicted once enough others accumulate.
-     */
-    /**
      * Runs everything, which takes one launch per kind of test the tree holds.
      *
      * The two halves are two different commands — `by run pytest` cannot see a `.py` test and plain
@@ -37,6 +30,13 @@ internal object ByTestNodeActions {
         for (source in kinds.sortedBy { it.ordinal }) run(project, null, executor, source)
     }
 
+    /**
+     * Runs [target] (null meaning the whole project) under [executor].
+     *
+     * The configuration is created as a temporary one, the same thing the gutter icons and
+     * right-click Run produce: it shows up in the run combo box, can be edited or saved from
+     * there, and is evicted once enough others accumulate.
+     */
     fun run(
         project: Project,
         target: String?,

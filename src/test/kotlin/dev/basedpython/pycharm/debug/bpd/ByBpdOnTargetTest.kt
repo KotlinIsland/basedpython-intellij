@@ -30,7 +30,7 @@ class ByBpdOnTargetTest {
         return (header + event + after).toByteArray(StandardCharsets.US_ASCII)
     }
 
-    /** The token [presentedToken] reads off a connection that wrote [bytes], and what comes after it. */
+    /** The token [ByBpdConnection.presentedToken] reads off a connection that wrote [bytes], and what comes after it. */
     private fun read(bytes: ByteArray): Pair<String?, String> =
         ServerSocket(0, 1, InetAddress.getLoopbackAddress()).use { server ->
             Socket(InetAddress.getLoopbackAddress(), server.localPort).use { client ->

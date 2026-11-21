@@ -53,8 +53,6 @@ import com.intellij.platform.lsp.api.lsWidget.LspClientWidgetItem
 import dev.basedpython.pycharm.BasedPythonIcons
 import dev.basedpython.pycharm.debug.dfa.ByDataFlowServer
 import dev.basedpython.pycharm.env.ByLaunch
-import dev.basedpython.pycharm.lang.BasedPythonFile
-import dev.basedpython.pycharm.lang.BasedPythonFileType
 import dev.basedpython.pycharm.lang.dialect.BasedPythonProjectDetector
 import dev.basedpython.pycharm.lsp.diagnostics.ByDiagnosticsSupport
 import dev.basedpython.pycharm.lsp.inlay.ByInlayRefresh

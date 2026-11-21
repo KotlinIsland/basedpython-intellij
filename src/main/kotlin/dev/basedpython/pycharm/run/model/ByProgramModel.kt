@@ -252,7 +252,7 @@ internal class ByProgramModel(private val project: Project, scope: CoroutineScop
     fun moduleNames(): Collection<String>? = modules?.byPath?.values ?: run { requestProjectRefresh(); null }
 
     /**
-     * The project's configured `run.main`, as of the last project-wide answer. [ByRunModules.known]
+     * The project's configured `run.main`, as of the last project-wide answer. [ByRunModules.Main.known]
      * is false while there has been none, which is not the same as there being no `run.main`.
      */
     fun configuredMain(): ByRunModules.Main =

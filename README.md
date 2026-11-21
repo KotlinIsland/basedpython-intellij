@@ -371,7 +371,9 @@ directly to see what it says.
 [Qodana](https://www.jetbrains.com/qodana/) lints the sources with DevKit's inspections, the ones an
 IDE shows a plugin project's code, and DevKit's threading inspection, which is off by default and
 reports a call that breaks a `@RequiresEdt`, `@RequiresReadLock` or `@RequiresBackgroundThread`
-annotation. The profile is in [`qodana.yaml`](qodana.yaml). CI fails on a Critical or High problem
+annotation, and with the Kotlin and JVM inspections that find probable bugs, dead code, misused
+coroutines, and mistakes in the message bundle and in i18n. The profile is in [`qodana.yaml`](qodana.yaml).
+A bundle key read under a name built at run time carries `# suppress inspection "UnusedProperty"`. CI fails on a Critical or High problem
 that is not in [`.qodana/baseline.sarif.json`](.qodana/baseline.sarif.json), the findings there were
 when the lint was set up. Run it locally with Docker running, on a copy of the last commit, since
 the container imports the project as an IDE does and writes its `.idea`, `.gradle` and build output

@@ -153,7 +153,7 @@ internal class ByRunAnythingProvider : RunAnythingCommandLineProvider() {
         const val PYTEST = "pytest"
         val SUBCOMMANDS = listOf(RUN, CHECK, BUILD, REPL)
 
-        /** [ByTestConfigurationType]'s id, named rather than its class: that one exists only with the test runner. */
+        /** [dev.basedpython.pycharm.run.test.ByTestConfigurationType]'s id, named rather than its class: that one exists only with the test runner. */
         const val TEST_TYPE_ID = "BasedPythonTestRunConfiguration"
 
         /**

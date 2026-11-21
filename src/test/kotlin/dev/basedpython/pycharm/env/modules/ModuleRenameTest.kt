@@ -52,9 +52,13 @@ class ModuleRenameTest {
             return step == failOn && count == failAt
         }
 
+        /**
+         * What `uv workspace list --paths` prints: the members and the root. The root is added as an
+         * element: `+ root` alone would add its name segments, a Path being an Iterable of Paths.
+         */
         override fun layout(): ModuleLayout? = UvWorkspace.read(
             root,
-            Files.list(root.resolve("packages")).use { dirs -> dirs.toList() }.filter { Files.isDirectory(it) } + root,
+            Files.list(root.resolve("packages")).use { dirs -> dirs.toList() }.filter { Files.isDirectory(it) } + listOf(root),
         )
 
         override fun isDirectory(path: Path): Boolean = Files.isDirectory(path)

@@ -4,16 +4,13 @@ import com.intellij.notification.Notification
 import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
 import com.intellij.openapi.application.ApplicationManager
-import com.intellij.openapi.application.readAction
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.roots.ProjectFileIndex
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.platform.dap.DapSessionExecutor
-import com.intellij.xdebugger.XDebugProcess
 import com.intellij.xdebugger.hotswap.HotSwapProvider
-import com.intellij.xdebugger.hotswap.HotSwapResultListener
 import com.intellij.xdebugger.hotswap.HotSwapSession
 import com.intellij.xdebugger.hotswap.SourceFileChangesCollector
 import com.intellij.xdebugger.hotswap.SourceFileChangesListener
@@ -69,7 +66,6 @@ import java.nio.file.Path
  * expects. Refusing would leave the button doing nothing in the one place it is pressed most.
  */
 internal class ByHotSwapProvider(
-    private val process: XDebugProcess,
     private val project: Project,
     private val executor: DapSessionExecutor,
     /**
@@ -97,12 +93,11 @@ internal class ByHotSwapProvider(
      * from `site-packages` is not code the user is working on, and the transpiled tree `by run`
      * runs from is not in the project at all, so neither should raise the toolbar.
      *
-     * Built through [PlatformChangesCollector] rather than by naming that collector's constructor,
-     * because which constructor it has depends on the IDE this is running in.
+     * Built as [ByChangesCollector], this plugin's own, since the platform's one implementation is
+     * internal and its constructor differs between builds.
      *
-     * `.by` is watched even though it cannot be reloaded — see [ByHotSwap.refuse]. Knowing the
-     * source on screen is not the code that is running is most of what this feature is for, and
-     * that is exactly as true of the file the whole project is written in.
+     * `.by` is watched as `.py` is, since both reach the running program the same way — see
+     * [performHotSwap].
      */
     override fun createChangesCollector(
         session: HotSwapSession<VirtualFile>,

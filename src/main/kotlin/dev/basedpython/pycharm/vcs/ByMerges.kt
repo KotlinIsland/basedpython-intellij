@@ -1,7 +1,5 @@
 package dev.basedpython.pycharm.vcs
 
-import com.intellij.diff.contents.DiffContent
-import com.intellij.diff.contents.DocumentContent
 import com.intellij.diff.lang.LangDiffIgnoredRangeProvider
 import com.intellij.diff.merge.LangSpecificMergeConflictResolver
 import com.intellij.diff.merge.LangSpecificMergeContext
@@ -46,9 +44,9 @@ internal class ByMergeConflictResolver : LangSpecificMergeConflictResolver {
     override suspend fun tryResolveMergeConflicts(context: LangSpecificMergeContext): List<CharSequence?>? {
         val server = context.project?.let(ByMerges::server) ?: return null
         val params = readAction {
-            val ours = context.file(ThreeSide.LEFT) ?: return@readAction null
-            val base = context.file(ThreeSide.BASE) ?: return@readAction null
-            val theirs = context.file(ThreeSide.RIGHT) ?: return@readAction null
+            val ours = context.file(ThreeSide.LEFT)
+            val base = context.file(ThreeSide.BASE)
+            val theirs = context.file(ThreeSide.RIGHT)
             ByMergeConflictsParams(
                 base = base.text,
                 ours = ours.text,
@@ -62,7 +60,7 @@ internal class ByMergeConflictResolver : LangSpecificMergeConflictResolver {
                 },
                 uri = ByMerges.uriOf(base),
             )
-        } ?: return null
+        }
         val resolved = server.awaitBy("by/resolveMergeConflicts", TIMEOUT_MS) { (it as ByServerExtensions).resolveMergeConflicts(params) }
             .value ?: return null
         if (resolved.size != params.conflicts.size) return null

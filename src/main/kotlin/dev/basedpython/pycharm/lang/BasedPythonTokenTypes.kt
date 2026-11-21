@@ -64,12 +64,6 @@ object BasedPythonTokenTypes {
      */
     @JvmField val STRING_LITERAL: IElementType = BasedPythonElementType("BY_STRING_LITERAL")
 
-    // Synthetic structural tokens produced by the indent-aware PARSING lexer only.
-    // These are NEVER fed to the syntax highlighter (which keeps using the plain lexer).
-    @JvmField val INDENT: IElementType = BasedPythonTokenType("BY_INDENT")
-    @JvmField val DEDENT: IElementType = BasedPythonTokenType("BY_DEDENT")
-    @JvmField val STATEMENT_BREAK: IElementType = BasedPythonTokenType("BY_STATEMENT_BREAK")
-
     // Re-export platform WHITESPACE / BAD_CHARACTER for convenience
     @JvmField val WHITESPACE: IElementType = TokenType.WHITE_SPACE
     @JvmField val BAD_CHARACTER: IElementType = TokenType.BAD_CHARACTER

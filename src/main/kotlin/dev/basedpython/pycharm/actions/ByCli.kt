@@ -12,7 +12,6 @@ import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
-import dev.basedpython.pycharm.util.BasedPythonBundle
 import java.nio.file.Path
 
 /**
@@ -43,7 +42,6 @@ internal object ByCli {
         cwd: Path? = null,
         contextFile: VirtualFile? = null,
         timeoutMs: Int? = null,
-        @Suppress("UNUSED_PARAMETER") title: String = "by",
     ): ProcessOutput? = runDetailed(
         project,
         args = args,
@@ -104,7 +102,6 @@ internal object ByCli {
         vararg args: String,
         cwd: Path? = null,
         contextFile: VirtualFile? = null,
-        @Suppress("UNUSED_PARAMETER") title: String = "buff",
     ): ProcessOutput? {
         val launch = BasedPythonBinaries.launchBuff(project, contextFile)
         if (launch == null) {

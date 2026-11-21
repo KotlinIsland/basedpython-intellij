@@ -21,7 +21,7 @@ package dev.basedpython.pycharm.lsp
  * opened on — and otherwise once the `didOpen`, `didChange` or file write that brings it arrives. The
  * plugin need not know whether the platform has opened a document yet, which it has no public way
  * to know. See `ty_server`'s `document/asked_text.rs`, which defines the hash and holds the known
- * values [ByTextHashTest] checks this against.
+ * values `ByTextHashTest` checks this against.
  *
  * The hash is FNV-1a, 64 bits, over the text's UTF-16 code units, with each line ending counted as
  * a single `\n`, in sixteen lowercase hex digits. A `Document` holds `\n` only; the file on disk may

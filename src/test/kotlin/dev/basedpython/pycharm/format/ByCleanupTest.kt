@@ -106,7 +106,7 @@ class ByCleanupTest {
 /**
  * The same edits against a plain string, which is the shape *Reformat Code* wants: the platform
  * hands [com.intellij.formatting.service.AsyncDocumentFormattingService] the text and asks for the
- * text back. Every case here is one the [Document] overload above is checked on, because the two
+ * text back. Every case here is one the [com.intellij.openapi.editor.Document] overload above is checked on, because the two
  * disagreeing about where a position falls would show up as a file reformatted into nonsense.
  */
 class ByCleanupTextEditTest {

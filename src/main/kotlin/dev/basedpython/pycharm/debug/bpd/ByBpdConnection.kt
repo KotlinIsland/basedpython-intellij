@@ -6,6 +6,7 @@ import com.intellij.openapi.diagnostic.Logger
 import com.intellij.platform.dap.connection.DebugAdapterHandle
 import dev.basedpython.pycharm.util.BasedPythonBundle
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.io.IOException
@@ -116,14 +117,14 @@ class ByBpdConnection private constructor(
                             ?.let { ByBpdRecord.parse(it, announced = false) }
                         val launch = record as? ByBpdRecord.Launch
                         if (launch == null) {
-                            socket.close()
+                            closeQuietly(socket)
                             val why = (record as? ByBpdRecord.Incomplete)?.why ?: NOTHING_WRITTEN
                             throw ExecutionException(BasedPythonBundle.message("debug.bpd.error.exited", why))
                         }
                         return ByBpdConnection(socket, launch)
                     }
                     LOG.warn("a connection to the debug listener presented no token or the wrong one; closed")
-                    runCatching { socket.close() }
+                    closeQuietly(socket)
                 }
                 if (debuggee?.isProcessTerminated == true) {
                     onTarget.close()
@@ -304,6 +305,14 @@ class ByBpdConnection private constructor(
                 is ByBpdRecord.Incomplete -> exited(code, said.text(), parsed.why)
                 null -> exited(code, said.text(), NOTHING_WRITTEN)
             }
+        }
+
+        /**
+         * Closes a connection that is not the session's, off the caller's thread since a close can
+         * block, and whether or not the caller is being cancelled, which would otherwise skip it.
+         */
+        private suspend fun closeQuietly(socket: Socket) {
+            withContext(NonCancellable + Dispatchers.IO) { runCatching { socket.close() } }
         }
 
         /**

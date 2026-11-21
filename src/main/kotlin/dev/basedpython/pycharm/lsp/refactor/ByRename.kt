@@ -69,7 +69,6 @@ import com.intellij.openapi.Disposable
 import dev.basedpython.pycharm.lsp.runningByServer
 import com.intellij.openapi.application.ModalityState
 import org.jetbrains.annotations.TestOnly
-import javax.swing.JCheckBox
 import java.awt.BorderLayout
 import com.intellij.util.ui.JBUI
 import com.intellij.util.Alarm
@@ -354,10 +353,6 @@ internal class ByRenameDialog(project: Project, name: ByRenamedName, editor: Edi
 
     /** What the processor is handed in place of a chosen scope; `by` renames across the project regardless. */
     override fun getRefactoringScope(): SearchScope = GlobalSearchScope.projectScope(project)
-
-    /** The groups' checkbox labelled [label], for a test. */
-    @TestOnly
-    fun groupBox(label: String): JCheckBox? = choices.box(label)
 
     private companion object {
         /** How long typing pauses before the name is checked, as the platform's own name fields wait. */

@@ -38,27 +38,6 @@ class BasedPythonSpellcheckingStrategy : SpellcheckingStrategy() {
 }
 
 /**
- * Spell-checking support for basedpython (.by) files.
- *
- * The EP registration in plugin.xml points to this class as the spellchecker.support
- * implementationClass. At runtime the IDE resolves this against intellij.spellchecker
- * (a bundled plugin that is always present in IntelliJ IDEA 2026.1+).
- *
- * Three token categories are spell-checked:
- *   - COMMENT  — checked verbatim via PlainTextSplitter
- *   - STRING   — content between quotes checked via PlainTextSplitter
- *   - IDENTIFIER — split into camelCase / snake_case words before checking
- *
- * NOTE: the class body is generated at load-time by [BasedPythonSpellcheckingStrategyImpl].
- * The compile-time stub here avoids a hard dependency on intellij.spellchecker's
- * SpellcheckingStrategy class, which is not available on the Gradle compileClasspath
- * without an explicit `bundledPlugin("com.intellij.spellchecker")` declaration in
- * build.gradle.kts. See _integration/K.md for the required build.gradle.kts change.
- */
-@Suppress("unused")
-object BasedPythonSpellcheckingStrategyCompileStub
-
-/**
  * Splits an identifier into camelCase / snake_case word segments.
  * Used by the runtime spellchecking strategy and independently testable.
  */

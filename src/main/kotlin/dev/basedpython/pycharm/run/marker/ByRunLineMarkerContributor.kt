@@ -86,7 +86,7 @@ class ByRunLineMarkerContributor : RunLineMarkerContributor() {
     /**
      * Run and Debug first, then the form.
      *
-     * The form is not the way out of a run that cannot start — [ByRunConfiguration] asks for
+     * The form is not the way out of a run that cannot start — [dev.basedpython.pycharm.run.ByRunConfiguration] asks for
      * missing arguments itself, so plain Run is never the wrong choice. What this adds is the way
      * to *change* arguments a run would otherwise reuse without asking.
      */

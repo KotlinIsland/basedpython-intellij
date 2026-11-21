@@ -39,7 +39,7 @@ internal data class ByDjangoNode(
  * it out: one project's apps at the top (a project row each when the session has several), each
  * app's models, admin, views, forms, serializers, receivers and commands in groups, a group left out
  * when the app has none of it, and the apps that are not the project's own — `django.contrib.*` —
- * only when [showExternal], with their models alone, since those are what the project's relations
+ * only when [build] is asked to show them, with their models alone, since those are what the project's relations
  * point at.
  */
 internal object ByDjangoStructureTree {

@@ -71,7 +71,6 @@ class BasedPythonFileIndentOptionsProvider : FileIndentOptionsProvider() {
         var i = 0
         val len = text.length
         while (i < len && scanned < maxLines) {
-            val lineStart = i
             var spaces = 0
             var lineHasTab = false
             // measure leading whitespace

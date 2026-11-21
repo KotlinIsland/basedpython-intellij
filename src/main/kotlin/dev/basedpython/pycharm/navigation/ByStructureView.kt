@@ -19,6 +19,7 @@ import com.intellij.lang.Language
 import com.intellij.lang.LanguageStructureViewBuilder
 import com.intellij.lang.PsiStructureViewFactory
 import com.intellij.openapi.editor.Editor
+import com.intellij.openapi.vcs.FileStatus
 import com.intellij.psi.PsiFile
 import dev.basedpython.pycharm.lsp.ext.ByInheritedMember
 import dev.basedpython.pycharm.util.BasedPythonBundle
@@ -81,6 +82,10 @@ internal class ByStructureViewModel(private val delegate: StructureViewModel, fi
     override fun addModelListener(modelListener: ModelListener) = delegate.addModelListener(modelListener)
 
     override fun removeModelListener(modelListener: ModelListener) = delegate.removeModelListener(modelListener)
+
+    // A Java default method, which Kotlin's `by` does not forward: the interface's NOT_CHANGED would
+    // answer for the platform's model, which says whether an element's file is changed.
+    override fun getElementStatus(element: Any?): FileStatus = delegate.getElementStatus(element)
 }
 
 /**

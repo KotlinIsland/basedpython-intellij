@@ -49,7 +49,7 @@ internal data class ByMoved(
      *
      * bpd sends its `PythonError` **whole**: an object of `kind`, `message` and `traceback`, not a
      * string. Reading it as a string yields null, which turns a refusal into a move that disturbed
-     * nothing and reports it as nothing at all — see [ByMovedTest].
+     * nothing and reports it as nothing at all — see `ByMovedTest`.
      */
     val refusal: String?,
     /** The line that was asked for, when it was refused. */

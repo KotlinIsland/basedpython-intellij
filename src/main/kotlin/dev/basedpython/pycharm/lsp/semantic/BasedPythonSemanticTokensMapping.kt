@@ -35,7 +35,6 @@ object BasedPythonSemanticTokensMapping {
     const val TYPE_PROPERTY = "property"
     const val TYPE_ENUM_MEMBER = "enumMember"
     const val TYPE_DECORATOR = "decorator"
-    const val TYPE_EVENT = "event"
     const val TYPE_FUNCTION = "function"
     const val TYPE_METHOD = "method"
     const val TYPE_MACRO = "macro"
@@ -53,10 +52,6 @@ object BasedPythonSemanticTokensMapping {
     const val MOD_DEFINITION = "definition"
     const val MOD_READONLY = "readonly"
     const val MOD_STATIC = "static"
-    const val MOD_DEPRECATED = "deprecated"
-    const val MOD_ABSTRACT = "abstract"
-    const val MOD_ASYNC = "async"
-    const val MOD_MODIFICATION = "modification"
     const val MOD_DOCUMENTATION = "documentation"
     const val MOD_DEFAULT_LIBRARY = "defaultLibrary"
     // endregion

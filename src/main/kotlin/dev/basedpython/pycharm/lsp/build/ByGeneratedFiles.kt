@@ -138,7 +138,7 @@ class ByGeneratedWritingAccessProvider(private val project: Project) : WritingAc
     override fun getReadOnlyMessage(): String = BasedPythonBundle.message("generated.readOnly")
 
     companion object {
-        /** Asks whether to edit [files] anyway. Replaced in tests, where no dialog can be answered. */
+        /** Asks whether to edit the files anyway. Replaced in tests, where no dialog can be answered. */
         @Volatile
         internal var confirm: (Project, List<VirtualFile>) -> Boolean = ::ask
 

@@ -27,7 +27,6 @@ import dev.basedpython.pycharm.lsp.ext.ByInvertBooleanParams
 import dev.basedpython.pycharm.lsp.ext.ByPrepareInvertBooleanParams
 import dev.basedpython.pycharm.lsp.ext.ByPreparedInvertBoolean
 import dev.basedpython.pycharm.util.BasedPythonBundle
-import org.jetbrains.annotations.TestOnly
 import javax.swing.JComponent
 import javax.swing.event.DocumentEvent
 
@@ -132,8 +131,7 @@ internal class ByInvertBooleanDialog(
     private val prepared: ByPreparedInvertBoolean,
 ) : RefactoringDialog(project, true) {
 
-    @get:TestOnly
-    val nameField = JBTextField(prepared.newName).apply { selectAll() }
+    private val nameField = JBTextField(prepared.newName).apply { selectAll() }
 
     private val checking = Alarm(Alarm.ThreadToUse.SWING_THREAD, disposable)
 

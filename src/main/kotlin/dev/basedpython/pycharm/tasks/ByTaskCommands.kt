@@ -86,7 +86,7 @@ internal object ByTaskCommands {
         if (kind == ByTaskKind.ALIAS) listOf(id ?: return null) else null
 
     /**
-     * True when running [node] on all files is a thing its runner can be asked for.
+     * True when running a task of [runner] on all files is a thing that runner can be asked for.
      *
      * pyprojectx has no notion of a file list — an alias is a command line, and which files it
      * touches is the command's business — so the toggle is left out of its rows rather than

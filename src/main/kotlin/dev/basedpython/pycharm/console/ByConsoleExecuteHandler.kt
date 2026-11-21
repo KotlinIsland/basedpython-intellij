@@ -10,7 +10,6 @@ import com.intellij.openapi.application.asContextElement
 import com.intellij.openapi.application.readAction
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.components.service
-import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.editor.EditorFactory
 import com.intellij.openapi.keymap.KeymapUtil
 import com.intellij.openapi.util.Condition
@@ -31,8 +30,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.eclipse.lsp4j.TextDocumentIdentifier
 import java.util.concurrent.atomic.AtomicBoolean
-
-private val LOG = Logger.getInstance(ByConsoleExecuteHandler::class.java)
 
 /**
  * Enter in a basedpython console: runs the input when it is whole, and starts another line of it when

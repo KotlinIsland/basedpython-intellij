@@ -20,7 +20,6 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.project.ProjectManager
 import com.intellij.openapi.util.text.StringUtil
 import com.intellij.profile.codeInspection.InspectionProfileManager
-import com.intellij.psi.PsiElement
 import com.intellij.util.xmlb.annotations.XCollection
 import dev.basedpython.pycharm.env.bundled.BundledBinaries
 import dev.basedpython.pycharm.lsp.ext.ByRule
@@ -217,9 +216,6 @@ internal class ByRuleInspection(private val rule: ByRule) : LocalInspectionTool(
 
         /** The inspection's name, and the key its settings and severity are kept under. */
         fun shortName(rule: String): String = "ByRule_$rule"
-
-        /** The rule a key of [shortName] is the inspection of, or null for any other inspection. */
-        fun ruleOf(shortName: String): String? = shortName.takeIf { it.startsWith("ByRule_") }?.removePrefix("ByRule_")
 
         /** A `by` level as a severity; null for `ignore`, which is no severity but switched off. */
         fun levelOf(level: String?): HighlightDisplayLevel? = when (level) {

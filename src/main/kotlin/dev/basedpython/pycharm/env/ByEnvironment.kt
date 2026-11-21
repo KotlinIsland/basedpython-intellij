@@ -194,8 +194,8 @@ object ByEnvironments {
 
     /**
      * What [hookEnvironment] adds, apart: the variables a venv-backed launch activates other than
-     * `PATH`, and the directories to put ahead of [parentPath], first first — each binary's from
-     * outside the venv not already on [parentPath], then the venv's own bin directory, which
+     * `PATH`, and the directories to put ahead of its `parentPath`, first first — each binary's from
+     * outside the venv not already on `parentPath`, then the venv's own bin directory, which
      * activation puts there wherever else it is.
      */
     data class Activation(val variables: Map<String, String>, val path: List<Path>)

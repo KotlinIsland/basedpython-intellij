@@ -99,9 +99,5 @@ object ByLogpoints {
     fun expressionOf(text: String): XExpression = XDebuggerUtil.getInstance()
         .createExpression(text, BasedPythonLanguage, null, EvaluationMode.EXPRESSION)
 
-    /** A log point with nothing to log — freshly created by a click in the gutter gap, and useless until typed into. */
-    fun isUnfilled(breakpoint: XLineBreakpoint<*>): Boolean =
-        breakpoint.logExpressionObject?.expression.isNullOrBlank()
-
     private const val PROVIDER_KEY = "basedpython.logpoints.provider"
 }

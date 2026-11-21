@@ -44,7 +44,7 @@ class LanguageInjectionTest {
     private fun contentRange(file: PsiFile, index: Int): TextRange =
         literalsIn(file)[index].let { it.contentRange.shiftRight(it.textRange.startOffset) }
 
-    /** Configures [source] as a `.by` file and hands it [injections] as if the server had. */
+    /** Configures [source] as a `.by` file and hands it [parts] in [language] as if the server had injected them. */
     private fun inject(
         source: String,
         language: String = PlainTextLanguage.INSTANCE.id,

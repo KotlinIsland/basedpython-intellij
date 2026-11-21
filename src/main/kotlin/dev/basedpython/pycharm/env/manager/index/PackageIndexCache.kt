@@ -44,6 +44,7 @@ internal class PackageIndexCache internal constructor(
     private val root: Path,
 ) : Disposable {
 
+    @Suppress("unused") // the one the platform creates the service through, reflectively
     constructor() : this(root())
 
     /**

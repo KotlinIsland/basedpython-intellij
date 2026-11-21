@@ -1,7 +1,6 @@
 package dev.basedpython.pycharm.env.bundled
 
 import com.intellij.openapi.diagnostic.Logger
-import com.intellij.openapi.extensions.PluginId
 import com.intellij.openapi.util.SystemInfo
 import dev.basedpython.pycharm.env.Executables
 import dev.basedpython.pycharm.env.download.ByBinaryDownloadPlan

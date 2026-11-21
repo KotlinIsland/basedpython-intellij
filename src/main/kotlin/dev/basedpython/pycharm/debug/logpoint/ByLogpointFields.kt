@@ -24,7 +24,7 @@ import java.lang.ref.WeakReference
  * The field is how a log point looks, not a prompt that opens once — so it has to arrive by every
  * route a log point does. A click in the gutter gap and `Ctrl+Alt+F8` both go through the breakpoint
  * manager, so [breakpointAdded] catches them and the `print` quick fix alike; a file opened with log
- * points already in it never fires that at all, which is what [ByLogpointFieldsOnEditorOpen] is for.
+ * points already in it never fires that at all, which is what [ByLogpointFieldsOnFileOpen] is for.
  */
 class ByLogpointFields(private val project: Project) : XBreakpointListener<XBreakpoint<*>> {
 

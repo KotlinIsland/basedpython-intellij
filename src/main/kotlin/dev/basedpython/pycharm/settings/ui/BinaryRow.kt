@@ -97,7 +97,7 @@ internal class BinaryRow(
                 .resizableColumn()
                 .bindText({ get().orEmpty() }, { set(it.trim().ifEmpty { null }) })
                 .comment(" ", maxLineLength = MAX_LINE_LENGTH_WORD_WRAP)
-                .comment as? JEditorPane
+                .comment
             cell(testButton)
         }
     }

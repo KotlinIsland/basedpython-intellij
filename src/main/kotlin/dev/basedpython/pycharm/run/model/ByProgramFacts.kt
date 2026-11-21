@@ -71,7 +71,7 @@ internal data class ByTestItem(
     }
 }
 
-/** Every item in [items] and below, depth first in source order. */
+/** Every item in these and below, depth first in source order. */
 internal fun Iterable<ByTestItem>.walk(): Sequence<ByTestItem> =
     asSequence().flatMap { sequenceOf(it) + it.children.walk() }
 

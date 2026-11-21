@@ -131,9 +131,9 @@ jobs:
 
       - uses: actions/checkout@v4
 
-      # DevKit's inspections and the threading one, configured in qodana.yaml. Fails on a Critical or
-      # High problem not in .qodana/baseline.sarif.json, the findings there were when this was set
-      # up, so the build is red for what a change adds rather than for the backlog. The whole
+      # DevKit's inspections, the threading one and the Kotlin/JVM ones, configured in qodana.yaml.
+      # Fails on a Critical or High problem not in .qodana/baseline.sarif.json, the backlog, so the
+      # build is red for what a change adds rather than for what was there before. The whole
       # project, not only a pull request's files: pr-mode would miss a call made newly wrong by a
       # change to the method it calls. No Qodana Cloud token: the community linter runs without one.
       - name: Run Qodana

@@ -28,7 +28,7 @@ data class ByScopeEnd(val end: Int, val header: Int, val column: Int, val text: 
  * clauses are inside the one scope and get none of their own. A `case` is a clause of its `match`.
  *
  * Every offset is the outline's, so only meaningful against the text it describes, which is the
- * [text] given here.
+ * `text` given to [of].
  */
 object ByScopeEnds {
 

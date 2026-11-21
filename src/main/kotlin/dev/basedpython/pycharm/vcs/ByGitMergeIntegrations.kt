@@ -50,7 +50,7 @@ internal object ByGitMergeIntegrations {
         data class Not(val why: String) : Answer
     }
 
-    /** What a project in [state] is offered: nothing, setting the integration up, or repairing a driver that no longer works. */
+    /** What a project is offered ([offerFor]): nothing, setting the integration up, or repairing a driver that no longer works. */
     enum class Offer { None, Enable, Repair }
 
     fun offerFor(state: ByGitMergeIntegration): Offer = when {
@@ -75,10 +75,12 @@ internal object ByGitMergeIntegrations {
             is ByAnswer.Answer -> Answer.State(answer.value)
             ByAnswer.None -> Answer.Not(BasedPythonBundle.message("gitMerge.noProject"))
             ByAnswer.Failed -> Answer.Not(
-                when {
-                    refusal != null && isMethodNotFound(refusal!!) -> BasedPythonBundle.message("gitMerge.unsupported")
-                    refusal != null -> BasedPythonBundle.message("gitMerge.refused", refusal!!.message.orEmpty())
-                    else -> BasedPythonBundle.message("gitMerge.noAnswer")
+                refusal.let { why ->
+                    when {
+                        why != null && isMethodNotFound(why) -> BasedPythonBundle.message("gitMerge.unsupported")
+                        why != null -> BasedPythonBundle.message("gitMerge.refused", why.message.orEmpty())
+                        else -> BasedPythonBundle.message("gitMerge.noAnswer")
+                    }
                 },
             )
         }

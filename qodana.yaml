@@ -1,7 +1,10 @@
 # The plugin's lint: DevKit's inspections and the threading one, run headless by Qodana, which is
-# the only way they run outside an editor. The profile is here rather than in a file of its own:
+# the only way they run outside an editor, and the Kotlin/JVM inspections that find probable bugs,
+# dead code, and bundle and i18n mistakes. The profile is here rather than in a file of its own:
 # the image has no YAML plugin, so a YAML profile file is skipped and the default profile runs,
-# saying nothing.
+# saying nothing. An unknown inspection id is skipped the same way: check a new one is in the run's
+# log/effective.profile.xml. An inspection whose default level is below WEAK WARNING reports
+# nothing unless given a severity, and a WEAK WARNING is Moderate, which does not fail the build.
 version: "1.0"
 linter: jetbrains/qodana-jvm-community:2026.3
 projectJDK: "25"
@@ -22,8 +25,185 @@ profile:
     - inspection: JetBrainsInternalApiUsage
       ignore:
         - "src/test/**"
+
+    # i18n and the bundle: a literal passed where an @Nls string is expected, a key that does not
+    # resolve, is never read, is defined twice, or a {n} the message does not use.
+    - inspection: HardCodedStringLiteral
+      enabled: true
+      options:
+        ignoreAllButNls: true
+      ignore:
+        - "src/test/**"
+    - inspection: KotlinInvalidBundleOrProperty
+      enabled: true
+    - inspection: UnusedProperty
+      enabled: true
+    - inspection: DuplicatePropertyInspection
+      enabled: true
+      options:
+        CHECK_DUPLICATE_VALUES: false
+    - inspection: UnusedMessageFormatParameter
+      enabled: true
+
+    # Dead code, stale references, and API misuse.
+    - inspection: TestOnlyProblems
+      enabled: true
+    - inspection: KDocUnresolvedReference
+      enabled: true
+    # The tests' JUnit classes and methods are reached by the runner alone.
+    - inspection: UnusedSymbol
+      enabled: true
+      ignore:
+        - "src/test/**"
+    - inspection: KotlinUnusedImport
+      enabled: true
+    - inspection: KotlinDeprecation
+      enabled: true
+    - inspection: UselessCallOnNotNull
+      enabled: true
+    - inspection: UnusedVariable
+      enabled: true
+    - inspection: RedundantSuppression
+      enabled: true
+    - inspection: UsagesOfObsoleteApi
+      enabled: true
+      severity: WARNING
+
+    # Probable bugs: what each reports is wrong where it is found. Most report nothing today and are
+    # here so that nothing like it comes in. Not KotlinMisorderedAssertEqualsArguments: it takes
+    # assertEquals(expected, Object.call("literal")) for a swap, and all 21 it reported were that.
+    - inspection: SuspiciousCallOnCollectionToAddOrRemovePath
+      enabled: true
+    - inspection: JavaDefaultMethodsNotOverriddenByDelegation
+      enabled: true
+    - inspection: KotlinConstantConditions
+      enabled: true
+    - inspection: SuspiciousCollectionReassignment
+      enabled: true
+      severity: WARNING
+    - inspection: SuspiciousEqualsCombination
+      enabled: true
+      severity: WARNING
+    - inspection: ForEachParameterNotUsed
+      enabled: true
+      severity: WARNING
+    - inspection: ArrayInDataClass
+      enabled: true
+    - inspection: EqualsOrHashCode
+      enabled: true
+    - inspection: KotlinCovariantEquals
+      enabled: true
+    - inspection: RecursiveEqualsCall
+      enabled: true
+    - inspection: RecursivePropertyAccessor
+      enabled: true
+    - inspection: SelfAssignment
+      enabled: true
+    - inspection: SelfReferenceConstructorParameter
+      enabled: true
+    - inspection: KotlinThrowableNotThrown
+      enabled: true
+    - inspection: UnusedEquals
+      enabled: true
+    - inspection: UnusedDataClassCopyResult
+      enabled: true
+    - inspection: UnusedExpression
+      enabled: true
+    - inspection: UnusedUnaryOperator
+      enabled: true
+    - inspection: EmptyRange
+      enabled: true
+    - inspection: FilterIsInstanceResultIsAlwaysEmpty
+      enabled: true
+    - inspection: SuspiciousVarProperty
+      enabled: true
+    - inspection: ConvertNaNEquality
+      enabled: true
+    - inspection: StringReferentialEquality
+      enabled: true
+    - inspection: KotlinArrayToString
+      enabled: true
+    - inspection: KotlinArrayHashCode
+      enabled: true
+    - inspection: KotlinEqualsBetweenInconvertibleTypes
+      enabled: true
+    - inspection: KotlinUnreachableCode
+      enabled: true
+    - inspection: DelegationToVarProperty
+      enabled: true
+    - inspection: LateinitVarOverridesLateinitVar
+      enabled: true
+    - inspection: UselessCallOnCollection
+      enabled: true
+    - inspection: UselessCallOnFlow
+      enabled: true
+    - inspection: AssignedValueIsNeverRead
+      enabled: true
+    - inspection: VariableNeverRead
+      enabled: true
+    - inspection: ThreadRun
+      enabled: true
+    - inspection: UrlHashCode
+      enabled: true
+    - inspection: ReturnFromFinallyBlock
+      enabled: true
+    - inspection: JUnitMalformedDeclaration
+      enabled: true
+    - inspection: RegExpDuplicateCharacterInClass
+      enabled: true
+    - inspection: RegExpDuplicateAlternationBranch
+      enabled: true
+    - inspection: RegExpEmptyAlternationBranch
+      enabled: true
+    - inspection: RegExpUnexpectedAnchor
+      enabled: true
+    - inspection: JsonDuplicatePropertyKeys
+      enabled: true
+
+    # Coroutines: a Deferred or Flow dropped, a cancellation swallowed, a Job in a context, a
+    # thread blocked where a coroutine runs.
+    - inspection: DeferredResultUnused
+      enabled: true
+    - inspection: ForEachJoinOnCollectionOfJob
+      enabled: true
+    - inspection: MapAwaitOnCollectionOfDeferred
+      enabled: true
+    - inspection: SuppressedCancellationException
+      enabled: true
+    - inspection: SuspendCoroutineLacksCancellationGuarantees
+      enabled: true
+    - inspection: CoroutineContextWithJob
+      enabled: true
+    - inspection: SuspiciousImplicitCoroutineScopeReceiverAccess
+      enabled: true
+    - inspection: UnusedFlow
+      enabled: true
+    - inspection: SuspiciousMutableCollectionInStateFlow
+      enabled: true
+    - inspection: RunBlocking
+      enabled: true
+    - inspection: PreferCurrentCoroutineContextToCoroutineContext
+      enabled: true
+    # The tests block in coroutines and extend and call platform API as its test framework does.
+    - inspection: BlockingMethodInNonBlockingContext
+      enabled: true
+      ignore:
+        - "src/test/**"
+    - inspection: RunBlockingInSuspendFunction
+      enabled: true
+      ignore:
+        - "src/test/**"
+    - inspection: OverrideOnly
+      enabled: true
+      ignore:
+        - "src/test/**"
+    - inspection: NonExtendableApiUsage
+      enabled: true
+      ignore:
+        - "src/test/**"
 # What the build fails on: a new Critical (error) or High (warning) problem. The findings there
-# were when this was set up are .qodana/baseline.sarif.json, passed with --baseline.
+# were when each inspection was added and not fixed are .qodana/baseline.sarif.json, passed with
+# --baseline.
 failureConditions:
   severityThresholds:
     critical: 0

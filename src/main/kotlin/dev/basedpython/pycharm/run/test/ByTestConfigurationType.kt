@@ -5,7 +5,6 @@ import com.intellij.execution.configurations.ConfigurationType
 import com.intellij.execution.configurations.ConfigurationTypeUtil
 import com.intellij.execution.configurations.RunConfiguration
 import com.intellij.execution.configurations.RunConfigurationOptions
-import com.intellij.icons.AllIcons
 import com.intellij.openapi.project.Project
 import dev.basedpython.pycharm.BasedPythonIcons
 import javax.swing.Icon

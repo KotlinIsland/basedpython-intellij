@@ -32,7 +32,6 @@ import dev.basedpython.pycharm.run.BasedPythonRunConfigurationType
 import dev.basedpython.pycharm.run.ByBuildConfiguration
 import dev.basedpython.pycharm.run.ByCheckConfiguration
 import dev.basedpython.pycharm.run.ByRunConfiguration
-import dev.basedpython.pycharm.run.ByTargetAwareConfiguration
 import dev.basedpython.pycharm.run.test.ByTestConfiguration
 import dev.basedpython.pycharm.run.test.ByTestConfigurationType
 import com.intellij.execution.configurations.RunConfiguration
@@ -395,7 +394,7 @@ class ByRunOnTargetTest {
     }
 }
 
-/** A run target that is a directory here: the project is copied to [projectRootOnTarget]. */
+/** A run target that is a directory here: the project is copied to [DirTargetConfiguration.projectRootOnTarget]. */
 private class DirTargetType : TargetEnvironmentType<DirTargetConfiguration>(ID) {
     override val displayName = "Directory"
     override val icon: Icon = AllIcons.Nodes.Folder

@@ -167,7 +167,6 @@ internal class BasedPythonConfigurable(private val project: Project) :
                             when (it) {
                                 ByDebugBackend.BPD -> BasedPythonBundle.message("settings.debug.backend.bpd")
                                 ByDebugBackend.DEBUGPY -> BasedPythonBundle.message("settings.debug.backend.debugpy")
-                                null -> ""
                             }
                         },
                     )

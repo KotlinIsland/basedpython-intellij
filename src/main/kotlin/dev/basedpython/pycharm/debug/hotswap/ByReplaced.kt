@@ -169,7 +169,7 @@ internal data class ByReplacedFile(
                 changed = outcome?.array("changed")?.mapNotNull { ByRebound.parse(it) }.orEmpty(),
                 unchanged = outcome?.strings("unchanged").orEmpty(),
                 refusals = outcome?.array("because")?.size ?: 0,
-                said = entry.strings("said").orEmpty(),
+                said = entry.strings("said"),
             )
         }
     }

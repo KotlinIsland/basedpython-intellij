@@ -29,7 +29,7 @@ import javax.swing.tree.DefaultMutableTreeNode
  * one [SimpleColoredComponent]: speed search highlights it, the tree measures it, and nothing about
  * the platform's handling of renderers has to be re-done by hand. The rounding is the only part
  * that is not the platform's: [SimpleColoredComponent] paints a fragment's background as a square,
- * and a component that owns chips overrides that one method to call [paintBackground] instead.
+ * and a component that owns chips overrides that one method to call [EnvChips.paintBackground] instead.
  */
 internal enum class EnvChip(light: Int, dark: Int) {
 

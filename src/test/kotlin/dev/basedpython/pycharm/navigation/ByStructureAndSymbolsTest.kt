@@ -4,6 +4,7 @@ import com.intellij.ide.structureView.StructureViewModel
 import com.intellij.ide.structureView.StructureViewTreeElement
 import com.intellij.ide.util.treeView.smartTree.Sorter
 import com.intellij.navigation.ItemPresentation
+import com.intellij.openapi.vcs.FileStatus
 import com.intellij.testFramework.junit5.fixture.TestFixtures
 import dev.basedpython.pycharm.testFramework.AnsweringClient
 import dev.basedpython.pycharm.testFramework.AnsweringClient.Companion.answered
@@ -19,6 +20,7 @@ import org.eclipse.lsp4j.jsonrpc.messages.Either
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.lang.reflect.Proxy
@@ -60,6 +62,25 @@ class ByStructureAndSymbolsTest {
         assertEquals(listOf(Sorter.ALPHA_SORTER), model.sorters.toList())
         assertEquals(listOf(ByFieldsFilter), model.filters.toList())
         assertEquals(listOf("SHOW_INHERITED"), model.nodeProviders.map { it.name }, "the platform's own toggle's name, shared with every language")
+    }
+
+    /** Kotlin's `by` forwards an interface's abstract methods only, not the Java default ones. */
+    @Test
+    fun `the platform's answers come through, a Java default method's included`() = onEdt {
+        val element = Any()
+        val platform = Proxy.newProxyInstance(javaClass.classLoader, arrayOf(StructureViewModel::class.java)) { _, method, args ->
+            when (method.name) {
+                "getElementStatus" -> if (args[0] === element) FileStatus.MODIFIED else FileStatus.NOT_CHANGED
+                "shouldEnterElement" -> args[0] === element
+                "getCurrentEditorElement" -> element
+                else -> null
+            }
+        } as StructureViewModel
+        val model = ByStructureViewModel(platform, fixture.configureByText("shapes.by", ""))
+        assertEquals(FileStatus.MODIFIED, model.getElementStatus(element))
+        assertEquals(FileStatus.NOT_CHANGED, model.getElementStatus(Any()))
+        assertTrue(model.shouldEnterElement(element))
+        assertSame(element, model.currentEditorElement)
     }
 
     @Test

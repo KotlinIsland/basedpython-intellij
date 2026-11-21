@@ -9,6 +9,7 @@ import dev.basedpython.pycharm.highlight.BasedPythonHighlightKeys
 import dev.basedpython.pycharm.lang.BasedPythonLanguage
 import dev.basedpython.pycharm.lsp.semantic.BasedPythonSemanticTokensMapping
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
@@ -73,7 +74,8 @@ class BasedPythonColorSettingsPageTest {
         val declaration = declarations.single()
         assertEquals(page.id, declaration.pageId)
         assertEquals(page.displayName, declaration.pageName)
-        val band = (page as? DisplayPrioritySortable)?.priority ?: DisplayPriority.LANGUAGE_SETTINGS
-        assertEquals(band, declaration.priority)
+        // A page that sorts itself into no band is shown among the languages' pages.
+        assertFalse(DisplayPrioritySortable::class.java.isInstance(page), "the page sorts itself into a band")
+        assertEquals(DisplayPriority.LANGUAGE_SETTINGS, declaration.priority)
     }
 }

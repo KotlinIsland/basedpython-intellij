@@ -113,7 +113,7 @@ internal object ByLineJoin {
         return Join.Edit(TextRange(left, secondCode), replacement, left + separator.length)
     }
 
-    /** Where a line break between [left], the end of the first line's code, and [right] is. */
+    /** Where a line break between `left`, the end of the first line's code, and `right` is. */
     private enum class Context {
         /** Inside one statement: in brackets, after a backslash, or inside a header. */
         Expression,

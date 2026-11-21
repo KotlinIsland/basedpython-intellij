@@ -19,7 +19,6 @@ import dev.basedpython.pycharm.lsp.semantic.BasedPythonSemanticTokensMapping
 import dev.basedpython.pycharm.lsp.semantic.BasedPythonSemanticTokensMapping.keyFor
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
 import dev.basedpython.pycharm.testFramework.onEdt
-import dev.basedpython.pycharm.editor.colors.BasedPythonColorSettingsPage
 import org.eclipse.lsp4j.Diagnostic
 import org.eclipse.lsp4j.DiagnosticSeverity
 import org.eclipse.lsp4j.DiagnosticTag
@@ -27,7 +26,6 @@ import org.eclipse.lsp4j.Position
 import org.eclipse.lsp4j.Range
 import org.eclipse.lsp4j.jsonrpc.messages.Either
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 /**

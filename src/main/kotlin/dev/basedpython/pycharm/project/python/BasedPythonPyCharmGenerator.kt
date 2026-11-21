@@ -45,6 +45,7 @@ class BasedPythonPyCharmGenerator private constructor(
     typeSpecificUI = BasedPythonPyCharmUI,
     _newProjectName = "basedpythonProject",
 ) {
+    @Suppress("unused") // the one the platform creates the extension through, reflectively
     constructor() : this(BasedPythonPyCharmSettings())
 
     override fun getName(): String = "basedpython"

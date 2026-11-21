@@ -728,7 +728,7 @@ interface ByServerExtensions {
     /**
      * The function at a position — in its name or parameters, or in a name referring to it — and its
      * parameters as the source writes them, without a method's `self` or `cls`: Change Signature's
-     * starting point, see [dev.basedpython.pycharm.lsp.refactor.ByChangeSignature]. `null` where
+     * starting point, see [dev.basedpython.pycharm.lsp.refactor.ByChangeSignatureHandler]. `null` where
      * there is no function.
      */
     @JsonRequest("by/prepareChangeSignature")

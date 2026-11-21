@@ -12,7 +12,6 @@ import com.intellij.profile.codeInspection.InspectionProjectProfileManager
 import dev.basedpython.pycharm.lang.dialect.BasedPythonProjectDetector
 import dev.basedpython.pycharm.lsp.ByLspLifecycleListener
 import dev.basedpython.pycharm.lsp.askBy
-import dev.basedpython.pycharm.lsp.byServerFor
 import dev.basedpython.pycharm.lsp.ext.ByServerExtensions
 import dev.basedpython.pycharm.lsp.reload.BasedPythonLspReloader
 import com.intellij.platform.lsp.api.LspClientManager

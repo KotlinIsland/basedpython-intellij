@@ -356,8 +356,7 @@ class LexerTest {
         """.trimIndent()
 
         val tokens = tokenize(src)
-        // Must not throw, and token span must cover full buffer
-        val last = tokens.last()
+        // Must not throw, and the tokens must cover the full buffer
         val reconstructed = tokens.joinToString("") { it.second }
         assertEquals(src, reconstructed)
     }

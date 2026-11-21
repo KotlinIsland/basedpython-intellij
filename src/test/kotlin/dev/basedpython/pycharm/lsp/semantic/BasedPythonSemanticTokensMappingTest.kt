@@ -3,7 +3,6 @@ package dev.basedpython.pycharm.lsp.semantic
 import com.intellij.openapi.editor.colors.TextAttributesKey
 import dev.basedpython.pycharm.highlight.BasedPythonHighlightKeys
 import dev.basedpython.pycharm.lang.BasedPythonColors
-import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertSame

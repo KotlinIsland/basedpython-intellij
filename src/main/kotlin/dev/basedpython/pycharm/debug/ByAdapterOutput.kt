@@ -23,9 +23,10 @@ internal enum class ByOutputRegister {
 /**
  * What to do with one `output` event from a debug adapter.
  *
- * Whether the events reach the console at all is [ByDebugBackend.ownsDebuggeeOutput] — under
- * debugpy they are a second copy of text the run console already has. This is the other half: given
- * that they are ours, where each one goes.
+ * Whether the events reach the console at all is
+ * [dev.basedpython.pycharm.debug.bpd.ByDebugBackend.ownsDebuggeeOutput] — under debugpy they are a
+ * second copy of text the run console already has. This is the other half: given that they are
+ * ours, where each one goes.
  *
  * The platform's `DapXDebugProcess` answers this in three lines — `console` is system output,
  * `stderr` is error output, everything else is stdout — and that is wrong in both directions for

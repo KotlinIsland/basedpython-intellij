@@ -21,6 +21,7 @@ import dev.basedpython.pycharm.settings.BasedPythonSettings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import org.eclipse.lsp4j.Diagnostic
@@ -31,7 +32,6 @@ import org.eclipse.lsp4j.jsonrpc.ResponseErrorException
 import org.eclipse.lsp4j.jsonrpc.messages.ResponseErrorCode
 import java.util.concurrent.CancellationException
 import java.util.concurrent.atomic.AtomicReference
-import kotlin.coroutines.coroutineContext
 
 private val LOG = Logger.getInstance(ByProjectDiagnostics::class.java)
 
@@ -147,13 +147,14 @@ internal class ByProjectDiagnostics(
      * Asks `by` for what changed, applies the answer, and asks again, for as long as this pass is
      * not cancelled and the server is there to ask.
      *
-     * [known] is every file listed so far with the result id it was listed under — what `by`
+     * `known` is every file listed so far with the result id it was listed under — what `by`
      * compares against to answer with only what changed.
      */
     private suspend fun poll(client: LspClient) {
         val known = HashMap<String, String>()
+        val context = currentCoroutineContext()
         while (true) {
-            coroutineContext.ensureActive()
+            context.ensureActive()
             val params = WorkspaceDiagnosticParams(known.map { (uri, id) -> PreviousResultId(uri, id) })
             val sent = AtomicReference<Any>()
             val report = try {
@@ -168,7 +169,7 @@ internal class ByProjectDiagnostics(
                     continue
                 }
                 LOG.warn("workspace/diagnostic failed; Project Errors no longer follows `by` until it restarts", e)
-                synchronized(lock) { if (coroutineContext[Job]?.isActive != false) clearLocked() }
+                synchronized(lock) { if (context[Job]?.isActive != false) clearLocked() }
                 return
             }
             if (report == null) {
@@ -208,9 +209,10 @@ internal class ByProjectDiagnostics(
                 file to diagnostics.mapNotNull { ByProjectProblem.of(this@ByProjectDiagnostics, file, it) }
             }
         }
+        val context = currentCoroutineContext()
         synchronized(lock) {
             // A pass cancelled while it read must not put back rows its server took with it.
-            coroutineContext.ensureActive()
+            context.ensureActive()
             for ((file, problems) in rows) replaceLocked(file, problems)
         }
     }

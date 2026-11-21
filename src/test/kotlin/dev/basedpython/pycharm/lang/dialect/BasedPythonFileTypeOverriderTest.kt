@@ -27,7 +27,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
  * Tests for [BasedPythonFileTypeOverrider].
  *
  * Two layers are exercised:
- *   1. The pure [BasedPythonFileTypeOverrider.decide] / [isOverridableExtension] logic,
+ *   1. The pure [BasedPythonFileTypeOverrider.decide] / [BasedPythonFileTypeOverrider.isOverridableExtension] logic,
  *      which needs no IDE state.
  *   2. The full [BasedPythonFileTypeOverrider.getOverriddenFileType] path against real
  *      [VirtualFile]s created through the fixture, with the project toggled into / out of

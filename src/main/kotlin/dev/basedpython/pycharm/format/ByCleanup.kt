@@ -284,7 +284,7 @@ object ByCleanup {
   }
 
   /**
-   * Where [position] falls in [document].
+   * Where [position] falls in this document.
    *
    * An LSP character is a UTF-16 code unit, which is what a [Document] offset counts too — the
    * platform advertises no `positionEncodings`, so the server falls back to UTF-16. A range that
