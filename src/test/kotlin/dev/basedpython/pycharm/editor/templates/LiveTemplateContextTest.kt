@@ -63,11 +63,11 @@ class LiveTemplateContextTest {
     @Test
     fun `both bundled template sets load`() = onEdt {
         assertEquals(
-            listOf("cdef", "dcl", "ecl", "enum", "fdcl", "let", "nt", "ovr", "proto"),
+            listOf("cdef", "dcl", "ecl", "enum", "fdcl", "let", "nt", "proto"),
             templateKeys("basedpython"),
         )
         assertEquals(
-            listOf("adef", "compr", "enum", "field", "fix", "main", "match", "prop", "test", "try", "with"),
+            listOf("adef", "compr", "field", "fix", "main", "match", "prop", "test", "try", "with"),
             templateKeys("BasedPythonExtra"),
         )
     }
@@ -83,12 +83,12 @@ class LiveTemplateContextTest {
      * than a spot check: the context block is copy-pasted per template, so one of them being wrong is
      * the shape this actually breaks in.
      *
-     * `main` and Python's `enum` are the exclusions, asserted in the tests below instead.
+     * `main` is the exclusion, asserted in the tests below instead.
      */
     @Test
     fun `every bundled template expands in a by file`() = onEdt {
         val keys = basedpythonTemplates() + sharedTemplates()
-        assertEquals(18, keys.size, "expected eighteen templates offered in a .by")
+        assertEquals(17, keys.size, "expected seventeen templates offered in a .by")
         for (key in keys) {
             assertNotEquals(key, expand("$key.by", key), "`$key` did not expand in a .by file")
         }
@@ -112,7 +112,7 @@ class LiveTemplateContextTest {
      */
     @Test
     fun `no basedpython template expands in an owned py file`() = asBasedPythonProject {
-        for (key in basedpythonTemplates() - "enum") {
+        for (key in basedpythonTemplates()) {
             assertEquals(key, expand("$key.py", key), "`$key` expanded in a .py file")
         }
     }
@@ -123,10 +123,15 @@ class LiveTemplateContextTest {
         assertEquals("enum class MyEnum:\n    case VALUE", expand("a.by", "enum"))
     }
 
-    /** …and Python's `Enum` in a `.py`, under the same key. */
+    /**
+     * …and no live template in a `.py`, where `enum` is `by`'s completion: a Python enum needs
+     * `from enum import Enum, auto`, which a live template cannot add and `by`'s importer places as
+     * the file's other imports are. A live template under the key would be preselected over it, an
+     * exact match winning whatever else is listed.
+     */
     @Test
-    fun `enum is a python enum in an owned py file`() = asBasedPythonProject {
-        assertEquals("class MyEnum(Enum):\n    VALUE = auto()", expand("a.py", "enum"))
+    fun `enum is not a live template in an owned py file`() = asBasedPythonProject {
+        assertEquals("enum", expand("a.py", "enum"))
     }
 
     /** Every template written in Python both read still expands in an owned `.py`. */
@@ -205,7 +210,7 @@ class LiveTemplateContextTest {
     }
 
     private companion object {
-        /** The `.py` only templates: the `__main__` guard, and Python's `enum`. */
-        val PY_ONLY = setOf("main", "enum")
+        /** The `.py` only template, the `__main__` guard. */
+        val PY_ONLY = setOf("main")
     }
 }

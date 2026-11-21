@@ -69,19 +69,6 @@
             <option name="BASED_PYTHON_BY" value="true"/>
         </context>
     </template>
-    <template name="ovr"
-              value="override def $NAME$($SELF$) -> $TYPE$:&#10;    $END$"
-              description="basedpython override method"
-              toReformat="false"
-              toShortenFQNames="true">
-        <variable name="NAME" expression="" defaultValue="&quot;method&quot;" alwaysStopAt="true"/>
-        <variable name="SELF" expression="" defaultValue="&quot;self&quot;" alwaysStopAt="true"/>
-        <variable name="TYPE" expression="" defaultValue="&quot;None&quot;" alwaysStopAt="true"/>
-        <context>
-            <option name="OTHER" value="false"/>
-            <option name="BASED_PYTHON_BY" value="true"/>
-        </context>
-    </template>
     <template name="nt"
               value="newtype $NAME$ = $TYPE$$END$"
               description="basedpython newtype"

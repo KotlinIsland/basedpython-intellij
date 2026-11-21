@@ -23,9 +23,14 @@
 ### Fixed
 
 - Live templates in basedpython's own syntax — `enum class`, `data class`, `let` and the rest — are
-  no longer offered in a `.py`, which is plain Python; there `enum` writes `class MyEnum(Enum)` with
-  `auto()` members. In a `.by`, `enum` writes a `case` member, `cdef` a class method (`class def`),
-  and `ovr` puts `override` on the `def` line.
+  no longer offered in a `.py`, which is plain Python. There `enum`, `dataclass` and `protocol`
+  complete to the class Python writes, with its imports, from a `by` that offers them. In a `.by`,
+  `enum` writes a `case` member and `cdef` a class method (`class def`).
+
+### Removed
+
+- The `ovr` live template. `by` completes each member a `.by` class can override to the declaration
+  *Override Methods* writes, its body selected to type over, as Kotlin completes `override fun`.
 
 ## [0.0.7]
 

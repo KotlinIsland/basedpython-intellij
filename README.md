@@ -320,9 +320,12 @@ Write Python with what it is missing (sum types, extension methods, `?.` and `??
 ### Templates
 - File templates (Empty, Class, Data Class, Protocol) under **New → basedpython File**.
 - Live templates in basedpython's syntax, in a `.by` or `.byi`: `cdef` (class method), `dcl`,
-  `fdcl`, `ecl` and `enum` (enum class), `proto`, `ovr`, `nt`, `let`; in plain Python, in a `.by` and
-  a `.py` alike: async def, match/case, pytest test and fixture, property, try, with and more; and in
-  a `.py` only, the main guard and `enum` as `class MyEnum(Enum)`.
+  `fdcl`, `ecl` and `enum` (enum class), `proto`, `nt`, `let`; in plain Python, in a `.by` and a
+  `.py` alike: async def, match/case, pytest test and fixture, property, try, with and more; and in
+  a `.py` only, the main guard.
+- In a `.py`, `enum`, `dataclass` and `protocol` complete to the class Python writes, imports and
+  all; in a `.by` class body each member that can be overridden completes to the declaration
+  *Override Methods* writes, as Kotlin completes `override fun`, both from `by`.
 
 ## Requirements
 - IntelliJ Platform 2026.3, the latest EAP: build 263.7307 or newer (IntelliJ IDEA Ultimate or
