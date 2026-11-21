@@ -94,8 +94,11 @@ interface ByServerExtensions {
      * [transpileForBuild] for a run with no staged tree to rewrite.
      *
      * One answer for each document, in their order, each as `by retranspile` prints it: a module
-     * transpiled again (`key`, `byPath`, `lines`, `columns`, `digests`), which a debugger is handed as
-     * it came, or why not (`refused`, `diagnostics`). Kept as the server's own json rather than read
+     * transpiled again (`key`, `byPath`, `lines`, `columns`, `digests`, `packages`), which a debugger
+     * is handed as it came, or why not (`refused`, `diagnostics`) — the server answers a module that
+     * does not parse, and a file that is no basedpython source, as refused. `by retranspile` answers
+     * a directory asked about with whether it is a package (`package`, `tree`); nothing here asks
+     * about one. Kept as the server's own json rather than read
      * into a class here, because bpd is handed each entry exactly as `by` wrote it and refuses a field
      * it does not know: the plugin reads which shape an entry is and passes it on untouched.
      */
@@ -155,10 +158,12 @@ interface ByServerExtensions {
      * source is written to, the source a generated file came from — see
      * [dev.basedpython.pycharm.lsp.build.ByBuildOutputs].
      *
-     * **Why the server.** The layout is the build's, and it is not the one an editor would guess:
-     * the directory is `build/`, and the path inside it follows the *module* tree — a src-layout
-     * project's `src/pkg/main.by` is written to `build/pkg/main.py`. The server holds the same
-     * project database, module roots and file set the build reads, so its answer is the build's.
+     * **Why the server.** The layout is the build's, and only the build knows which files it
+     * carries: the directory is `build/`, which mirrors the project — a src-layout project's
+     * `src/pkg/main.by` is written to `build/src/pkg/main.py`, and `_by_launch.py` beside it puts the
+     * module roots on `sys.path` — and an older `by` laid it out by the *module* tree instead
+     * (`build/pkg/main.py`). The server holds the same project database, module roots and file set
+     * the build reads, so its answer is the build's, whichever layout that is.
      *
      * Not a document request: a directory, or a generated file the editor has never opened, is
      * asked about as often as a source.

@@ -40,9 +40,10 @@ import java.util.concurrent.ConcurrentHashMap
  * Every part of the plugin that relates a `.by` to its output goes through here: Go to Related, the
  * generated-file actions, the `byOutPath` template macro, the index exclusion, the test runner's
  * `--ignore`. Each of them used to spell the layout out for itself as `<project>/out/<relative
- * path>.py`, and that was wrong on both counts — `by build` writes to `build/`, and the path inside
- * it follows the module tree, so `src/pkg/main.by` becomes `build/pkg/main.py`. The layout is the
- * build's to decide, and `by/buildOutput` is the build's answer (`by_stage::layout`).
+ * path>.py`, and that was wrong — `by build` writes to `build/`, and the layout inside it is the
+ * build's: a mirror of the project, so `src/pkg/main.by` becomes `build/src/pkg/main.py`, where an
+ * older `by` followed the module tree (`build/pkg/main.py`). The layout is the build's to decide, and
+ * `by/buildOutput` is the build's answer (`by_stage::layout`).
  *
  * ## What is cached, and why
  *

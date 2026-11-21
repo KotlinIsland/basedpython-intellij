@@ -99,13 +99,16 @@ private fun Range.contains(line: Int, column: Int): Boolean {
 }
 
 /**
- * The path, `/`-separated, a source is staged at inside the tree `by run` builds — which is the path
- * pytest, collecting that tree, names the file by in a node id; null when the answer places no source.
+ * The path, `/`-separated, a source is staged at inside the tree a staged `by run` builds — which is
+ * the path pytest, collecting that tree, names the file by in a node id; null when the answer places
+ * no source. Asked only of a `by` that stages programs: one that runs them in place names a test by
+ * its file in the project ([dev.basedpython.pycharm.run.test.ByTestTargets]).
  *
- * `by/buildOutput` says where `by build` writes the file, and a `by run` tree is laid out the same
- * way: both place a source with `by_stage::transpiled_destination`, relative to the module root that
- * holds it. So a src-layout project's `src/tests/test_x.by` is `tests/test_x.py` — the source's own
- * path with its extension swapped is right only for a project whose module root is its root.
+ * `by/buildOutput` says where `by build` writes the file, and such a `by` laid its `by run` tree out
+ * the same way: both placed a source with `by_stage::transpiled_destination`, relative to the module
+ * root that holds it, so a src-layout project's `src/tests/test_x.by` is `tests/test_x.py`. A `by`
+ * whose build mirrors the project (`build/src/tests/test_x.py`) runs programs in place, and this is
+ * the mirror's path there, which no run of it reads.
  */
 internal val ByBuildOutput.stagedPath: String?
     get() {
