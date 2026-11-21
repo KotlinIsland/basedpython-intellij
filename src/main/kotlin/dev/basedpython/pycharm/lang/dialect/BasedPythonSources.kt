@@ -48,18 +48,21 @@ object BasedPythonSources {
     }
 
     /**
-     * True when a top-level `main` in [file] *is* the program's entry point and its command line.
+     * True when [file] is written in basedpython's own syntax: anything of the basedpython language
+     * but a `.py` or `.pyi`, so `.by`, `.byi`, and a code fragment.
      *
-     * `.by` only, and this is a real difference rather than a conservative guess. basedpython reads
-     * a top-level `main` as the program's command-line interface: it builds an argparse parser from
-     * the signature and emits the `if __name__ == "__main__"` guard that feeds it, which is what the
-     * argument form and the `def main(` gutter icon exist to serve. A plain `.py` gets none of that
-     * — `by run` does not transpile it, so the interpreter runs exactly what is written, and a bare
-     * `def main(name)` with no guard below it is a function nothing ever calls. Verified by running
-     * both: the `.by` printed its greeting, the `.py` printed nothing at all.
-     *
-     * So a `.py` is offered the run configuration and the guard's icon, and not the argument form.
+     * A `.py` this plugin owns is still plain Python. Owning it re-types the file so it gets
+     * highlighting and `by`'s code intelligence (see [PyFileHandling]); the text is not transpiled —
+     * `by run` imports a `.py` straight from where it was written — so `data class`, `enum class`,
+     * `let` and the other basedpython forms are syntax errors there, and editor help that writes
+     * code has to write Python. The other way round, a `.py`'s Python is what a `.by` gets for free:
+     * there a top-level `def main` is the program's entry point and basedpython generates the
+     * `if __name__ == "__main__"` guard, which a `.py` has to write by hand.
      */
-    fun hasGeneratedEntryPoint(file: VirtualFile?): Boolean =
-        file?.extension.equals(BY, ignoreCase = true)
+    fun isWrittenInBasedPython(file: VirtualFile?): Boolean = when (file?.extension?.lowercase()) {
+        PY, PYI -> false
+        else -> true
+    }
+
+    private const val PYI: String = "pyi"
 }

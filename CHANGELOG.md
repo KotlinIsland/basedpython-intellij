@@ -20,6 +20,13 @@
 - Django's test runner, `manage.py test`, for a Django project without pytest-django, chosen by `by`
   or in *Settings | basedpython | Tests*, with tracebacks, navigation and *Rerun Failed Tests*.
 
+### Fixed
+
+- Live templates in basedpython's own syntax — `enum class`, `data class`, `let` and the rest — are
+  no longer offered in a `.py`, which is plain Python; there `enum` writes `class MyEnum(Enum)` with
+  `auto()` members. In a `.by`, `enum` writes a `case` member, `cdef` a class method (`class def`),
+  and `ovr` puts `override` on the `def` line.
+
 ## [0.0.7]
 
 ### Added

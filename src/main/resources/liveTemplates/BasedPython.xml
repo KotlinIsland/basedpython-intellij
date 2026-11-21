@@ -1,13 +1,16 @@
 <templateSet group="basedpython">
+    <!-- basedpython's own syntax, so `.by` and `.byi` only: a `.py` this plugin owns is plain
+         Python, where every one of these is a syntax error. See BasedPythonByTemplateContextType. -->
     <template name="cdef"
-              value="class def $NAME$:&#10;    $END$"
-              description="basedpython class def"
+              value="class def $NAME$(cls) -&gt; $TYPE$:&#10;    $END$"
+              description="basedpython class method"
               toReformat="false"
               toShortenFQNames="true">
-        <variable name="NAME" expression="" defaultValue="&quot;MyClass&quot;" alwaysStopAt="true"/>
+        <variable name="NAME" expression="" defaultValue="&quot;method&quot;" alwaysStopAt="true"/>
+        <variable name="TYPE" expression="" defaultValue="&quot;None&quot;" alwaysStopAt="true"/>
         <context>
             <option name="OTHER" value="false"/>
-            <option name="BASED_PYTHON" value="true"/>
+            <option name="BASED_PYTHON_BY" value="true"/>
         </context>
     </template>
     <template name="dcl"
@@ -18,7 +21,7 @@
         <variable name="NAME" expression="" defaultValue="&quot;MyData&quot;" alwaysStopAt="true"/>
         <context>
             <option name="OTHER" value="false"/>
-            <option name="BASED_PYTHON" value="true"/>
+            <option name="BASED_PYTHON_BY" value="true"/>
         </context>
     </template>
     <template name="fdcl"
@@ -29,7 +32,7 @@
         <variable name="NAME" expression="" defaultValue="&quot;MyFrozen&quot;" alwaysStopAt="true"/>
         <context>
             <option name="OTHER" value="false"/>
-            <option name="BASED_PYTHON" value="true"/>
+            <option name="BASED_PYTHON_BY" value="true"/>
         </context>
     </template>
     <template name="ecl"
@@ -40,7 +43,19 @@
         <variable name="NAME" expression="" defaultValue="&quot;MyEnum&quot;" alwaysStopAt="true"/>
         <context>
             <option name="OTHER" value="false"/>
-            <option name="BASED_PYTHON" value="true"/>
+            <option name="BASED_PYTHON_BY" value="true"/>
+        </context>
+    </template>
+    <template name="enum"
+              value="enum class $NAME$:&#10;    case $MEMBER$$END$"
+              description="basedpython enum class"
+              toReformat="false"
+              toShortenFQNames="true">
+        <variable name="NAME" expression="" defaultValue="&quot;MyEnum&quot;" alwaysStopAt="true"/>
+        <variable name="MEMBER" expression="" defaultValue="&quot;VALUE&quot;" alwaysStopAt="true"/>
+        <context>
+            <option name="OTHER" value="false"/>
+            <option name="BASED_PYTHON_BY" value="true"/>
         </context>
     </template>
     <template name="proto"
@@ -51,11 +66,11 @@
         <variable name="NAME" expression="" defaultValue="&quot;MyProtocol&quot;" alwaysStopAt="true"/>
         <context>
             <option name="OTHER" value="false"/>
-            <option name="BASED_PYTHON" value="true"/>
+            <option name="BASED_PYTHON_BY" value="true"/>
         </context>
     </template>
     <template name="ovr"
-              value="override&#10;def $NAME$($SELF$) -> $TYPE$:&#10;    $END$"
+              value="override def $NAME$($SELF$) -> $TYPE$:&#10;    $END$"
               description="basedpython override method"
               toReformat="false"
               toShortenFQNames="true">
@@ -64,7 +79,7 @@
         <variable name="TYPE" expression="" defaultValue="&quot;None&quot;" alwaysStopAt="true"/>
         <context>
             <option name="OTHER" value="false"/>
-            <option name="BASED_PYTHON" value="true"/>
+            <option name="BASED_PYTHON_BY" value="true"/>
         </context>
     </template>
     <template name="nt"
@@ -76,7 +91,7 @@
         <variable name="TYPE" expression="" defaultValue="&quot;int&quot;" alwaysStopAt="true"/>
         <context>
             <option name="OTHER" value="false"/>
-            <option name="BASED_PYTHON" value="true"/>
+            <option name="BASED_PYTHON_BY" value="true"/>
         </context>
     </template>
     <template name="let"
@@ -89,7 +104,7 @@
         <variable name="VALUE" expression="" defaultValue="&quot;0&quot;" alwaysStopAt="true"/>
         <context>
             <option name="OTHER" value="false"/>
-            <option name="BASED_PYTHON" value="true"/>
+            <option name="BASED_PYTHON_BY" value="true"/>
         </context>
     </template>
 </templateSet>

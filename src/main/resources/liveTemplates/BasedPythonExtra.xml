@@ -1,4 +1,6 @@
 <templateSet group="BasedPythonExtra">
+    <!-- Python, valid in a `.by` and a `.py` alike, so BASED_PYTHON, except where a template says
+         otherwise. -->
     <!-- `.py` only. In a `.by` the guard is generated from `def main`, and writing one by hand
          turns the generated entry point off, so `main` there must stay the `by` server's own
          completion. See BasedPythonPyTemplateContextType. -->
@@ -37,17 +39,18 @@
             <option name="BASED_PYTHON" value="true"/>
         </context>
     </template>
+    <!-- `.py` only, Python's enum; a `.by` gets basedpython's `enum class` from the basedpython
+         group under the same key. -->
     <template name="enum"
-              value="enum class $NAME$:&#10;    $MEMBER$ = $VALUE$$END$"
+              value="class $NAME$(Enum):&#10;    $MEMBER$ = auto()$END$"
               description="enum class"
               toReformat="false"
               toShortenFQNames="true">
         <variable name="NAME" expression="" defaultValue="&quot;MyEnum&quot;" alwaysStopAt="true"/>
         <variable name="MEMBER" expression="" defaultValue="&quot;VALUE&quot;" alwaysStopAt="true"/>
-        <variable name="VALUE" expression="" defaultValue="&quot;1&quot;" alwaysStopAt="true"/>
         <context>
             <option name="OTHER" value="false"/>
-            <option name="BASED_PYTHON" value="true"/>
+            <option name="BASED_PYTHON_PY" value="true"/>
         </context>
     </template>
     <template name="test"

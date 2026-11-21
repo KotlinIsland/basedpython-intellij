@@ -254,6 +254,10 @@
             contextId="BASED_PYTHON_PY"
             baseContextId="BASED_PYTHON"
             implementation="dev.basedpython.pycharm.editor.BasedPythonPyTemplateContextType"/>
+        <liveTemplateContext
+            contextId="BASED_PYTHON_BY"
+            baseContextId="BASED_PYTHON"
+            implementation="dev.basedpython.pycharm.editor.BasedPythonByTemplateContextType"/>
         <internalFileTemplate name="basedpython File"/>
         <internalFileTemplate name="basedpython Class"/>
         <internalFileTemplate name="basedpython Data Class"/>

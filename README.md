@@ -319,8 +319,10 @@ Write Python with what it is missing (sum types, extension methods, `?.` and `??
 
 ### Templates
 - File templates (Empty, Class, Data Class, Protocol) under **New → basedpython File**.
-- Live templates: `cdef`, `dcl`, `fdcl`, `ecl`, `proto`, `ovr`, `nt`, `let`, plus main
-  guard, async def, match/case, enum, and pytest fixture.
+- Live templates in basedpython's syntax, in a `.by` or `.byi`: `cdef` (class method), `dcl`,
+  `fdcl`, `ecl` and `enum` (enum class), `proto`, `ovr`, `nt`, `let`; in plain Python, in a `.by` and
+  a `.py` alike: async def, match/case, pytest test and fixture, property, try, with and more; and in
+  a `.py` only, the main guard and `enum` as `class MyEnum(Enum)`.
 
 ## Requirements
 - IntelliJ Platform 2026.3, the latest EAP: build 263.7307 or newer (IntelliJ IDEA Ultimate or

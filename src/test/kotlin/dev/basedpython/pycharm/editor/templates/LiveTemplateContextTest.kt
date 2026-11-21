@@ -63,7 +63,7 @@ class LiveTemplateContextTest {
     @Test
     fun `both bundled template sets load`() = onEdt {
         assertEquals(
-            listOf("cdef", "dcl", "ecl", "fdcl", "let", "nt", "ovr", "proto"),
+            listOf("cdef", "dcl", "ecl", "enum", "fdcl", "let", "nt", "ovr", "proto"),
             templateKeys("basedpython"),
         )
         assertEquals(
@@ -72,20 +72,68 @@ class LiveTemplateContextTest {
         )
     }
 
+    /** The templates written in basedpython's own syntax, the whole `basedpython` group. */
+    private fun basedpythonTemplates(): List<String> = templateKeys("basedpython")
+
+    /** The templates written in Python a `.by` reads the same: the rest, but the `.py` only ones. */
+    private fun sharedTemplates(): List<String> = templateKeys("BasedPythonExtra") - PY_ONLY
+
     /**
-     * Every bundled template, expanded in a `.by` file. One assertion per template rather than a
-     * spot check: the context block is copy-pasted per template, so one of them being wrong is the
-     * shape this actually breaks in.
+     * Every bundled template a `.by` is offered, expanded in one. One assertion per template rather
+     * than a spot check: the context block is copy-pasted per template, so one of them being wrong is
+     * the shape this actually breaks in.
      *
-     * `main` is the one exclusion, and [`the guard template is not offered in a by file`] is where
-     * it is asserted instead.
+     * `main` and Python's `enum` are the exclusions, asserted in the tests below instead.
      */
     @Test
     fun `every bundled template expands in a by file`() = onEdt {
-        val keys = templateKeys("basedpython") + templateKeys("BasedPythonExtra")
-        assertEquals(19, keys.size, "expected the two bundled sets to hold nineteen templates")
-        for (key in keys - "main") {
+        val keys = basedpythonTemplates() + sharedTemplates()
+        assertEquals(18, keys.size, "expected eighteen templates offered in a .by")
+        for (key in keys) {
             assertNotEquals(key, expand("$key.by", key), "`$key` did not expand in a .by file")
+        }
+    }
+
+    /**
+     * …and in a `.byi`, which is basedpython syntax as much as a `.by` is: the two halves are told
+     * apart by the syntax a file is written in, not by whether it runs.
+     */
+    @Test
+    fun `a basedpython template expands in a byi file`() = onEdt {
+        assertTrue(expand("a.byi", "dcl").startsWith("data class "), "`dcl` did not expand in a .byi")
+        assertEquals("main", expand("a.byi", "main"))
+    }
+
+    /**
+     * No template in basedpython's own syntax is offered in a `.py` this plugin owns. Owning a `.py`
+     * re-types it, it does not transpile it, so it is plain Python, and `data class` or `enum class`
+     * there is a syntax error the template wrote. This is the regression: all of them were offered,
+     * `enum` among them writing `enum class` into a `.py`.
+     */
+    @Test
+    fun `no basedpython template expands in an owned py file`() = asBasedPythonProject {
+        for (key in basedpythonTemplates() - "enum") {
+            assertEquals(key, expand("$key.py", key), "`$key` expanded in a .py file")
+        }
+    }
+
+    /** `enum` is basedpython's `enum class` in a `.by`, with a `case` member, as basedpython writes one. */
+    @Test
+    fun `enum is an enum class in a by file`() = onEdt {
+        assertEquals("enum class MyEnum:\n    case VALUE", expand("a.by", "enum"))
+    }
+
+    /** …and Python's `Enum` in a `.py`, under the same key. */
+    @Test
+    fun `enum is a python enum in an owned py file`() = asBasedPythonProject {
+        assertEquals("class MyEnum(Enum):\n    VALUE = auto()", expand("a.py", "enum"))
+    }
+
+    /** Every template written in Python both read still expands in an owned `.py`. */
+    @Test
+    fun `every shared template expands in an owned py file`() = asBasedPythonProject {
+        for (key in sharedTemplates()) {
+            assertNotEquals(key, expand("$key.py", key), "`$key` did not expand in a .py file")
         }
     }
 
@@ -110,7 +158,7 @@ class LiveTemplateContextTest {
     /**
      * …and is still offered in a `.py` this plugin owns, which is why it is narrowed rather than
      * deleted. `by run` does not transpile a `.py`, so the interpreter runs exactly what is
-     * written and the guard has to be written by hand — see [BasedPythonSources.hasGeneratedEntryPoint].
+     * written and the guard has to be written by hand — see [BasedPythonSources.isWrittenInBasedPython].
      */
     @Test
     fun `the guard template is offered in an owned py file`() = asBasedPythonProject {
@@ -118,19 +166,21 @@ class LiveTemplateContextTest {
     }
 
     /**
-     * A template that names only `BASED_PYTHON` still expands in an owned `.py`, through the
-     * `BASED_PYTHON_PY` -> `BASED_PYTHON` base chain.
+     * A template that names only `BASED_PYTHON` expands in an owned `.py` and in a `.by`, through the
+     * `BASED_PYTHON_PY` -> `BASED_PYTHON` and `BASED_PYTHON_BY` -> `BASED_PYTHON` base chains.
      *
      * Worth its own assertion because the platform makes the narrowing look like a replacement:
      * `TemplateManagerImpl.getDirectlyApplicableContextTypes` *removes* a base context from the
      * applicable set once a more specific one matches, so in a `.py` the only context type left is
-     * `BASED_PYTHON_PY`. What saves the other eighteen templates is `TemplateContext.isEnabled`
-     * walking up to the base when the template names no value of its own — and if
-     * `baseContextId` were ever dropped from the extension point, this is what would notice.
+     * `BASED_PYTHON_PY`, and in a `.by` `BASED_PYTHON_BY`. What saves the shared templates is
+     * `TemplateContext.isEnabled` walking up to the base when the template names no value of its
+     * own — and if `baseContextId` were ever dropped from either extension point, this is what
+     * would notice.
      */
     @Test
-    fun `a basedpython template still expands in an owned py file`() = asBasedPythonProject {
-        assertTrue(expand("a.py", "dcl").startsWith("data class "), "`dcl` did not expand in a .py")
+    fun `a shared template expands through the base context`() = asBasedPythonProject {
+        assertTrue(expand("a.py", "match").startsWith("match "), "`match` did not expand in a .py")
+        assertTrue(expand("a.by", "match").startsWith("match "), "`match` did not expand in a .by")
     }
 
     /** The plugin owning `.py`, which is what puts a `.py` in the basedpython template contexts. */
@@ -152,5 +202,10 @@ class LiveTemplateContextTest {
     @Test
     fun `a bundled template does not expand in a plain text file`() = onEdt {
         assertEquals("dcl", expand("a.txt", "dcl"))
+    }
+
+    private companion object {
+        /** The `.py` only templates: the `__main__` guard, and Python's `enum`. */
+        val PY_ONLY = setOf("main", "enum")
     }
 }
