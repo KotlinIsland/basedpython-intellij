@@ -324,8 +324,10 @@ Write Python with what it is missing (sum types, extension methods, `?.` and `??
   `.py` alike: async def, match/case, pytest test and fixture, property, try, with and more; and in
   a `.py` only, the main guard.
 - In a `.py`, `enum`, `dataclass` and `protocol` complete to the class Python writes, imports and
-  all; in a `.by` class body each member that can be overridden completes to the declaration
-  *Override Methods* writes, as Kotlin completes `override fun`, both from `by`.
+  all, `protocol` leaving the caret in its body; in a `.by` class body each member that can be
+  overridden completes to the declaration *Override Methods* writes, as Kotlin completes
+  `override fun`; and in any class body the special methods it does not have yet, `__exit__`,
+  `__iter__`, `__add__` and the rest, complete whole with their imports; all from `by`.
 
 ## Requirements
 - IntelliJ Platform 2026.3, the latest EAP: build 263.7307 or newer (IntelliJ IDEA Ultimate or
