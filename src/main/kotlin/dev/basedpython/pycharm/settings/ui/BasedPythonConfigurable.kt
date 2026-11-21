@@ -1,5 +1,6 @@
 package dev.basedpython.pycharm.settings.ui
 
+import dev.basedpython.pycharm.run.test.ByTestRunnerChoice
 import com.intellij.openapi.options.BoundConfigurable
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.ComboBox
@@ -155,6 +156,23 @@ internal class BasedPythonConfigurable(private val project: Project) :
                             .bindSelected(s::indexGeneratedPython)
                             .comment("Lets the Python plugin navigate the code basedpython compiles to.", maxLineLength = WRAP)
                     }
+                }
+            }
+
+            group(BasedPythonBundle.message("settings.tests.group")) {
+                row(BasedPythonBundle.message("settings.tests.runner")) {
+                    comboBox(
+                        ByTestRunnerChoice.entries,
+                        textListCellRenderer("") {
+                            when (it) {
+                                ByTestRunnerChoice.AUTOMATIC -> BasedPythonBundle.message("settings.tests.runner.automatic")
+                                ByTestRunnerChoice.PYTEST -> BasedPythonBundle.message("settings.tests.runner.pytest")
+                                ByTestRunnerChoice.DJANGO -> BasedPythonBundle.message("settings.tests.runner.django")
+                            }
+                        },
+                    )
+                        .bindItem({ s.testRunner }, { s.testRunner = it ?: ByTestRunnerChoice.AUTOMATIC })
+                        .comment(BasedPythonBundle.message("settings.tests.runner.comment"), maxLineLength = WRAP)
                 }
             }
 

@@ -1,5 +1,6 @@
 package dev.basedpython.pycharm.run.model
 
+import dev.basedpython.pycharm.run.test.ByTestRunner
 import com.intellij.openapi.vfs.VirtualFile
 import dev.basedpython.pycharm.lsp.ext.ByBuildOutput
 import dev.basedpython.pycharm.lsp.ext.ByEntryPointResponse
@@ -52,7 +53,15 @@ internal data class ByTestItem(
     /** The name. */
     val selectionRange: Range,
     val children: List<ByTestItem>,
+    /** A `unittest.TestCase` test or class, which a runner other than pytest — django's — can run. */
+    val unittest: Boolean = false,
 ) {
+    /**
+     * Whether running this item runs a `unittest` test: it is one, or holds one. `by` marks the tests,
+     * not the `TestCase` class they are in.
+     */
+    val holdsUnittest: Boolean get() = unittest || children.any { it.holdsUnittest }
+
     /** How many tests running this item runs, before parametrization multiplies them. */
     val testCount: Int get() = if (isClass) children.sumOf { it.testCount } else 1
 
@@ -64,6 +73,7 @@ internal data class ByTestItem(
             range = reply.range ?: EMPTY,
             selectionRange = reply.selectionRange ?: EMPTY,
             children = reply.children.map(::of),
+            unittest = reply.unittest,
         )
 
         private const val CLASS = "class"
@@ -106,8 +116,11 @@ internal val ByBuildOutput.stagedPath: String?
         return relative.joinToString("/")
     }
 
-/** The tests of every project file that holds some. */
-internal data class ByProjectTests(val byFile: Map<VirtualFile, List<ByTestItem>>)
+/** The tests of every project file that holds some, and what runs each file's where `by` said. */
+internal data class ByProjectTests(
+    val byFile: Map<VirtualFile, List<ByTestItem>>,
+    val runners: Map<VirtualFile, ByTestRunner> = emptyMap(),
+)
 
 /** What `by/runModules` said about the project. */
 internal data class ByRunModules(

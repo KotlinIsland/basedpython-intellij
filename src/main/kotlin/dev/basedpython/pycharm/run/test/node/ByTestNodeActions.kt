@@ -1,5 +1,10 @@
 package dev.basedpython.pycharm.run.test.node
 
+import dev.basedpython.pycharm.run.model.ByProgramModel
+import dev.basedpython.pycharm.run.model.walk
+import dev.basedpython.pycharm.run.test.ByTestRunner
+import dev.basedpython.pycharm.run.test.ByTestRunners
+import dev.basedpython.pycharm.run.test.tree.ByTestLocations
 import com.intellij.execution.Executor
 import com.intellij.execution.ProgramRunnerUtil
 import com.intellij.execution.RunManager
@@ -47,18 +52,21 @@ internal object ByTestNodeActions {
         // where `by run` stages it, and one plain pytest collected names the file in the project.
         val plain = source == ByTestSource.PYTHON
         val paths = target.orEmpty()
+        val runner = runnerFor(project, target, source)
+        val framework = if (runner == ByTestRunner.DJANGO) "Django tests" else "pytest"
         val runManager = RunManager.getInstance(project)
         val settings = runManager.createConfiguration(
             when {
-                paths.isNotBlank() -> "pytest $paths"
-                plain -> "pytest (.py tests)"
-                else -> "pytest"
+                paths.isNotBlank() -> "$framework $paths"
+                plain -> "$framework (.py tests)"
+                else -> framework
             },
             ByTestConfigurationType.getInstance().testFactory,
         )
         val configuration = settings.configuration as ByTestConfiguration
         configuration.options.paths = paths
         configuration.options.plainPytest = plain
+        configuration.options.runner = runner
         if (configuration.options.workingDir.isBlank()) {
             project.basePath?.let { configuration.options.workingDir = it }
         }
@@ -66,6 +74,21 @@ internal object ByTestNodeActions {
         // Show the scope as running before the process has said anything; see [markRunning].
         ByTestNodeService.getInstance(project).markRunning(target, source)
         ProgramRunnerUtil.executeConfiguration(settings, executor)
+    }
+
+    /**
+     * What runs [target]: [ByTestRunners]' choice for the file and test it names, or for the project
+     * when it names none.
+     */
+    private fun runnerFor(project: Project, target: String?, source: ByTestSource): ByTestRunner {
+        if (target.isNullOrBlank()) return ByTestRunners.forProject(project)
+        val location = ByTestLocations.parse(target) ?: return ByTestRunners.forProject(project)
+        val place = ByTestSources.locate(project, target, transpiled = source == ByTestSource.TRANSPILED)
+            ?: return ByTestRunners.forProject(project)
+        val model = ByProgramModel.getInstance(project)
+        val items = model.projectTests()?.byFile?.get(place.file).orEmpty()
+        val item = items.walk().firstOrNull { it.symbols == location.symbols }
+        return ByTestRunners.forFile(project, place.file, unittest = item?.holdsUnittest ?: items.any { it.holdsUnittest })
     }
 
     /**

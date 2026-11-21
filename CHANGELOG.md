@@ -15,6 +15,10 @@
 - *Django* in the New Project wizard, `django-stubs` among its dev dependencies so `by` reads Django
   without false errors; *New | Django App*, a model diagram with the Diagrams plugin,
   and `DATABASES` as data sources with the Database plugin.
+- Run icons and *Run* for tests in a `.py` basedpython serves, which in IntelliJ IDEA had no way to
+  run from the editor.
+- Django's test runner, `manage.py test`, for a Django project without pytest-django, chosen by `by`
+  or in *Settings | basedpython | Tests*, with tracebacks, navigation and *Rerun Failed Tests*.
 
 ## [0.0.7]
 

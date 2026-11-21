@@ -1,5 +1,6 @@
 package dev.basedpython.pycharm.settings
 
+import dev.basedpython.pycharm.run.test.ByTestRunnerChoice
 import com.intellij.openapi.components.PersistentStateComponent
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.State
@@ -152,6 +153,11 @@ class BasedPythonSettings : PersistentStateComponent<BasedPythonSettings.State> 
     var buffFormatting: Boolean = true,
     var buffCodeActions: Boolean = true,
     var buffHover: Boolean = true,
+    /**
+     * [ByTestRunnerChoice.id] of what runs the project's tests: empty for what `by` says each project
+     * uses. A `String` for the same reason as [debugBackend].
+     */
+    var testRunner: String = "",
   )
 
   private var state = State()
@@ -320,6 +326,9 @@ class BasedPythonSettings : PersistentStateComponent<BasedPythonSettings.State> 
   var debugBackend: ByDebugBackend
     get() = ByDebugBackend.of(state.debugBackend)
     set(value) { state.debugBackend = ByDebugBackend.settingFor(value) }
+  var testRunner: ByTestRunnerChoice
+    get() = ByTestRunnerChoice.of(state.testRunner)
+    set(value) { state.testRunner = value.id }
   var buffFormatting: Boolean
     get() = state.buffFormatting
     set(value) { state.buffFormatting = value }

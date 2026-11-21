@@ -11,6 +11,9 @@ import com.intellij.openapi.application.ApplicationManager
 import com.intellij.execution.configurations.RuntimeConfigurationError
 import java.nio.file.Path
 import dev.basedpython.pycharm.run.test.tree.ByTestEventsConverter
+import dev.basedpython.pycharm.run.test.tree.ByDjangoTestEventsConverter
+import dev.basedpython.pycharm.run.django.ByDjangoManage
+import com.intellij.util.execution.ParametersListUtil
 import dev.basedpython.pycharm.run.test.tree.ByTestLocator
 import com.intellij.execution.DefaultExecutionResult
 import com.intellij.execution.ExecutionResult
@@ -51,6 +54,17 @@ class ByTestOptions : ByCommonOptions() {
     var plainPytest: Boolean
         get() = plainPytestProp.getValue(this)
         set(v) { plainPytestProp.setValue(this, v) }
+
+    private val runnerProp = string("").provideDelegate(this, "runner")
+
+    /**
+     * What runs [paths]: pytest, or django's `manage.py test` ([ByDjangoTests]). [paths] are pytest
+     * node ids either way; a Django run names them to its runner as labels. [plainPytest] still says
+     * whether `by run` or the project's interpreter starts it.
+     */
+    var runner: ByTestRunner
+        get() = ByTestRunner.of(runnerProp.getValue(this)) ?: ByTestRunner.PYTEST
+        set(v) { runnerProp.setValue(this, if (v == ByTestRunner.PYTEST) "" else v.id) }
 }
 
 class ByTestConfiguration(project: Project, factory: ConfigurationFactory, name: String) :
@@ -64,20 +78,25 @@ class ByTestConfiguration(project: Project, factory: ConfigurationFactory, name:
         if (options.plainPytest && targetName != null) {
             throw RuntimeConfigurationError(BasedPythonBundle.message("target.error.plainPytest"))
         }
+        if (options.runner == ByTestRunner.DJANGO && ByDjangoManage.find(project) == null) {
+            throw RuntimeConfigurationError(BasedPythonBundle.message("django.tests.noManage"))
+        }
     }
 
     override fun getState(executor: Executor, environment: ExecutionEnvironment): RunProfileState {
         refuseOnTarget(executor)
         val opts = options
         val config = this
+        if (opts.runner == ByTestRunner.DJANGO) return djangoState(executor, environment)
         if (opts.plainPytest) {
             // the interpreter it starts is this machine's, in the project here
             if (targetName != null) throw CantRunException(BasedPythonBundle.message("target.error.plainPytest"))
-            return PlainPytestCommandLineState(project, opts, environment) { handler, exec ->
+            val arguments = listOf("-m", ByPytest.MODULE, ByPytest.VERBOSE) + ParametersListUtil.parse(opts.paths)
+            return PlainPythonTestCommandLineState(project, opts, environment, arguments) { handler, exec ->
                 SMTestRunnerConnectionUtil.createAndAttachConsole(
                     FRAMEWORK_NAME, handler, testConsoleProperties(config, exec, fromTarget = null),
                 )
-            }.also { it.paths = opts.paths }
+            }
         }
         return object : ByCommandLineState(project, opts, environment) {
             // `by run pytest`, not `by test` — see [ByPytest].
@@ -124,6 +143,103 @@ class ByTestConfiguration(project: Project, factory: ConfigurationFactory, name:
     }
 
     /**
+     * A run of django's `manage.py test` on [ByTestOptions.paths]' labels, beside `manage.py`: `by run
+     * manage test -v 2` as a `by run` of `manage.py` is run, or, for tests already `.py` that `by run`
+     * does not stage, the project's interpreter on `manage.py` itself.
+     *
+     * A `by run` is asked for its test reporter as a pytest run is: a `by` that speaks for django's
+     * runner writes the run as service messages; until then the tree is read from the runner's `-v 2`
+     * lines ([ByUnittestOutputParser]).
+     */
+    private fun djangoState(executor: Executor, environment: ExecutionEnvironment): RunProfileState {
+        val config = this
+        val manage = ByDjangoManage.find(project) ?: throw CantRunException(BasedPythonBundle.message("django.tests.noManage"))
+        val plain = options.plainPytest
+        // node ids a plain run names are relative to the project, `by run`'s to the tree it stages
+        val base = if (plain) projectRelative(manage.directory) else ""
+        val paths = ParametersListUtil.parse(options.paths)
+        val labels = paths.map { path ->
+            ByDjangoTests.label(path, base) ?: throw CantRunException(BasedPythonBundle.message("django.tests.noLabel", path, manage.directory))
+        }
+        val arguments = ByDjangoTests.ARGUMENTS + labels
+        if (plain) {
+            if (targetName != null) throw CantRunException(BasedPythonBundle.message("target.error.plainPytest"))
+            val manageFile = manage.directory.resolve(manage.module + ".py").toString()
+            return PlainPythonTestCommandLineState(project, options, environment, listOf(manageFile) + arguments, manage.directory.toString()) { handler, exec ->
+                SMTestRunnerConnectionUtil.createAndAttachConsole(
+                    DJANGO_FRAMEWORK_NAME, handler, djangoConsoleProperties(config, exec, null, base, labels),
+                )
+            }
+        }
+        val opts = ByTestOptions().also {
+            it.copyFrom(options)
+            it.workingDir = manage.directory.toString()
+        }
+        return object : ByCommandLineState(project, opts, environment) {
+            override val subcommand = "run"
+
+            override fun buildSubcommandArgs(): List<String> = listOf(manage.module) + arguments
+
+            override val runnerEnvironment = mapOf(ByPytest.REPORTER_VARIABLE to ByPytest.REPORTER_TEAMCITY)
+
+            override val extraArgsForProgram = true
+
+            /** As the pytest run's: the SM runner attaches the console to the process this starts. */
+            override fun execute(executor: Executor, runner: ProgramRunner<*>): ExecutionResult {
+                val handler = startProcess()
+                val fromTarget = fromTarget
+                var result: ExecutionResult? = null
+                ApplicationManager.getApplication().invokeAndWait {
+                    val console = SMTestRunnerConnectionUtil.createAndAttachConsole(
+                        DJANGO_FRAMEWORK_NAME, handler, djangoConsoleProperties(config, executor, fromTarget, base, labels),
+                    )
+                    fromTarget?.let { console.addMessageFilter(ByConsoleFilter(project, it)) }
+                    result = DefaultExecutionResult(console, handler, *createActions(console, handler, executor))
+                        .withTestRestartActions(console)
+                }
+                return checkNotNull(result)
+            }
+        }
+    }
+
+    /** [directory] relative to the project, `/`-terminated, or `""` for the project itself or a directory outside it. */
+    private fun projectRelative(directory: Path): String {
+        val root = project.basePath?.let(Path::of) ?: return ""
+        if (!directory.startsWith(root)) return ""
+        val relative = root.relativize(directory).joinToString("/")
+        return if (relative.isEmpty()) "" else "$relative/"
+    }
+
+    /**
+     * The console of a Django run: a tree built by node id, since a failure is only known once every
+     * test has run ([ByUnittestOutputParser]); otherwise as a pytest run's. [base] is where `manage.py`
+     * is, as the node ids of the run are written.
+     */
+    private fun djangoConsoleProperties(
+        config: ByTestConfiguration,
+        executor: Executor,
+        fromTarget: ((String) -> Path?)?,
+        base: String,
+        labels: List<String>,
+    ): SMTRunnerConsoleProperties =
+        object : SMTRunnerConsoleProperties(config, DJANGO_FRAMEWORK_NAME, executor), SMCustomMessagesParsing {
+            init {
+                isIdBasedTestTree = true
+            }
+
+            override fun createTestEventsConverter(
+                testFrameworkName: String,
+                consoleProperties: TestConsoleProperties,
+            ): OutputToGeneralTestEventsConverter =
+                ByDjangoTestEventsConverter(testFrameworkName, consoleProperties, base, labels)
+
+            override fun getTestLocator(): SMTestLocator = fromTarget?.let(::ByTargetTestLocator) ?: ByTestLocator
+
+            override fun createRerunFailedTestsAction(consoleView: ConsoleView): AbstractRerunFailedTestsAction =
+                ByRerunFailedTestsAction(consoleView, this)
+        }
+
+    /**
      * Wires the `by`-specific output parser and source locator into the SM test runner; [fromTarget]
      * translates the paths a run on a run target reports, null for a run on this machine.
      */
@@ -147,5 +263,6 @@ class ByTestConfiguration(project: Project, factory: ConfigurationFactory, name:
 
     private companion object {
         const val FRAMEWORK_NAME = "pytest (by)"
+        const val DJANGO_FRAMEWORK_NAME = "Django tests (by)"
     }
 }

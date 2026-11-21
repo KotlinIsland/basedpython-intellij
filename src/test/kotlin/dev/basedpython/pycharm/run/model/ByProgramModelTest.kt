@@ -99,6 +99,16 @@ class ByProgramModelTest {
         assertNull(guard.mainLine)
     }
 
+    /** What runs a file's tests is the project-wide answer's when no answer about the file says. */
+    @Test
+    fun `the runner by names comes with its answer about the tests`() = onEdt {
+        val file = fixture.addFileToProject("polls/tests.py", "")
+        model.rememberProjectTests(file.virtualFile, emptyList(), dev.basedpython.pycharm.run.test.ByTestRunner.DJANGO)
+        assertEquals(dev.basedpython.pycharm.run.test.ByTestRunner.DJANGO, model.testRunner(file.virtualFile))
+        model.rememberProjectTests(file.virtualFile, emptyList())
+        assertNull(model.testRunner(file.virtualFile))
+    }
+
     /**
      * The test tree built from the static answer: node ids as pytest would report them, so running a
      * node and matching its outcome work exactly as they do for a collected one.

@@ -1244,6 +1244,13 @@ data class ByTestItemsResponse(val files: List<ByTestFileReply> = emptyList())
 data class ByTestFileReply(
     val uri: String? = null,
     val tests: List<ByTestItemReply> = emptyList(),
+    /**
+     * What runs the file's tests: `pytest`, or `django` — `manage.py test` — for a django project that
+     * pytest-django does not set up for pytest. Which one is the server's to say, from the project's
+     * environment and configuration; absent from a `by` that does not say, and then pytest. The
+     * contract is `scratch.django.md`'s *pytest and django tests*.
+     */
+    val runner: String? = null,
 )
 
 data class ByTestItemReply(

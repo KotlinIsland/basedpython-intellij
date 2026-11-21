@@ -19,7 +19,8 @@ import dev.basedpython.pycharm.env.ByEnvironments
 import dev.basedpython.pycharm.run.ByCommonOptions
 
 /**
- * Runs `python -m pytest -v <targets>` in the project, for tests that are already `.py`.
+ * Runs tests that are already `.py` on the project's interpreter: `python -m pytest -v <targets>` in
+ * the project, or django's `python manage.py test -v 2 <labels>` beside `manage.py`.
  *
  * `by run pytest` cannot run these at all: it transpiles the `.by` files into a temp directory and
  * runs pytest *there*, and `by build` transpiles ".by files" only — so a `.py` test is not in the
@@ -30,15 +31,16 @@ import dev.basedpython.pycharm.run.ByCommonOptions
  * Everything downstream is shared with the transpiled path: the output is pytest's, so the same
  * parser, the same SM console, the same tree.
  */
-internal class PlainPytestCommandLineState(
+internal class PlainPythonTestCommandLineState(
     private val project: Project,
     private val options: ByCommonOptions,
     environment: ExecutionEnvironment,
+    /** What the interpreter is given, before [ByCommonOptions.extraArgs]: `-m pytest -v <targets>`. */
+    private val arguments: List<String>,
+    /** Where it runs; null for the configuration's working directory, or the project's. */
+    private val directory: String? = null,
     private val attachConsole: (ProcessHandler, Executor) -> ConsoleView,
 ) : CommandLineState(environment) {
-
-    /** The targets to run, as pytest node ids naming real `.py` files. Blank runs everything. */
-    var paths: String = ""
 
     override fun startProcess(): ProcessHandler {
         val python = ByEnvironments.resolvePython(project)
@@ -49,11 +51,10 @@ internal class PlainPytestCommandLineState(
             .withExePath(python.exe.toString())
             .withCharset(Charsets.UTF_8)
         cmd.addParameters(python.prependArgs)
-        cmd.addParameters("-m", ByPytest.MODULE, ByPytest.VERBOSE)
-        if (paths.isNotBlank()) cmd.addParameters(ParametersListUtil.parse(paths))
+        cmd.addParameters(arguments)
         if (options.extraArgs.isNotBlank()) cmd.addParameters(ParametersListUtil.parse(options.extraArgs))
 
-        val workingDir = options.workingDir.ifBlank { project.basePath ?: System.getProperty("user.home") }
+        val workingDir = directory ?: options.workingDir.ifBlank { project.basePath ?: System.getProperty("user.home") }
         cmd.withWorkDirectory(FileUtil.toSystemDependentName(workingDir))
         cmd.withParentEnvironmentType(
             if (options.passParentEnv) GeneralCommandLine.ParentEnvironmentType.CONSOLE

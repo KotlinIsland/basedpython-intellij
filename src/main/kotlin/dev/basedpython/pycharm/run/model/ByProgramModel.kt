@@ -28,6 +28,8 @@ import dev.basedpython.pycharm.lsp.ext.ByRunModulesParams
 import dev.basedpython.pycharm.lsp.ext.ByRunModulesProjectReply
 import dev.basedpython.pycharm.lsp.ext.ByServerExtensions
 import dev.basedpython.pycharm.lsp.ext.ByTestItemsParams
+import dev.basedpython.pycharm.run.test.ByTestRunner
+import dev.basedpython.pycharm.lang.dialect.BasedPythonSources
 import dev.basedpython.pycharm.run.main.ByMainFunction
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import dev.basedpython.pycharm.util.Debounced
@@ -75,6 +77,12 @@ internal class ByProgramModel(private val project: Project, scope: CoroutineScop
     private val entryPoints: MutableMap<VirtualFile, Stamped<ByEntryPoint>> = ContainerUtil.createConcurrentWeakMap()
     private val testFiles: MutableMap<VirtualFile, Stamped<List<ByTestItem>>> = ContainerUtil.createConcurrentWeakMap()
 
+    /**
+     * What runs each file's tests, as the same `by/testItems` answer as [testFiles] said, kept and
+     * forgotten with it: a runner is part of that answer, and the two must never disagree.
+     */
+    private val testFileRunners: MutableMap<VirtualFile, Stamped<ByTestRunner?>> = ContainerUtil.createConcurrentWeakMap()
+
     /** Files a background request is already out for, so a stalled server is asked once. */
     private val asking: MutableSet<Pair<String, VirtualFile>> = ContainerUtil.newConcurrentSet()
 
@@ -95,6 +103,7 @@ internal class ByProgramModel(private val project: Project, scope: CoroutineScop
                     if (serverName != BY_SERVER) return
                     entryPoints.clear()
                     testFiles.clear()
+                    testFileRunners.clear()
                     requestProjectRefresh()
                 }
             },
@@ -176,6 +185,13 @@ internal class ByProgramModel(private val project: Project, scope: CoroutineScop
         stamped(testFiles, file) ?: askOrSchedule(TEST_ITEMS, file) { askTestItems(file) }
 
     /**
+     * What `by` says runs [file]'s tests: the answer [testItems] holds for the file as it stands, else
+     * the project-wide one; null when neither says, which a `by` from before the field never does.
+     * Never waits.
+     */
+    fun testRunner(file: VirtualFile): ByTestRunner? = stamped(testFileRunners, file) ?: tests?.runners?.get(file)
+
+    /**
      * Whether a run from a context in [file] is the test configuration's to make: [file] is a `.by`
      * file that holds tests, or one `by` has not yet said holds none. The `by run` and `by check`
      * producers make nothing there.
@@ -188,11 +204,12 @@ internal class ByProgramModel(private val project: Project, scope: CoroutineScop
      * rather than the wrong thing; off the EDT, where the action system asks, it waits for the
      * answer instead.
      *
-     * `.by` only, as the test producer is: a `.py` test is PyCharm's pytest configuration's to run.
-     * And never while `by` is switched off for the project, where no test configuration is ever made.
+     * A file `by` serves only, as the test producer's are: `.by`, and a `.py` treated as basedpython; a
+     * `.py` the Python plugin owns is its pytest configuration's to run. And never while `by` is switched
+     * off for the project, where no test configuration is ever made.
      */
     fun mayHoldTests(file: VirtualFile): Boolean {
-        if (file.extension != BY_EXTENSION || !BasedPythonSettings.getInstance(project).byEnabled) return false
+        if (!BasedPythonSources.isOwnedSource(file) || !BasedPythonSettings.getInstance(project).byEnabled) return false
         return testItems(file)?.isEmpty() != true
     }
 
@@ -224,12 +241,14 @@ internal class ByProgramModel(private val project: Project, scope: CoroutineScop
             (it as ByServerExtensions).testItems(ByTestItemsParams(client.descriptor.getFileUri(file)))
         }
         val found = when (answer) {
-            is ByAnswer.Answer -> answer.value.files.firstOrNull()?.tests.orEmpty().map(ByTestItem::of)
-            ByAnswer.None -> emptyList()
+            is ByAnswer.Answer -> answer.value.files.firstOrNull()
+            ByAnswer.None -> null
             ByAnswer.Failed -> return null
         }
-        testFiles[file] = Stamped(stamp, found)
-        return found
+        val items = found?.tests.orEmpty().map(ByTestItem::of)
+        testFileRunners[file] = Stamped(stamp, ByTestRunner.of(found?.runner))
+        testFiles[file] = Stamped(stamp, items)
+        return items
     }
 
     // ------------------------------------------------------------------------------------------
@@ -281,10 +300,11 @@ internal class ByProgramModel(private val project: Project, scope: CoroutineScop
             if (changed) restartDaemon()
         }
         projectTests.value?.let { reply ->
-            val next = ByProjectTests(reply.files.mapNotNull { file ->
-                val virtualFile = file.uri?.let(::fileAt) ?: return@mapNotNull null
-                virtualFile to file.tests.map(ByTestItem::of)
-            }.toMap())
+            val files = reply.files.mapNotNull { file -> file.uri?.let(::fileAt)?.let { it to file } }
+            val next = ByProjectTests(
+                byFile = files.associate { (virtualFile, file) -> virtualFile to file.tests.map(ByTestItem::of) },
+                runners = files.mapNotNull { (virtualFile, file) -> ByTestRunner.of(file.runner)?.let { virtualFile to it } }.toMap(),
+            )
             // Where each test file is staged, before anyone is told there are tests to run: a target
             // and a node id are built from it. Asked only where it is not known, since it changes
             // when a file moves or the server restarts, both of which forget it.
@@ -345,6 +365,7 @@ internal class ByProgramModel(private val project: Project, scope: CoroutineScop
     override fun dispose() {
         entryPoints.clear()
         testFiles.clear()
+        testFileRunners.clear()
         asking.clear()
     }
 
@@ -366,10 +387,14 @@ internal class ByProgramModel(private val project: Project, scope: CoroutineScop
         modules = ByRunModules(known.byPath + names.mapKeys { it.key.path }, main ?: known.main)
     }
 
-    /** Adds [items] to the project-wide answer about tests, as [file]'s. */
+    /** Adds [items] to the project-wide answer about tests, as [file]'s, run by [runner] when `by` named one. */
     @TestOnly
-    fun rememberProjectTests(file: VirtualFile, items: List<ByTestItem>) {
-        tests = ByProjectTests((tests?.byFile ?: emptyMap()) + (file to items))
+    fun rememberProjectTests(file: VirtualFile, items: List<ByTestItem>, runner: ByTestRunner? = null) {
+        val known = tests ?: ByProjectTests(emptyMap())
+        tests = ByProjectTests(
+            byFile = known.byFile + (file to items),
+            runners = if (runner == null) known.runners - file else known.runners + (file to runner),
+        )
     }
 
     /** Forgets every answer, project-wide ones too: a light test project outlives the test that put them in. */

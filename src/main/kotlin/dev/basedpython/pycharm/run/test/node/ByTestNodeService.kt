@@ -1,5 +1,7 @@
 package dev.basedpython.pycharm.run.test.node
 
+import dev.basedpython.pycharm.run.test.ByTestRunner
+import dev.basedpython.pycharm.run.test.ByTestRunners
 import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.execution.process.ProcessOutput
 import com.intellij.openapi.Disposable
@@ -310,7 +312,11 @@ internal class ByTestNodeService(
      * *this* half resolves, and that is reported as nothing to add rather than as a red node under
      * every such project. Skipped entirely when no `.py` test file exists.
      */
-    private suspend fun collectPythonTests(cwd: Path?): ByCollection {        if (cwd == null || ByPythonTests.find(cwd, limit = 1).isEmpty()) return ByCollection()
+    private suspend fun collectPythonTests(cwd: Path?): ByCollection {
+        // a django project's tests run with django's runner; plain pytest cannot import them, and its
+        // collection would be a red error under every such project
+        if (ByTestRunners.forProject(project) == ByTestRunner.DJANGO) return ByCollection()
+        if (cwd == null || ByPythonTests.find(cwd, limit = 1).isEmpty()) return ByCollection()
         val python = ByEnvironments.resolvePython(project) ?: return ByCollection()
         val command = GeneralCommandLine()
             .withExePath(python.exe.toString())
