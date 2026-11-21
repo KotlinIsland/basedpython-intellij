@@ -34,6 +34,8 @@
   no longer offered in a `.py`, which is plain Python. There `enum`, `dataclass` and `protocol`
   complete to the class Python writes, with its imports, from a `by` that offers them. In a `.by`,
   `enum` writes a `case` member and `cdef` a class method (`class def`).
+- With several projects open, editing a file in one no longer sends it to `by` and `buff` in the
+  others, where `by` showed *ty encountered a problem* on each edit.
 
 ### Removed
 

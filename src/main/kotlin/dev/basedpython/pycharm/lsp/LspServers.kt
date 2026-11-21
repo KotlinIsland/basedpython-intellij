@@ -9,8 +9,12 @@ import com.intellij.execution.process.ProcessOutputTypes
 import com.intellij.injected.editor.VirtualFileWindow
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.editor.ex.EditorSettingsExternalizable
+import com.intellij.openapi.fileEditor.FileEditorManager
+import com.intellij.openapi.project.BaseProjectDirectories
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.project.ProjectManager
 import com.intellij.openapi.util.Key
+import com.intellij.openapi.util.io.FileUtil
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiFile
 import com.intellij.platform.lsp.api.LspClient
@@ -125,6 +129,42 @@ internal fun VirtualFile.isByServerFile(): Boolean =
 internal const val API_LOCK = "api.lock"
 
 /**
+ * Whether [file] is for [project]'s servers, rather than only another open project's.
+ *
+ * What a descriptor's `isSupportedFile` has to say besides the file's kind, because the platform
+ * asks every server of every open project about a file: an edited, unsaved document is opened on
+ * each running client whose descriptor supports it (`LspDocumentListener`, and
+ * `LspDocumentSyncManager.openForOpenedOrUnsavedFiles` when a client starts), whichever project's
+ * editor it is in. Answered by kind alone, editing a `.py` in one project sent its `didOpen` and
+ * `didChange`s to `by` and `buff` in every other, which they read as part of their own project, and
+ * `by` showed *ty encountered a problem* for each `didChange` it had no document for (measured in
+ * the runIde sandbox, IU-263.7307.112, with three projects open).
+ *
+ * A project claims a file under one of its base directories, or one open in one of its editors: a
+ * stub, a library's source or a scratch file opened there. A file another open project claims and
+ * this one does not is that project's; one no project claims, whose edit nothing else would tell
+ * a server about, is every project's, as it was.
+ *
+ * Kept to what holds steady while the file is being edited, because the platform remembers a "no"
+ * for as long as the client runs (`LspClientImpl.unsupportedFilePaths`): opening another project's
+ * file in this project's editor afterwards does not make this project's server sync it, until it
+ * restarts.
+ *
+ * Takes no lock, and not the file index, which would place a library outside every base directory
+ * but needs a read lock: [byServerFor] asks this from threads holding none.
+ */
+internal fun isProjectsFile(project: Project, file: VirtualFile): Boolean {
+  if (claims(project, file)) return true
+  val open = ProjectManager.getInstanceIfCreated()?.openProjects.orEmpty()
+  return open.none { it !== project && !it.isDisposed && claims(it, file) }
+}
+
+private fun claims(project: Project, file: VirtualFile): Boolean =
+  BaseProjectDirectories.getInstance(project).contains(file) ||
+    project.basePath?.let { FileUtil.isAncestor(it, file.path, false) } == true ||
+    FileEditorManager.getInstance(project).isFileOpen(file)
+
+/**
  * Whether opening [file] should start a language server for [project].
  *
  * A `.by` file is ours no matter where it lives, so it always does. A `.py` file only does in a
@@ -211,7 +251,7 @@ internal class ByLspServerDescriptor(
   private val extraArgs: List<String>,
 ) : ProjectWideLspClientDescriptor(project, "basedpython") {
 
-  override fun isSupportedFile(file: VirtualFile): Boolean = file.isByServerFile()
+  override fun isSupportedFile(file: VirtualFile): Boolean = file.isByServerFile() && isProjectsFile(project, file)
 
   /** Start/stop for [dev.basedpython.pycharm.lsp.reload.BasedPythonLspReloader] and the status widget. */
   override val lspServerListener: LspServerListener = ByLspLifecycleListener.Broadcaster(ByLspLifecycle.getInstance(project), "by")
@@ -503,7 +543,7 @@ internal class BuffLspServerDescriptor(
   private val extraArgs: List<String>,
 ) : ProjectWideLspClientDescriptor(project, "buff") {
 
-  override fun isSupportedFile(file: VirtualFile): Boolean = file.isBasedPythonSource()
+  override fun isSupportedFile(file: VirtualFile): Boolean = file.isBasedPythonSource() && isProjectsFile(project, file)
 
   /** Start/stop for [dev.basedpython.pycharm.lsp.reload.BasedPythonLspReloader] and the status widget. */
   override val lspServerListener: LspServerListener = ByLspLifecycleListener.Broadcaster(ByLspLifecycle.getInstance(project), "buff")
