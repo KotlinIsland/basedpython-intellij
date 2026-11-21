@@ -21,7 +21,8 @@ import dev.basedpython.pycharm.lang.BasedPythonFileType
  * `ByCommandLineState` arranges), and a breakpoint in it needs no source map because the file the
  * breakpoint names is the file that runs.
  *
- * `.byi` and `.pyi` stubs are excluded everywhere: they declare, they do not execute.
+ * `.byi` and `.pyi` stubs are excluded everywhere, though both can be of basedpython's file type (a
+ * `.pyi` is re-typed along with its `.py`): they declare, they do not execute.
  */
 object BasedPythonSources {
 
@@ -29,7 +30,7 @@ object BasedPythonSources {
     const val BY: String = "by"
 
     /** `.py`, ours only when [isOwnedSource] says the file type is. */
-    const val PY: String = BasedPythonFileTypeOverrider.OVERRIDABLE_EXTENSION
+    const val PY: String = "py"
 
     /**
      * The extensions of the modules `by run` stages and runs.

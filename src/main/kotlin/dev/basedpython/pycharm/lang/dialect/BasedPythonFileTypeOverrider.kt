@@ -13,21 +13,26 @@ import dev.basedpython.pycharm.lang.BasedPythonFileType
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 
 /**
- * Treats plain `.py` files inside a basedpython project as basedpython source (FEATURES.md §16).
+ * Treats plain `.py` files and their `.pyi` stubs inside a basedpython project as basedpython source
+ * (FEATURES.md §16).
  *
  * Rationale: an IDE with no Python plugin opens a `.py` file as plain text — no highlighting, no
  * LSP. Re-typing it to [BasedPythonFileType] gives it basedpython highlighting and routes it
- * through the `by` / `buff` servers (whose supported extensions already include `py`).
+ * through the `by` / `buff` servers (whose supported extensions already include `py` and `pyi`).
+ * A `.pyi` goes with its `.py`: the stub of a module the plugin owns is Python the same plugin
+ * reads, and leaving it to the Python plugin, or to TextMate without one, gave the two halves of one
+ * module two different editors. Re-typed, it is still plain Python and still a stub —
+ * [BasedPythonSources] neither runs it nor writes basedpython syntax into it.
  *
  * In PyCharm that same move is a downgrade: it takes `.py` away from a plugin that understands
  * Python properly. So the default ([PyFileHandling.AUTO]) only claims `.py` when nothing else
  * provides the Python language, and [PyFileHandling.NEVER] / [PyFileHandling.ALWAYS] let the user
- * override either way. Either way the `by` server still attaches to `.py` — see
+ * override either way. Either way the `by` server still attaches to `.py` and `.pyi` — see
  * `ByLspServerSupportProvider`. This is only about who owns the file type.
  *
  * Scope is otherwise narrow:
- *   - Only `.py` is overridden. `.by` is handled by the file-type registration itself, and `.pyi`
- *     stub files are left alone.
+ *   - Only `.py` and `.pyi` are overridden, together. `.by` and `.byi` are handled by the file-type
+ *     registration itself.
  *   - Only projects that actually carry a basedpython marker (see [BasedPythonProjectDetector])
  *     are affected; a plain Python project keeps its `.py` files.
  *   - Only files of the project. A [LightVirtualFile] is decided by the file it is a copy of (a
@@ -52,8 +57,11 @@ class BasedPythonFileTypeOverrider : FileTypeOverrider {
     }
 
     companion object {
-        /** Extension we are willing to override (case-insensitive); only plain `.py`. */
-        const val OVERRIDABLE_EXTENSION: String = "py"
+        /** Python source, the extension [pyFileTypeIn] answers for. */
+        private const val PY: String = "py"
+
+        /** Extensions we are willing to override (lower case): Python source and its stubs. */
+        val OVERRIDABLE_EXTENSIONS: Set<String> = setOf(PY, "pyi")
 
         /**
          * The type a `.py` file of [project] has: basedpython where this overrider claims `.py`
@@ -62,8 +70,8 @@ class BasedPythonFileTypeOverrider : FileTypeOverrider {
          * one this overrider decides about, so its maker has to say.
          */
         fun pyFileTypeIn(project: Project): FileType =
-            decideFor(project, OVERRIDABLE_EXTENSION)
-                ?: FileTypeManager.getInstance().getFileTypeByExtension(OVERRIDABLE_EXTENSION)
+            decideFor(project, PY)
+                ?: FileTypeManager.getInstance().getFileTypeByExtension(PY)
 
         private fun decideFor(project: Project, extension: String?): FileType? = decide(
             extension = extension,
@@ -104,9 +112,9 @@ class BasedPythonFileTypeOverrider : FileTypeOverrider {
                 ?.first
         }
 
-        /** True when [extension] is the one extension this overrider acts on. */
+        /** True when [extension] is one this overrider acts on, in any case. */
         fun isOverridableExtension(extension: String?): Boolean =
-            extension?.lowercase() == OVERRIDABLE_EXTENSION
+            extension != null && extension.lowercase() in OVERRIDABLE_EXTENSIONS
 
         /**
          * Pure decision used by [getOverriddenFileType], extracted for unit testing.

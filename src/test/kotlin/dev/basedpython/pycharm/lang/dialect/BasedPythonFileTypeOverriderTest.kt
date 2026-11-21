@@ -113,9 +113,15 @@ class BasedPythonFileTypeOverriderTest {
         assertNull(decide("py", isBasedPythonProject = false))
     }
 
+    /** A stub goes with the module it stubs: the same setting, the same answer. */
     @Test
-    fun `decide returns null for pyi even in basedpython project`() = onEdt {
-        assertNull(decide("pyi"))
+    fun `decide treats pyi as py`() = onEdt {
+        assertSame(BasedPythonFileType.INSTANCE, decide("pyi"))
+        assertSame(BasedPythonFileType.INSTANCE, decide("PYI"))
+        assertNull(decide("pyi", isBasedPythonProject = false))
+        assertNull(decide("pyi", handling = PyFileHandling.NEVER))
+        assertNull(decide("pyi", handling = PyFileHandling.AUTO, pythonLanguageAvailable = true))
+        assertSame(BasedPythonFileType.INSTANCE, decide("pyi", handling = PyFileHandling.AUTO, pythonLanguageAvailable = false))
     }
 
     @Test
@@ -163,11 +169,14 @@ class BasedPythonFileTypeOverriderTest {
     }
 
     @Test
-    fun `isOverridableExtension only accepts py`() = onEdt {
+    fun `isOverridableExtension only accepts py and pyi`() = onEdt {
         assertTrue(BasedPythonFileTypeOverrider.isOverridableExtension("py"))
         assertTrue(BasedPythonFileTypeOverrider.isOverridableExtension("PY"))
-        assertFalse(BasedPythonFileTypeOverrider.isOverridableExtension("pyi"))
+        assertTrue(BasedPythonFileTypeOverrider.isOverridableExtension("pyi"))
+        assertTrue(BasedPythonFileTypeOverrider.isOverridableExtension("Pyi"))
+        assertFalse(BasedPythonFileTypeOverrider.isOverridableExtension("pyx"))
         assertFalse(BasedPythonFileTypeOverrider.isOverridableExtension("by"))
+        assertFalse(BasedPythonFileTypeOverrider.isOverridableExtension("byi"))
         assertFalse(BasedPythonFileTypeOverrider.isOverridableExtension(null))
     }
 
@@ -190,10 +199,24 @@ class BasedPythonFileTypeOverriderTest {
     }
 
     @Test
-    fun `pyi is never overridden even in basedpython project`() = onEdt {
+    fun `pyi in basedpython project is overridden to basedpython`() = onEdt {
         makeBasedPythonProject()
         val file = fixtureFile("stub.pyi")
-        assertNull(overrider.getOverriddenFileType(file))
+        assertSame(BasedPythonFileType.INSTANCE, overrider.getOverriddenFileType(file))
+        assertSame(BasedPythonFileType.INSTANCE, file.fileType)
+    }
+
+    @Test
+    fun `pyi is left alone where py is`() = onEdt {
+        makeBasedPythonProject()
+        settings().pyFileHandling = PyFileHandling.NEVER
+        assertNull(overrider.getOverriddenFileType(fixtureFile("kept.pyi")))
+    }
+
+    @Test
+    fun `pyi in vanilla project is not overridden`() = onEdt {
+        makeVanillaProject()
+        assertNull(overrider.getOverriddenFileType(fixtureFile("plain.pyi")))
     }
 
     @Test

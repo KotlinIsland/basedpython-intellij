@@ -20,6 +20,12 @@
 - Django's test runner, `manage.py test`, for a Django project without pytest-django, chosen by `by`
   or in *Settings | basedpython | Tests*, with tracebacks, navigation and *Rerun Failed Tests*.
 
+### Changed
+
+- *Treat .py and .pyi as basedpython*, formerly *Treat .py as basedpython*, re-types a `.py`'s `.pyi`
+  stubs along with it, which were left to the Python plugin, or to TextMate without one. A stub is
+  still a stub: no run icon, breakpoint or basedpython-syntax live template.
+
 ### Fixed
 
 - Live templates in basedpython's own syntax — `enum class`, `data class`, `let` and the rest — are

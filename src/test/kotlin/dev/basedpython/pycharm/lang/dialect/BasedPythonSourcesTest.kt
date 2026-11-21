@@ -2,11 +2,13 @@ package dev.basedpython.pycharm.lang.dialect
 
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.testFramework.junit5.fixture.TestFixtures
+import dev.basedpython.pycharm.lang.BasedPythonFileType
 import dev.basedpython.pycharm.settings.BasedPythonSettings
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
 import dev.basedpython.pycharm.testFramework.onEdt
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import com.intellij.openapi.application.WriteAction
@@ -78,12 +80,29 @@ class BasedPythonSourcesTest {
         assertFalse(BasedPythonSources.isOwnedSource(file("untouched.py")))
     }
 
-    /** Stubs declare, they do not execute — neither dialect's. */
+    /**
+     * Stubs declare, they do not execute — neither dialect's, though both are of basedpython's file
+     * type here, a `.pyi` re-typed along with its `.py`.
+     */
     @Test
     fun `stubs never do`() = onEdt {
         makeBasedPythonProject()
-        assertFalse(BasedPythonSources.isOwnedSource(file("shape.byi")))
-        assertFalse(BasedPythonSources.isOwnedSource(file("shape.pyi")))
+        val byi = file("shape.byi")
+        val pyi = file("shape.pyi")
+        assertSame(BasedPythonFileType.INSTANCE, byi.fileType)
+        assertSame(BasedPythonFileType.INSTANCE, pyi.fileType)
+        assertFalse(BasedPythonSources.isOwnedSource(byi))
+        assertFalse(BasedPythonSources.isOwnedSource(pyi))
+    }
+
+    /** A re-typed `.pyi` is still Python: editor help that writes code writes Python there. */
+    @Test
+    fun `a pyi we own is not written in basedpython`() = onEdt {
+        makeBasedPythonProject()
+        val pyi = file("shape.pyi")
+        assertSame(BasedPythonFileType.INSTANCE, pyi.fileType)
+        assertFalse(BasedPythonSources.isWrittenInBasedPython(pyi))
+        assertTrue(BasedPythonSources.isWrittenInBasedPython(file("shape.byi")))
     }
 
     @Test

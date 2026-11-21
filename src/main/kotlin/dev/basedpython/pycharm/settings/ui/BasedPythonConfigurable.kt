@@ -143,8 +143,8 @@ internal class BasedPythonConfigurable(private val project: Project) :
 
             inlayHintsGroup()
 
-            group(".py files") {
-                row("Treat .py as basedpython:") {
+            group(".py and .pyi files") {
+                row("Treat .py and .pyi as basedpython:") {
                     comboBox(PyFileHandling.entries, textListCellRenderer("") { it.display })
                         .bindItem({ s.pyFileHandling }, { s.pyFileHandling = it ?: PyFileHandling.AUTO })
                         .comment("Only who highlights them: by checks them either way.", maxLineLength = WRAP)

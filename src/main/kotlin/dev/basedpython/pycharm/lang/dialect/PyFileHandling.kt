@@ -3,7 +3,7 @@ package dev.basedpython.pycharm.lang.dialect
 import com.intellij.lang.Language
 
 /**
- * Who owns `.py` files in a basedpython project.
+ * Who owns `.py` files, and the `.pyi` stubs that go with them, in a basedpython project.
  *
  * The plugin re-types `.py` to basedpython so those files get highlighting and code intelligence in
  * an IDE with no Python support. In PyCharm that is the wrong trade: it takes `.py` away from a
@@ -23,10 +23,10 @@ enum class PyFileHandling(val id: String, val display: String) {
      */
     AUTO("auto", "Only when no Python plugin is installed"),
 
-    /** Never re-type `.py`. Leave them to the Python plugin, or to plain text. */
-    NEVER("never", "Never: leave .py to the Python plugin"),
+    /** Never re-type `.py` or `.pyi`. Leave them to the Python plugin, or to plain text. */
+    NEVER("never", "Never: leave .py and .pyi to the Python plugin"),
 
-    /** Always re-type `.py` in a basedpython project, Python plugin or not. */
+    /** Always re-type `.py` and `.pyi` in a basedpython project, Python plugin or not. */
     ALWAYS("always", "Always"),
     ;
 
