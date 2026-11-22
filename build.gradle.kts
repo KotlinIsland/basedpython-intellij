@@ -15,19 +15,24 @@ plugins {
   id("org.jetbrains.changelog")
 }
 
-// The build everything compiles and tests against: the newest 263 EAP, the only build this plugin
-// supports (`sinceBuild` is its branch). An EAP stops at "EAP Build Expired" about 30 days after it
-// ships — 263.5153 did on 2026-10-22 and 263.5701.42 on 2026-10-25 — so an older floor admits only
-// IDEs that cannot start, and nothing can be run or measured against it.
+// The build everything compiles and tests against: the newest public 263 build. An EAP stops at "EAP
+// Build Expired" about 30 days after it ships — 263.5153 did on 2026-10-22 and 263.5701.42 on
+// 2026-10-25 — so an older EAP is nothing to support. A release does not expire: `releasedPlatform`
+// is the oldest build the plugin supports, and `sinceBuild` its branch.
 //
 // Pinned rather than `263.+`. Following the snapshot repository moved the build out from under
 // everyone at once: 263.5701.9 landing there took `intellij.platform.vcs` out of the core
 // classloader, and every checkout stopped compiling with nothing changed here and nothing to
-// bisect. Moving to a newer build is a change to this line and to `sinceBuild`, made together.
+// bisect.
 //
-// `verifyPlugin` also checks the newest 263 snapshot (see `ides { }`), and
+// `verifyPlugin` also checks the release and the newest 263 snapshot (see `ides { }`), and
 // `-PplatformVersion=263.+` — or any build — compiles and tests against it.
-val platformVersion: String = providers.gradleProperty("platformVersion").getOrElse("263.7307.112-EAP-CANDIDATE")
+val platformVersion: String = providers.gradleProperty("platformVersion").getOrElse("263.8311.30-EAP-CANDIDATE")
+
+// 2026.3, the release the plugin still runs on, which nothing here compiles against: only the verifier
+// says whether code compiled against `platformVersion` still links there. Moving it is a change to
+// `sinceBuild` too.
+val releasedPlatform = "263.7307.200"
 
 dependencies {
   // JUnit 6: the platform's JUnit 5 test framework calls `ExtensionContext.Store.computeIfAbsent`,
@@ -153,7 +158,7 @@ dependencies {
   // Pinned to the build `platformVersion` names, and moved with it: PythonCore is published for each
   // public build, under that build's number. `-PpythonCoreVersion` names another, for a
   // `-PplatformVersion` with no PythonCore of its own (a snapshot such as 263.7307.60).
-  compileOnly("com.jetbrains.plugins:PythonCore:${providers.gradleProperty("pythonCoreVersion").getOrElse("263.7307.44")}")
+  compileOnly("com.jetbrains.plugins:PythonCore:${providers.gradleProperty("pythonCoreVersion").getOrElse("263.8311.30")}")
 }
 
 kotlin {
@@ -376,9 +381,9 @@ intellijPlatform {
     // those are Maven artifacts rather than installers, and the verifier wants an unpacked
     // distribution, which is what the artifact is.
     //
-    // Then two 263 builds, the two ends of the range as far as a repository can supply them. The
-    // floor is the pinned build everything compiles against (`platformVersion`), the only build
-    // `sinceBuild` admits. The top is dynamic on purpose, and is the one place in the
+    // Then three 263 builds: the two ends of the range as far as a repository can supply them, and
+    // the build between that everything compiles against (`platformVersion`). The floor is the
+    // release (`releasedPlatform`). The top is dynamic on purpose, and is the one place in the
     // build that is: pinning it would freeze the check at whatever platform existed the day it was
     // pinned. It means a JetBrains change can turn this red without a change here — that is the
     // signal, not noise: 263.4732 to 263.5153 rewrote the DAP client and turned it red in 70 places.
@@ -389,6 +394,7 @@ intellijPlatform {
     // dependency that makes it right. That one is caught by `-PplatformVersion=263.+`, compiling
     // against the top, and by running there.
     ides {
+      create(IntelliJPlatformType.IntellijIdea, releasedPlatform) { useInstaller = false }
       create(IntelliJPlatformType.IntellijIdea, platformVersion) { useInstaller = false }
       create(IntelliJPlatformType.IntellijIdea, "263.+") { useInstaller = false }
 
@@ -419,8 +425,8 @@ intellijPlatform {
       // build of the debugger links against both: against 263.5153 the 262-compiled plugin had 70
       // unresolved references. The floor went where the platform is going, 2026.3.
       //
-      // Only the latest build: the branch of `platformVersion`, which moves with it, since an older
-      // EAP stops at "EAP Build Expired" on start (see `platformVersion`).
+      // The branch of the release (`releasedPlatform`), the oldest build that still starts: an older
+      // EAP stops at "EAP Build Expired" (see `platformVersion`).
       sinceBuild = "263.7307"
       untilBuild = "271.*"
     }

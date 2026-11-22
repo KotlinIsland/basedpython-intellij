@@ -333,8 +333,8 @@ Edit, type check, refactor, run, test and debug both Python and [basedpython](ht
   `__iter__`, `__add__` and the rest, complete whole with their imports; all from `by`.
 
 ## Requirements
-- IntelliJ Platform 2026.3, the latest EAP: build 263.7307 or newer (IntelliJ IDEA Ultimate or
-  PyCharm Professional). Older EAPs have expired. Not the Community editions: `com.intellij.modules.lsp` is a paid-IDE module, which is why
+- IntelliJ Platform 2026.3 or newer, build 263.7307 on (IntelliJ IDEA Ultimate or PyCharm
+  Professional). Not the Community editions: `com.intellij.modules.lsp` is a paid-IDE module, which is why
   Marketplace lists IntelliJ IDEA Community and PyCharm Community as unsupported products.
 - A project with basedpython installed (`uv add --dev basedpython`), exposing `by` and
   `buff` in `.venv/` or on `PATH`.
@@ -361,15 +361,13 @@ of its own, for whatever behaves differently in the IDE the plugin is mostly use
 ```bash
 ./gradlew runPyCharm
 ./gradlew runPyCharm -PpycharmPath=/Applications/PyCharm.app   # a PyCharm you already have
-./gradlew runPyCharm -PpycharmVersion=263.7307.50-EAP-CANDIDATE # a particular snapshot
+./gradlew runPyCharm -PpycharmVersion=263.8311.32-EAP-CANDIDATE # a particular snapshot
 ```
 
 Both are also **Run IDE** and **Run PyCharm** in the IDE's own run-configuration dropdown.
 
-`./gradlew verifyPlugin` checks the built zip against the recommended releases in the range the
-manifest claims — none, until 2026.3 is released — and the newest 2026.3 build in JetBrains' snapshot
-repository. The
-public 2026.3 snapshots run some weeks behind the internal nightlies, so a platform change can be
+`./gradlew verifyPlugin` checks the built zip against the 2026.3 release, the build it was compiled
+against and the newest 2026.3 build in JetBrains' snapshot repository. The public 2026.3 snapshots run some weeks behind the internal nightlies, so a platform change can be
 live in the IDE you use before any repository can hand it to CI — point the verifier at that build
 directly to see what it says.
 

@@ -3,6 +3,8 @@ package dev.basedpython.pycharm.lsp
 import com.intellij.codeInsight.daemon.DaemonCodeAnalyzer
 import com.intellij.codeInsight.daemon.impl.DaemonCodeAnalyzerImpl
 import com.intellij.codeInsight.hints.codeVision.ModificationStampUtil
+import com.intellij.codeInsight.multiverse.CodeInsightContext
+import com.intellij.codeInsight.multiverse.codeInsightContext
 import com.intellij.openapi.editor.Document
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.util.Disposer
@@ -67,10 +69,12 @@ class ByLspLifecycleTest {
     fun `once every subscriber has heard a start or a stop, every open file is drawn again`() {
         lateinit var editor: Editor
         lateinit var document: Document
+        lateinit var context: CodeInsightContext
         runInEdtAndWait {
             fixture.configureByText("shapes.by", "class Shape:\n    def area(self) -> float:\n        return 0.0\n")
             editor = fixture.editor
             document = editor.document
+            context = fixture.file.codeInsightContext
         }
         val daemon = DaemonCodeAnalyzer.getInstance(fixture.project) as DaemonCodeAnalyzerImpl
         for (event in listOf<(ByLspLifecycleListener.Broadcaster) -> Unit>({ it.serverInitialized(InitializeResult()) }, { it.serverStopped(false) })) {
@@ -78,7 +82,7 @@ class ByLspLifecycleTest {
                 fixture.doHighlighting()
                 ModificationStampUtil.putCurrentModificationStamp(editor, fixture.file)
             }
-            assertTrue(daemon.fileStatusMap.allDirtyScopesAreNullFor(document), "highlighted, and nothing left to do")
+            assertTrue(daemon.fileStatusMap.allDirtyScopesAreNullFor(document, context), "highlighted, and nothing left to do")
             // what a subscriber dropping a server's answers sees: the editor not yet drawn again
             val drawnBeforeHeard = CopyOnWriteArrayList<Boolean>()
             val disposable = Disposer.newDisposable()
@@ -100,7 +104,7 @@ class ByLspLifecycleTest {
                 while (ModificationStampUtil.getModificationStamp(editor) != null && System.nanoTime() < deadline) Thread.sleep(10)
                 assertEquals(listOf(false), drawnBeforeHeard.toList())
                 assertNull(ModificationStampUtil.getModificationStamp(editor), "code vision's pass runs again too")
-                assertFalse(daemon.fileStatusMap.allDirtyScopesAreNullFor(document), "the file is highlighted again")
+                assertFalse(daemon.fileStatusMap.allDirtyScopesAreNullFor(document, context), "the file is highlighted again")
             } finally {
                 job.cancel()
                 Disposer.dispose(disposable)
