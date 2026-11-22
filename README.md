@@ -1,15 +1,18 @@
 # basedpython for PyCharm / IntelliJ
 
 <!-- Plugin description -->
-Python and basedpython support: editing, testing, refactoring, debugging, environment management
+Python support with a powerful Python debugger for IntelliJ IDEA and PyCharm
 
-Write Python with what it is missing (sum types, extension methods, `?.` and `??`) and ship plain `.py` that every Python tool already reads. This plugin makes [basedpython](https://kotlinisland.github.io/basedpython/)'s `.by` files a first-class language in IntelliJ IDEA Ultimate and PyCharm Professional.
+Edit, type check, refactor, run, test and debug both Python and [basedpython](https://kotlinisland.github.io/basedpython/).
 
-- **A type checker that knows your frameworks.** Pydantic, SQLAlchemy, pytest and Django are modelled, so synthesized constructors and injected fixtures are checked like ordinary code.
-- **Completion that understands your types**, from the `by` language server: navigation, rename, find usages, inlay hints and quick fixes.
-- **See what ships.** Compare any `.by` with the Python it lowers to, side by side.
-- **Run, test and debug `.by` directly.** Run configurations for `by run`, `by build` and `by check`, pytest results in the test tree, and breakpoints on the lines you wrote.
-- **Formatting and linting** from `buff`, with format on save.
+- **A debugger built for modern Python.** the ability to reset the stack and hot reload of edited code without restarting the program, and data flow analysis support.
+  - **Debugs Django the way you run it.** `runserver` without `--noreload`, and breakpoints in templates.
+- **A type checker that knows your frameworks.** Pydantic, SQLAlchemy, pytest and Django support is built in, so synthesized constructors and injected fixtures are checked like ordinary code.
+- **Python editing.** Completion, navigation, find usages, inlay hints, quick fixes and refactorings, formatting, linting and import sorting from the `by` language server.
+- **Run and test.** A powerful test tree UI, with support for coverage, Docker, SSH and WSL targets.
+- **Environment management.** Add and remove dependencies, and set up a missing environment in one click.
+- **Git hooks and tasks.** A UI for prek, pre-commit, lefthook and pyprojectx.
+- **basedpython.** A Python like language with a powerful and consistent type system, extension methods, and many more features, builds as plain `.py`, or compiles into C extension modules.
 
 [Getting started](https://kotlinisland.github.io/basedpython/getting-started/) · [The plugin](https://kotlinisland.github.io/basedpython/features/intellij-plugin/) · [Language reference](https://kotlinisland.github.io/basedpython/features/) · [Discord](https://discord.gg/7y9upqPrk2)
 <!-- Plugin description end -->
