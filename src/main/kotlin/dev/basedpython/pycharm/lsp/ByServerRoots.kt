@@ -14,6 +14,7 @@ import com.intellij.openapi.startup.ProjectActivity
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.platform.lsp.api.LspClientManager
 import com.intellij.platform.lsp.api.LspIntegrationProvider
+import java.nio.file.Path
 
 /**
  * The directories `by` and `buff` are given as a project's workspace, and the one they run in.
@@ -44,7 +45,7 @@ internal object ByServerRoots {
     }
 
     /** Where [project]'s servers run: the project's directory, never the IDE's. */
-    fun workingDirectory(project: Project): String? = project.basePath
+    fun workingDirectory(project: Project): Path? = project.basePath?.let(Path::of)
 
     /**
      * Restarts a project's `by` and `buff` when the roots they were started with are no longer the

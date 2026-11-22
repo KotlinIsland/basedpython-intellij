@@ -45,6 +45,7 @@ import org.junit.jupiter.api.Assertions.assertNotSame
 import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import java.nio.file.Path
 import java.nio.file.Paths
 
 /**
@@ -437,7 +438,7 @@ class LspServerDescriptorTest {
   @Test
   fun `servers run in the project and are given its directories`() {
     for (descriptor in listOf(byDescriptor(), buffDescriptor())) {
-      assertEquals(project.basePath, descriptor.createCommandLine().workDirectory?.path)
+      assertEquals(project.basePath?.let(Path::of), descriptor.createCommandLine().workingDirectory)
       assertEquals(ByServerRoots.of(project).toList(), descriptor.roots.toList())
       assertTrue(descriptor.roots.isNotEmpty())
     }

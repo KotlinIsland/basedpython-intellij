@@ -1,14 +1,17 @@
 package dev.basedpython.pycharm.lsp
 
 import com.intellij.openapi.progress.ProcessCanceledException
-import com.intellij.openapi.progress.ProgressManager
-import com.intellij.openapi.progress.util.ProgressIndicatorBase
+import com.intellij.openapi.progress.coroutineToIndicator
 import com.intellij.testFramework.junit5.TestApplication
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -18,11 +21,12 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
-import kotlin.concurrent.thread
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.measureTime
 import kotlin.time.measureTimedValue
 
 /**
@@ -122,17 +126,23 @@ class ByLateAnswersTest {
     @Test
     fun `a cancelled caller stops waiting and leaves the request to the next`() {
         val answers = answers(60.seconds)
-        val indicator = ProgressIndicatorBase()
-        val cancelling = thread {
-            Thread.sleep(100)
-            indicator.cancel()
-        }
-        val (_, took) = measureTimedValue {
-            assertThrows(ProcessCanceledException::class.java) {
-                ProgressManager.getInstance().runProcess({ answers.answer("file", 1, wait = true, ::request) }, indicator)
+        val stopped = AtomicBoolean()
+        val took = measureTime {
+            runBlocking {
+                val pass = launch(Dispatchers.IO) {
+                    coroutineToIndicator {
+                        assertThrows(ProcessCanceledException::class.java) {
+                            answers.answer("file", 1, wait = true, ::request)
+                        }
+                        stopped.set(true)
+                    }
+                }
+                while (sent.get() == 0) delay(10.milliseconds)
+                delay(100.milliseconds)
+                pass.cancelAndJoin()
             }
         }
-        cancelling.join()
+        assertTrue(stopped.get(), "the caller was not waiting when it was cancelled")
         assertTrue(took < 10.seconds, "cancelled after $took")
         answer.complete("tests")
         assertEquals("tests", answers.answer("file", 1, wait = true, ::request) ?: answers.answer("file", 1, wait = true, ::request))

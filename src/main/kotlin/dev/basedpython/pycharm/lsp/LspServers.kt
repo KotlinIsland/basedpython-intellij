@@ -262,7 +262,7 @@ internal class ByLspServerDescriptor(
       addAll(launch.prependArgs)
       add("server")
       addAll(extraArgs)
-    }).withEnvironment(launch.env).withWorkDirectory(ByServerRoots.workingDirectory(project))
+    }).withEnvironment(launch.env).withWorkingDirectory(ByServerRoots.workingDirectory(project))
 
   override fun startServerProcess(): BaseProcessHandler<*> =
     super.startServerProcess().mirrorStderrTo(project, "by")
@@ -554,7 +554,7 @@ internal class BuffLspServerDescriptor(
       addAll(launch.prependArgs)
       add("server")
       addAll(extraArgs)
-    }).withEnvironment(launch.env).withWorkDirectory(ByServerRoots.workingDirectory(project))
+    }).withEnvironment(launch.env).withWorkingDirectory(ByServerRoots.workingDirectory(project))
 
   override fun startServerProcess(): BaseProcessHandler<*> =
     super.startServerProcess().mirrorStderrTo(project, "buff")
