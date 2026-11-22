@@ -1,3 +1,4 @@
+import groovy.json.JsonSlurper
 import org.jetbrains.changelog.Changelog
 import org.jetbrains.changelog.markdownToHTML
 import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
@@ -5,6 +6,8 @@ import org.jetbrains.intellij.platform.gradle.TestFrameworkType
 import org.jetbrains.intellij.platform.gradle.tasks.VerifyPluginTask
 import org.jetbrains.kotlin.gradle.dsl.JvmDefaultMode
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+import java.io.ByteArrayOutputStream
+import java.io.OutputStream
 
 plugins {
   id("org.jetbrains.kotlin.jvm")
@@ -620,6 +623,111 @@ tasks {
     archiveClassifier = bundledPlatform.orElse("")
   }
 }
+
+// --- Linting with Qodana ------------------------------------------------------------------------
+//
+// `./gradlew lint` — what CI's Lint job runs, in Docker: the image and profile qodana.yaml names,
+// failing on a Critical or High problem that is not in the baseline.
+//
+// On a copy of the last commit rather than the checkout, since the container imports the project as
+// an IDE does and writes its .idea, .gradle and build output into it. The `qodana-cache` volume
+// rather than a directory under build/, where `clean` would delete the import's downloads, which
+// take ten minutes to fetch again. Not part of `check`, which needs no Docker.
+//
+// JetBrains' own Gradle plugin, org.jetbrains.qodana, scans the checkout and keeps its cache in
+// build/ unless told otherwise, so it would save none of this.
+
+/** The findings of a Qodana run's [sarif] that its baseline does not hold, gravest first. */
+fun newFindings(sarif: File): List<String> {
+  fun Any?.at(vararg path: String): Any? = path.fold(this) { value, key ->
+    val here = if (value is List<*>) value.firstOrNull() else value
+    (here as? Map<*, *>)?.get(key)
+  }
+  val results = (JsonSlurper().parse(sarif).at("runs") as List<*>).flatMap { it.at("results") as? List<*> ?: emptyList<Any>() }
+  val gravity = listOf("Critical", "High", "Moderate", "Low", "Info")
+  return results
+    .filter { it.at("baselineState") == "new" }
+    .sortedBy { gravity.indexOf(it.at("properties", "qodanaSeverity")) }
+    .map {
+      val file = it.at("locations", "physicalLocation", "artifactLocation", "uri") ?: "(project)"
+      val line = it.at("locations", "physicalLocation", "region", "startLine")?.let { line -> ":$line" }.orEmpty()
+      "${it.at("properties", "qodanaSeverity")} $file$line ${it.at("message", "text")} [${it.at("ruleId")}]"
+    }
+}
+
+interface LintServices {
+  @get:Inject val exec: ExecOperations
+  @get:Inject val files: FileSystemOperations
+  @get:Inject val archives: ArchiveOperations
+}
+
+tasks.register("lint") {
+  group = LifecycleBasePlugin.VERIFICATION_GROUP
+  description = "Lints the last commit with Qodana, as CI does. Needs Docker running."
+  val services = objects.newInstance<LintServices>()
+  val checkout = layout.projectDirectory.asFile
+  val work = layout.buildDirectory.dir("qodana").get().asFile
+  doLast {
+    // `docker run` exits 1 with no daemon to talk to, as Qodana itself may, so ask first
+    val docker = runCatching {
+      services.exec.exec {
+        commandLine("docker", "version")
+        standardOutput = OutputStream.nullOutputStream()
+        errorOutput = OutputStream.nullOutputStream()
+        isIgnoreExitValue = true
+      }.exitValue
+    }.getOrNull()
+    if (docker != 0) throw GradleException("lint needs Docker, which is not installed or not running.")
+
+    val uncommitted = ByteArrayOutputStream()
+    services.exec.exec {
+      workingDir = checkout
+      commandLine("git", "status", "--porcelain")
+      standardOutput = uncommitted
+    }
+    if (uncommitted.size() > 0) {
+      logger.warn("Linting the last commit: these uncommitted changes are not in it.\n$uncommitted")
+    }
+
+    val source = work.resolve("src")
+    val results = work.resolve("results")
+    val archive = work.resolve("head.tar")
+    services.files.delete { delete(work) }
+    source.mkdirs()
+    results.mkdirs()
+    services.exec.exec {
+      workingDir = checkout
+      commandLine("git", "archive", "--format=tar", "-o", archive.path, "HEAD")
+    }
+    services.files.copy {
+      from(services.archives.tarTree(archive))
+      into(source)
+    }
+
+    val image = source.resolve("qodana.yaml").useLines { lines ->
+      lines.firstOrNull { it.startsWith("linter:") }?.substringAfter(':')?.trim()
+    } ?: throw GradleException("qodana.yaml names no linter")
+    val exit = services.exec.exec {
+      commandLine(
+        "docker", "run", "--rm",
+        "-v", "$source:/data/project",
+        "-v", "$results:/data/results",
+        "-v", "qodana-cache:/data/cache",
+        image, "scan", "--baseline", ".qodana/baseline.sarif.json",
+      )
+      isIgnoreExitValue = true
+    }.exitValue
+    if (exit == 137) throw GradleException("Qodana was killed, most likely for want of memory in Docker.")
+    // Qodana's summary counts the findings by inspection and does not say where they are, and its
+    // report is a page that is blank unless a web server serves it.
+    val sarif = results.resolve("qodana.sarif.json")
+    val found = if (sarif.exists()) newFindings(sarif) else emptyList()
+    if (found.isNotEmpty()) logger.lifecycle("Not in the baseline:\n" + found.joinToString("\n") { "  $it" })
+    logger.lifecycle("The report, at http://localhost:8000: python3 -m http.server --bind 127.0.0.1 -d ${results.resolve("report")}")
+    if (exit != 0) throw GradleException("Qodana failed with exit code $exit")
+  }
+}
+
 /**
  * The PyCharm `runPyCharm` downloads when none is named: the newest 2026.3 snapshot, because no
  * release is new enough for the floor. Dynamic, unlike the IDEA platform the build compiles against:
