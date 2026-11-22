@@ -1,5 +1,7 @@
 ## [Unreleased]
 
+## [0.0.7.1]
+
 ### Added
 
 - A *basedpython Django* tool window: a Django project's apps with their models, fields and
@@ -71,6 +73,13 @@
   again, which they had not moved.
 - In a python a debugged program starts, under debugpy, the environment's own `sitecustomize` runs
   again when `by run` puts one of its own ahead of the debugger's.
+- With several projects open, the IDE no longer reports *Attempt to take read lock* while it paints an
+  editor of a `.py`, as the Jupyter minimap did: the project a `.py` is typed by is found without a
+  lock.
+- *Stop* ends what a program started and left running, on macOS and Linux, where the run stayed
+  running until that ended by itself and a second *Stop* did not reach it.
+- What bpd says of a refused *Reset Frame* or *Jump to Cursor*, or of a hot reload, is shown as it
+  wrote it, where `<module>` was read as a tag and vanished.
 
 ### Removed
 
