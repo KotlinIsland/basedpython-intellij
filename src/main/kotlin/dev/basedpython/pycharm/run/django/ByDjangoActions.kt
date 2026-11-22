@@ -1,6 +1,5 @@
 package dev.basedpython.pycharm.run.django
 
-import com.intellij.ide.actions.runAnything.RunAnythingManager
 import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
 import com.intellij.openapi.actionSystem.ActionUpdateThread
@@ -28,11 +27,11 @@ internal abstract class ByDjangoProjectAction : DumbAwareAction() {
     override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
 }
 
-/** *Tools | Run manage.py Task…*: Run Anything with `manage.py ` typed, its commands completed ([ByManageRunAnythingProvider]). */
+/** *Tools | Run manage.py Task…*: the *manage.py* window's Commands view, its command line focused ([ByManageCommandsPanel]). */
 internal class ByRunManageTaskAction : ByDjangoProjectAction() {
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
-        RunAnythingManager.getInstance(project).show(ByManageRunAnythingProvider.MANAGE + " ", false, e)
+        ByManageToolWindow.edit(project, null)
     }
 }
 

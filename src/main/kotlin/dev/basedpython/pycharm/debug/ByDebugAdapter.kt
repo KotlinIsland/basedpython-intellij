@@ -60,6 +60,7 @@ import dev.basedpython.pycharm.debug.recompose.ByRecompositionLink
 import dev.basedpython.pycharm.debug.recompose.ByRecompositionRequests
 import dev.basedpython.pycharm.debug.recompose.ByRecompositionSession
 import dev.basedpython.pycharm.run.ByCommandLineState
+import dev.basedpython.pycharm.run.django.ByManageRuns
 import dev.basedpython.pycharm.util.BasedPythonBundle
 import kotlinx.coroutines.CoroutineScope
 import kotlin.time.Duration.Companion.milliseconds
@@ -819,5 +820,9 @@ private class ByOutputSupport(private val backend: () -> ByDebugBackend?) : DapE
             ByOutputRegister.HIDDEN -> return
         }
         context.session.consoleView?.print(event.output, contentType)
+        // the program's own, not the adapter's remarks
+        if (event.category?.value == "stdout" || event.category?.value == "stderr") {
+            ByManageRuns.getInstance(context.session.project).printed(context.session.runProfile, event.output)
+        }
     }
 }

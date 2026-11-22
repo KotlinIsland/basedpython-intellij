@@ -3,6 +3,7 @@ package dev.basedpython.pycharm.navigation.django
 import com.intellij.codeInsight.daemon.DaemonCodeAnalyzer
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.application.EDT
 import com.intellij.openapi.application.readAction
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
@@ -25,6 +26,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.concurrent.atomic.AtomicBoolean
@@ -86,6 +88,11 @@ internal class ByDjangoStructureService(private val project: Project, private va
                 }
             },
         )
+        // whoever it was that asked
+        scope.launch(Dispatchers.EDT) {
+            state.first { it is State.Ready }
+            ByDjangoStructureToolWindow.offer(project)
+        }
         scope.launch {
             for (ask in asks) {
                 delay(SETTLE_MS)

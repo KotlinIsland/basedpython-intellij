@@ -517,6 +517,13 @@
                     secondary="true"
                     icon="AllIcons.Toolwindows.ToolWindowStructure"
                     factoryClass="dev.basedpython.pycharm.navigation.django.ByDjangoStructureToolWindowFactory"/>
+        <!-- What a django project's manage.py commands are doing, and running one; beside the Run window,
+             which holds their output. See run.django.ByManageToolWindowFactory. -->
+        <toolWindow id="basedpython manage.py"
+                    anchor="bottom"
+                    secondary="true"
+                    icon="/icons/basedpythonManage.svg"
+                    factoryClass="dev.basedpython.pycharm.run.django.ByManageToolWindowFactory"/>
         <!-- The merge window's semantic resolution and Ignore imports and formatting for .by files,
              from by/resolveMergeConflicts and by/diffIgnoredRanges; see vcs.ByMerges. -->
         <diff.merge.conflict.semantic.resolver implementation="dev.basedpython.pycharm.vcs.ByMergeConflictResolver"/>
@@ -1031,6 +1038,11 @@
     </extensions>
 
     <projectListeners>
+        <!-- Follows every manage.py command the IDE runs, for the manage.py window. -->
+        <listener
+            class="dev.basedpython.pycharm.run.django.ByManageRuns$Listener"
+            topic="com.intellij.execution.ExecutionListener"/>
+
         <!-- Turns every stop into a `bpd/facts` question and a `by/dataFlowAt` answer. Registered
              as a listener rather than driven from the drawing pass because the daemon decides when
              a pass runs, and that is not when the program stopped. -->
@@ -1137,7 +1149,7 @@
                 icon="/icons/basedpython.svg">
             <add-to-group group-id="ToolsMenu" anchor="first"/>
         </action>
-        <!-- Django's Tools: Run manage.py Task… (Run Anything with `manage.py ` typed) and the Django
+        <!-- Django's Tools: Run manage.py Task… (the manage.py window's command line) and the Django
              Console (a basedpython console with django set up), shown in a django project. -->
         <action id="basedpython.RunManageTask" class="dev.basedpython.pycharm.run.django.ByRunManageTaskAction">
             <add-to-group group-id="ToolsMenu" anchor="after" relative-to-action="basedpython.OpenConsole"/>

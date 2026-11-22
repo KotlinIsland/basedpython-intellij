@@ -99,7 +99,8 @@ internal class ByProcessHandler(
 
     /** Set, and never cleared, once a request to end the process came after what it ran had ended. */
     @Volatile
-    private var leftToFinish = false
+    var leftToFinish = false
+        private set
 
     override fun destroyProcess() {
         if (finishesOnItsOwn()) leftToFinish = true

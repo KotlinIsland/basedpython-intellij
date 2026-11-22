@@ -8,8 +8,15 @@
   until one does.
 - Django gutter icons: a view's routes and templates, a `path()`'s view, a model's admin and an admin's
   model, and the views rendering a template.
-- A *Django Server (basedpython)* run configuration, made once for a Django project, *Tools | Run
-  manage.py Task…* with command completion, and *Tools | Django Console*.
+- A *basedpython manage.py* tool window, which *Tools | Run manage.py Task…* opens. *Now* shows every
+  `manage.py` command the IDE is running: where `runserver` serves, its reloads, requests and failed
+  reloads, a migration's progress, a command waiting for an answer, what Django says is to be done
+  with a link that does it, and how the last commands ended. *Commands* has a command line with the
+  project's commands, starred and recent ones, and a form for a command's arguments, which change each
+  other; the list and the form need a `by` that answers `by/djangoStructure` and `by/djangoCommand`.
+- A *Django Server (basedpython)* run configuration, made once for a Django project, and *Tools |
+  Django Console*.
+- `manage.py` commands run from the window or Run Anything have a terminal, so `createsuperuser` works.
 - The Endpoints view's *HTTP Client* and *OpenAPI* tabs for basedpython routes.
 - Folding in a Django template, and its blocks in the Structure view above the HTML, from `by`.
 - *Django* in the New Project wizard, `django-stubs` among its dev dependencies so `by` reads Django

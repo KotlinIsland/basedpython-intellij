@@ -507,6 +507,14 @@ interface ByServerExtensions {
     fun djangoStructure(params: Map<String, Any>): CompletableFuture<ByDjangoStructure?>
 
     /**
+     * A management command's arguments, as its own parser declares them, or `null` for no such
+     * command; `MethodNotFound` from a `by` before the request. The contract is `scratch.django.md`'s
+     * *`by/djangoCommand` — the contract*.
+     */
+    @JsonRequest("by/djangoCommand")
+    fun djangoCommand(params: ByDjangoCommandParams): CompletableFuture<ByDjangoCommandArguments?>
+
+    /**
      * For each of a merge's conflicts, the text that replaces its lines, or `null` where it cannot be
      * resolved. A `by` from before the request answers `MethodNotFound`.
      */
@@ -1908,6 +1916,49 @@ data class ByDjangoCommand(
     /** The `Command` class. */
     val symbol: ByEndpointSymbol? = null,
 )
+
+/** Which command `by/djangoCommand` is asked of: [settings] is the [ByDjangoProject.settings] it is a command of. */
+data class ByDjangoCommandParams(val command: String, val settings: String? = null)
+
+/** A command's arguments in its parser's order, or why django could not be set up to read them. */
+data class ByDjangoCommandArguments(
+    val help: String? = null,
+    val arguments: List<ByDjangoArgument> = emptyList(),
+    val error: String? = null,
+)
+
+/** One argument of a management command: an option, or a positional when it has no [flags]. */
+data class ByDjangoArgument(
+    val name: String? = null,
+    /** As declared, `-v` and `--verbosity`. */
+    val flags: List<String> = emptyList(),
+    /** One of the constants; a kind this does not know is one value. */
+    val kind: String? = null,
+    val required: Boolean = false,
+    val help: String? = null,
+    val metavar: String? = null,
+    val default: String? = null,
+    val choices: List<String> = emptyList(),
+    /** Whether every command has it. */
+    val general: Boolean = false,
+) {
+    companion object {
+        /** Takes no value. */
+        const val FLAG = "flag"
+
+        /** Takes one. */
+        const val VALUE = "value"
+
+        /** Takes several at once. */
+        const val LIST = "list"
+
+        /** Takes one each time it is given. */
+        const val APPEND = "append"
+
+        /** Takes none, and counts. */
+        const val COUNT = "count"
+    }
+}
 
 /**
  * One of `DATABASES`, as the settings write it: never its password. [name] is `NAME`, which for

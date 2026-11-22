@@ -94,6 +94,7 @@ class ByRunOptions : ByCommonOptions() {
     private val redirectInputProp = property(false).provideDelegate(this, "redirectInput")
     private val inputFileProp = string("").provideDelegate(this, "inputFile")
     private val emulateTerminalProp = property(false).provideDelegate(this, "emulateTerminal")
+    private val terminalInRunProp = property(false).provideDelegate(this, "terminalInRun")
     private val runWithConsoleProp = property(false).provideDelegate(this, "runWithConsole")
 
     /**
@@ -123,6 +124,14 @@ class ByRunOptions : ByCommonOptions() {
     var emulateTerminal: Boolean
         get() = emulateTerminalProp.getValue(this)
         set(v) { emulateTerminalProp.setValue(this, v) }
+
+    /**
+     * Whether a Run on this machine has a terminal as [emulateTerminal] gives it, and a debug session, or
+     * a run on a target, which can have none, goes without: for a configuration made to be run by either.
+     */
+    var terminalInRun: Boolean
+        get() = terminalInRunProp.getValue(this)
+        set(v) { terminalInRunProp.setValue(this, v) }
 
     /**
      * Whether Run starts the module in a basedpython console — `by repl --module` — and leaves the

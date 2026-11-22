@@ -32,6 +32,7 @@ import dev.basedpython.pycharm.lang.dialect.BasedPythonProjectDetector
 import dev.basedpython.pycharm.lsp.ByLspLifecycleListener
 import dev.basedpython.pycharm.lsp.ext.ByEndpointSymbol
 import dev.basedpython.pycharm.lsp.refactor.ByWorkspaceEditFiles
+import dev.basedpython.pycharm.run.django.ByManageToolWindow
 import dev.basedpython.pycharm.util.BasedPythonBundle
 import java.awt.event.KeyAdapter
 import java.awt.event.KeyEvent
@@ -91,10 +92,12 @@ internal object ByDjangoStructureToolWindow {
         }
     }
 
-    /** Shows the stripe button once `by` has answered with a structure. One-way. EDT. */
+    /** Shows the stripe buttons of this window and the *manage.py* one once `by` has answered with a structure. One-way. EDT. */
     fun offer(project: Project) {
-        val window = ToolWindowManager.getInstance(project).getToolWindow(ID) ?: return
-        if (!window.isAvailable) window.isAvailable = true
+        for (id in listOf(ID, ByManageToolWindow.ID)) {
+            val window = ToolWindowManager.getInstance(project).getToolWindow(id) ?: continue
+            if (!window.isAvailable) window.isAvailable = true
+        }
     }
 }
 
@@ -153,7 +156,6 @@ internal class ByDjangoStructurePanel(private val project: Project) : SimpleTool
                 is ByDjangoStructureService.State.Ready -> "django.structure.empty"
             },
         )
-        if (state is ByDjangoStructureService.State.Ready) ByDjangoStructureToolWindow.offer(project)
         draw(nodes.orEmpty())
     }
 

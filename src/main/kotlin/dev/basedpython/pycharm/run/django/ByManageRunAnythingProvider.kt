@@ -1,24 +1,20 @@
 package dev.basedpython.pycharm.run.django
 
-import com.intellij.execution.ProgramRunnerUtil
-import com.intellij.execution.RunManager
 import com.intellij.execution.executors.DefaultRunExecutor
 import com.intellij.ide.actions.runAnything.RunAnythingAction
 import com.intellij.ide.actions.runAnything.RunAnythingUtil
 import com.intellij.ide.actions.runAnything.activity.RunAnythingCommandLineProvider
 import com.intellij.openapi.actionSystem.DataContext
 import com.intellij.openapi.project.Project
-import com.intellij.util.execution.ParametersListUtil
 import dev.basedpython.pycharm.BasedPythonIcons
 import dev.basedpython.pycharm.lang.dialect.BasedPythonProjectDetector
 import dev.basedpython.pycharm.lsp.ext.ByDjangoCommand
 import dev.basedpython.pycharm.navigation.django.ByDjangoStructureService
-import dev.basedpython.pycharm.run.BasedPythonRunConfigurationType
 import dev.basedpython.pycharm.util.BasedPythonBundle
 import javax.swing.Icon
 
 /**
- * `manage.py …` in Run Anything (double Ctrl, or *Tools | Run manage.py Task…*): a django command run
+ * `manage.py …` in Run Anything (double Ctrl): a django command run
  * as a `by run` of the project's `manage.py` ([ByDjangoManage]), with Shift for the debugger, in the
  * Run tool window under the command's name, as PyCharm Professional's *Run manage.py Task* does.
  *
@@ -54,14 +50,9 @@ internal class ByManageRunAnythingProvider : RunAnythingCommandLineProvider() {
         val project = RunAnythingUtil.fetchProject(dataContext)
         val arguments = commandLine.parameters
         if (arguments.isEmpty()) return false
-        val manage = ByDjangoManage.find(project) ?: return false
-        val name = "manage.py " + ParametersListUtil.join(arguments)
-        val settings = ByDjangoManage.configuration(project, manage, BasedPythonRunConfigurationType.getInstance().runFactory, name, arguments)
-        val runManager = RunManager.getInstance(project)
-        runManager.setTemporaryConfiguration(settings)
-        runManager.selectedConfiguration = settings
         val executor = dataContext.getData(RunAnythingAction.EXECUTOR_KEY) ?: DefaultRunExecutor.getRunExecutorInstance()
-        ProgramRunnerUtil.executeConfiguration(settings, executor)
+        val manage = ByDjangoManage.find(project) ?: return false
+        ByManageLauncher.run(project, manage, arguments, executor, select = true)
         return true
     }
 

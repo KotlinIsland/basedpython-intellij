@@ -33,6 +33,9 @@ internal data class ByDjangoManage(val directory: Path, val module: String) {
     companion object {
         private const val MANAGE = "manage.py"
 
+        /** What `by run` runs [MANAGE] as. */
+        const val MODULE = "manage"
+
         /** The project's `manage.py`, or null when neither `by` nor the project's root has one. */
         fun find(project: Project, structure: ByDjangoProject? = null): ByDjangoManage? {
             val said = (structure ?: ByDjangoStructureService.getInstance(project).current()?.projects?.firstOrNull())

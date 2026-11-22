@@ -131,7 +131,8 @@ class ByRunConfiguration(project: Project, factory: ConfigurationFactory, name: 
 
             override val inputFile: File? = inputFile()
 
-            override val emulateTerminal: Boolean = opts.emulateTerminal
+            override val emulateTerminal: Boolean = opts.emulateTerminal ||
+                opts.terminalInRun && executor.id == DefaultRunExecutor.EXECUTOR_ID && targetName == null && inputFile == null
 
             // The console is created after the process, so the hint is told about each as it
             // appears; it needs the process to read the failure and the console to answer it.
