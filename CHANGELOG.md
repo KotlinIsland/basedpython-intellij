@@ -1,5 +1,11 @@
 ## [Unreleased]
 
+### Fixed
+
+- Hovering an inlay hint whose tooltip has code in it no longer reports an error ("Read access is
+  allowed from inside read-action only"). The tooltip is converted in the background the first time
+  it is hovered.
+
 ## [0.0.7.1]
 
 ### Added
