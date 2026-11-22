@@ -429,5 +429,19 @@ class LspServerDescriptorTest {
   }
 
   /** Creates an in-memory virtual file with the given name (extension drives support). */
+  /**
+   * Both servers run in the project's directory and are given [ByServerRoots]' roots: the platform's
+   * project-wide descriptor gave none while a first-opened folder had no module, so they ran in the
+   * IDE's install directory and served it.
+   */
+  @Test
+  fun `servers run in the project and are given its directories`() {
+    for (descriptor in listOf(byDescriptor(), buffDescriptor())) {
+      assertEquals(project.basePath, descriptor.createCommandLine().workDirectory?.path)
+      assertEquals(ByServerRoots.of(project).toList(), descriptor.roots.toList())
+      assertTrue(descriptor.roots.isNotEmpty())
+    }
+  }
+
   private fun makeFile(name: String): VirtualFile = LightVirtualFile(name, "")
 }

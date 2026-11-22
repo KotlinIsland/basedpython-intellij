@@ -40,6 +40,10 @@
 
 ### Fixed
 
+- A project opened for the first time no longer starts `by` and `buff` in the IDE's own install
+  directory, serving that instead of the project, and then a second pair beside them once its
+  module appears: both run in the project, given its directory until it has base directories, and
+  are restarted onto them when they change. Its tests are listed from the start.
 - Live templates in basedpython's own syntax — `enum class`, `data class`, `let` and the rest — are
   no longer offered in a `.py`, which is plain Python. There `enum`, `dataclass` and `protocol`
   complete to the class Python writes, with its imports, from a `by` that offers them. In a `.by`,

@@ -925,6 +925,8 @@
              cannot start a server from inside the modal dialogs those run in. -->
         <postStartupActivity
             implementation="dev.basedpython.pycharm.lsp.ByStartOnOpen"/>
+        <!-- by and buff restarted onto a project's base directories when they change: see lsp.ByServerRoots. -->
+        <postStartupActivity implementation="dev.basedpython.pycharm.lsp.ByServerRoots$Activity"/>
         <!-- Asks `by` again how the project's modules run and which tests they hold whenever the
              project's own sources or configuration change. Runs nothing. -->
         <postStartupActivity

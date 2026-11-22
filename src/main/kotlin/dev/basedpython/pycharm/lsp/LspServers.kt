@@ -24,7 +24,7 @@ import com.intellij.platform.lsp.api.LspIntegrationProvider
 import com.intellij.platform.lsp.api.LspIntegrationProvider.LspClientStarter
 import com.intellij.platform.lsp.api.LspServerListener
 import com.intellij.platform.lsp.api.LspServerNotificationsHandler
-import com.intellij.platform.lsp.api.ProjectWideLspClientDescriptor
+import com.intellij.platform.lsp.api.LspClientDescriptor
 import com.intellij.platform.lsp.api.customization.LspCallHierarchyDisabled
 import com.intellij.platform.lsp.api.customization.LspCodeActionsDisabled
 import com.intellij.platform.lsp.api.customization.LspCodeLensDisabled
@@ -249,7 +249,7 @@ internal class ByLspServerDescriptor(
   project: Project,
   private val launch: ByLaunch,
   private val extraArgs: List<String>,
-) : ProjectWideLspClientDescriptor(project, "basedpython") {
+) : LspClientDescriptor(project, "basedpython", *ByServerRoots.of(project)) {
 
   override fun isSupportedFile(file: VirtualFile): Boolean = file.isByServerFile() && isProjectsFile(project, file)
 
@@ -262,7 +262,7 @@ internal class ByLspServerDescriptor(
       addAll(launch.prependArgs)
       add("server")
       addAll(extraArgs)
-    }).withEnvironment(launch.env)
+    }).withEnvironment(launch.env).withWorkDirectory(ByServerRoots.workingDirectory(project))
 
   override fun startServerProcess(): BaseProcessHandler<*> =
     super.startServerProcess().mirrorStderrTo(project, "by")
@@ -541,7 +541,7 @@ internal class BuffLspServerDescriptor(
   project: Project,
   private val launch: ByLaunch,
   private val extraArgs: List<String>,
-) : ProjectWideLspClientDescriptor(project, "buff") {
+) : LspClientDescriptor(project, "buff", *ByServerRoots.of(project)) {
 
   override fun isSupportedFile(file: VirtualFile): Boolean = file.isBasedPythonSource() && isProjectsFile(project, file)
 
@@ -554,7 +554,7 @@ internal class BuffLspServerDescriptor(
       addAll(launch.prependArgs)
       add("server")
       addAll(extraArgs)
-    }).withEnvironment(launch.env)
+    }).withEnvironment(launch.env).withWorkDirectory(ByServerRoots.workingDirectory(project))
 
   override fun startServerProcess(): BaseProcessHandler<*> =
     super.startServerProcess().mirrorStderrTo(project, "buff")
