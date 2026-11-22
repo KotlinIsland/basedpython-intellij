@@ -31,6 +31,16 @@ class ByTestTargetsTest {
         assertEquals(ByTestTargets.Staged.Unknown("tests/test_b.by"), ByTestTargets.staged("tests/test_b.by::test_x") { null })
     }
 
+    /** Measured against by 0.0.3, which stages, and 99f067bc2, which runs in place; see [ByTestTargets.plain]. */
+    @Test
+    fun `a py test is by run's in place, and the interpreter's with a by that stages`() {
+        assertEquals(false, ByTestTargets.plain(listOf("py"), inPlace = true))
+        assertEquals(false, ByTestTargets.plain(listOf("by", "py"), inPlace = true))
+        assertEquals(true, ByTestTargets.plain(listOf("py", "py"), inPlace = false))
+        assertEquals(false, ByTestTargets.plain(listOf("by"), inPlace = false))
+        assertEquals(null, ByTestTargets.plain(listOf("by", "py"), inPlace = false), "no one run of both")
+    }
+
     @Test
     fun `a target with a space stays one`() {
         assertEquals(

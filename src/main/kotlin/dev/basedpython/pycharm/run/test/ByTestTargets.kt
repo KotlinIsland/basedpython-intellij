@@ -18,13 +18,32 @@ internal object ByTestTargets {
     /** The node id separator: what follows the file is the names leading to a test in it. */
     private const val NAMES = "::"
 
-    private const val BY_SUFFIX = ".by"
+    private const val BY_EXTENSION = "by"
+
+    private const val BY_SUFFIX = ".$BY_EXTENSION"
 
     /**
      * The target for [file]: its path from the project, as [ByTestSources.relativePath] names a file
      * in a node id; null when the project does not hold it.
      */
     fun of(project: Project, file: VirtualFile): String? = ByTestSources.relativePath(project, file)
+
+    /**
+     * Whether a run of test files with [extensions] is the project's interpreter's rather than `by
+     * run`'s; null when it is neither's, as one run.
+     *
+     * A `by run` in place runs a `.by` and a `.py` test alike, named by the project's own files, in a
+     * project of `.py` alone too. A `by run` that stages does stage a `.py`, but refuses a project with
+     * no `.by`, and does not say where: `by/buildOutput` places only a `.by`, and in a src layout
+     * `src/tests/test_p.py` is staged as `tests/test_p.py`, a path pytest has to be given (all measured
+     * against by 0.0.3 and, in place, 99f067bc2). So there a `.py` is run where it is.
+     */
+    fun plain(extensions: Collection<String?>, inPlace: Boolean): Boolean? = when {
+        inPlace -> false
+        extensions.none { it == BY_EXTENSION } -> true
+        extensions.all { it == BY_EXTENSION } -> false
+        else -> null
+    }
 
     /**
      * The `.by` files [paths] names, by their path from the project, once each in order: what a run

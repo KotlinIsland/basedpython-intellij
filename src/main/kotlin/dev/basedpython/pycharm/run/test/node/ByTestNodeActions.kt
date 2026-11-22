@@ -26,10 +26,9 @@ internal object ByTestNodeActions {
      * Runs everything, which takes one launch per kind of test the tree holds.
      *
      * A tree collected in place is one kind, every test of the project, and one run. A staged
-     * collection's two halves are two different commands — `by run pytest` of a staged tree cannot
-     * see a `.py` test and plain pytest is not given the transpiled tree — so "run all" in a project
-     * with both is genuinely two runs, and pretending otherwise would silently skip half the suite. A
-     * project with one kind gets one run, which is every project until it isn't.
+     * collection's two halves are two different commands, `by run pytest` of the staged tree and plain
+     * pytest in the project, so "run all" in a project with both is two runs. They overlap: the staged
+     * tree holds the project's `.py` too, so there each `.py` test runs twice.
      */
     fun runAll(project: Project, executor: Executor, sources: Set<ByTestSource>) {
         val kinds = sources.ifEmpty { setOf(ByTestSource.TRANSPILED) }

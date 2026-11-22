@@ -22,10 +22,9 @@ import dev.basedpython.pycharm.run.ByCommonOptions
  * Runs tests that are already `.py` on the project's interpreter: `python -m pytest -v <targets>` in
  * the project, or django's `python manage.py test -v 2 <labels>` beside `manage.py`.
  *
- * `by run pytest` cannot run these at all: it transpiles the `.by` files into a temp directory and
- * runs pytest *there*, and `by build` transpiles ".by files" only — so a `.py` test is not in the
- * tree pytest walks. Until `by run` can be told to include them, running one means running pytest
- * the ordinary way, on the interpreter [ByEnvironments.resolvePython] finds, in the project itself
+ * With a `by` that stages the project, `by run pytest` refuses a project with no `.by` and does not say
+ * where in the staged tree a `.py` is, so a target cannot be named there ([ByTestTargets.plain]).
+ * Running one means running pytest the ordinary way, on the interpreter [ByEnvironments.resolvePython] finds, in the project itself
  * so that its `pyproject.toml`, `conftest.py` and rootdir all apply the way the user expects.
  *
  * Everything downstream is shared with the transpiled path: the output is pytest's, so the same

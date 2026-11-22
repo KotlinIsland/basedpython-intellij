@@ -4,6 +4,7 @@ import dev.basedpython.pycharm.run.model.ByProgramModel
 import dev.basedpython.pycharm.run.model.innermostAt
 import dev.basedpython.pycharm.run.test.ByTestConfiguration
 import dev.basedpython.pycharm.run.test.ByTestConfigurationType
+import dev.basedpython.pycharm.lsp.ByCommandFlags
 import dev.basedpython.pycharm.run.test.ByTestRunner
 import dev.basedpython.pycharm.run.test.ByTestRunners
 import dev.basedpython.pycharm.run.test.ByTestTargets
@@ -28,9 +29,10 @@ import com.intellij.util.execution.ParametersListUtil
  * project ([ByTestTargets]), then the names `by/testItems` gives the test. A run that is not in place
  * writes a `.by` where `by` stages it when it starts ([dev.basedpython.pycharm.run.test.ByPytest]). A
  * `.py` that `by` serves — a basedpython project's, or any when `.py` is treated as basedpython — is
- * not staged by the `by run` this plugin bundles, so its tests run on the project's interpreter
- * ([ByTestOptions.plainPytest]), named by the same path. Without this, such a file had no
- * way to run a test in IntelliJ IDEA, where no Python plugin's pytest configuration is there to.
+ * named by the same path and run the same way by a `by run` in place, and on the project's interpreter
+ * ([ByTestOptions.plainPytest]) with a `by` that stages ([ByTestTargets.plain]). Without this, such a
+ * file had no way to run a test in IntelliJ IDEA, where no Python plugin's pytest configuration is
+ * there to.
  *
  * What runs them is [ByTestRunners]' choice: pytest, or django's `manage.py test` for a `unittest`
  * test in a project that runs its tests that way.
@@ -105,9 +107,7 @@ private fun testTargetFor(context: ConfigurationContext): TestTarget? {
         .filter { (file, tests) -> tests.isNotEmpty() && VfsUtilCore.isAncestor(directory, file, true) }
     if (tests.isEmpty()) return null
     val files = tests.keys.sortedBy { it.path }
-    // `.by` and `.py` are two commands; a directory holding both is not one run of either
-    val plain = files.none { it.extension == BY_EXTENSION }
-    if (!plain && files.any { it.extension != BY_EXTENSION }) return null
+    val plain = ByTestTargets.plain(files.map { it.extension }, ByCommandFlags.ofRunning(project).runsInPlace) ?: return null
     val paths = files.map { file -> ByTestTargets.of(project, file) ?: return null }
     val runners = files.map { file -> ByTestRunners.forFile(project, file, unittest = tests.getValue(file).any { it.holdsUnittest }) }.toSet()
     val runner = runners.singleOrNull() ?: ByTestRunner.PYTEST
@@ -138,7 +138,7 @@ private fun fileTargetFor(context: ConfigurationContext): FileTarget? {
     if (!BasedPythonSources.isOwnedSource(file)) return null
     val project = context.project
     val model = ByProgramModel.getInstance(project)
-    val plain = file.extension != BY_EXTENSION
+    val plain = ByTestTargets.plain(listOf(file.extension), ByCommandFlags.ofRunning(project).runsInPlace) ?: return null
     val path = ByTestTargets.of(project, file) ?: return null
     fun target(path: String, unittest: Boolean) = FileTarget(path, plain, ByTestRunners.forFile(project, file, unittest))
 
@@ -157,5 +157,3 @@ private fun fileTargetFor(context: ConfigurationContext): FileTarget? {
     val items = model.testItems(file) ?: model.projectTests()?.let { it.byFile[file].orEmpty() } ?: return null
     return target(path, items.any { it.holdsUnittest }).takeIf { items.isNotEmpty() }
 }
-
-private const val BY_EXTENSION = "by"

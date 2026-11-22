@@ -40,6 +40,8 @@
 
 ### Fixed
 
+- With a `by` that runs programs in place, a `.py` test run from the editor runs through `by run`, as
+  a `.by` one does, and a directory holding both kinds is one run.
 - A project opened for the first time no longer starts `by` and `buff` in the IDE's own install
   directory, serving that instead of the project, and then a second pair beside them once its
   module appears: both run in the project, given its directory until it has base directories, and

@@ -326,9 +326,9 @@ internal class ByTestNodeService(
     /**
      * The other half of the collection: `python -m pytest --collect-only` in the project itself.
      *
-     * `by run` transpiles only `.by` files into the tree it hands pytest, so a project whose tests
-     * live in `.py` files hands it an empty one. Until `by run` can be told to include them, they are
-     * collected here and combined.
+     * For a `by` that stages the project: it refuses one with no `.by`, so a project whose tests live in
+     * `.py` files alone has no other collection. In a project with both the staged tree holds the `.py`
+     * as well, and each of its tests is collected by both halves.
      *
      * Best-effort by design. A `.by`-only project need not have pytest importable by the interpreter
      * *this* half resolves, and that is reported as nothing to add rather than as a red node under

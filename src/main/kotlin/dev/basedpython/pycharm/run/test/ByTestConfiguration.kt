@@ -52,9 +52,8 @@ class ByTestOptions : ByCommonOptions() {
     /**
      * Run `python -m pytest` in the project instead of `by run pytest`.
      *
-     * For tests that are already `.py`: `by run` transpiles `.by` files into a temp directory and
-     * runs pytest there, so it never sees them (`by build`: "Transpile all .by files"). The node
-     * view collects both kinds and sets this when what it is running came from the plain half.
+     * For tests that are already `.py`, with a `by` that stages the project: see [ByTestTargets.plain]
+     * for why. The node view sets this when what it is running came from the plain half.
      */
     var plainPytest: Boolean
         get() = plainPytestProp.getValue(this)
@@ -156,8 +155,8 @@ class ByTestConfiguration(project: Project, factory: ConfigurationFactory, name:
 
     /**
      * A run of django's `manage.py test` on [ByTestOptions.paths]' labels, beside `manage.py`: `by run
-     * manage test -v 2` as a `by run` of `manage.py` is run, or, for tests already `.py` that `by run`
-     * does not stage, the project's interpreter on `manage.py` itself.
+     * manage test -v 2` as a `by run` of `manage.py` is run, or, for tests already `.py` with a `by` that
+     * stages the project ([ByTestTargets.plain]), the project's interpreter on `manage.py` itself.
      *
      * A `by run` is asked for its test reporter as a pytest run is: a `by` that speaks for django's
      * runner writes the run as service messages; until then the tree is read from the runner's `-v 2`
