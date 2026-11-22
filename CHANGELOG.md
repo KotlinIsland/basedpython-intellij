@@ -5,6 +5,9 @@
 - Hovering an inlay hint whose tooltip has code in it no longer reports an error ("Read access is
   allowed from inside read-action only"). The tooltip is converted in the background the first time
   it is hovered.
+- A test run under pytest-xdist has its tests in the tree, each in the one node of its file, with a
+  `by` whose reporter tells them apart. The tree was empty, and each test reported an error
+  ("Attribute 'name' is not specified in service message").
 
 ## [0.0.7.1]
 

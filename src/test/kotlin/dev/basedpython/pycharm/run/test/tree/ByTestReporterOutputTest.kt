@@ -2,7 +2,7 @@ package dev.basedpython.pycharm.run.test.tree
 
 import com.intellij.execution.executors.DefaultRunExecutor
 import com.intellij.execution.process.ProcessOutputTypes
-import com.intellij.execution.testframework.sm.runner.GeneralToSMTRunnerEventsConvertor
+import com.intellij.execution.testframework.sm.runner.GeneralIdBasedToSMTRunnerEventsConvertor
 import com.intellij.execution.testframework.sm.runner.SMTRunnerConsoleProperties
 import com.intellij.execution.testframework.sm.runner.SMTestProxy
 import com.intellij.openapi.util.Disposer
@@ -72,16 +72,55 @@ class ByTestReporterOutputTest {
         ##teamcity[testSuiteFinished name='tests/test_k.by']
     """.trimIndent() + "\n"
 
+    /** What `by` printed for two files run by two pytest-xdist workers at once, each message with the ids of its nodes. */
+    private val atOnce = """
+        ##teamcity[enteredTheMatrix]
+        ============================= test session starts ==============================
+        configfile: pyproject.toml
+        plugins: by-pytest-0, xdist-3.8.0
+        created: 2/2 workers
+        ##teamcity[testCount count='4']
+        2 workers [4 items]
+
+        scheduling tests via LoadScheduling
+
+        tests/test_a.py::TestGroup::test_prints 
+        tests/test_a.py::test_number[10] ##teamcity[testSuiteStarted name='tests/test_a.py' nodeId='tests/test_a.py' parentNodeId='0' locationHint='file:///p/tests/test_a.py']
+        ##teamcity[testSuiteStarted name='TestGroup' nodeId='tests/test_a.py::TestGroup' parentNodeId='tests/test_a.py' locationHint='file:///p/tests/test_a.py:12']
+        ##teamcity[testStarted name='test_prints' nodeId='tests/test_a.py::TestGroup::test_prints' parentNodeId='tests/test_a.py::TestGroup' locationHint='file:///p/tests/test_a.py:13' metainfo='tests/test_a.py::TestGroup::test_prints' captureStandardOutput='false']
+        ##teamcity[testStarted name='test_number|[10|]' nodeId='tests/test_a.py::test_number|[10|]' parentNodeId='tests/test_a.py' locationHint='file:///p/tests/test_a.py:6' metainfo='tests/test_a.py::test_number|[10|]' captureStandardOutput='false']
+
+        [gw1] [ 25%] PASSED tests/test_a.py::TestGroup::test_prints ##teamcity[testStdOut name='test_prints' nodeId='tests/test_a.py::TestGroup::test_prints' out='said|n']
+        ##teamcity[testFinished name='test_prints' nodeId='tests/test_a.py::TestGroup::test_prints' duration='9']
+        ##teamcity[testSuiteFinished name='TestGroup' nodeId='tests/test_a.py::TestGroup']
+
+        tests/test_b.by::test_eq ##teamcity[testSuiteStarted name='tests/test_b.by' nodeId='tests/test_b.by' parentNodeId='0' locationHint='file:///p/tests/test_b.by']
+        ##teamcity[testStarted name='test_eq' nodeId='tests/test_b.by::test_eq' parentNodeId='tests/test_b.by' locationHint='file:///p/tests/test_b.by:1' metainfo='tests/test_b.by::test_eq' captureStandardOutput='false']
+
+        [gw1] [ 50%] FAILED tests/test_b.by::test_eq ##teamcity[testFailed name='test_eq' nodeId='tests/test_b.by::test_eq' message='assert 3 == 4' details='def test_eq():|n>       assert 3 == 4|nE       assert 3 == 4|n|ntests/test_b.by:2: AssertionError' type='comparisonFailure' expected='4' actual='3']
+        ##teamcity[testFinished name='test_eq' nodeId='tests/test_b.by::test_eq' duration='0']
+        ##teamcity[testSuiteFinished name='tests/test_b.by' nodeId='tests/test_b.by']
+
+        [gw0] [ 75%] PASSED tests/test_a.py::test_number[10] ##teamcity[testFinished name='test_number|[10|]' nodeId='tests/test_a.py::test_number|[10|]' duration='55']
+
+        tests/test_a.py::test_number[20] ##teamcity[testStarted name='test_number|[20|]' nodeId='tests/test_a.py::test_number|[20|]' parentNodeId='tests/test_a.py' locationHint='file:///p/tests/test_a.py:6' metainfo='tests/test_a.py::test_number|[20|]' captureStandardOutput='false']
+
+        [gw0] [100%] FAILED tests/test_a.py::test_number[20] ##teamcity[testFailed name='test_number|[20|]' nodeId='tests/test_a.py::test_number|[20|]' message='assert 20 == 10' details='number = 20|n|n    @pytest.mark.parametrize("number", |[10, 20|])|n    def test_number(number):|n        time.sleep(0.05)|n>       assert number == 10|nE       assert 20 == 10|n|ntests/test_a.py:9: AssertionError' type='comparisonFailure' expected='10' actual='20']
+        ##teamcity[testFinished name='test_number|[20|]' nodeId='tests/test_a.py::test_number|[20|]' duration='61']
+        ##teamcity[testSuiteFinished name='tests/test_a.py' nodeId='tests/test_a.py']
+    """.trimIndent() + "\n"
+
     private fun run(text: String): SMTestProxy.SMRootTestProxy {
         val project = fixture.project
         val type = ByTestConfigurationType.getInstance()
         val configuration = type.configurationFactories.single().createTemplateConfiguration(project) as ByTestConfiguration
         val properties = SMTRunnerConsoleProperties(configuration, "pytest (by)", DefaultRunExecutor.getRunExecutorInstance())
+        properties.isIdBasedTestTree = true
         Disposer.register(fixture.testRootDisposable, properties)
         val root = SMTestProxy.SMRootTestProxy()
         // as the run's console does, which is how a tree is known to be a `.by` test run's
         root.setTestConsoleProperties(properties)
-        val processor = GeneralToSMTRunnerEventsConvertor(project, root, "pytest (by)")
+        val processor = GeneralIdBasedToSMTRunnerEventsConvertor(project, root, "pytest (by)")
         val converter = ByTestEventsConverter("pytest (by)", properties)
         Disposer.register(fixture.testRootDisposable, converter)
         Disposer.register(fixture.testRootDisposable, processor)
@@ -144,6 +183,18 @@ class ByTestReporterOutputTest {
             override fun mark() = Unit
         })
         assertTrue(out.contains("to stdout"), out.toString())
+    }
+
+    @Test
+    fun `tests run at once by pytest-xdist are each told apart, in one suite of their file`() = onEdt {
+        val root = run(atOnce)
+        assertEquals(listOf("tests/test_a.py", "tests/test_b.by"), root.children.map { it.name })
+        assertEquals(listOf("TestGroup", "test_number[10]", "test_number[20]"), root.children.first().children.map { it.name })
+        val outcomes = root.allTests.filter { it.isLeaf }.associate { it.name to it.isPassed }
+        assertEquals(mapOf("test_prints" to true, "test_number[10]" to true, "test_number[20]" to false, "test_eq" to false), outcomes)
+        assertTrue(root.children.all { !it.isInProgress }, "a suite is left running")
+        assertEquals("tests/test_a.py::test_number[20]", ByRerunTargets.nodeId(root.find("test_number[20]").locationUrl, root.find("test_number[20]").metainfo))
+        assertEquals("20", root.find("test_number[20]").diffViewerProviders.single().right)
     }
 
     @Test

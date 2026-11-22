@@ -253,8 +253,8 @@ class ByTestConfiguration(project: Project, factory: ConfigurationFactory, name:
     }
 
     /**
-     * The console of a Django run: a tree built by node id, since a failure is only known once every
-     * test has run ([ByUnittestOutputParser]); otherwise as a pytest run's. [run] names the modules
+     * The console of a Django run: a tree built by node id, as a pytest run's is, and here because a
+     * failure is only known once every test has run ([ByUnittestOutputParser]). [run] names the modules
      * its runner prints by their files, and [projectPaths] says those are the project's.
      */
     private fun djangoConsoleProperties(
@@ -321,6 +321,10 @@ class ByTestConfiguration(project: Project, factory: ConfigurationFactory, name:
         projectPaths: Boolean,
     ): SMTRunnerConsoleProperties =
         object : SMTRunnerConsoleProperties(config, FRAMEWORK_NAME, executor), SMCustomMessagesParsing {
+            init {
+                isIdBasedTestTree = true
+            }
+
             override fun createTestEventsConverter(
                 testFrameworkName: String,
                 consoleProperties: TestConsoleProperties,

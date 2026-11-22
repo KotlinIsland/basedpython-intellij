@@ -6,6 +6,8 @@ import com.intellij.execution.testframework.sm.runner.OutputToGeneralTestEventsC
 import com.intellij.openapi.util.Key
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VfsUtilCore
+import jetbrains.buildServer.messages.serviceMessages.ServiceMessage
+import jetbrains.buildServer.messages.serviceMessages.ServiceMessageVisitor
 import dev.basedpython.pycharm.run.model.ByProgramModel
 
 /**
@@ -23,6 +25,11 @@ import dev.basedpython.pycharm.run.model.ByProgramModel
  * resulting [ByTestEvent]s into TeamCity service messages (via the platform's
  * [ServiceMessageBuilder]), and re-feed those to the base converter so the standard
  * `GeneralTestEventsProcessor` builds the tree.
+ *
+ * The tree is built by node id, as a Django run's is, since under pytest-xdist several tests run at
+ * once: a reporter's messages say which test each is of and which suite that is in. The messages made
+ * here, and those of a `by` whose reporter gives no ids, tell of one test at a time, in order, so
+ * [ByNodeIds] gives them theirs.
  *
  * All recognized lines are consumed; unrecognized text still flows to the console
  * via the base implementation so nothing is lost.
@@ -43,6 +50,7 @@ class ByTestEventsConverter(
         val base = project.basePath?.let { LocalFileSystem.getInstance().findFileByPath(it) }
         source?.let { file -> base?.let { VfsUtilCore.getRelativePath(file, it) } } ?: staged
     }
+    private val ids = ByNodeIds()
     private var finished = false
 
     /** Whether the run's own reporter has said it speaks for the run; see the class comment. */
@@ -80,6 +88,10 @@ class ByTestEventsConverter(
         super.flushBufferOnProcessTermination(exitCode)
     }
 
+    override fun processServiceMessage(message: ServiceMessage, visitor: ServiceMessageVisitor) {
+        super.processServiceMessage(ids.identified(message), visitor)
+    }
+
     /** Translate one [ByTestEvent] to a [ServiceMessageBuilder] and feed it back. */
     private fun emit(event: ByTestEvent, outputType: Key<*>) {
         val builder: ServiceMessageBuilder = when (event) {
@@ -95,8 +107,8 @@ class ByTestEventsConverter(
                     .also { b -> event.locationHint?.let { b.addAttribute("locationHint", it) } }
                     .addAttribute("captureStandardOutput", "true")
 
-            is ByTestEvent.TestPassed ->
-                ServiceMessageBuilder.testFinished(event.name)
+            // a test that finished without failing passed, and the parser says next that it finished
+            is ByTestEvent.TestPassed -> return
 
             is ByTestEvent.TestFailed ->
                 ServiceMessageBuilder.testFailed(event.name)
