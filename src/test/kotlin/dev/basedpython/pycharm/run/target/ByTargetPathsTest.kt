@@ -67,7 +67,7 @@ class ByTargetPathsTest {
     fun `the target environment puts the target working directory on PYTHONPATH in the target's syntax`() {
         val options = ByRunOptions().apply { envVars = linkedMapOf("PYTHONPATH" to "/opt/libs", "A" to "1") }
 
-        val env = byTargetEnvironment(options, "/opt/project", startsProgram = true, separator = ':')
+        val env = byTargetEnvironment(options, "/opt/project", workingDirectoryOnPath = true, separator = ':')
 
         assertEquals("/opt/project:/opt/libs", env["PYTHONPATH"])
         assertEquals("1", env["A"])
@@ -76,7 +76,7 @@ class ByTargetPathsTest {
 
     @Test
     fun `nothing of this machine's environment reaches the target`() {
-        val env = byTargetEnvironment(ByRunOptions(), "/opt/project", startsProgram = false, separator = ':')
+        val env = byTargetEnvironment(ByRunOptions(), "/opt/project", workingDirectoryOnPath = false, separator = ':')
 
         assertEquals(mapOf("PYTHONUNBUFFERED" to "1"), env)
     }
@@ -85,6 +85,6 @@ class ByTargetPathsTest {
     fun `a user's PYTHONUNBUFFERED still wins`() {
         val options = ByRunOptions().apply { envVars = linkedMapOf("PYTHONUNBUFFERED" to "") }
 
-        assertEquals("", byTargetEnvironment(options, "/p", startsProgram = true, separator = ':')["PYTHONUNBUFFERED"])
+        assertEquals("", byTargetEnvironment(options, "/p", workingDirectoryOnPath = true, separator = ':')["PYTHONUNBUFFERED"])
     }
 }

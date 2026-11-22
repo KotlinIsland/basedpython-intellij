@@ -100,6 +100,14 @@ class ByInPlaceTest {
         assertEquals(listOf("run", "app.main"), stateOf(configuration, inPlace = false).buildCommand())
     }
 
+    /** `by` refuses a program in place with a directory below its module roots there. */
+    @Test
+    fun `the working directory is on PYTHONPATH for a staged run alone`() = onEdt {
+        val configuration = ByRunConfiguration(fixture.project, BasedPythonRunConfigurationType().runFactory, "run")
+        assertTrue(stateOf(configuration, inPlace = false).workingDirectoryOnPath)
+        assertFalse(stateOf(configuration, inPlace = true).workingDirectoryOnPath)
+    }
+
     /** The configuration's own `getState`, with the mode written where the server need not be asked. */
     @Test
     fun `a configuration whose flags say --in-place runs in place and says it once`() = onEdt {

@@ -28,6 +28,7 @@ import dev.basedpython.pycharm.lsp.ext.ByDjangoCommandArguments
 import dev.basedpython.pycharm.lsp.ext.ByDjangoProject
 import dev.basedpython.pycharm.run.BasedPythonRunConfigurationType
 import dev.basedpython.pycharm.run.ByRunConfiguration
+import dev.basedpython.pycharm.run.runSubcommandArgs
 import dev.basedpython.pycharm.testFramework.codeInsightFixture
 import dev.basedpython.pycharm.testFramework.onEdt
 import dev.basedpython.pycharm.testFramework.withLocksForbidden
@@ -186,7 +187,7 @@ class ByManageWindowTest {
         assertTrue(history.starred.isEmpty())
     }
 
-    private val manage = ByDjangoManage(Path.of("/p"), "manage")
+    private val manage = ByDjangoManage(Path.of("/p/web"), "manage.py")
 
     private fun ByManageLauncher.options(settings: RunnerAndConfigurationSettings) = (settings.configuration as ByRunConfiguration).options
 
@@ -204,15 +205,29 @@ class ByManageWindowTest {
             ByManageLauncher.options(first).envVars = mutableMapOf("A" to "1")
             assertSame(first, ByManageLauncher.configuration(fixture.project, manage, listOf("migrate")))
             // run like one with other variables, it is another, and not under the name that would replace it
-            val like = configuration("manage", "runserver").also { it.options.workingDir = "/p"; it.options.envVars = mutableMapOf("A" to "2") }
+            val like = configuration("manage.py", "runserver").also { it.options.workingDir = "/p/web"; it.options.envVars = mutableMapOf("A" to "2") }
             val other = ByManageLauncher.configuration(fixture.project, like, listOf("migrate"))
             assertNotSame(first, other)
             assertNotEquals(first.name, other.name)
             assertEquals(mapOf("A" to "2"), ByManageLauncher.options(other).envVars.toMap())
-            assertEquals("/p", ByManageLauncher.options(other).workingDir)
+            assertEquals("/p/web", ByManageLauncher.options(other).workingDir)
         } finally {
             runManager.removeConfiguration(first)
         }
+    }
+
+    /** As the module `manage`, `by` runs the one at the project's root, or none, wherever it is run. */
+    @Test
+    fun `a manage py below the project's root is run by its file beside itself`() = onEdt {
+        val options = ByManageLauncher.options(ByManageLauncher.configuration(fixture.project, manage, listOf("migrate", "polls")))
+        assertEquals(listOf("manage.py", "migrate", "polls"), runSubcommandArgs(options))
+        assertEquals("/p/web", options.workingDir)
+    }
+
+    @Test
+    fun `a Django server is made of manage py by its file`() {
+        val server = ByDjangoServerConfigurationType.getInstance().factory.createTemplateConfiguration(fixture.project) as ByRunConfiguration
+        assertEquals(listOf("manage.py", "runserver"), runSubcommandArgs(server.options))
     }
 
     private fun emulates(executor: Executor, target: String?): Boolean {

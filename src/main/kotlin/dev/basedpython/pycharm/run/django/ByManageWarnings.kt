@@ -21,13 +21,17 @@ internal data class ByManagePlace(
     companion object {
         fun of(options: ByRunOptions, directory: String, words: List<String>, staged: Boolean) = ByManagePlace(
             directory = options.workingDir.ifBlank { directory },
-            module = options.module.trim(),
+            module = module(options.module.trim(), options.workingDir, directory),
             settings = listOf("--settings", "--pythonpath").mapNotNull { flag -> ByManageWords.value(words, flag)?.let { "$flag=$it" } },
             database = ByManageWords.value(words, "--database"),
             environment = options.envVars.toMap(),
             environmentFiles = options.envFilePaths.toList(),
             staged = staged,
         )
+
+        /** [module], the project's own `manage` as the `manage.py` it is: one place, however a configuration says it. */
+        private fun module(module: String, workingDir: String, project: String): String =
+            if (module == ByDjangoManage.MODULE && (workingDir.isBlank() || workingDir == project)) ByDjangoManage.SCRIPT else module
     }
 }
 

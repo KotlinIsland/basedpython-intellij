@@ -155,7 +155,7 @@ class ByTestConfiguration(project: Project, factory: ConfigurationFactory, name:
 
     /**
      * A run of django's `manage.py test` on [ByTestOptions.paths]' labels, beside `manage.py`: `by run
-     * manage test -v 2` as a `by run` of `manage.py` is run, or, for tests already `.py` with a `by` that
+     * manage.py test -v 2` as a `by run` of `manage.py` is run, or, for tests already `.py` with a `by` that
      * stages the project ([ByTestTargets.plain]), the project's interpreter on `manage.py` itself.
      *
      * A `by run` is asked for its test reporter as a pytest run is: a `by` that speaks for django's
@@ -168,7 +168,7 @@ class ByTestConfiguration(project: Project, factory: ConfigurationFactory, name:
         if (options.plainPytest) {
             if (targetName != null) throw CantRunException(BasedPythonBundle.message("target.error.plainPytest"))
             val run = djangoRun(manage, projectPaths = true)
-            val manageFile = manage.directory.resolve(manage.module + ".py").toString()
+            val manageFile = manage.directory.resolve(manage.script).toString()
             return PlainPythonTestCommandLineState(project, options, environment, listOf(manageFile) + run.arguments, manage.directory.toString()) { handler, exec ->
                 SMTestRunnerConnectionUtil.createAndAttachConsole(
                     DJANGO_FRAMEWORK_NAME, handler, djangoConsoleProperties(config, exec, null, run, projectPaths = true),
@@ -190,7 +190,7 @@ class ByTestConfiguration(project: Project, factory: ConfigurationFactory, name:
 
             private val run: DjangoRun by lazy { runHere ?: djangoRun(manage, projectPaths = inPlace) }
 
-            override fun buildSubcommandArgs(): List<String> = listOf(manage.module) + run.arguments
+            override fun buildSubcommandArgs(): List<String> = listOf(manage.script) + run.arguments
 
             override val runnerEnvironment = mapOf(ByPytest.REPORTER_VARIABLE to ByPytest.REPORTER_TEAMCITY)
 

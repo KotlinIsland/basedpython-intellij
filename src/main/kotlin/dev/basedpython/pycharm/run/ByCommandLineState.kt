@@ -194,6 +194,9 @@ abstract class ByCommandLineState(
      */
     open val inPlace: Boolean get() = inPlaceDecision?.value ?: false
 
+    /** Whether the working directory is put on the program's `PYTHONPATH`: for a staged one alone ([byCommandLine]). */
+    internal val workingDirectoryOnPath: Boolean get() = startsProgram && !inPlace
+
     /** Set while a target is being prepared for this run; see [prepareTargetEnvironmentRequest]. */
     private var targetLaunch: ByTargetLaunch? = null
 
@@ -241,7 +244,7 @@ abstract class ByCommandLineState(
                         byPath = launch.byPath,
                         arguments = listOf(ByCommandFlags.PRINT_COMMAND),
                         workDirectory = workDir,
-                        environment = byTargetEnvironment(options, workDir, startsProgram = false, paths.platform.pathSeparator, fileEnvironment()),
+                        environment = byTargetEnvironment(options, workDir, workingDirectoryOnPath = false, paths.platform.pathSeparator, fileEnvironment()),
                     ),
                 ),
             )
@@ -269,7 +272,7 @@ abstract class ByCommandLineState(
             arguments = buildCommand(),
             infrastructureEnv = runnerEnvironment + infrastructureEnv,
             pythonPathPrefix = pythonPathPrefix,
-            startsProgram = startsProgram,
+            workingDirectoryOnPath = workingDirectoryOnPath,
             fileEnvironment = fileEnvironment(),
         )
         inputFile?.let(cmd::withInput)
@@ -306,7 +309,7 @@ abstract class ByCommandLineState(
             byPath = launch.byPath,
             arguments = buildCommand(targetInfrastructure?.arguments().orEmpty()),
             workDirectory = workDir,
-            environment = byTargetEnvironment(options, workDir, startsProgram, paths.platform.pathSeparator, fileEnvironment()) +
+            environment = byTargetEnvironment(options, workDir, workingDirectoryOnPath, paths.platform.pathSeparator, fileEnvironment()) +
                 runnerEnvironment + targetInfrastructure?.environment().orEmpty(),
         )
         val process = target.createProcess(commandLine, EmptyProgressIndicator())
@@ -404,8 +407,8 @@ internal class ByInPlace private constructor(@Volatile private var known: Boolea
 internal const val IN_BUILD_FLAG: String = "--in-build"
 
 /**
- * The environment `by` gets on a run target: the user's variables, unbuffered output, and — when it
- * starts a program — the working directory on `PYTHONPATH`, for the reasons [byCommandLine] gives.
+ * The environment `by` gets on a run target: the user's variables, unbuffered output, and — with
+ * [workingDirectoryOnPath] — the working directory on `PYTHONPATH`, for the reasons [byCommandLine] gives.
  *
  * No venv activation: the venv [byCommandLine] activates is one on this machine, and `by run` on the
  * target chooses the target's interpreter itself, as it does here when nothing is activated. The
@@ -415,14 +418,14 @@ internal const val IN_BUILD_FLAG: String = "--in-build"
 internal fun byTargetEnvironment(
     options: ByCommonOptions,
     workDirectory: String,
-    startsProgram: Boolean,
+    workingDirectoryOnPath: Boolean,
     separator: Char,
     fileEnvironment: Map<String, String> = emptyMap(),
 ): Map<String, String> = buildMap {
     put(PYTHONUNBUFFERED, "1")
     putAll(fileEnvironment)
     putAll(options.envVars)
-    if (startsProgram) {
+    if (workingDirectoryOnPath) {
         put(PYTHONPATH, composePythonPath(listOf(workDirectory), options.envVars[PYTHONPATH], separator))
     }
 }
@@ -438,7 +441,8 @@ internal fun byTargetEnvironment(
  * [fileEnvironment], the variables of the configuration's `.env` files, is applied before the user's
  * variables, [infrastructureEnv] after them, and [pythonPathPrefix] goes in front of
  * `PYTHONPATH`, as [ByCommandLineState.infrastructureEnv] and [ByCommandLineState.pythonPathPrefix]
- * describe. [startsProgram] puts the working directory on `PYTHONPATH` as well.
+ * describe. [workingDirectoryOnPath] puts the working directory on `PYTHONPATH` as well, for a `by` that
+ * stages the program it starts.
  *
  * @throws ExecutionException when no `by` can be found.
  */
@@ -448,7 +452,7 @@ internal fun byCommandLine(
     arguments: List<String>,
     infrastructureEnv: Map<String, String> = emptyMap(),
     pythonPathPrefix: List<String> = emptyList(),
-    startsProgram: Boolean = false,
+    workingDirectoryOnPath: Boolean = false,
     fileEnvironment: Map<String, String> = emptyMap(),
 ): GeneralCommandLine {
     val launch = BasedPythonBinaries.launchBy(project, kind = options.environmentKind)
@@ -494,11 +498,13 @@ internal fun byCommandLine(
     // a generated module still wins over a stale `.py` of the same name left lying beside the
     // source it was generated from.
     //
-    // A run in place needs none of this — its runner puts the project's module roots where python
-    // puts a script's directory, and imports each `.py` from where it is — and it does no harm
-    // there: the roots come first, and the directory behind them is one of them in a project whose
-    // root is a module root.
-    val prefixes = pythonPathPrefix + listOfNotNull(wd.takeIf { startsProgram })
+    // A program run in place needs none of this, and is refused for it: its runner puts the project's
+    // module roots where python puts a script's directory and imports each `.py` from where it is, and
+    // `by` reads `PYTHONPATH` as a place modules are found. With the working directory there, one below
+    // the module roots — that of a nested `manage.py` — had `by run` and `by repl` start nothing,
+    // "`by check` resolves the module `polls.views` to …, while once the project is laid out, python
+    // finds no `polls.views`" (measured, 99f067bc2 and 6ececa578; not in the directory of a module root).
+    val prefixes = pythonPathPrefix + listOfNotNull(wd.takeIf { workingDirectoryOnPath })
     if (prefixes.isNotEmpty()) {
         cmd.withEnvironment(PYTHONPATH, composePythonPath(prefixes, inheritedPythonPath(options)))
     }

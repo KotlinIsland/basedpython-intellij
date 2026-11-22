@@ -3,13 +3,14 @@ package dev.basedpython.pycharm.run.django
 import dev.basedpython.pycharm.run.ByRunOptions
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 /** What is to be done, until something has done it. */
 class ByManageWarningsTest {
 
-    private val here = ByManagePlace("/p", "manage")
+    private val here = ByManagePlace("/p", "manage.py")
 
     private fun run(arguments: String, place: ByManagePlace = here, facts: ByManageFacts = ByManageFacts()) =
         ByManageRun(1, arguments, "Run", place, 0, facts = facts)
@@ -43,6 +44,17 @@ class ByManageWarningsTest {
         assertTrue(kept(unapplied, "migrate polls"))
         assertTrue(kept(unapplied, "migrate --plan"))
         assertTrue(kept(unapplied, "check"))
+    }
+
+    /** A configuration can say either, and below the root `manage` is not the `manage.py` there. */
+    @Test
+    fun `the project's manage is one place by its module and by its file`() {
+        fun at(module: String, directory: String) =
+            ByManagePlace.of(ByRunOptions().also { it.module = module; it.workingDir = directory }, "/p", emptyList(), false)
+        assertEquals(at("manage.py", "/p"), at("manage", "/p"))
+        assertEquals(at("manage.py", "/p"), at(" manage ", ""))
+        assertNotEquals(at("manage.py", "/p/web"), at("manage", "/p/web"))
+        assertFalse(kept(ByManageWarning.UNAPPLIED, "migrate", place = at("manage.py", "/p"), there = at("manage", "/p")))
     }
 
     @Test

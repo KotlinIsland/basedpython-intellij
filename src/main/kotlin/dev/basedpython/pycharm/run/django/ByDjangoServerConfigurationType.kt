@@ -48,7 +48,7 @@ class ByDjangoServerConfigurationType : ConfigurationTypeBase(
                 val options = configuration.options
                 options.programArgs = RUNSERVER
                 val manage = ByDjangoManage.find(project)
-                options.module = manage?.module ?: "manage"
+                options.module = manage?.script ?: ByDjangoManage.SCRIPT
                 manage?.let { options.workingDir = it.directory.toString() }
             }
 

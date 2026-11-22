@@ -331,7 +331,7 @@ internal class ByConsoleSession private constructor(
                     arguments = replArguments(sessionFile, flags, events?.port, module),
                     infrastructureEnv = events?.let { mapOf(ByReplEvents.ENV_TOKEN to it.token) }.orEmpty(),
                     // the session imports the project's modules as a program does
-                    startsProgram = true,
+                    workingDirectoryOnPath = !flags.replsInPlace,
                     fileEnvironment = fileEnvironment,
                 )
             } catch (e: com.intellij.execution.ExecutionException) {

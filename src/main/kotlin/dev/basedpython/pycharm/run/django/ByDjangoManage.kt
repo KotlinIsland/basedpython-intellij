@@ -13,35 +13,40 @@ import java.nio.file.Files
 import java.nio.file.Path
 
 /**
- * The `manage.py` a django project's commands run through, as a `by run` of it: `by run manage
- * <command> <args>` in the directory `manage.py` is in, which is how `by` runs a script beside the
- * project's modules, its `.by` ones transpiled.
+ * The `manage.py` a django project's commands run through, as a `by run` of it: `by run
+ * manage.py <command> <args>` in the directory `manage.py` is in, which is how `by` runs a script
+ * beside the project's modules, its `.by` ones transpiled.
+ *
+ * By its file name rather than as the module `manage`, which `by` looks for from the project's module
+ * roots wherever it is run: for a `manage.py` in a directory that is no such root there is no module
+ * `manage`, or it is another `manage.py`, at the project's root (both measured, by 0.0.3 and 6ececa578).
  *
  * Which `manage.py` is `by`'s to say (`by/djangoStructure`'s [ByDjangoProject.manage]); until `by`
  * says, the one at the project's root, where `startproject` writes it.
  */
-internal data class ByDjangoManage(val directory: Path, val module: String) {
+internal data class ByDjangoManage(val directory: Path, val script: String) {
 
     /** The program arguments of `manage.py`, as `by run` forwards them. */
     fun configure(configuration: ByRunConfiguration, arguments: List<String>) {
         val options = configuration.options
-        options.module = module
+        options.module = script
         options.programArgs = ParametersListUtil.join(arguments)
         options.workingDir = directory.toString()
     }
 
     companion object {
-        private const val MANAGE = "manage.py"
+        /** The file `startproject` writes. */
+        const val SCRIPT = "manage.py"
 
-        /** What `by run` runs [MANAGE] as. */
+        /** The module [SCRIPT] is, which `by run` runs it as too where it is in one of the project's module roots. */
         const val MODULE = "manage"
 
         /** The project's `manage.py`, or null when neither `by` nor the project's root has one. */
         fun find(project: Project, structure: ByDjangoProject? = null): ByDjangoManage? {
             val said = (structure ?: ByDjangoStructureService.getInstance(project).current()?.projects?.firstOrNull())
                 ?.manage?.uri?.let(ByWorkspaceEditFiles::fileOf)?.toNioPath()
-            val file = said ?: project.basePath?.let { Path.of(it, MANAGE) }?.takeIf(Files::isRegularFile) ?: return null
-            return ByDjangoManage(file.parent, file.fileName.toString().removeSuffix(".py"))
+            val file = said ?: project.basePath?.let { Path.of(it, SCRIPT) }?.takeIf(Files::isRegularFile) ?: return null
+            return ByDjangoManage(file.parent, file.fileName.toString())
         }
 
         /** A configuration of [factory] running `manage.py` with [arguments], named [name]; not added to the project. */

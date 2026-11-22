@@ -61,7 +61,7 @@ class ByRunOptionsEditorTest {
     @Test
     fun `variables from env files are beneath the configuration's own, on a run target too`() {
         val options = ByRunOptions().apply { envVars = linkedMapOf("OVERRIDE" to "explicit") }
-        val environment = byTargetEnvironment(options, "/w", startsProgram = false, separator = ':', fileEnvironment = mapOf("OVERRIDE" to "file", "FROM_ENV" to "hello"))
+        val environment = byTargetEnvironment(options, "/w", workingDirectoryOnPath = false, separator = ':', fileEnvironment = mapOf("OVERRIDE" to "file", "FROM_ENV" to "hello"))
         assertEquals("explicit", environment["OVERRIDE"])
         assertEquals("hello", environment["FROM_ENV"])
     }
