@@ -370,10 +370,10 @@ internal class ByLspServerDescriptor(
   // Per-capability toggles (§142) let the user disable individual features;
   // inlay hints are rendered by the plugin itself (see `lsp.inlay.ByInlayHintsProvider`).
   override val lspCustomization: LspCustomization =
-    ByCapabilityCustomization(BasedPythonSettings.getInstance(project))
+    ByCapabilityCustomization(project, BasedPythonSettings.getInstance(project))
 
   /** Disables only the `by` capabilities the user turned off in settings. */
-  private class ByCapabilityCustomization(private val s: BasedPythonSettings) : LspCustomization() {
+  private class ByCapabilityCustomization(project: Project, private val s: BasedPythonSettings) : LspCustomization() {
     /** Not a toggle: `by`'s messages are written in markdown, and a tooltip is HTML. */
     override val diagnosticsCustomizer = ByDiagnosticsSupport()
 
@@ -410,7 +410,7 @@ internal class ByLspServerDescriptor(
       } else {
         LspSemanticTokensDisabled
       }
-    private val codeLenses = ByCodeLensSupport()
+    private val codeLenses = ByCodeLensSupport(project)
 
     /** `by`'s lenses, with the navigating ones navigated here rather than sent back to it. */
     override val codeLensCustomizer

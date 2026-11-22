@@ -44,6 +44,9 @@
 - *Treat .py and .pyi as basedpython*, formerly *Treat .py as basedpython*, re-types a `.py`'s `.pyi`
   stubs along with it, which were left to the Python plugin, or to TextMate without one. A stub is
   still a stub: no run icon, breakpoint or basedpython-syntax live template.
+- The *run BookTest* and *run test* code lenses of a Django test are no longer drawn above a test the
+  gutter's icon runs, which has the test tree, tracebacks, rerun and the debugger. They stay where the
+  gutter runs none.
 
 ### Fixed
 
