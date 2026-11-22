@@ -127,11 +127,11 @@ internal object ByDocstringSpans {
         // the text both answers' positions are read against, and so the text they are asked about
         val text = file.text
         val textHash = ByTextHash.of(text)
-        val tokens = server.askBy("textDocument/semanticTokens/full", TIMEOUT_MS) {
+        val tokens = server.askBy("textDocument/semanticTokens/full", TIMEOUT_MS, drawn = true) {
             it.textDocumentService.semanticTokensFull(ByNamedSemanticTokensParams(identifier, textHash))
         }.value ?: return null
 
-        val symbols = server.askBy("textDocument/documentSymbol", TIMEOUT_MS) {
+        val symbols = server.askBy("textDocument/documentSymbol", TIMEOUT_MS, drawn = true) {
             it.textDocumentService.documentSymbol(ByNamedDocumentSymbolParams(identifier, textHash))
         }.value
 

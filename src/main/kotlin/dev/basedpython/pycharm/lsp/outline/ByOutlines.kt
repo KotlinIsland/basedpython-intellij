@@ -192,7 +192,7 @@ internal class ByOutlines(private val project: Project, private val scope: Corou
             // the text the answer's stamp will say it is about
             ByTextHash.of(document.immutableCharSequence),
         )
-        val answer = server.askBy("by/syntaxOutline", TIMEOUT_MS) {
+        val answer = server.askBy("by/syntaxOutline", TIMEOUT_MS, drawn = true) {
             (it as ByServerExtensions).syntaxOutline(params)
         }
         val outline = when (answer) {

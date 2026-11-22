@@ -103,7 +103,7 @@ internal class ByDeclarations(private val project: Project) : Disposable {
             ByTextHash.of(document.immutableCharSequence),
         )
         val answer = runBlockingCancellable {
-            server.awaitBy("textDocument/documentSymbol", TIMEOUT_MS) { it.textDocumentService.documentSymbol(params) }
+            server.awaitBy("textDocument/documentSymbol", TIMEOUT_MS, drawn = true) { it.textDocumentService.documentSymbol(params) }
         }
         val symbols = when (answer) {
             is ByAnswer.Answer -> answer.value.mapNotNull { it.right }

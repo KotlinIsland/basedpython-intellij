@@ -174,7 +174,7 @@ private class ByInlayHintsCollector(
             server.getDocumentIdentifier(virtualFile),
             getLsp4jRange(document, 0, document.textLength),
         )
-        val hints = server.askBy("textDocument/inlayHint", INLAY_HINT_TIMEOUT_MS) {
+        val hints = server.askBy("textDocument/inlayHint", INLAY_HINT_TIMEOUT_MS, drawn = true) {
             it.textDocumentService.inlayHint(params)
         }.value ?: return true
 
@@ -325,7 +325,7 @@ private class ByInlayHintsCollector(
             // The tab size the editor lays tabs out with, so `by` counts columns the way they are drawn.
             tabSize = EditorUtil.getTabSize(editor),
         )
-        val groups = server.askBy("by/alignmentGroups", ALIGNMENT_TIMEOUT_MS) {
+        val groups = server.askBy("by/alignmentGroups", ALIGNMENT_TIMEOUT_MS, drawn = true) {
             (it as ByServerExtensions).alignmentGroups(params)
         }.value ?: return
 

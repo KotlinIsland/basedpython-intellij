@@ -16,11 +16,10 @@ import dev.basedpython.pycharm.lsp.ByAnswer
 import dev.basedpython.pycharm.lsp.ByLspLifecycleListener
 import dev.basedpython.pycharm.lsp.ByServerDocuments
 import dev.basedpython.pycharm.lsp.ByTextHash
-import dev.basedpython.pycharm.lsp.awaitingAgain
+import dev.basedpython.pycharm.lsp.awaitBy
 import dev.basedpython.pycharm.lsp.ext.ByDocumentSuperMembersParams
 import dev.basedpython.pycharm.lsp.ext.ByOverridingMember
 import dev.basedpython.pycharm.lsp.ext.ByServerExtensions
-import dev.basedpython.pycharm.lsp.isMethodNotFound
 import dev.basedpython.pycharm.lsp.runningByServer
 import org.eclipse.lsp4j.TextDocumentIdentifier
 import org.jetbrains.annotations.TestOnly
@@ -163,13 +162,8 @@ internal class ByOverridingMembers(private val project: Project) : Disposable {
                 ByTextHash.of(document.immutableCharSequence),
             )
             var unknown = false
-            val answer = awaitingAgain<List<ByOverridingMember>>("by/documentSuperMembers", TIMEOUT_MS) { sent ->
-                try {
-                    server.sendRequest { (it as ByServerExtensions).documentSuperMembers(params).also(sent) }
-                } catch (e: Exception) {
-                    if (isMethodNotFound(e)) unknown = true
-                    throw e
-                }
+            val answer = server.awaitBy<List<ByOverridingMember>>("by/documentSuperMembers", TIMEOUT_MS, drawn = true, unknown = { unknown = true }) {
+                (it as ByServerExtensions).documentSuperMembers(params)
             }
             return when (answer) {
                 is ByAnswer.Answer -> Asked.Answered(answer.value)

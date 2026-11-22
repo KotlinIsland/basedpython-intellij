@@ -150,7 +150,7 @@ internal class ByInjections(private val project: Project, private val scope: Cor
             // the text [stamp] names, read in the same read action
             ByTextHash.of(document.immutableCharSequence),
         )
-        val answer = server.askBy("by/injections", INJECTIONS_TIMEOUT_MS) {
+        val answer = server.askBy("by/injections", INJECTIONS_TIMEOUT_MS, drawn = true) {
             (it as ByServerExtensions).injections(params)
         }
         val found = when (answer) {

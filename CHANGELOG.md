@@ -40,6 +40,9 @@
 
 ### Fixed
 
+- Run icons, inlay hints and what else is drawn from `by` no longer stay missing until the next edit
+  when `by` answers nothing for a few seconds, as it may while it starts: they are drawn once it
+  answers. Run icons hold a highlighting pass up for two seconds at most, where it was two a line.
 - With a `by` that runs programs in place, a `.py` test run from the editor runs through `by run`, as
   a `.by` one does, and a directory holding both kinds is one run.
 - A project opened for the first time no longer starts `by` and `buff` in the IDE's own install

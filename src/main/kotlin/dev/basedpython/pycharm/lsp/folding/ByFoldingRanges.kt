@@ -106,7 +106,7 @@ internal class ByFoldingRanges(private val project: Project) : Disposable {
             server.getDocumentIdentifier(virtualFile),
             ByTextHash.of(document.immutableCharSequence),
         )
-        val answer = server.askBy("textDocument/foldingRange", TIMEOUT_MS) { it.textDocumentService.foldingRange(params) }
+        val answer = server.askBy("textDocument/foldingRange", TIMEOUT_MS, drawn = true) { it.textDocumentService.foldingRange(params) }
         val folds = when (answer) {
             is ByAnswer.Answer -> answer.value.mapNotNull { fold(it, document) }
             ByAnswer.None -> emptyList()

@@ -3,6 +3,8 @@ package dev.basedpython.pycharm.lsp
 import com.intellij.openapi.diagnostic.ControlFlowException
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.platform.lsp.api.LspClient
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withTimeoutOrNull
 import org.eclipse.lsp4j.jsonrpc.ResponseErrorException
 import org.eclipse.lsp4j.jsonrpc.messages.ResponseErrorCode
@@ -75,20 +77,30 @@ internal sealed interface ByAnswer<out R : Any> {
  * [CONTENT_MODIFIED_ATTEMPTS] times; any other error, a timeout, or a request never sent is
  * [ByAnswer.Failed].
  *
+ * [drawn] says that the editor is drawn from the answer, which has it drawn again when a server that
+ * let the request time out answers again ([ByRecovery]). The request may be sent again for that, so
+ * never for one that does something.
+ *
  * Threading: background only, like the request it wraps.
  */
 internal fun <R : Any> LspClient.askBy(
     what: String,
     timeoutMs: Int = LspClient.DEFAULT_REQUEST_TIMEOUT_MS,
+    drawn: Boolean = false,
     request: (LanguageServer) -> CompletableFuture<R?>,
-): ByAnswer<R> = askingAgain(what) { sent -> sendRequestSync(timeoutMs) { server -> request(server).also(sent) } }
+): ByAnswer<R> = askingAgain(
+    what,
+    timedOut = { if (drawn) ByRecovery.getInstance(project).timedOut(this, timeoutMs.toLong(), request) },
+) { sent -> sendRequestSync(timeoutMs) { server -> request(server).also(sent) } }
 
 /**
  * [askBy] without the server: [send] sends the request once, hands the future it went out as to the
- * callback it is given, and returns what `sendRequestSync` returned.
+ * callback it is given, and returns what `sendRequestSync` returned. [timedOut] is called when no
+ * answer came.
  */
 internal fun <R : Any> askingAgain(
     what: String,
+    timedOut: () -> Unit = {},
     send: (sent: (CompletableFuture<R?>) -> Unit) -> R?,
 ): ByAnswer<R> {
     repeat(CONTENT_MODIFIED_ATTEMPTS) {
@@ -101,8 +113,10 @@ internal fun <R : Any> askingAgain(
             LOG.debug("$what request was not sent: no server was running")
         }
         // the platform has logged a timeout already
-        if (!future.isDone) return ByAnswer.Failed
+        if (!future.isDone) return ByAnswer.Failed.also { timedOut() }
         val error = errorOf(future) ?: return ByAnswer.None
+        // a request the platform has given up on is cancelled, as it tells the server
+        if (error is CancellationException) return ByAnswer.Failed.also { timedOut() }
         if (!isContentModified(error)) {
             // the platform has logged the error as a warning already; this says which request it was
             LOG.debug("$what request was answered with an error: $error")
@@ -155,21 +169,38 @@ internal fun isMethodNotFound(error: Throwable): Boolean =
  * it does for [askBy]. No answer within [timeoutMs] is [ByAnswer.Failed]; only a cancellation of the
  * caller itself propagates. A `ContentModified` answer is asked again, as [askBy] does, within the
  * same [timeoutMs].
+ *
+ * [unknown] is called when the server has no such request, for a caller that does not ask that server
+ * again. [drawn] is as for [askBy].
  */
 internal suspend fun <R : Any> LspClient.awaitBy(
     what: String,
     timeoutMs: Long = LspClient.DEFAULT_REQUEST_TIMEOUT_MS.toLong(),
+    drawn: Boolean = false,
+    unknown: () -> Unit = {},
     request: (LanguageServer) -> CompletableFuture<R?>,
-): ByAnswer<R> = awaitingAgain(what, timeoutMs) { sent -> sendRequest { server -> request(server).also(sent) } }
+): ByAnswer<R> = awaitingAgain(
+    what,
+    timeoutMs,
+    timedOut = { if (drawn) ByRecovery.getInstance(project).timedOut(this, timeoutMs, request) },
+) { sent ->
+    try {
+        sendRequest { server -> request(server).also(sent) }
+    } catch (e: Exception) {
+        if (isMethodNotFound(e)) unknown()
+        throw e
+    }
+}
 
 /**
  * [awaitBy] without the server: [send] sends the request once, hands the future it went out as to
  * the callback it is given, and returns what the suspending `sendRequest` returned or throws what it
- * threw.
+ * threw. [timedOut] is called when no answer came within [timeoutMs].
  */
 internal suspend fun <R : Any> awaitingAgain(
     what: String,
     timeoutMs: Long,
+    timedOut: () -> Unit = {},
     send: suspend (sent: (CompletableFuture<R?>) -> Unit) -> R?,
 ): ByAnswer<R> = withTimeoutOrNull<ByAnswer<R>>(timeoutMs) {
     repeat(CONTENT_MODIFIED_ATTEMPTS) {
@@ -182,7 +213,11 @@ internal suspend fun <R : Any> awaitingAgain(
                 else -> ByAnswer.None
             }
         } catch (e: CancellationException) {
-            throw e
+            // the caller's own, or the request given up on: a server that stops cancels what it was asked
+            if (e is ControlFlowException) throw e
+            currentCoroutineContext().ensureActive()
+            LOG.debug("$what request was cancelled under the caller")
+            return@withTimeoutOrNull ByAnswer.Failed
         } catch (e: Exception) {
             if (isMethodNotFound(e)) {
                 // A `by` from before the request, which is not a fault: what it means is the
@@ -199,7 +234,10 @@ internal suspend fun <R : Any> awaitingAgain(
     }
     LOG.info("$what request was overtaken by an edit $CONTENT_MODIFIED_ATTEMPTS times running")
     ByAnswer.Failed
-} ?: ByAnswer.Failed.also { LOG.info("$what request got no answer within $timeoutMs ms") }
+} ?: ByAnswer.Failed.also {
+    LOG.info("$what request got no answer within $timeoutMs ms")
+    timedOut()
+}
 
 /**
  * [askBy] without the server, so that the rule above can be stated in a test rather than only in a

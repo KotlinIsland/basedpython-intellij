@@ -1,7 +1,10 @@
 package dev.basedpython.pycharm.lsp
 
 import com.intellij.openapi.progress.ProcessCanceledException
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.eclipse.lsp4j.jsonrpc.ResponseErrorException
 import org.eclipse.lsp4j.jsonrpc.messages.ResponseError
@@ -82,7 +85,7 @@ class ByServerRequestTest {
     @Test
     fun `an error answer is a failure, not an empty answer`() {
         val internal = ResponseErrorException(ResponseError(ResponseErrorCode.InternalError, "request handler panicked", null))
-        assertEquals(ByAnswer.Failed, askingAgain("by/testItems", answeredWithError(internal)))
+        assertEquals(ByAnswer.Failed, askingAgain("by/testItems", send = answeredWithError(internal)))
     }
 
     @Test
@@ -154,5 +157,48 @@ class ByServerRequestTest {
         }
         assertEquals("fixed", answer.value)
         assertEquals(2, asked)
+    }
+
+    /** A `by` that stops cancels what it was asked, which must not end the coroutine that asked it. */
+    @Test
+    fun `awaiting, a request the server cancelled is a failure`() = runBlocking {
+        assertEquals(ByAnswer.Failed, awaitingAgain<String>("by/runModules", 1_000) { throw CancellationException("stopped") })
+    }
+
+    @Test
+    fun `awaiting, the caller's own cancellation goes on up`() = runBlocking {
+        var answer: ByAnswer<String>? = null
+        val caller = launch(start = CoroutineStart.UNDISPATCHED) {
+            answer = awaitingAgain<String>("by/runModules", 60_000) { awaitCancellation() }
+        }
+        caller.cancelAndJoin()
+        assertNull(answer)
+    }
+
+    // What is drawn from an answer is drawn again when one comes, so a timeout is told from the rest.
+
+    @Test
+    fun `only no answer in time is a timeout`() {
+        fun timeouts(send: (sent: (CompletableFuture<String?>) -> Unit) -> String?): Int {
+            var timeouts = 0
+            askingAgain("textDocument/inlayHint", { timeouts++ }, send)
+            return timeouts
+        }
+        assertEquals(1, timeouts { sent -> sent(CompletableFuture()); null })
+        assertEquals(1, timeouts { sent -> sent(CompletableFuture<String?>().also { it.cancel(true) }); null }, "given up on, as the platform does")
+        assertEquals(0, timeouts { "answered" })
+        assertEquals(0, timeouts { sent -> sent(CompletableFuture.completedFuture(null)); null })
+        assertEquals(0, timeouts { null }, "never sent")
+        assertEquals(0, timeouts { sent -> sent(CompletableFuture.failedFuture(IllegalStateException("no"))); null })
+    }
+
+    @Test
+    fun `awaiting, only no answer in time is a timeout`() = runBlocking {
+        var timeouts = 0
+        awaitingAgain<String>("textDocument/inlayHint", 1_000, { timeouts++ }) { null }
+        awaitingAgain<String>("textDocument/inlayHint", 1_000, { timeouts++ }) { error("no") }
+        assertEquals(0, timeouts)
+        awaitingAgain<String>("textDocument/inlayHint", 50, { timeouts++ }) { awaitCancellation() }
+        assertEquals(1, timeouts)
     }
 }

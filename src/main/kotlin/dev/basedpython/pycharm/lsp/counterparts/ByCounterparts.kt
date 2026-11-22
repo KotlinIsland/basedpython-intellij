@@ -16,12 +16,11 @@ import dev.basedpython.pycharm.lsp.ByAnswer
 import dev.basedpython.pycharm.lsp.ByLspLifecycleListener
 import dev.basedpython.pycharm.lsp.ByServerDocuments
 import dev.basedpython.pycharm.lsp.ByTextHash
-import dev.basedpython.pycharm.lsp.awaitingAgain
+import dev.basedpython.pycharm.lsp.awaitBy
 import dev.basedpython.pycharm.lsp.ext.ByDocumentCounterparts
 import dev.basedpython.pycharm.lsp.ext.ByDocumentCounterpartsParams
 import dev.basedpython.pycharm.lsp.ext.ByServerExtensions
 import dev.basedpython.pycharm.lsp.isByServerFile
-import dev.basedpython.pycharm.lsp.isMethodNotFound
 import dev.basedpython.pycharm.lsp.runningByServer
 import dev.basedpython.pycharm.lsp.vision.SharedAsks
 import kotlinx.coroutines.CoroutineScope
@@ -171,13 +170,8 @@ internal class ByCounterparts(private val project: Project, scope: CoroutineScop
         suspend fun ask(server: LspClient, file: VirtualFile, textHash: String): Asked {
             val params = ByDocumentCounterpartsParams(TextDocumentIdentifier(server.getDocumentIdentifier(file).uri), textHash)
             var unknown = false
-            val answer = awaitingAgain<ByDocumentCounterparts>("by/documentCounterparts", TIMEOUT_MS) { sent ->
-                try {
-                    server.sendRequest { (it as ByServerExtensions).documentCounterparts(params).also(sent) }
-                } catch (e: Exception) {
-                    if (isMethodNotFound(e)) unknown = true
-                    throw e
-                }
+            val answer = server.awaitBy<ByDocumentCounterparts>("by/documentCounterparts", TIMEOUT_MS, drawn = true, unknown = { unknown = true }) {
+                (it as ByServerExtensions).documentCounterparts(params)
             }
             return when (answer) {
                 is ByAnswer.Answer -> Asked.Answered(answer.value)

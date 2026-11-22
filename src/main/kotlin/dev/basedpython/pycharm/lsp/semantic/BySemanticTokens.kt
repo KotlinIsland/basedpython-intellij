@@ -96,7 +96,7 @@ internal class BySemanticTokens(project: Project) : Disposable {
         // the text the answer's positions are read against, and so the text it is asked about
         val text = file.text
         val params = ByNamedSemanticTokensParams(server.getDocumentIdentifier(virtualFile), ByTextHash.of(text))
-        val tokens = server.askBy("textDocument/semanticTokens/full", TIMEOUT_MS) {
+        val tokens = server.askBy("textDocument/semanticTokens/full", TIMEOUT_MS, drawn = true) {
             it.textDocumentService.semanticTokensFull(params)
         }.value ?: return null
         return decode(text, tokens.data.orEmpty(), legend)

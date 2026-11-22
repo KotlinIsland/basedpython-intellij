@@ -137,8 +137,13 @@ internal class ByLspLifecycle(private val project: Project, scope: CoroutineScop
     events.trySend(event)
   }
 
+  /** Queues a redraw on its own, for what was drawn while a server answered nothing. */
+  fun requestRedraw() {
+    publish {}
+  }
+
   companion object {
-    const val REDRAW_REASON = "a basedpython language server started or stopped"
+    const val REDRAW_REASON = "a basedpython language server started, stopped or answered again"
 
     fun getInstance(project: Project): ByLspLifecycle = project.service()
   }

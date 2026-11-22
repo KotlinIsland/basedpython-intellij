@@ -20,11 +20,10 @@ import dev.basedpython.pycharm.lsp.ByAnswer
 import dev.basedpython.pycharm.lsp.ByLspLifecycleListener
 import dev.basedpython.pycharm.lsp.ByServerDocuments
 import dev.basedpython.pycharm.lsp.ByTextHash
-import dev.basedpython.pycharm.lsp.awaitingAgain
+import dev.basedpython.pycharm.lsp.awaitBy
 import dev.basedpython.pycharm.lsp.ext.ByDeclarationUsages
 import dev.basedpython.pycharm.lsp.ext.ByDocumentUsageCountsParams
 import dev.basedpython.pycharm.lsp.ext.ByServerExtensions
-import dev.basedpython.pycharm.lsp.isMethodNotFound
 import dev.basedpython.pycharm.lsp.runningByServer
 import dev.basedpython.pycharm.lsp.supers.ByInheritorMarkers
 import kotlinx.coroutines.CoroutineScope
@@ -206,13 +205,8 @@ internal class ByUsageCounts(private val project: Project, private val scope: Co
          */
         suspend fun ask(server: LspClient, params: ByDocumentUsageCountsParams): Asked {
             var unknown = false
-            val answer = awaitingAgain<List<ByDeclarationUsages>>("by/documentUsageCounts", TIMEOUT_MS) { sent ->
-                try {
-                    server.sendRequest { (it as ByServerExtensions).documentUsageCounts(params).also(sent) }
-                } catch (e: Exception) {
-                    if (isMethodNotFound(e)) unknown = true
-                    throw e
-                }
+            val answer = server.awaitBy<List<ByDeclarationUsages>>("by/documentUsageCounts", TIMEOUT_MS, drawn = true, unknown = { unknown = true }) {
+                (it as ByServerExtensions).documentUsageCounts(params)
             }
             return when (answer) {
                 is ByAnswer.Answer -> Asked.Answered(answer.value)

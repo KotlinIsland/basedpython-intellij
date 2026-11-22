@@ -14,12 +14,15 @@ import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.platform.lsp.api.LspClient
 import com.intellij.platform.lsp.api.LspClientManager
 import com.intellij.platform.lsp.api.LspServerState
+import com.intellij.psi.PsiManager
 import com.intellij.util.containers.ContainerUtil
 import com.intellij.util.messages.Topic
 import dev.basedpython.pycharm.lsp.ByAnswer
+import dev.basedpython.pycharm.lsp.ByLateAnswers
 import dev.basedpython.pycharm.lsp.ByLspLifecycleListener
 import dev.basedpython.pycharm.lsp.ByLspServerSupportProvider
 import dev.basedpython.pycharm.lsp.askBy
+import dev.basedpython.pycharm.lsp.awaitBy
 import dev.basedpython.pycharm.lsp.build.ByBuildOutputs
 import dev.basedpython.pycharm.lsp.byServerFor
 import dev.basedpython.pycharm.lsp.ext.ByEntryPointParams
@@ -37,9 +40,11 @@ import java.net.URI
 import java.nio.file.Paths
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.plus
 import kotlinx.coroutines.withContext
 import org.jetbrains.annotations.TestOnly
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * What `by` says about how this project's modules run and which tests they hold — the one place the
@@ -57,8 +62,10 @@ import kotlin.time.Duration.Companion.milliseconds
  *
  *  - [entryPoint], [testItems] and [mayHoldTests] **ask and wait** off the EDT — the line-marker
  *    pass, and the action system updating a run action, are cancellable background read actions
- *    (an edit cancels them), and `sendRequestSync` polls for that cancellation — and serve only what
- *    is already known on the EDT, starting a request behind the answer.
+ *    (an edit cancels them), and the wait polls for that cancellation — and serve only what is
+ *    already known on the EDT, starting a request behind the answer. However many ask about a
+ *    revision of a file, they wait on one request, [PATIENCE] in all; an answer that comes after that
+ *    has the file drawn again ([ByLateAnswers]).
  *  - [cachedEntryPoint], [moduleName], [projectTests], [stagedPath] and [configuredMain] **never
  *    wait**. They answer from what the last request said, and start one when nothing has been said
  *    yet.
@@ -69,6 +76,9 @@ import kotlin.time.Duration.Companion.milliseconds
  */
 @Service(Service.Level.PROJECT)
 internal class ByProgramModel(private val project: Project, scope: CoroutineScope) : Disposable {
+
+    /** What a file is asked about: its entry point, or its tests. */
+    private data class Question(val kind: String, val file: VirtualFile)
 
     /** An answer about one file, and the revision of the file it was given for. */
     private class Stamped<T>(val stamp: Long, val value: T)
@@ -83,8 +93,8 @@ internal class ByProgramModel(private val project: Project, scope: CoroutineScop
      */
     private val testFileRunners: MutableMap<VirtualFile, Stamped<ByTestRunner?>> = ContainerUtil.createConcurrentWeakMap()
 
-    /** Files a background request is already out for, so a stalled server is asked once. */
-    private val asking: MutableSet<Pair<String, VirtualFile>> = ContainerUtil.newConcurrentSet()
+    /** The requests about files that are out, one a question, so a stalled server is asked once. */
+    private val asking = ByLateAnswers<Question>(scope + Dispatchers.IO, PATIENCE) { rehighlight(it.file) }
 
     @Volatile
     private var modules: ByRunModules? = null
@@ -101,6 +111,7 @@ internal class ByProgramModel(private val project: Project, scope: CoroutineScop
                 /** A restarted server is a new project database; what the old one said may no longer hold. */
                 override fun serverInitialized(serverName: String) {
                     if (serverName != BY_SERVER) return
+                    asking.clear()
                     entryPoints.clear()
                     testFiles.clear()
                     testFileRunners.clear()
@@ -120,11 +131,11 @@ internal class ByProgramModel(private val project: Project, scope: CoroutineScop
      * Waits for the server off the EDT; on it, serves only an answer already held for this revision.
      */
     fun entryPoint(file: VirtualFile): ByEntryPoint? =
-        stamped(entryPoints, file) ?: askOrSchedule(ENTRY_POINT, file) { askEntryPoint(file) }
+        stamped(entryPoints, file) ?: asked(ENTRY_POINT, file, wait = mayWait(), ::askEntryPoint)
 
     /** What [entryPoint] already knows about [file] at its current revision, without asking. */
     fun cachedEntryPoint(file: VirtualFile): ByEntryPoint? =
-        stamped(entryPoints, file) ?: run { schedule(ENTRY_POINT, file) { askEntryPoint(file) }; null }
+        stamped(entryPoints, file) ?: run { asked(ENTRY_POINT, file, wait = false, ::askEntryPoint); null }
 
     /**
      * The command line of the module a `by run` configuration names — [module], or the project's
@@ -159,10 +170,8 @@ internal class ByProgramModel(private val project: Project, scope: CoroutineScop
         )
     }
 
-    private fun askEntryPoint(file: VirtualFile): ByEntryPoint? {
-        val client = byServerFor(project, file) ?: return null
-        val stamp = stampOf(file)
-        val answer = client.askBy("by/entryPoint", REQUEST_TIMEOUT_MS) {
+    private suspend fun askEntryPoint(client: LspClient, file: VirtualFile, stamp: Long): ByEntryPoint? {
+        val answer = client.awaitBy("by/entryPoint", ANSWER_TIMEOUT_MS) {
             (it as ByServerExtensions).entryPoint(ByEntryPointParams(client.descriptor.getFileUri(file)))
         }
         val found = when (answer) {
@@ -182,7 +191,7 @@ internal class ByProgramModel(private val project: Project, scope: CoroutineScop
 
     /** The tests [file] holds as it stands right now; null while that is not known. */
     fun testItems(file: VirtualFile): List<ByTestItem>? =
-        stamped(testFiles, file) ?: askOrSchedule(TEST_ITEMS, file) { askTestItems(file) }
+        stamped(testFiles, file) ?: asked(TEST_ITEMS, file, wait = mayWait(), ::askTestItems)
 
     /**
      * What `by` says runs [file]'s tests: the answer [testItems] holds for the file as it stands, else
@@ -234,10 +243,8 @@ internal class ByProgramModel(private val project: Project, scope: CoroutineScop
         (tests?.byFile?.keys.orEmpty().asSequence() + testFiles.keys.asSequence())
             .firstOrNull { it.isValid && stagedPath(it) == path }
 
-    private fun askTestItems(file: VirtualFile): List<ByTestItem>? {
-        val client = byServerFor(project, file) ?: return null
-        val stamp = stampOf(file)
-        val answer = client.askBy("by/testItems", REQUEST_TIMEOUT_MS) {
+    private suspend fun askTestItems(client: LspClient, file: VirtualFile, stamp: Long): List<ByTestItem>? {
+        val answer = client.awaitBy("by/testItems", ANSWER_TIMEOUT_MS) {
             (it as ByServerExtensions).testItems(ByTestItemsParams(client.descriptor.getFileUri(file)))
         }
         val found = when (answer) {
@@ -283,14 +290,11 @@ internal class ByProgramModel(private val project: Project, scope: CoroutineScop
 
     private suspend fun refreshProject() {
         val client = anyClient() ?: return
-        val (runModules, projectTests) = withContext(Dispatchers.IO) {
-            val runModules = client.askBy("by/runModules", REQUEST_TIMEOUT_MS) {
-                (it as ByServerExtensions).runModules(ByRunModulesParams())
-            }
-            val projectTests = client.askBy("by/testItems", PROJECT_TESTS_TIMEOUT_MS) {
-                (it as ByServerExtensions).testItems(ByTestItemsParams())
-            }
-            runModules to projectTests
+        val runModules = client.awaitBy("by/runModules", ANSWER_TIMEOUT_MS) {
+            (it as ByServerExtensions).runModules(ByRunModulesParams())
+        }
+        val projectTests = client.awaitBy("by/testItems", ANSWER_TIMEOUT_MS) {
+            (it as ByServerExtensions).testItems(ByTestItemsParams())
         }
         runModules.value?.let { reply ->
             val next = ByRunModules.of(reply.projects.firstOrNull() ?: ByRunModulesProjectReply(), ::pathOf)
@@ -324,27 +328,23 @@ internal class ByProgramModel(private val project: Project, scope: CoroutineScop
     private fun <T> stamped(map: Map<VirtualFile, Stamped<T>>, file: VirtualFile): T? =
         map[file]?.takeIf { it.stamp == stampOf(file) }?.value
 
-    /** Asks now when this thread may wait, and otherwise starts the request behind the caller. */
-    private fun <T> askOrSchedule(kind: String, file: VirtualFile, ask: () -> T?): T? {
-        if (!ApplicationManager.getApplication().isDispatchThread) return ask()
-        schedule(kind, file, ask)
-        return null
-    }
+    /** Whether the caller may wait for `by`: anywhere but the EDT. */
+    private fun mayWait(): Boolean = !ApplicationManager.getApplication().isDispatchThread
 
-    private fun <T> schedule(kind: String, file: VirtualFile, ask: () -> T?) {
-        // Nothing to ask: no thread is worth starting, and in a test there is never a server.
-        if (byServerFor(project, file) == null) return
-        val key = kind to file
-        if (!asking.add(key)) return
-        // A cancellation goes on to executeOnPooledThread, which ends the task quietly on one; the
-        // next caller asks again.
-        ApplicationManager.getApplication().executeOnPooledThread {
-            try {
-                if (!project.isDisposed) ask()
-            } finally {
-                asking.remove(key)
-            }
-        }
+    /**
+     * What [ask] answers about [file] as it stands, or null when no answer has come within [PATIENCE]
+     * of asking — or yet, without [wait] — and the request goes on behind the caller.
+     */
+    private fun <T : Any> asked(
+        kind: String,
+        file: VirtualFile,
+        wait: Boolean,
+        ask: suspend (client: LspClient, file: VirtualFile, stamp: Long) -> T?,
+    ): T? {
+        // Nothing to ask: no request is worth starting, and in a test there is never a server.
+        val client = byServerFor(project, file) ?: return null
+        val stamp = stampOf(file)
+        return asking.answer(Question(kind, file), stamp, wait) { ask(client, file, stamp) }
     }
 
     private fun stampOf(file: VirtualFile): Long =
@@ -355,6 +355,18 @@ internal class ByProgramModel(private val project: Project, scope: CoroutineScop
             .getClients(ByLspServerSupportProvider::class.java)
             .firstOrNull { it.state == LspServerState.Running }
 
+    /** Draws [file] again, whose answer came after it was drawn without it. */
+    private fun rehighlight(file: VirtualFile) {
+        ApplicationManager.getApplication().invokeLater(
+            {
+                if (!file.isValid) return@invokeLater
+                val psi = PsiManager.getInstance(project).findFile(file) ?: return@invokeLater
+                DaemonCodeAnalyzer.getInstance(project).restart(psi, LATE_REASON)
+            },
+            project.disposed,
+        )
+    }
+
     private fun restartDaemon() {
         ApplicationManager.getApplication().invokeLater(
             { DaemonCodeAnalyzer.getInstance(project).restart(RESTART_REASON) },
@@ -363,10 +375,10 @@ internal class ByProgramModel(private val project: Project, scope: CoroutineScop
     }
 
     override fun dispose() {
+        asking.clear()
         entryPoints.clear()
         testFiles.clear()
         testFileRunners.clear()
-        asking.clear()
     }
 
     /** The seams a test needs: answers put in as though the server had just given them. */
@@ -427,12 +439,21 @@ internal class ByProgramModel(private val project: Project, scope: CoroutineScop
         private const val TEST_ITEMS = "testItems"
         private const val REQUEST_TIMEOUT_MS = 2_000
 
-        /** Every test file of the project is classified, which on a large one is the checker's work. */
-        private const val PROJECT_TESTS_TIMEOUT_MS = 30_000
+        /** How long those who ask about a file wait for `by` between them, from when it was asked. */
+        private val PATIENCE = 2.seconds
+
+        /**
+         * How long an answer nobody is waiting on is waited for. Longer than a `by` that is starting
+         * takes to answer; and every test file of a project is classified, which on a large one is the
+         * checker's work.
+         */
+        private const val ANSWER_TIMEOUT_MS = 60_000L
 
         /** Long enough that a save-all is one refresh. */
         private val REFRESH_DEBOUNCE = 500.milliseconds
 
         private const val RESTART_REASON = "basedpython run modules changed"
+
+        private const val LATE_REASON = "basedpython run icons arrived"
     }
 }
